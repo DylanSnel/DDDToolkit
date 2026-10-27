@@ -14,8 +14,8 @@ data inside one application. This page explains what Tenancy is for, what it cov
 
 Every request in a multi-tenant application needs two answers:
 
-1. **Who is calling, and in which tenant?** Tove signs in once. She works in two tenants, Harbor Works and Meadow
-   Gardens, with different rights in each.
+1. **Who is calling, and in which tenant?** Ada works in Harbor Works, and Tove in Meadow Gardens. Each request names
+   its tenant. A person with seats in both tenants signs in once, and holds different rights in each.
 2. **What may the caller do, and where?** In Harbor Works, Ada manages everything, Rhea manages only the North
    region, and Leo manages nothing.
 
@@ -106,7 +106,7 @@ classDiagram
 | **Organization** | The tenant's structure. Each tenant has one, and it holds the units. | Harbor Works' organization |
 | **Unit** (`OrganizationUnit`) | A place in that structure. Units form a tree. The unit at the top is the **root**. | Harbor Works, North, North Coast, South Bay |
 | **Identity** | The user id from your sign-in. A seat points at it. | Tove's user id |
-| **Seat** | One person in one tenant. A person in two tenants has two seats. | Tove's seat in Harbor Works, and her seat in Meadow Gardens |
+| **Seat** | One person in one tenant. A person in two tenants has two seats. | Ada's seat in Harbor Works, and Tove's seat in Meadow Gardens |
 | **Placement** | A unit a seat is placed at. A seat has one or more placements. | Rhea's seat, placed at North |
 | **Permission** | One thing a caller may do, as a string. A request requires one; a role contains several. | `projects.edit` |
 | **Role** | A named set of permissions. Each tenant has its own roles. A new tenant starts with copies of your starter roles. Your application decides whether a tenant may also make its own ([below](#what-your-application-decides)). | Area manager |

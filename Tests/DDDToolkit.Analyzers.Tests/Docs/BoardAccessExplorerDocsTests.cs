@@ -107,7 +107,7 @@ public partial class BoardAccessExplorerDocsTests
             if (role.Every)
             {
                 role.Name.Should().Be("Administrator");
-                made.Should().Contain("That pack holds every permission in the catalogue.", "Ada's Administrator role holds the board permissions too");
+                made.Should().Contain("That starter role holds every permission in the catalogue.", "Ada's Administrator role holds the board permissions too");
                 continue;
             }
 

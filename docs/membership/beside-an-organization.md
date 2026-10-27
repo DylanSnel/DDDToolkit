@@ -31,22 +31,24 @@ each resource. It also keeps a resource reachable after its owner has left, so s
   every other permission it holds above, except the permissions marked `FromAbove = false`. Rules that reach from
   above without an `EveryMember` permission are refused when they are made. So are rules whose `EveryMember`
   permission is marked `FromAbove = false`.
-- **A reach covers one permission and ignores whether the caller sees the resource.** A caller who holds
-  `boards.edit` above a board, without the permission that sees, is inside the reach for `boards.edit` and still does
-  not see the board. `HoldAsync` and `PermissionsOnAsync` return results only for resources the caller sees. In your
-  own query, put the reach that sees first: `db.Boards.Within(seen).Within(act)`.
+- **`WhereIHold` and a reach cover one permission, and ignore whether the caller sees the resource.** A caller who
+  holds `boards.edit` above a board, without the permission that sees, is inside `db.Boards.WhereIHold(BoardPermissions.Edit)`
+  and still does not see the board. The access manager's `HoldAsync` and `PermissionsOnAsync`, and the pairs of
+  `WhereIHold([...])`, return results only for resources the caller sees. In your own query, put the permission that
+  sees first: `db.Boards.WhereIHold(BoardPermissions.View).WhereIHold(BoardPermissions.Edit, db)`.
 - **`InRoles = false` does not limit what is held above.** So an administrator at the root can also decide who is on
   a resource, and can hand it on.
 - **Members come first.** For a caller who holds the permission both as a member and from above, `Via` is
   `Members`.
-- **`[At]`** marks the one property that says where the aggregate root hangs. The property is never nullable
-  ([DDD00097](../diagnostics.md#ddd00097)). Reach from above on a class without `[At]` is
-  [DDD00098](../diagnostics.md#ddd00098).
+- **`[At]`** marks the one property that says where the aggregate root hangs. The marker comes from the package
+  `DDDToolkit.Supporting.Membership.Abstractions`, which the Membership package references. Its namespace is
+  `DDDToolkit.Supporting.Membership`. The property is never nullable ([DDD00097](../diagnostics.md#ddd00097)). Reach
+  from above on a class without `[At]` is [DDD00098](../diagnostics.md#ddd00098).
 - **A permission held from above lasts as long as the caller sees the resource.** The organization keeps the end of
   that permission, outside Membership. So `MemberHold.Until` is `null` for a caller who sees the resource from
   above. For a caller who sees the resource only as a member, `Until` is the end of the membership.
 - **Reach from above still runs in one statement.** What you return is a query over rows your context maps
-  ([on the context the query runs on](checks-and-saves.md#access-in-your-own-queries)).
+  ([on the context the query runs on](checks-and-saves.md#the-context-a-question-runs-on)).
 
 ## With Tenancy
 
@@ -57,7 +59,8 @@ registration `Add{Resource}MembershipWithTenancy`. The tutorial uses both throug
 - the member class over `SeatId` ([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles));
 - the context ([step 3](tutorial.md#step-3-where-it-is-stored));
 - the registration ([step 5](tutorial.md#step-5-the-modules-registration-and-the-host));
-- reach from above ([step 8](tutorial.md#step-8-reach-from-above)).
+- reach from above ([step 8](tutorial.md#step-8-reach-from-above));
+- the access manager over seats ([step 9](tutorial.md#step-9-what-the-caller-may-do-on-a-board)).
 
 The [Tenancy sample](../tenancy/the-sample.md#who-may-do-what-in-the-sample) uses them at scale: a project's crew, with
 project roles that each tenant makes from three starter roles.
@@ -107,10 +110,19 @@ roles instead:
 - **Only for seats.** The generator reads Tenancy's ids from your classes declared with Tenancy's templates, in the
   project or in a project it references. A member id that is not the id of your `[SeatAggregate<SeatId>]` class gets
   nothing.
-- **A module that refers to the organization only by its ids**, as Boards does, sees none of Tenancy's classes. The
-  generator then cannot tell which ids are Tenancy's, or a seat id from another id. So each member class of that
-  module gets the registration. The registration takes the tenant, unit and role id types. The role id type is
-  left out where members hold the tenant's roles. Call the registration only for a resource whose members are seats:
+- **A module that refers to the organization only by its ids**, as Boards does, sees none of Tenancy's classes. One
+  line in the module names Tenancy's ids, `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`
+  ([tutorial step 2](tutorial.md#step-2-the-permissions-and-the-rules)). The generator then writes the registration
+  only for a member class whose member id is the seat id, and the registration names only the context:
+
+  ```csharp
+  services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules);
+  ```
+
+- **Without that line**, the generator cannot tell which ids are Tenancy's, or a seat id from another id. So each
+  member class of the module gets the registration, and the registration takes the tenant, unit and role id types.
+  The role id type is left out where members hold the tenant's roles. Call the registration only for a resource whose
+  members are seats:
 
   ```csharp
   services.AddBoardMembershipWithTenancy<BoardsContext, TenantId, OrganizationUnitId, RoleId>(BoardMembership.Rules);
@@ -125,12 +137,18 @@ roles instead:
 
   | Database | Map with |
   |---|---|
-  | Postgres with `AddTenancyPostgres()`, which keeps the rights in the database | `AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy")` ([Read functions for modules](../tenancy/postgres.md#read-functions-for-modules)). `AddTenancyReadModel` is refused there. |
+  | Postgres with `AddTenancyPostgres()`, which keeps the rights in the database | `modelBuilder.AddTenancyReadFunctions("tenancy")`, which the generator writes from the `TenancyIds` line. Without the line, the call names the four ids: `AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy")` ([Read functions for modules](../tenancy/postgres.md#read-functions-for-modules)). `AddTenancyReadModel` is refused there. |
   | a database that does not keep the rights, such as SQLite | `AddTenancyReadModel<...>(...)`, which maps views over Tenancy's tables |
 
 - **Where a resource hangs.** Put `[At]` on its unit property.
-- **The tenant on your rows.** Membership stores no tenant. `ScopeToTenant` keeps the resource and your role class
-  inside their tenant. You make the starter roles when you set up a tenant.
+- **The tenant on your rows.** Membership stores no tenant. Mark the tenant property of the resource and of your role
+  class `[OfTenant]`, from `Supporting.Tenancy.Abstractions`. Tenancy's convention keeps both classes inside their
+  tenant, and Membership's mapping gives the role class its two unique indexes per tenant
+  ([Which customer a role belongs to](permissions-and-roles.md#which-customer-a-role-belongs-to)). You make the
+  starter roles when you set up a tenant.
+- **Handlers that need the caller's tenant or seat** take Tenancy's access manager, `TenancyAccessManager`, as the
+  tutorial's `OpenBoard` does. It also begins system work in the module's scope
+  ([System work](checks-and-saves.md#system-work)).
 - **On Postgres**, the export writes Tenancy's contribution (from your `[TenancyCatalogue]`) and each resource's
   contribution together. So a resource's function finds Tenancy's functions in any schema. A function name that
   nothing defines is refused. What a seat reads inside its tenant is your
@@ -178,8 +196,7 @@ public static MembershipRules Rules { get; } = MembershipRules.For<Crate>(
     members: MemberSource.Resolved(DepotFunctions.CallerPorter),
     reachFromAbove: DepotFunctions.BaysWhereIHold);
 
-// OnModelCreating: map the members. Where a crate stands comes from its [At] property.
-modelBuilder.Entity<Crate>().HasMembers(crate => crate.Porters);
+// The context's AddDDDToolkitConventions() maps the porters. Where a crate stands comes from its [At] property.
 
 // Services: the resource, with the class that implements the depot's ports
 services.AddCrateMembership<DepotContext, CratesInTheDepot>(CrateMembership.Rules);

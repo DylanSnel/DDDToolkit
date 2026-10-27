@@ -53,8 +53,8 @@ flowchart TD
 - `MemberAccess.Sees` requires that the caller sees the document, whether or not the caller holds the permission.
   Like `On`, it refuses with `documents.not-found`, compares the version and keeps the hold.
 - Where a permission is marked `LocksMembers`, the database lets only callers with that permission write member
-  rows. A member without it cannot remove its own row. So the handler saves that change as the application's own
-  work ([The caller's own on a resource](../access-requirements.md#the-callers-own-on-a-resource)).
+  rows. A member without it cannot remove its own row. So the handler saves that change as system work
+  ([The caller's own on a resource](../access-requirements.md#the-callers-own-on-a-resource)).
 
 **Membership and Tenancy together.** Moving a project requires edit on the project and open at the unit it moves to:
 `All(MemberAccess.On(ProjectPermissionNames.Edit, Project, ExpectedVersion), TenancyAccess.AtUnit(ProjectPermissionNames.Open, To))`.
@@ -96,61 +96,163 @@ The default path has three limits:
   through a caller who lost the command's permission and kept another one. Where that matters, write the policy per
   permission.
 - **When a handler is reached around its checks, only the database checks the write**, against what the caller may
-  do. Add a test that proves your request sender runs the checks. No row rule restricts a save that runs as the
-  application's own work. So begin that work only for a request whose check passed. `RequestInHand.Current.Request` is that
-  request ([The request in hand](../access-requirements.md#the-request-in-hand)). The sample's `OwnPlaceOnTheCrew`
-  does this.
+  do. Add a test that proves your request sender runs the checks. No row rule restricts a save that runs as system
+  work. So begin system work only for a request whose check passed. `RequestInHand.Current.Request` is that request
+  ([The request in hand](../access-requirements.md#the-request-in-hand)). The sample's `OwnPlaceOnTheCrew` does this.
 - **The save is not tied to the version the check read.** For a caller who named no version, the last write wins.
   [The expert hold](#the-expert-hold) adds that tie.
 
 ## Access in your own queries
 
-[`IMemberQuestions<DocumentId>`](reference/use-cases.md#membershipaccessmanagertresource) has methods about one resource
-(`HoldAsync`, `RequireAsync`, `ViaAsync`) and a method about up to 200 resources (`PermissionsOnAsync`). Each method
-runs one statement. For your own queries, `Reach(permission)` returns a **reach**. You put the reach into your query,
-so a list runs as one statement and fetches no ids first ([tutorial step 6](tutorial.md#step-6-open-a-board-see-it-list-them)).
-Two more forms:
+Your code asks what the caller holds in two places: in a handler, through the resource's access manager, and inside
+a query of your own, through `WhereIHold`. Each answer runs one statement. The examples use the document of
+[Resources and members](resources-and-members.md#a-document-and-the-people-it-is-shared-with).
+
+### The access manager
+
+[`MembershipAccessManager<Document>`](reference/use-cases.md#membershipaccessmanagertresource) answers questions about
+the current caller and documents. `AddDocumentMembership` registers it per scope, and a handler takes it like any
+service. Each question takes the document, or the document's id:
+
+| Question | Returns | Refuses |
+|---|---|---|
+| `HoldAsync(document, p)` | a `MemberHold<Document>`: how the caller holds `p` (`Via`), until when (`Until`), and the document's `Version`. `null` when the caller does not see the document. | nobody |
+| `RequireAsync(document, p)` | the hold | the caller's own refusal when the caller is nobody, then `documents.not-found`, then `documents.not-permitted` |
+| `ViaAsync(document, p)` | how the caller holds `p` (`Members`, `Above` or `System`), or `null` | the caller's own refusal, then `documents.not-found` |
+| `PermissionsOnAsync(documents, ps)` | which of `ps` the caller holds on each document it sees, for at most 200 documents (`MembershipAccessManager.MostResources`) | nobody |
+
+This handler shows a document and whether the caller may edit it:
 
 ```csharp
-// Your own columns next to how a permission is held and until when
-var seen = questions.Reach("documents.view");                    // IMemberQuestions<DocumentId>
-var act = questions.Reach("documents.edit");
-var answer = await db.Documents.Where(document => document.Id == id)
-    .Within(seen)
-    .Reached(act)
-    .Select(found => new { found.Resource.Archived, found.AsMember, found.FromAbove, found.Until })
-    .FirstOrDefaultAsync(cancellationToken);
-var via = answer is null ? null : act.Via(answer.AsMember, answer.FromAbove);
+[RequiresPermission(DocumentPermissions.View)]
+public sealed record ShowDocument([OnResource] DocumentId Document) : IFilingRequest;
 
-// What the caller may do with each row of a page
-var permissions = await db.Documents.Where(document => ids.Contains(document.Id))
-    .PermissionsOn(questions.PermissionReach(["documents.edit", "documents.share"]))
+public sealed class ShowDocumentHandler(FilingContext db, MembershipAccessManager<Document> documentAccess)
+{
+    // Runs after the check let the request through: the caller holds documents.view on the document
+    public async Task<DocumentView> HandleAsync(ShowDocument query, CancellationToken cancellationToken)
+    {
+        var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == query.Document, cancellationToken)
+            ?? throw Document.Codes.Refuse(MembershipRefusals.NotFound);
+
+        // How the caller holds documents.edit on this document, or null when the caller does not hold it
+        var edit = await documentAccess.ViaAsync(document, DocumentPermissions.Edit, cancellationToken);
+        return new DocumentView(document.Id, document.Archived, CanEdit: edit is not null);
+    }
+}
+```
+
+- **An answer names the resource the way the question named it.** Asked with the document, `HoldAsync` returns a
+  `MemberHold<Document>`, and `PermissionsOnAsync` keys its answer by the documents. Asked with an id, as in
+  `documentAccess.HoldAsync(command.Document, ...)`, the hold is a `MemberHold<DocumentId>`, and the answer is keyed
+  by the ids.
+- **An answer that shows a button lets no command through.** The access check checks the command's permission when
+  the command runs.
+- **Each question answers for the caller who is current when the question runs.** Inside system work that the
+  handler began, a question answers for the system work.
+- **The access manager answers what a caller holds.** Who may add a member or give a role is your rule
+  ([Who may give a role](permissions-and-roles.md#who-may-give-a-role)).
+
+### The resources a caller holds a permission on
+
+`db.Documents.WhereIHold(DocumentPermissions.View)` keeps the documents the caller holds `documents.view` on. It is
+part of your query, so a list runs as one statement and fetches no ids first
+([tutorial step 6](tutorial.md#step-6-open-a-board-see-it-list-them)). On the set, `WhereIHold` finds the context. A
+query that starts with a filter of yours passes the context it runs on:
+
+```csharp
+[SeenWith<DocumentId>(DocumentPermissions.View)]
+public sealed record ListOpenDocuments : IFilingRequest;
+
+public sealed class ListOpenDocumentsHandler(FilingContext db)
+{
+    public async Task<IReadOnlyList<Document>> HandleAsync(ListOpenDocuments query, CancellationToken cancellationToken)
+        => await db.Documents.Where(document => !document.Archived)   // a filter of yours first
+            .WhereIHold(DocumentPermissions.View, db)                  // then WhereIHold, with the context
+            .ToListAsync(cancellationToken);
+}
+```
+
+- **The rules come from the services the context was made with.** For a context registered with `AddDbContext`,
+  those are the services of the request's scope. Bind a context from a pool or a factory to the scope first:
+  `context.BindToScope(scope.ServiceProvider)`.
+- **The context must be the one the resource is registered with.** `WhereIHold` throws an
+  `InvalidOperationException` for a resource that is not registered with Membership, or is registered with another
+  context. The message names the registration to add.
+
+### What the caller may do with each row
+
+`db.Documents.WhereIHold([DocumentPermissions.Edit, DocumentPermissions.Share])` returns one
+`PermissionOn<Document>` for each document the caller sees and each of the permissions it holds there. A pair has
+the document, `Resource`, and the `Permission`. A list uses the pairs to show the buttons of each row:
+
+```csharp
+var buttons = await db.Documents.WhereIHold([DocumentPermissions.Edit, DocumentPermissions.Share])
+    .Select(pair => new { pair.Resource.Id, pair.Permission })
     .ToListAsync(cancellationToken);
 ```
+
+- A permission is one pair on a document, however many ways the caller holds the permission there.
+- A query that does not start at the set passes the context, as above: `query.WhereIHold(permissions, db)`.
+- [Tutorial step 9](tutorial.md#step-9-what-the-caller-may-do-on-a-board) shows the pairs in a list handler, and
+  `PermissionsOnAsync` for one board.
+
+### The lower level: a reach
+
+`WhereIHold` is built on a **reach**: the resources the caller holds one permission on, as a part of a statement.
+The access manager makes a reach: `documentAccess.Reach(permission)` for a permission, and
+`documentAccess.ReachSeen()` for the documents the caller sees. Two steps take a reach:
+
+- `Within(reach)` keeps the resources the reach covers.
+- `Reached(reach)` keeps every resource, and adds how the reach covers each one: `AsMember`, `FromAbove` and
+  `Until`.
+
+Use a reach for your own columns next to how a permission is held, or for one reach that several statements use:
+
+```csharp
+// The document's own column next to how the caller holds documents.edit, and until when
+var seen = documentAccess.ReachSeen();                       // MembershipAccessManager<Document>
+var edit = documentAccess.Reach(DocumentPermissions.Edit);
+var answer = await db.Documents.Where(document => document.Id == id)
+    .Within(seen)
+    .Reached(edit)
+    .Select(found => new { found.Resource.Archived, found.AsMember, found.FromAbove, found.Until })
+    .FirstOrDefaultAsync(cancellationToken);
+var via = answer is null ? null : edit.Via(answer.AsMember, answer.FromAbove);
+```
+
+- **A reach covers one permission, and ignores whether the caller sees the document.** Put `Within(seen)` in front,
+  as above, so the statement answers only about documents the caller sees
+  ([Reach from above](beside-an-organization.md#reach-from-above)).
+- `edit.Via(asMember, fromAbove)` turns the two columns into a `MemberVia`, system work included.
+
+### Lists and `[SeenWith]`
 
 **A list declares `[SeenWith<DocumentId>(permission)]`**, because the checks
 [fail closed](../access-requirements.md#what-answers-it):
 
-- `[SeenWith]` refuses nobody for lacking the permission. The reach in the query is the filter. So `[SeenWith]` goes
-  on queries only. On a Mediator command or a plain `IRequest` it is [DDD00082](../diagnostics.md#ddd00082). With
-  another dispatcher, a [test](../access-requirements.md#testing-the-requirements) checks it.
+- `[SeenWith]` refuses nobody for lacking the permission. `WhereIHold` in the query is the filter. So `[SeenWith]`
+  goes on queries only. On a Mediator command or a plain `IRequest` it is [DDD00082](../diagnostics.md#ddd00082).
+  With another dispatcher, a [test](../access-requirements.md#testing-the-requirements) checks it.
 - A caller who did not sign in reaches nothing. The check refuses that caller with `documents.not-permitted`, and no
   statement is sent.
 - With Tenancy, the check first refuses a caller without an active seat in the tenant, with Tenancy's code:
   `tenancy.tenant-required` when the caller names no tenant, `tenancy.not-seated` or `tenancy.seat-suspended`. A
   list is refused the same way as a command.
 
-**Which context the questions run on:**
+### The context a question runs on
 
-- With a registered context factory (for example a pool with `AddScopedFromPool`), each question runs on a context
-  of its own, because the questions of one request may run side by side. Without a factory, the questions run on the
-  request's context.
-- The questions run on the request's context when the resource or the custom role class has a query filter that
-  reads a member of your context. A context made for one reading does not know that member's value. A filter that
-  reads the ambient work, such as [Tenancy's](../tenancy/keeping-tenants-apart.md), works on every context.
-- A reach is data, so it works on any context. Some reaches add a subquery of their own, over custom role rows or
-  over [what you return](beside-an-organization.md#an-organization-of-your-own). On a context other than the
-  request's, pass that context as well: `db.Crates.Within(reach, db)`.
+- **The access manager's questions** run on a context of their own when you registered a context factory (for
+  example a pool with `AddScopedFromPool`), because the questions of one request may run side by side. Without a
+  factory, they run on the request's context.
+- **They run on the request's context** when the resource or the custom role class has a query filter that reads a
+  member of your context. A context made for one reading does not know that member's value. A filter that reads the
+  ambient work, such as [Tenancy's](../tenancy/keeping-tenants-apart.md), works on every context.
+- **`WhereIHold` runs on the context of your query.** On the set it finds that context. On a query that does not start
+  at the set, you pass it.
+- **A reach works on any context.** Some reaches add a subquery of their own, over custom role rows or over
+  [what you return](beside-an-organization.md#an-organization-of-your-own). On a context other than the request's,
+  pass that context as well: `db.Crates.Within(reach, db)`.
 
 ## System work
 
@@ -158,8 +260,13 @@ var permissions = await db.Documents.Where(document => ids.Contains(document.Id)
 - **`Caller.SystemIn("filing")`** is nobody's member. It holds every permission where the rules let its scope
   through, and nothing elsewhere.
 - **By default, the rules let the module's own scope through**, for example `filing` for the module `Filing`
-  ([Names](resources-and-members.md#names)). So a seeding, or a handler that saves as the application, needs no
-  setting.
+  ([Names](resources-and-members.md#names)). So a seeding, or a handler that saves as system work, needs no setting.
+- **With Tenancy, begin system work in the module's scope** on `TenancyAccessManager`:
+  `access.BeginSystemIn(tenant, actingSeat: seat, scope: "boards")`. Without `scope`, `BeginSystemIn` runs in the
+  `tenancy` scope, which holds nothing on a board.
+- **A command marked `[Operator]`** runs its handler as system work, recorded as the operator who sent it. The work
+  runs in the `tenancy` scope unless the attribute names another. A Boards command for operators names the module's
+  scope, `[Operator(Scope = "boards")]`, to hold every permission on every board.
 - **`systemScopes` replaces the default.** Name the scopes, including the module's scope if you want to keep it, or
   pass `[]` for none. A scope has lower case letters, digits, `_` and `-`, and each scope is named once:
 
@@ -170,9 +277,9 @@ var permissions = await db.Documents.Where(document => ids.Contains(document.Id)
       systemScopes: ["boards", "boards-import"]);
   ```
 
-- **Name a scope after the work it does, and never use `tenancy`.** Every piece of work that calls Tenancy's use cases
-  (provisioning, placing a seat, a grant) runs in the `tenancy` scope. With `tenancy` in `systemScopes`, all of that
-  work would hold every permission on every board.
+- **Name a scope after the work it does, and never use `tenancy`.** System work for Tenancy runs in the `tenancy`
+  scope: provisioning a tenant, accepting an invitation, and every `BeginSystemIn(tenant)` without a scope. With
+  `tenancy` in `systemScopes`, all of that work would hold every permission on every board.
 - **On Postgres**, the scoped system role may call the functions. [The lock](postgres.md#who-writes-the-member-rows)
   refuses member row writes from work in a scope the rules do not name.
 

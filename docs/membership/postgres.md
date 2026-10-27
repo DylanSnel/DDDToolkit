@@ -11,8 +11,8 @@ tutorial sets this up in [steps 3 to 5](tutorial.md#step-3-where-it-is-stored).
 
 ## The five functions
 
-`DDDToolkit.Supporting.Membership.Postgres` writes five functions per resource, from the same rules as the questions
-in C#. For `documents`:
+`DDDToolkit.Supporting.Membership.Postgres` writes five functions per resource, from the same rules that the access
+manager and `WhereIHold` read in C#. For `documents`:
 
 | Function | Returns | Your rules call it through |
 |---|---|---|
@@ -31,7 +31,7 @@ in C#. For `documents`:
 
 ### The mark and the contracts
 
-The tutorial writes the mark and two contracts ([step 3](tutorial.md#step-3-where-it-is-stored)), the row access rules
+The tutorial writes the mark ([step 3](tutorial.md#step-3-where-it-is-stored)), two contracts, the row access rules
 and the lock ([step 4](tutorial.md#step-4-the-databases-own-rules)), and calls `AddMembershipPostgres()`
 ([step 5](tutorial.md#step-5-the-modules-registration-and-the-host)). A third contract returns the people a caller
 works with. Its `Ids` method declares the member id type:
@@ -130,11 +130,12 @@ from the marks:
 | either mark, with `reachFromAbove` | Nothing extra about where a resource hangs. The lock checks what the caller holds there when the statement runs. |
 
 - **You still decide who may change the members.** No code of the package gates a command by the marks.
-- **When your command allows a change that the lock refuses, the handler makes the change as the application's own
-  work and names who acts.** Leaving a document is an example. The command requires `documents.leave`, marked
+- **When your command allows a change that the lock refuses, the handler makes the change as system work and names
+  who acts.** Leaving a document is an example. The command requires `documents.leave`, marked
   `EveryMember = true`. The lock refuses the member a write to its own row. So the handler removes the row as system
-  work begun for the member (with Tenancy, `TenancyUseCases.BeginSystemIn(tenant, actingSeat: caller, scope:
-  "documents")`). The history then names who left. The sample's `OwnPlaceOnTheCrew` does this.
+  work begun for the member. With Tenancy, the handler calls
+  `access.BeginSystemIn(tenant, actingSeat: caller, scope: "documents")` on `TenancyAccessManager`. The history then
+  names who left. The sample's `OwnPlaceOnTheCrew` does this.
 - **Three columns need a rule of yours:**
   - *The owner of a new resource.* Your create rule says whom a caller may name as owner. That is the caller itself,
     unless the caller may name owners (tutorial step 4, and the sample's `SeatsOpenProjectsWhereTheyMay`).
@@ -163,9 +164,9 @@ from the marks:
     row names the owner. So a rule over `DocumentsISee.Ids()` lets the owner write the member rows of a resource it
     has just opened. Where callers open resources as themselves, let the owner hold the locking permission.
   - An owner who holds the permissions only by owning loses them once the owner column changes. The rest of that
-    hand-over is then no longer the old owner's to write. So save an owner's own hand-over as the application's own
-    work, once your command's check passed (`RequestInHand.Current.Request` is the command). A caller who holds the
-    permission through a role or from above saves the hand-over as itself.
+    hand-over is then no longer the old owner's to write. So save an owner's own hand-over as system work, once your
+    command's check passed (`RequestInHand.Current.Request` is the command). A caller who holds the permission
+    through a role or from above saves the hand-over as itself.
 - **The lock is written only for a resource with row access rules.** Without rules, no role may call the functions
   and nobody reads a member row.
 

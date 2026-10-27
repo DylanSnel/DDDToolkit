@@ -20,8 +20,9 @@ The [Tenancy tutorial](../tenancy/tutorial.md) built Harbor. It has:
 ## What we build
 
 A module called Boards. A board belongs to a tenant and hangs at a unit. It has one owner and members, and the
-members hold roles that the tenant keeps. At the end of the tutorial, Harbor Works has two boards. Units are square;
-boards are purple and rounded, with a dotted line to the unit where they hang:
+members hold roles that the tenant keeps. At the end of the tutorial, Harbor Works has two boards. Units are square
+and show the roles granted there. Boards are purple and rounded, with a dotted line to the unit where they hang, and
+show their owner and their members with their roles:
 
 ```mermaid
 flowchart TD
@@ -29,7 +30,7 @@ flowchart TD
     north["<b>North</b><br/><small>Rhea: Area manager<br/>and Board keeper</small>"]
     coast["<b>North Coast</b>"]
     south["<b>South Bay</b>"]
-    crane("<b>Crane schedule</b><br/><small>owner: Rhea<br/>Leo: editor</small>")
+    crane("<b>Crane schedule</b><br/><small>owner: Rhea<br/>Leo: editor<br/>Ada: editor</small>")
     quay("<b>Quay plan</b><br/><small>owner: Ada</small>")
     root --> north --> coast
     root --> south
@@ -41,15 +42,17 @@ flowchart TD
 
 | Person | Sees | Can change | Why |
 |---|---|---|---|
-| Rhea | both boards | Crane schedule | She owns Crane schedule. Her `boards.view` at North reaches Quay plan; she holds no `boards.edit` there. |
+| Rhea | both boards | Crane schedule | She owns Crane schedule. Her `boards.view` at North reaches Quay plan. She holds no `boards.edit` there. |
 | Leo | Crane schedule | Crane schedule's name | He is a member with the role editor. |
-| Ada | both boards | both boards | Her Administrator role at the root reaches every board. |
+| Ada | both boards | both boards | Her Administrator role at the root reaches every board. She also adds herself to Crane schedule as an editor. |
 
 When it is done, you can try these with plain HTTP requests:
 
 - Rhea opens Crane schedule at North and adds Leo as an editor.
 - Leo renames Crane schedule. Adding a member gets him `403`: an editor does not hold `boards.members.manage`.
-- Rhea renames Quay plan and gets `403`: she sees it, but her roles give no `boards.edit` there.
+- Rhea renames Quay plan and gets `403`. She sees the board, but her roles give no `boards.edit` there.
+- Rhea lists her boards with what she may do on each: `boards.edit` and `boards.members.manage` on Crane schedule,
+  neither on Quay plan.
 
 Each step says where we are, why the step comes now, and what it adds. It explains the idea, shows every file
 whole with the new lines highlighted, and lists what those lines do.
@@ -390,12 +393,19 @@ declaration: each tenant has its own board roles, and starts with one role calle
   what a board is. The application project decides who may do what.
 - **Tenancy's catalogue**: Tenancy's generator adds every permission of a `[Permissions]` class to Tenancy's
   catalogue. So a Tenancy role can hold `boards.create` at North. The host collects these permissions in step 5.
+- **Tenancy's ids in Boards**: Boards uses Tenancy's ids from Tenancy's contracts project, and none of Tenancy's
+  classes. So the generator cannot tell by itself which of Boards' ids are Tenancy's. One line,
+  `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`, names them. The generator then writes
+  Tenancy's names into Boards without type arguments:
+  - `TenancyAccessManager` in this project: who the caller is, and the caller's tenant and seat (step 6);
+  - `modelBuilder.AddTenancyReadFunctions()` in the infrastructure project (step 3);
+  - `AddTenancyAccess<TRequests, TContext>()` and `AddBoardMembershipWithTenancy<TContext>(rules)` there too
+    (step 5).
 
 ### What you write
 
 **The application project.** **Why:** the requests go in this project. Tenancy's core package brings the two levels
-Tenancy knows, `[AtUnit]` and `[AtTenant]`, and `ITenancy`, which returns the current caller's tenant and seat
-(step 6).
+Tenancy knows, `[AtUnit]` and `[AtTenant]`, and the `TenancyIds` line.
 
 **`src/Modules/Boards/Harbor.Boards.Application/Harbor.Boards.Application.csproj`**
 
@@ -405,12 +415,25 @@ Tenancy knows, `[AtUnit]` and `[AtTenant]`, and `ITenancy`, which returns the cu
   <!-- The requests of Boards and their handlers, a folder per feature, and who holds which permission on a board. -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Boards.Domain\Harbor.Boards.Domain.csproj" />
-    <!-- Tenancy's words for a permission held in the organization, [AtUnit] and [AtTenant], and its answers about the caller. -->
+    <!-- Tenancy's levels for a permission held in the organization, [AtUnit] and [AtTenant], and its access manager. -->
     <PackageReference Include="Temp.DDDToolkit.Supporting.Tenancy" />
     <PackageReference Include="Mediator.Abstractions" />
   </ItemGroup>
 
 </Project>
+```
+
+**Tenancy's ids.** **Why:** with this line, no code of Boards names Tenancy's ids as type arguments. Write it once,
+in this project. The infrastructure project references this one and gets the line's names too.
+
+**`Harbor.Boards.Application/TenancyIds.cs`**
+
+```csharp {4-5}
+using DDDToolkit.Supporting.Tenancy;
+using Harbor.Tenancy.Contracts.ValueObjects;
+
+// The ids of Tenancy's tenant, seat, unit and role. The generator writes Tenancy's names into the module over these ids.
+[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]
 ```
 
 **The permissions.** **Why:** each permission is declared once. A request requires the constant, the rules read it,
@@ -477,6 +500,8 @@ dotnet build Harbor.slnx
 - `new("editor", [...])`: a starter role, with its name and its permissions.
 - `MembershipRules.For` checks the rules when it runs, and throws for rules that contradict themselves. For example,
   a starter role with `boards.members.manage` is refused, because no role may give that permission.
+- `[assembly: TenancyIds<...>]`: the order of the ids is tenant, seat, unit, role. A project that declares Tenancy's
+  classes needs no such line, because the generator reads the ids from the classes.
 
 > **Going further.** Every setting of a permission, `Implies` and `Retired` among them:
 > [The settings of a permission](permissions-and-roles.md#the-settings-of-a-permission).
@@ -506,9 +531,10 @@ rules for the export.
 - **The tenant filter and the save check**: Tenancy's convention adds both to every class with a property marked
   `[OfTenant]`, here the board and the role. A query returns only the rows of the caller's tenant. The save check
   refuses a row of another tenant.
-- `AddTenancyReadFunctions` maps Tenancy's rows, the rights and the units, through Tenancy's database functions. So a
-  question such as "does Rhea hold `boards.create` at North" becomes part of this context's query. The query reads
-  no Tenancy table directly. Boards knows Tenancy's ids but not its classes, so the call names the four id types.
+- `AddTenancyReadFunctions()` maps Tenancy's rows, the rights and the units, through Tenancy's database functions. So
+  a question such as "does Rhea hold `boards.create` at North" becomes part of this context's query. The query reads
+  no Tenancy table directly. The generator wrote this call for Boards from the `TenancyIds` line of step 2, so the
+  call names no id type.
 - **The mark**, `[MembershipRules<BoardMember>]`: the build cannot read which rules a registration call receives. The
   mark tells the build which rules belong to the board. The export writes the board's database functions from those
   rules.
@@ -551,14 +577,13 @@ the conventions.
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardsContext.cs`**
 
-```csharp {26,28,33,35}
+```csharp {25,27,32,34}
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Harbor.Boards.Domain.Aggregates.BoardRoles;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Boards.Infrastructure.Converters;
-using Harbor.Tenancy.Contracts.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace Harbor.Boards.Infrastructure.Persistence;
@@ -577,7 +602,7 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
         modelBuilder.HasDefaultSchema(Schema);
 
         // Tenancy's rows, read through its functions, so a question about the organization is part of this context's queries.
-        modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
+        modelBuilder.AddTenancyReadFunctions("tenancy");
 
         // The conventions map the members, the role, the tenant and the role's two indexes.
     }
@@ -622,8 +647,8 @@ dotnet ef migrations add Boards --project src/Modules/Boards/Harbor.Boards.Infra
 
 - `[SupabaseMigrations]`, `StoreDateTimeOffsetsAsUtc`: the same as in Tenancy's context. The database functions
   compare member periods in SQL, so the times are stored as UTC.
-- `AddTenancyReadFunctions<...>("tenancy")`: `"tenancy"` is the schema of Tenancy's functions, the schema of
-  Tenancy's context.
+- `AddTenancyReadFunctions("tenancy")`: `"tenancy"` is the schema of Tenancy's functions, the schema of Tenancy's
+  context.
 - `AddBoardsConverters()` is generated for the module. It stores Boards' ids, and the Tenancy ids from Tenancy's
   contracts, as their `Guid`.
 - The migration creates the schema `boards` with four tables: `Boards`, `BoardPeople` (the members, named after the
@@ -853,14 +878,16 @@ and policies.
   When no registered check decides a requirement, the behavior refuses every caller.
 - **The generator joins Membership to Tenancy.** The project references both packages, so the generator writes
   `AddBoardMembershipWithTenancy`. With it, the caller's seat is the caller's member identity, and a new member's seat
-  must be active in the tenant. Boards knows Tenancy's ids but not its classes, so the call names three id types. The
-  seat id type comes from the member class.
-- **Ada's role lacks the new permissions.** Her Administrator role is a copy of Tenancy's default administrators'
-  pack. The copy was made when Harbor Works was provisioned, before boards existed. That pack holds every permission
-  in the catalogue. `SyncStarterRoles()` in the host adds the board permissions to her role when the host starts. Changes
-  that the tenant made to its roles stay.
+  must be active in the tenant. The `TenancyIds` line of step 2 names Tenancy's ids, and the member class names the
+  seat id, so the call names only the context.
+- **The access manager of boards.** `AddBoardMembershipWithTenancy` also registers `MembershipAccessManager<Board>`
+  per scope. A handler takes it to ask what the caller holds on a board (step 9).
+- **Ada's role lacks the new permissions.** Her Administrator role was made from Tenancy's default administrators'
+  starter role when Harbor Works was provisioned, before boards existed. That starter role holds every permission in
+  the catalogue. `SyncStarterRoles()` in the host adds the board permissions to her role when the host starts.
+  Changes that the tenant made to its roles stay.
 
-**What this looks like on a request.** Step 7 writes this request and its handler. You do not write it now; it shows
+**What this looks like on a request.** Step 7 writes this request and its handler. You do not write it now. It shows
 what the checks of this step do. `[RequiresPermission(BoardPermissions.Edit)]` asks for `boards.edit`, and
 `[OnResource]` says on which board. Membership's check decides it, and `Handle` runs only when the check passes:
 
@@ -936,8 +963,6 @@ global using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 global using Harbor.Boards.Domain.Aggregates.Boards;
 global using Harbor.Tenancy.Contracts.ValueObjects;
 global using Mediator;
-
-[assembly: DDDToolkit.Supporting.Tenancy.TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]
 ```
 
 **The application's registration.** **Why:** the generator writes the behavior next to `IBoardsRequest`, in this
@@ -1112,10 +1137,12 @@ dotnet sln Harbor.slnx add --solution-folder src/Modules/Boards src/Modules/Boar
 
 - `AddDDDToolkitEntityFramework()`: the same registration as in Tenancy's module, here without an outbox. Each call
   adds to the same options.
-- `AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBoardsRequest, BoardsContext>()` registers
-  Tenancy's checks for Boards' requests. Outside the Tenancy module, the call names Tenancy's four id types, because
-  Boards does not see Tenancy's classes. The checks read through this context's read functions.
-- `AddBoardMembershipWithTenancy` registers Membership's queries about boards over this context, joined to Tenancy.
+- `AddTenancyAccess<IBoardsRequest, BoardsContext>()` registers Tenancy's checks for Boards' requests, and
+  `TenancyAccessManager` per scope. The checks read through this context's read functions. The generator wrote the
+  call for Boards from the `TenancyIds` line.
+- `AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules)` registers, over this context and joined to
+  Tenancy, the access manager `MembershipAccessManager<Board>`, the queries on `db.Boards`, and the admission of new
+  members (step 7).
 - `AddBoardMemberAccess<IBoardsRequest>()` registers Membership's check for Boards' requests.
 - `AddMembershipPostgres()` adds a start-up check: the database functions and the lock must match the rules the host
   runs with.
@@ -1156,17 +1183,19 @@ not see it yet.
   |---|---|---|
   | `OpenBoard` | `[RequiresPermission(boards.create)]`, with `[AtUnit]` on its unit | Tenancy, at that unit or above. The board does not exist yet, so nobody is a member of it. |
   | `SeeBoard` | `[RequiresPermission(boards.view)]`, with `[OnResource]` on its board | Membership, on that board |
-  | `ListBoards` | `[SeenWith<BoardId>(boards.view)]` | Membership. It refuses nobody. The list contains only the boards the caller sees. |
+  | `ListBoards` | `[SeenWith<BoardId>(boards.view)]` | Membership. It refuses nobody for lacking the permission. The list contains only the boards the caller holds `boards.view` on. |
 
 - **Hidden boards**: for a board the caller does not see, the answer is `404`, `boards.not-found`. An id that is not a
   board gets the same answer, so a caller cannot find out that a board exists.
-- **The boards I hold a permission on**: `db.Boards.WhereIHold(permission)` adds the boards the caller holds the
-  permission on to an Entity Framework query, so the list is one SQL statement. The code never loads the ids first.
+- **The boards I hold a permission on**: `db.Boards.WhereIHold(BoardPermissions.View)` keeps the boards on which the
+  caller holds `boards.view`. It is part of the Entity Framework query, so the list is one SQL statement. The code
+  never loads the ids first. `WhereIHold` finds the context from the set, and the rules from the context's services.
 - **Repository**: the handlers load and save boards through `IBoardRepository`. The interface is in the application
-  project, and the infrastructure project implements it. The repository asks `WhereIHold`, because it is part of an
-  Entity Framework query.
-- **The owner is the caller**: the handler gets the caller's tenant and seat from `ITenancy` with `RequireTenant()`.
-  The create rule of step 4 makes the database check the same.
+  project, and the infrastructure project implements it. The repository calls `WhereIHold`, because `WhereIHold` is
+  part of an Entity Framework query.
+- **The owner is the caller**: the handler takes `TenancyAccessManager`, Tenancy's access manager. Its
+  `CurrentTenant.Require()` returns the caller's tenant and seat. The create rule of step 4 makes the database check
+  the same.
 
 ### What you write
 
@@ -1316,8 +1345,8 @@ public sealed class SeeBoardHandler(IBoardRepository boards, TimeProvider clock)
 public sealed record BoardDetails(BoardId Id, string Name, OrganizationUnitId Unit, long Version, IReadOnlyList<MemberOverview<SeatId, BoardRoleId>> Members);
 ```
 
-**Listing the caller's boards.** **Why:** a list request refuses nobody. The reach decides which boards the list
-contains.
+**Listing the caller's boards.** **Why:** a list request refuses nobody for lacking the permission. `WhereIHold` in
+the repository's query decides which boards the list contains.
 
 **`Harbor.Boards.Application/Boards/ListBoards/ListBoards.cs`**
 
@@ -1332,7 +1361,7 @@ public sealed class ListBoardsHandler(IBoardRepository boards)
 {
     public async ValueTask<IReadOnlyList<BoardListing>> Handle(ListBoards query, CancellationToken cancellationToken)
     {
-        // The boards the caller holds boards.view on, as part of the repository's query: never the ids first.
+        // The boards the caller holds boards.view on. The repository's query reads them in one statement.
         var found = await boards.ListVisibleAsync(cancellationToken);
         return [.. found.Select(board => new BoardListing(board.Id, board.Name, board.UnitId, board.OwnerSeatId))];
     }
@@ -1401,9 +1430,11 @@ public static class BoardsModule
 ### What it does
 
 - `[AtUnit] Unit`: Rhea needs `boards.create` at that unit or above it, from a Tenancy role.
-- `ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>`: the same service as in step 10 of the Tenancy tutorial.
-  `RequireTenant()` returns the caller's `Tenant` and `Seat`. `Seat` can be `null` for system work in the tenant. In
-  Harbor only a seat opens a board, so the handler throws in that case.
+- `TenancyAccessManager`: the class the generator wrote into this project from the `TenancyIds` line. It is the same
+  access manager the Tenancy module's handlers take. `access.CurrentTenant.Require()` returns the caller's tenant,
+  with its `Id` and the caller's `Seat`. A caller without a tenant gets the refusal its request got. `Seat` is `null`
+  for system work in the tenant that acts for no seat. In Harbor only a seat opens a board, so the handler throws in
+  that case.
 - `TimeProvider`: .NET's clock. Tenancy registers `TimeProvider.System` unless the host registered another one, such
   as a fixed clock in a test. The handler passes `clock.GetUtcNow()` to the board, because the board reads no clock.
 - `BoardId.Create()` makes the new board's id in code, before the save.
@@ -1414,7 +1445,8 @@ public static class BoardsModule
 - `MemberOverviews.From(...)` puts the members in the standard order: the owner first, then by the start of each
   membership. It runs no query.
 - `board.Version`: the board's version, which every save that changes the board or its members raises.
-- `WhereIHold(BoardPermissions.View)` adds the boards Rhea holds `boards.view` on as a subquery, in the same statement.
+- `db.Boards.WhereIHold(BoardPermissions.View)` adds the boards Rhea holds `boards.view` on as a subquery, in the same
+  statement.
 
 ### Try it
 
@@ -1430,7 +1462,7 @@ Content-Type: application/json
 { "name": "Board keeper", "description": "Opens boards", "permissions": ["boards.create", "boards.view"] }
 ```
 
-1. As Ada: `POST /grants` with Rhea's seat, North, and that role: `204`.
+1. As Ada: `POST /grants` with Rhea's seat, North, and that role.
 2. As Rhea (`X-Dev-User` ending in `0002`): `POST /boards` with `{ "unit": "<North's id>", "name": "Crane schedule" }`:
    `200`, the board's id. Keep it.
 3. As Rhea: `POST /boards` at the root: `403`, `tenancy.not-permitted`, "You lack the permission boards.create."
@@ -1440,8 +1472,10 @@ Content-Type: application/json
    and Rhea holds it at North. Until step 8, a permission held at a unit does not count on a board. Only the board's
    owner and members hold permissions on it.
 
-> **Going further.** A command that names the version its caller read, `[ExpectedVersion]`, and what holds a change
-> between the check and the save: [From the check to the save](checks-and-saves.md#from-the-check-to-the-save).
+> **Going further.** A command that names the version its caller read, `[ExpectedVersion]`, and what stops a change
+> between the check and the save: [From the check to the save](checks-and-saves.md#from-the-check-to-the-save). A
+> query that does not start at `db.Boards`, and the lower level under `WhereIHold`:
+> [Access in your own queries](checks-and-saves.md#access-in-your-own-queries).
 
 ## Step 7: members
 
@@ -1879,9 +1913,12 @@ board he is a member of.
 ### The idea: a permission held at a board's unit counts on the board
 
 - `[At]` marks the property that holds the board's unit, where the board hangs. This is a fact about the board, so it
-  goes on the domain class.
-- `reachFromAbove: true`: a permission held at that unit, or above it, counts on the board. Tenancy returns where the
-  caller holds the permission, both in C# and in the database functions.
+  goes on the domain class. The marker comes from Membership's markers package, `Supporting.Membership.Abstractions`,
+  in the namespace `DDDToolkit.Supporting.Membership`. The Membership package references it, so the domain project
+  needs no new reference.
+- `reachFromAbove: true`: a permission held at that unit, or above it, counts on the board. The code that joins
+  Membership to Tenancy (step 5) reads where the caller holds the permission from Tenancy's queries in C#, and from
+  Tenancy's functions in the database.
 - **Seeing from above**: a caller above sees a board through the permission every member holds, here `boards.view`.
   `MembershipRules.For` throws for rules with `reachFromAbove` and no `EveryMember` permission.
 - **`FromAbove`**: on by default, so every permission on a board counts from above. A permission marked
@@ -2010,8 +2047,9 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
 
 ### What it does
 
-- `[At]` and `reachFromAbove: true`: the boards functions ask Tenancy where the caller holds a permission. They then
-  include the boards that hang at those units or below them.
+- `[At]` and `reachFromAbove: true`: the boards functions call Tenancy's function for the units where the caller holds
+  a permission. They then include the boards that hang at those units or below them. `db.Boards.WhereIHold(...)` and
+  Membership's check do the same in C#.
 - `IsFixedAfterInsert`: Entity Framework throws on a save that changes a board's unit. The export also leaves `UnitId`
   out of the columns a caller may update.
 - The tables did not change, so there is no new migration. The export writes a new `<v>_access.boards.ddd.sql`.
@@ -2030,10 +2068,199 @@ Build the host, run `npx supabase migration up --local`, and start the host agai
    boards.edit." Board keeper gives only `boards.create` and `boards.view`.
 6. As Ada: `POST /boards/<Crane schedule's id>/members` with her own seat and `editor`: `204`. Ada is not a member or
    the owner of the board. Her `boards.members.manage` at the root reaches it.
+7. As Ada: `GET /boards/<Crane schedule's id>`: three members. Rhea is first, as the owner. Leo and Ada follow, each
+   with `editor`.
 
 > **Going further.** A command that moves a board, and a trigger that guards the unit column instead:
 > [Who writes the member rows](postgres.md#who-writes-the-member-rows). Reach from above without Tenancy:
 > [An organization of your own](beside-an-organization.md#an-organization-of-your-own).
+
+## Step 9: what the caller may do on a board
+
+**Where we are.** Rhea, Leo and Ada each reach the boards the diagram at the start shows. A command that a caller may
+not send gets a refusal from the access check.
+
+**Why now.** A screen shows a button only for what the caller may do, such as Rename or Add member. The screen needs
+that answer before the caller sends a command. Since step 8, the answer differs per person and per board.
+
+**What we want.** `GET /boards/{id}` and `GET /boards` also say, for each board, which of `boards.edit` and
+`boards.members.manage` the caller holds. Each answer costs one statement.
+
+### The idea: asking what the caller holds
+
+- **Showing and checking are separate steps.** The answer decides which buttons the screen shows. Each command still
+  requires its permission, and the access check checks the permission again when the command runs.
+- **The access manager**: `MembershipAccessManager<Board>` answers what the current caller holds on boards. The
+  registration of step 5 adds it per scope, and a handler takes it like any service. For example, the question "which
+  of `boards.edit` and `boards.members.manage` does the caller hold on Crane schedule?" returns both for Rhea. Each
+  question takes a board, or a board's id:
+
+  | Question | Returns | Refuses |
+  |---|---|---|
+  | `HoldAsync(board, p)` | how the caller holds `p` (`Via`: `Members`, `Above` or `System`), until when, and the board's version. `null` when the caller does not see the board. | nobody |
+  | `ViaAsync(board, p)` | how the caller holds `p`, or `null` | `boards.not-found` for a board the caller does not see |
+  | `RequireAsync(board, p)` | the hold | as the access check does: `boards.not-found`, then `boards.not-permitted` |
+  | `PermissionsOnAsync(boards, ps)` | which of `ps` the caller holds on each board it sees, for at most 200 boards | nobody |
+
+- **Pairs in a query**: `db.Boards.WhereIHold([BoardPermissions.Edit, BoardPermissions.ManageMembers])` returns one
+  `PermissionOn<Board>` for each board and each permission the caller holds on it. A pair has the board, `Resource`,
+  and the `Permission`. A board the caller does not see is in no pair. The pairs are a query of the context, so a list
+  reads them in one statement, however many boards it has.
+
+### What you write
+
+**The repository.** **Why:** the pairs are an Entity Framework query, so the infrastructure project reads them. The
+application project receives the permissions per board id.
+
+**`Harbor.Boards.Application/Boards/IBoardRepository.cs`**
+
+```csharp {12}
+namespace Harbor.Boards.Application.Boards;
+
+// Where the handlers load and save boards. The infrastructure project implements it.
+public interface IBoardRepository
+{
+    void Add(Board board);
+
+    Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken);
+
+    Task<ILookup<BoardId, string>> PermissionsOnVisibleAsync(IReadOnlyCollection<string> permissions, CancellationToken cancellationToken);
+
+    Task SaveAsync(CancellationToken cancellationToken);
+}
+```
+
+**`Harbor.Boards.Infrastructure/Persistence/BoardRepository.cs`**
+
+```csharp {20-25}
+using DDDToolkit.Supporting.Membership.EntityFramework;
+using Harbor.Boards.Application.Access;
+using Harbor.Boards.Application.Boards;
+using Harbor.Boards.Contracts.ValueObjects;
+using Harbor.Boards.Domain.Aggregates.Boards;
+using Microsoft.EntityFrameworkCore;
+
+namespace Harbor.Boards.Infrastructure.Persistence;
+
+internal sealed class BoardRepository(BoardsContext db) : IBoardRepository
+{
+    public void Add(Board board) => db.Boards.Add(board);
+
+    public Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken)
+        => db.Boards.SingleOrDefaultAsync(board => board.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken)
+        => await db.Boards.WhereIHold(BoardPermissions.View).OrderBy(board => board.Name).ToListAsync(cancellationToken);
+
+    // One pair for each board the caller sees and each of the permissions it holds there.
+    public async Task<ILookup<BoardId, string>> PermissionsOnVisibleAsync(IReadOnlyCollection<string> permissions, CancellationToken cancellationToken)
+        => (await db.Boards.WhereIHold(permissions)
+                .Select(pair => new { pair.Resource.Id, pair.Permission })
+                .ToListAsync(cancellationToken))
+            .ToLookup(pair => pair.Id, pair => pair.Permission);
+
+    public Task SaveAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
+}
+```
+
+**Seeing one board.** **Why:** the handler has the board already, so it asks the access manager about that board.
+
+**`Harbor.Boards.Application/Boards/SeeBoard/SeeBoard.cs`**
+
+```csharp {11,19-21,25,29}
+using DDDToolkit.Supporting.Membership;
+using DDDToolkit.Supporting.Membership.UseCases;
+
+namespace Harbor.Boards.Application.Boards.SeeBoard;
+
+[RequiresPermission(BoardPermissions.View)]
+public sealed record SeeBoard([OnResource] BoardId Board) : IQuery<BoardDetails>, IBoardsRequest;
+
+public sealed class SeeBoardHandler(
+    IBoardRepository boards,
+    MembershipAccessManager<Board> boardAccess,
+    TimeProvider clock) : IQueryHandler<SeeBoard, BoardDetails>
+{
+    public async ValueTask<BoardDetails> Handle(SeeBoard query, CancellationToken cancellationToken)
+    {
+        var board = await boards.FindAsync(query.Board, cancellationToken)
+            ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
+
+        // Which of the two permissions the caller holds on this board: one statement, for the screen's buttons.
+        var held = await boardAccess.PermissionsOnAsync([board], [BoardPermissions.Edit, BoardPermissions.ManageMembers], cancellationToken);
+        IReadOnlyList<string> may = held.TryGetValue(board, out var permissions) ? [.. permissions] : [];
+
+        // The owner first, then by when each membership starts, each with its roles.
+        var members = MemberOverviews.From(board.People, board.OwnerSeatId, clock.GetUtcNow());
+        return new BoardDetails(board.Id, board.Name, board.UnitId, board.Version, members, may);
+    }
+}
+
+public sealed record BoardDetails(BoardId Id, string Name, OrganizationUnitId Unit, long Version, IReadOnlyList<MemberOverview<SeatId, BoardRoleId>> Members, IReadOnlyList<string> May);
+```
+
+**Listing the caller's boards.** **Why:** the list has many boards, so it reads the pairs in one statement instead
+of one question per board.
+
+**`Harbor.Boards.Application/Boards/ListBoards/ListBoards.cs`**
+
+```csharp {14-16,20}
+namespace Harbor.Boards.Application.Boards.ListBoards;
+
+[SeenWith<BoardId>(BoardPermissions.View)]
+public sealed record ListBoards : IQuery<IReadOnlyList<BoardListing>>, IBoardsRequest;
+
+public sealed class ListBoardsHandler(IBoardRepository boards)
+    : IQueryHandler<ListBoards, IReadOnlyList<BoardListing>>
+{
+    public async ValueTask<IReadOnlyList<BoardListing>> Handle(ListBoards query, CancellationToken cancellationToken)
+    {
+        // The boards the caller holds boards.view on. The repository's query reads them in one statement.
+        var found = await boards.ListVisibleAsync(cancellationToken);
+
+        // Which of the two permissions the caller holds on each of those boards, in one more statement.
+        var may = await boards.PermissionsOnVisibleAsync([BoardPermissions.Edit, BoardPermissions.ManageMembers], cancellationToken);
+        return [.. found.Select(board => new BoardListing(board.Id, board.Name, board.UnitId, board.OwnerSeatId, [.. may[board.Id]]))];
+    }
+}
+
+public sealed record BoardListing(BoardId Id, string Name, OrganizationUnitId Unit, SeatId Owner, IReadOnlyList<string> May);
+```
+
+```powershell
+dotnet build Harbor.slnx
+```
+
+### What it does
+
+- `MembershipAccessManager<Board>`: its type argument is the board class alone. The registration of step 5 made it for
+  Boards' context and ids.
+- `PermissionsOnAsync([board], [...])`: one statement. The answer is keyed by the boards the handler passed. A board
+  the caller does not see, or holds none of the permissions on, is not in the answer, so `may` is then empty. One
+  question takes at most 200 boards (`MembershipAccessManager.MostResources`).
+- Each question has an overload that takes the board's id instead, for a handler that has not loaded the board:
+  `boardAccess.PermissionsOnAsync([query.Board], [...])`. That answer is keyed by the ids.
+- `WhereIHold([...])`: a pair is one row per permission on a board, however many ways the caller holds it there. The
+  query goes on from the pair to the board's columns, here `pair.Resource.Id`.
+- `may[board.Id]`: an `ILookup` returns no permissions for a board without pairs.
+- The routes of step 6 send the same requests, so they need no change. The responses get the field `may`.
+
+### Try it
+
+1. As Rhea: `GET /boards`: Crane schedule with `may` `boards.edit` and `boards.members.manage`, because she owns it.
+   Quay plan with an empty `may`. Of the permissions on a board, her roles at North give only `boards.view`.
+2. As Leo: `GET /boards`: Crane schedule with `may` `boards.edit`. The role editor gives no
+   `boards.members.manage`.
+3. As Ada: `GET /boards`: both boards, each with both permissions. Her Administrator role at the root reaches both
+   boards.
+4. As Ada: `GET /boards/<Crane schedule's id>`: `may` holds both permissions. She holds `boards.edit` as a member,
+   through the role editor, and `boards.members.manage` from above.
+
+> **Going further.** A rule of your own over how and until when the caller holds a permission:
+> [Who may give a role](permissions-and-roles.md#who-may-give-a-role). A list that reads its own columns next to how
+> a permission is held: [Access in your own queries](checks-and-saves.md#access-in-your-own-queries).
 
 ## What you built
 
@@ -2045,6 +2272,7 @@ Build the host, run `npx supabase migration up --local`, and start the host agai
 | 6 | Opening a board at a unit, and seeing and listing boards by a permission held on them |
 | 7 | Starter roles, and members that the owner adds with a role that counts on that one board |
 | 8 | A permission held at a unit counting on every board at that unit and below it |
+| 9 | Each board answered with what the caller may do on it, for one board and for a list |
 
 Next: the topic pages describe each part in detail, starting with [Resources and members](resources-and-members.md).
 The [API reference](reference/resource-and-members.md) lists every class and method.

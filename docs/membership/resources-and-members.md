@@ -17,9 +17,9 @@ names, and several kinds of resource in one module. The [tutorial](tutorial.md) 
 
 | Package | What it holds |
 |---|---|
-| `DDDToolkit.Supporting.Membership` | The templates, the member list and the generator that writes it, the rules, the questions and the requirements. It has no database code. |
-| `DDDToolkit.Supporting.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on the property that says where a resource hangs. No Entity Framework. `DDDToolkit.Supporting.Membership` references it. |
-| `DDDToolkit.Supporting.Membership.EntityFramework` | `HasMembers()`, `IsCustomRole()`, the registrations, and the questions inside your queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
+| `DDDToolkit.Supporting.Membership` | The templates, the member list and the generator that writes it, the rules, the access manager (`MembershipAccessManager<TResource>`) and the requirements. It has no database code. |
+| `DDDToolkit.Supporting.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on the property that says where a resource hangs, in the namespace `DDDToolkit.Supporting.Membership`. No Entity Framework. `DDDToolkit.Supporting.Membership` references it. |
+| `DDDToolkit.Supporting.Membership.EntityFramework` | The mapping by convention, with `HasMembers()` and `IsCustomRole()` for names of your own, the registrations, and `WhereIHold` for your own queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
 | `DDDToolkit.Supporting.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
 
 - **Membership needs no dispatcher and no Tenancy.** Members are your users unless the rules say
@@ -122,15 +122,12 @@ public sealed class FilingContext(DbContextOptions<FilingContext> options) : DbC
 {
     public DbSet<Document> Documents => Set<Document>();
 
+    // The conventions map the document and both member tables. The owner is the property marked [Owner].
     protected override void ConfigureConventions(ModelConfigurationBuilder configuration)
     {
         configuration.AddDDDToolkitConventions();
         configuration.AddFilingConverters();         // stores your ids with the converters generated for your module
     }
-
-    // Maps both member tables, owned by the document. The owner is the property marked [Owner].
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.Entity<Document>().HasMembers(document => document.Shares);
 }
 
 public static class FilingModule
@@ -138,7 +135,7 @@ public static class FilingModule
     public static IServiceCollection AddFiling(this IServiceCollection services, Action<DbContextOptionsBuilder> database)
     {
         services.AddDbContext<FilingContext>(database);                             // your context, on your provider
-        services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);    // the questions and the admission for documents
+        services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);    // the access manager, the queries and the admission for documents
         services.AddDocumentMemberAccess<IFilingRequest>();                         // the check for documents, on your requests
         services.RequireExplicitCallers();                                          // work that names no caller fails
         return services.AddScoped<DocumentHandlers>();
@@ -147,7 +144,10 @@ public static class FilingModule
 ```
 
 - The generator writes `AddDocumentMembership` and `AddDocumentMemberAccess`, and names them after the resource.
-- `HasMembers` adds two tables, `DocumentShares` and `DocumentShareRoles`. Add a migration for them.
+- `AddDDDToolkitConventions()` maps `Shares` as two tables, `DocumentShares` and `DocumentShareRoles`, owned by the
+  document. `OnModelCreating` needs no line for them. Add a migration for the tables.
+- `AddDocumentMembership` registers `MembershipAccessManager<Document>` per scope, and the queries on
+  `db.Documents` ([Access in your own queries](checks-and-saves.md#access-in-your-own-queries)).
 - Without `RequireExplicitCallers()`, work that names no caller runs as the application, which holds every
   permission. With it, that work [fails](../row-level-security.md#requiring-explicit-callers).
 
@@ -314,9 +314,10 @@ refusal.
 
 ## Several kinds of resource
 
-Each resource has its own member class, rules, `HasMembers` call, registrations, tables, codes, functions and
-questions. Two resources share none of these. The module keeps one request interface, which gets one check per
-resource. Adding a second resource changes none of the existing calls:
+Each resource has its own member class, rules, registrations, tables, codes, functions and access manager
+(`MembershipAccessManager<Folder>` beside `MembershipAccessManager<Document>`). Two resources share none of these. The
+module keeps one request interface, which gets one check per resource. Adding a second resource changes none of the
+existing calls:
 
 ```csharp
 [Member<FolderMemberId, StaffCode, NamedRole, Folder>]
@@ -332,13 +333,17 @@ services.AddFolderMemberAccess<IFilingRequest>();
   [DDD00045](../diagnostics.md#ddd00045). A member class that names something other than one of your aggregate
   roots, such as a child entity, is [DDD00050](../diagnostics.md#ddd00050). Both are reported on the member class. In
   a domain project without the registrations, both mistakes are [DDD00060](../diagnostics.md#ddd00060).
-- **Pass your own table and column names to `HasMembers`:**
+- **For table and column names of your own, call `HasMembers` in `OnModelCreating`.** A hand-written call wins over
+  the convention, for that resource:
 
   ```csharp
   modelBuilder.Entity<Folder>().HasMembers(folder => folder.Staff,
       new MemberTableNames("FolderStaff", "FolderStaffRoles", MemberColumn: "StaffCode"));
   ```
 
+- **`IsCustomRole()` does the same for a role class** that a context maps in a table layout of its own
+  ([Roles a customer makes](permissions-and-roles.md#roles-a-customer-makes)). A members collection that the context
+  ignores stays unmapped.
 - **A composite key works.** Both tables use the resource's full key, with its [`[KeyPart]`](../composite-keys.md)
-  parts under their own names. Call `HasKey` before `HasMembers`. A key set after `HasMembers` is refused where the
-  mapping is read.
+  parts under their own names. With `HasMembers`, call `HasKey` before `HasMembers`. A key set after `HasMembers` is
+  refused where the mapping is read.
