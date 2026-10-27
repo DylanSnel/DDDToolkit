@@ -4,6 +4,7 @@ const { themes: prismThemes } = require('prism-react-renderer');
 const githubAlerts = require('./src/remark/githubAlerts');
 const githubLinks = require('./src/remark/githubLinks');
 const interactive = require('./src/remark/interactive');
+const scrollingTables = require('./src/rehype/scrollingTables');
 
 const repoRoot = path.resolve(__dirname, '..');
 const docsDir = path.join(repoRoot, 'docs');
@@ -47,6 +48,8 @@ const config = {
 
   themes: ['@docusaurus/theme-mermaid'],
 
+  clientModules: [require.resolve('./src/clientModules/copyWithoutBreaks.js')],
+
   presets: [
     [
       'classic',
@@ -66,6 +69,7 @@ const config = {
             [githubLinks, { docsDir, repoRoot }],
             githubAlerts,
           ],
+          rehypePlugins: [scrollingTables],
         },
         blog: false,
         theme: {

@@ -104,6 +104,31 @@ body {
   max-width: 50rem;
 }
 
+/* The table of contents stands at the right edge of the window, at every width: the page's container fills the
+   space beside the sidebar instead of centring at 1320px, the contents column has a fixed width, and the text
+   keeps its reading width (above) at the left. */
+@media (min-width: 997px) {
+  [class*='docMainContainer'] > .container {
+    max-width: none;
+  }
+
+  [class*='docMainContainer'] > .container > .row {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  [class*='docMainContainer'] > .container > .row > .col--3 {
+    flex: 0 0 17rem;
+    max-width: 17rem;
+  }
+
+  [class*='docItemCol'] {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none !important;
+  }
+}
+
 .theme-doc-markdown h1 {
   letter-spacing: -0.03em;
   font-weight: 800;
@@ -196,17 +221,25 @@ html[data-theme='dark'] .theme-code-block {
   box-shadow: inset 3px 0 0 var(--ifm-color-primary);
 }
 
-/* tables */
+/* tables: each sits in a box that scrolls sideways (src/rehype/scrollingTables.js), so a table wider than the
+   column scrolls inside its border instead of running over the table of contents. */
+.markdown .table-scroll {
+  overflow-x: auto;
+  margin-bottom: var(--ifm-spacing-vertical);
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.75rem;
+}
+
 .markdown table {
   display: table;
   width: 100%;
+  margin: 0;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid var(--ddd-border);
-  border-radius: 0.75rem;
-  overflow: hidden;
+  border: none;
   font-size: 0.93rem;
 }
+
 
 .markdown table thead tr {
   background: color-mix(in srgb, var(--ifm-color-primary) 8%, var(--ddd-card));
@@ -215,6 +248,12 @@ html[data-theme='dark'] .theme-code-block {
 .markdown table th {
   text-align: left;
   font-weight: 600;
+}
+
+/* The last column is most often the one with sentences: it keeps room to read, and a table that then no longer
+   fits scrolls inside its box. */
+.markdown table td:last-child {
+  min-width: 16rem;
 }
 
 .markdown table th,
@@ -230,15 +269,6 @@ html[data-theme='dark'] .theme-code-block {
 
 .markdown table tr:nth-child(2n) {
   background: transparent;
-}
-
-/* On a phone a table wider than the column scrolls inside its own border, rather than widening the page:
-   drawn as a table, a wide one made the whole page scroll sideways. */
-@media (max-width: 996px) {
-  .markdown table {
-    display: block;
-    overflow-x: auto;
-  }
 }
 
 /* blockquotes as quiet asides */
