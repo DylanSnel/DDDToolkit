@@ -31,8 +31,8 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// checked, with the version the caller named, <c>context.ExpectVersion(document, command.ExpectedVersion)</c>,
 /// so a resource changed since the caller read it is a lost race at the load as well as here; the save compares
 /// the version it loaded, the aggregate keeps its own rules, and a database that checks every row checks the
-/// write again. A rule that needs how or until when the caller holds the permission asks the questions for it
-/// (<see cref="IMemberQuestions{TResourceId}.HoldAsync"/>).
+/// write again. A rule that needs how or until when the caller holds the permission asks the access manager for it
+/// (<see cref="MembershipAccessManager{TResource}.HoldAsync"/>).
 /// </para>
 /// <para>
 /// What it read it keeps all the same, as a <see cref="MemberHold{TResourceId}"/> in <see cref="Checked{T}"/>,
@@ -54,11 +54,11 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// </summary>
 /// <typeparam name="TResource">The resource's aggregate, which a lost race names.</typeparam>
 /// <typeparam name="TResourceId">The resource's id.</typeparam>
-/// <param name="access">The access questions of this kind of resource.</param>
+/// <param name="access">The access manager of this kind of resource.</param>
 /// <param name="kept">Where what was read of a request's resource is kept, for the expert hold.</param>
 /// <param name="callers">Who is calling: what tells a caller who did not sign in.</param>
-public sealed class MemberAccessCheck<TResource, TResourceId>(IMemberQuestions<TResourceId> access, Checked<MemberHold<TResourceId>> kept, ICallerAccessor callers) : IAccessCheck
-    where TResource : class
+public sealed class MemberAccessCheck<TResource, TResourceId>(MembershipAccessManager<TResource> access, Checked<MemberHold<TResourceId>> kept, ICallerAccessor callers) : IAccessCheck
+    where TResource : class, IEntity<TResourceId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
 {
     /// <inheritdoc />

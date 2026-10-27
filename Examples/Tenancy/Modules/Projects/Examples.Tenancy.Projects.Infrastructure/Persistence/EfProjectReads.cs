@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.Access;
@@ -23,28 +24,31 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 /// A context runs one query at a time, and a request's queries may run side by side. So a reading takes a context
 /// from the factory the module registers next to its context, and disposes it with the reading. The factory
 /// builds it with the options the request's own context has, so the tenant filter and the caller it reads are the
-/// same. It holds no context and no state of its own, so one instance serves every query of a request, whichever
-/// run at once.
+/// same. The reading's context is bound to the request's scope, so what the projects' rules ask of the organization,
+/// in a query on the projects' own set, is asked of that scope. It holds no context and no state of its own, so one
+/// instance serves every query of a request, whichever run at once.
 /// <para>
 /// Internal: the module's registration, in this project, is the only code that names it. Everything else asks for
 /// the port.
 /// </para>
 /// </remarks>
 /// <param name="contexts">Makes a context for one reading.</param>
-internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts) : IProjectReads
+/// <param name="scope">The services of the request's scope, which each reading's context is bound to.</param>
+internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts, IServiceProvider scope) : IProjectReads
 {
     /// <inheritdoc />
-    public IProjectReading Open() => new Reading(contexts.CreateDbContext());
+    public IProjectReading Open() => new Reading(contexts.CreateDbContext().BindToScope(scope));
 
     /// <summary>
     /// The projects, their project roles and Tenancy's read model on one context, which the reading owns: what makes
     /// a reach and the projects one statement.
     /// </summary>
     /// <remarks>
-    /// A reach is put into a query with the Membership package's own extensions (<c>Within</c>, <c>Reached</c>,
-    /// <c>PermissionsOn</c>), which add its conditions as subqueries over the crews, the project roles and Tenancy's rows.
-    /// This context is one made for the reading, not the request's, so each is handed it: the rows of the project
-    /// roles and what Tenancy answers are queries of the context the statement runs on.
+    /// A reach is put into a query with the Membership package's own extensions (<c>Within</c>, <c>Reached</c>), and
+    /// which permissions are held is asked of the projects' own set (<c>WhereIHold</c>): each adds its conditions as
+    /// subqueries over the crews, the project roles and Tenancy's rows. This context is one made for the reading, not the
+    /// request's, so each is handed it: the rows of the project roles and what Tenancy answers are queries of the context
+    /// the statement runs on.
     /// </remarks>
     /// <param name="db">A context of the reading's own, from the factory.</param>
     private sealed class Reading(ProjectsContext db) : IProjectReading
@@ -87,7 +91,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         /// paged read makes (<see cref="ListCursors"/>).
         /// </para>
         /// </remarks>
-        public async Task<Page<ProjectOverview>> PageAsync(MemberReach<ProjectId> reach, ProjectListFilter filter, PagingArguments paging, CancellationToken cancellationToken)
+        public async Task<Page<ProjectOverview>> PageAsync(MemberReach<Project> reach, ProjectListFilter filter, PagingArguments paging, CancellationToken cancellationToken)
         {
             var page = await RowsOf(Listed(reach, filter), reach)
                 .OrderBy(row => row.Number)
@@ -104,7 +108,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         }
 
         /// <inheritdoc />
-        public async Task<IReadOnlyList<ProjectOverview>> ByIdsAsync(IReadOnlyCollection<ProjectId> ids, MemberReach<ProjectId> reach, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<ProjectOverview>> ByIdsAsync(IReadOnlyCollection<ProjectId> ids, MemberReach<Project> reach, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(ids);
 
@@ -121,7 +125,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         /// with it, as the access check reads how a permission is held: the projects seen are the filter, and how
         /// <paramref name="manage"/> reaches each of them is what is read with it.
         /// </remarks>
-        public async Task<IReadOnlyList<ProjectCrewData>> CrewsOfAsync(IReadOnlyCollection<ProjectId> projects, MemberReach<ProjectId> reach, MemberReach<ProjectId> manage, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<ProjectCrewData>> CrewsOfAsync(IReadOnlyCollection<ProjectId> projects, MemberReach<Project> reach, MemberReach<Project> manage, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(projects);
             ArgumentNullException.ThrowIfNull(manage);
@@ -155,38 +159,30 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         /// </remarks>
         public async Task<IReadOnlyDictionary<ProjectId, ProjectStanding>> StandingOnAsync(
             IReadOnlyCollection<ProjectId> projects,
-            MemberPermissionReach<ProjectId> reach,
+            IReadOnlyCollection<string> permissions,
             IQueryable<OrganizationUnitId> units,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(projects);
-            ArgumentNullException.ThrowIfNull(reach);
+            ArgumentNullException.ThrowIfNull(permissions);
             ArgumentNullException.ThrowIfNull(units);
 
             var ids = projects.ToList();
             var asked = Projects.Where(project => ids.Contains(project.Id));
-            var seen = asked.Within(reach.See, db);
-
-            if (reach.See.Everything)
-            {
-                // The application's own work in the tenant holds every permission on every project of it, so only which
-                // exist is read.
-                var all = await seen.Select(project => new { project.Id, project.State, AtAUnit = units.Any() }).ToListAsync(cancellationToken);
-                return all.ToDictionary(project => project.Id, project => new ProjectStanding(project.State, reach.Permissions.ToHashSet(StringComparer.Ordinal), project.AtAUnit));
-            }
+            var seen = asked.WhereIHold(ProjectPermissionNames.View, db);
 
             var isSeen = SeenMark;
             var atAUnit = UnitMark;
-            var marked = asked.PermissionsOn(reach, db)
-                .Concat(seen.Select(project => new MemberPermissionOn<ProjectId> { Resource = project.Id, Permission = isSeen }))
-                .Concat(seen.Where(project => units.Any()).Select(project => new MemberPermissionOn<ProjectId> { Resource = project.Id, Permission = atAUnit }));
+            var marked = asked.WhereIHold(permissions, db).Select(pair => new Mark { Project = pair.Resource.Id, Permission = pair.Permission })
+                .Concat(seen.Select(project => new Mark { Project = project.Id, Permission = isSeen }))
+                .Concat(seen.Where(project => units.Any()).Select(project => new Mark { Project = project.Id, Permission = atAUnit }));
             var rows = await (from row in marked
-                              join project in Projects on row.Resource equals project.Id
-                              select new { row.Resource, project.State, row.Permission })
+                              join project in Projects on row.Project equals project.Id
+                              select new { row.Project, project.State, row.Permission })
                 .ToListAsync(cancellationToken);
 
             return rows
-                .GroupBy(row => row.Resource)
+                .GroupBy(row => row.Project)
                 .ToDictionary(
                     held => held.Key,
                     held => new ProjectStanding(
@@ -198,38 +194,33 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         /// <inheritdoc />
         /// <remarks>
         /// One statement of a part for each permission asked about, each over the projects asked about that the caller
-        /// sees: the package's, which reads the permission held as a member, by owning the project and at its unit. The
-        /// parts are put together where the statement runs and grouped here.
+        /// sees: the package's, asked of the projects' own set, which reads the permission held as a member, by owning the
+        /// project and at its unit. The parts are put together where the statement runs and grouped here.
         /// </remarks>
         public async Task<IReadOnlyDictionary<ProjectId, IReadOnlySet<string>>> PermissionsOnAsync(
             IReadOnlyCollection<ProjectId> projects,
-            MemberPermissionReach<ProjectId> reach,
+            IReadOnlyCollection<string> permissions,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(projects);
-            ArgumentNullException.ThrowIfNull(reach);
+            ArgumentNullException.ThrowIfNull(permissions);
 
             var ids = projects.ToList();
-            var asked = Projects.Where(project => ids.Contains(project.Id));
+            var held = await Projects.Where(project => ids.Contains(project.Id))
+                .WhereIHold(permissions, db)
+                .Select(pair => new { pair.Resource.Id, pair.Permission })
+                .ToListAsync(cancellationToken);
 
-            if (reach.See.Everything)
-            {
-                // The application's own work in the tenant holds every permission on every project of it, so only which
-                // exist is read.
-                var all = await asked.Select(project => project.Id).ToListAsync(cancellationToken);
-                return all.ToDictionary(project => project, _ => (IReadOnlySet<string>)reach.Permissions.ToHashSet(StringComparer.Ordinal));
-            }
-
-            return (await asked.PermissionsOn(reach, db).ToListAsync(cancellationToken))
-                .GroupBy(pair => pair.Resource)
+            return held
+                .GroupBy(pair => pair.Id)
                 .ToDictionary(pairs => pairs.Key, pairs => (IReadOnlySet<string>)pairs.Select(pair => pair.Permission).ToHashSet(StringComparer.Ordinal));
         }
 
         /// <inheritdoc />
         public async Task<IReadOnlyDictionary<ProjectId, ProjectAnswer>> AnswersAsync(
             IReadOnlyCollection<ProjectId> ids,
-            MemberReach<ProjectId> see,
-            MemberReach<ProjectId> act,
+            MemberReach<Project> see,
+            MemberReach<Project> act,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(ids);
@@ -300,7 +291,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         /// The projects within <paramref name="reach"/> that <paramref name="filter"/> keeps: what a page lists and a
         /// count counts, so the two never differ.
         /// </summary>
-        private IQueryable<Project> Listed(MemberReach<ProjectId> reach, ProjectListFilter filter)
+        private IQueryable<Project> Listed(MemberReach<Project> reach, ProjectListFilter filter)
         {
             ArgumentNullException.ThrowIfNull(filter);
 
@@ -342,7 +333,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         /// caller it runs as. They are read here, in the statement, so a page of rows carries them and nothing
         /// needs to be tracked to show them.
         /// </remarks>
-        private IQueryable<Row> RowsOf(IQueryable<Project> projects, MemberReach<ProjectId> reach)
+        private IQueryable<Row> RowsOf(IQueryable<Project> projects, MemberReach<Project> reach)
             => projects.Reached(reach, db).Select(found => new Row
             {
                 Id = found.Resource.Id,
@@ -360,7 +351,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
             });
 
         /// <summary>The project of <paramref name="row"/> as its caller is shown it: the row, and how <paramref name="reach"/> reaches it.</summary>
-        private static ProjectOverview Overview(Row row, MemberReach<ProjectId> reach)
+        private static ProjectOverview Overview(Row row, MemberReach<Project> reach)
             => new(
                 row.Id,
                 row.Version,
@@ -372,6 +363,14 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
                 row.Planned,
                 ProjectAccess.Via(reach.Via(row.AsMember, row.FromAbove)),
                 new ChangedBy(row.ChangedByKind, row.ChangedBySeat));
+
+        /// <summary>A project and a permission held on it, or a mark in the place of one: a row of what decides a project's standing.</summary>
+        private sealed class Mark
+        {
+            public required ProjectId Project { get; init; }
+
+            public required string Permission { get; init; }
+        }
 
         /// <summary>A project's own columns, who changed its row last and how a reach reaches it: what a page is made of.</summary>
         private sealed class Row

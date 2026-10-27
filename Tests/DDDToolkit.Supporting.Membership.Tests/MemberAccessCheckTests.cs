@@ -69,8 +69,8 @@ public sealed class MemberAccessCheckTests
     [Fact]
     public void A_check_decides_the_requirements_of_its_own_resource_and_no_other()
     {
-        var documents = DocumentCheck(new StubAccess<DocumentId>(DocumentMembership.Rules), new());
-        var folders = new MemberAccessCheck<Folder, FolderId>(new StubAccess<FolderId>(FolderMembership.Rules), new(), new AmbientCallerAccessor());
+        var documents = DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules), new());
+        var folders = new MemberAccessCheck<Folder, FolderId>(new StubAccess<Folder, FolderId>(FolderMembership.Rules), new(), new AmbientCallerAccessor());
 
         documents.Decides(MemberAccess.On(DocumentPermissions.Share, Minutes)).Should().BeTrue();
         documents.Decides(MemberAccess.SeenWith<DocumentId>(DocumentPermissions.View)).Should().BeTrue();
@@ -87,7 +87,7 @@ public sealed class MemberAccessCheckTests
     [Fact]
     public async Task A_request_on_a_resource_passes_when_the_permission_is_held_and_its_handler_takes_what_was_checked()
     {
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.Share, MemberVia.Members));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.Share, MemberVia.Members));
         var kept = new Checked<MemberHold<DocumentId>>();
         var check = DocumentCheck(access, kept);
         var request = new ShareDocument(Minutes, UserId.CreateSequential());
@@ -105,7 +105,7 @@ public sealed class MemberAccessCheckTests
         // A hold that ends in an hour, and one that ended on paper a year from now: the check passes both alike.
         // What a host makes of the end is the host's own rule, in its handler.
         var soon = new DateTimeOffset(2026, 10, 1, 10, 0, 0, TimeSpan.Zero);
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules) { Until = soon }.Sees(Minutes, version: 4, (DocumentPermissions.Share, MemberVia.Members));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { Until = soon }.Sees(Minutes, version: 4, (DocumentPermissions.Share, MemberVia.Members));
         var kept = new Checked<MemberHold<DocumentId>>();
         var check = DocumentCheck(access, kept);
         var request = new ShareDocument(Minutes, UserId.CreateSequential(), Until: soon.AddYears(1));
@@ -118,7 +118,7 @@ public sealed class MemberAccessCheckTests
     [Fact]
     public async Task A_refused_request_keeps_nothing_for_its_handler()
     {
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
         var kept = new Checked<MemberHold<DocumentId>>();
         var check = DocumentCheck(access, kept);
         var seen = new ShareDocument(Minutes, UserId.CreateSequential());
@@ -136,7 +136,7 @@ public sealed class MemberAccessCheckTests
     [Fact]
     public async Task The_version_a_caller_read_is_compared_only_once_the_caller_has_access()
     {
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.Share, MemberVia.Members));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.Share, MemberVia.Members));
         var kept = new Checked<MemberHold<DocumentId>>();
         var check = DocumentCheck(access, kept);
 
@@ -153,11 +153,11 @@ public sealed class MemberAccessCheckTests
         FluentActions.Invoking(() => kept.TakeFor(stale)).Should().Throw<InvalidOperationException>();
 
         // Without the permission, whatever version is sent: answered as if none had been sent.
-        var noPermission = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
+        var noPermission = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
         await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => DocumentCheck(noPermission, kept).RequireAsync(((IRequireAccess)stale).RequiredAccess, stale, Cancellation).AsTask());
 
         // Without seeing the resource, whatever version is sent: not found, and no version is learned.
-        var blind = new StubAccess<DocumentId>(DocumentMembership.Rules);
+        var blind = new StubAccess<Document, DocumentId>(DocumentMembership.Rules);
         await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => DocumentCheck(blind, kept).RequireAsync(((IRequireAccess)stale).RequiredAccess, stale, Cancellation).AsTask());
         await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => DocumentCheck(blind, kept).RequireAsync(((IRequireAccess)current).RequiredAccess, current, Cancellation).AsTask());
     }
@@ -166,7 +166,7 @@ public sealed class MemberAccessCheckTests
     public async Task A_query_that_shows_what_a_permission_is_held_on_requires_a_caller_and_refuses_nobody_for_the_permission()
     {
         // The caller sees nothing and holds nothing: its list is empty, and that is an answer.
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules);
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules);
         var kept = new Checked<MemberHold<DocumentId>>();
         var query = new ListDocuments();
 
@@ -177,7 +177,7 @@ public sealed class MemberAccessCheckTests
 
         // A caller the questions cannot be asked about at all is refused, with that caller's own refusal.
         var nobody = new RefusalException("host.not-signed-in", RefusalKind.NotPermitted, "Sign in first.");
-        var closed = new StubAccess<DocumentId>(DocumentMembership.Rules) { Nobody = nobody };
+        var closed = new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { Nobody = nobody };
         (await FluentActions.Awaiting(() => DocumentCheck(closed, kept).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation).AsTask())
             .Should().ThrowAsync<RefusalException>()).Which.Should().BeSameAs(nobody);
     }
@@ -187,7 +187,7 @@ public sealed class MemberAccessCheckTests
     {
         // A caller who did not sign in is nobody's member under any rules: its list would be empty, and a database
         // that checks every row may refuse its role the resource's schema outright. So the handler does not run.
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
         var query = new ListDocuments();
 
         RefusalException refused;
@@ -202,14 +202,14 @@ public sealed class MemberAccessCheckTests
         // A signed-in caller who reaches nothing is let through: its empty list is an answer.
         using (Callers.Begin(Caller.User(Guid.NewGuid())))
         {
-            await DocumentCheck(new StubAccess<DocumentId>(DocumentMembership.Rules), new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation);
+            await DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules), new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation);
         }
 
         // And the caller's own refusal, where the questions have one, is what a caller who is nobody hears first.
         var nobody = new RefusalException("host.not-signed-in", RefusalKind.NotPermitted, "Sign in first.");
         using (Callers.Begin(Caller.Anonymous))
         {
-            (await FluentActions.Awaiting(() => DocumentCheck(new StubAccess<DocumentId>(DocumentMembership.Rules) { Nobody = nobody }, new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation).AsTask())
+            (await FluentActions.Awaiting(() => DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { Nobody = nobody }, new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation).AsTask())
                 .Should().ThrowAsync<RefusalException>()).Which.Should().BeSameAs(nobody);
         }
     }
@@ -217,7 +217,7 @@ public sealed class MemberAccessCheckTests
     [Fact]
     public async Task A_requirement_that_is_not_one_of_its_cases_stops_the_request()
     {
-        var check = DocumentCheck(new StubAccess<DocumentId>(DocumentMembership.Rules), new());
+        var check = DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules), new());
         var request = new FileInFolder(Cabinet);
 
         // Asked all the same, round the set that asks Decides first: it fails closed.
@@ -232,12 +232,12 @@ public sealed class MemberAccessCheckTests
     [Fact]
     public async Task Two_kinds_of_resource_in_one_module_are_each_held_to_their_own_check()
     {
-        var documents = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.Share, MemberVia.Members));
-        var folders = new StubAccess<FolderId>(FolderMembership.Rules).Sees(Cabinet, version: 9, (FolderPermissions.Read, MemberVia.Members));
+        var documents = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.Share, MemberVia.Members));
+        var folders = new StubAccess<Folder, FolderId>(FolderMembership.Rules).Sees(Cabinet, version: 9, (FolderPermissions.Read, MemberVia.Members));
 
         await using var provider = new ServiceCollection()
-            .AddSingleton<IMemberQuestions<DocumentId>>(documents)
-            .AddSingleton<IMemberQuestions<FolderId>>(folders)
+            .AddSingleton<MembershipAccessManager<Document>>(documents)
+            .AddSingleton<MembershipAccessManager<Folder>>(folders)
             .AddSingleton<ICallerAccessor, AmbientCallerAccessor>()
             .AddAccessCheck<IFilingRequest, MemberAccessCheck<Document, DocumentId>>()
             .AddAccessCheck<IFilingRequest, MemberAccessCheck<Folder, FolderId>>()
@@ -273,7 +273,7 @@ public sealed class MemberAccessCheckTests
     public async Task A_requirement_about_a_kind_of_resource_nobody_registered_a_check_for_lets_nobody_through()
     {
         await using var provider = new ServiceCollection()
-            .AddSingleton<IMemberQuestions<DocumentId>>(new StubAccess<DocumentId>(DocumentMembership.Rules))
+            .AddSingleton<MembershipAccessManager<Document>>(new StubAccess<Document, DocumentId>(DocumentMembership.Rules))
             .AddSingleton<ICallerAccessor, AmbientCallerAccessor>()
             .AddAccessCheck<IFilingRequest, MemberAccessCheck<Document, DocumentId>>()
             .BuildServiceProvider(validateScopes: true);
@@ -286,7 +286,7 @@ public sealed class MemberAccessCheckTests
             .WithMessage("*FileInFolder declares 'MemberAccess<FolderId>.On'*register the check that decides it with services.Add{Resource}MemberAccess<IFilingRequest>(), written for the resource whose id the case names.");
     }
 
-    private static MemberAccessCheck<Document, DocumentId> DocumentCheck(IMemberQuestions<DocumentId> access, Checked<MemberHold<DocumentId>> kept) => new(access, kept, new AmbientCallerAccessor());
+    private static MemberAccessCheck<Document, DocumentId> DocumentCheck(MembershipAccessManager<Document> access, Checked<MemberHold<DocumentId>> kept) => new(access, kept, new AmbientCallerAccessor());
 
     /// <summary>A requirement of somebody else's.</summary>
     private sealed record SomethingElse : AccessRequirement;

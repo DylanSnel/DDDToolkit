@@ -31,11 +31,13 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// application has members on, its documents and its folders, in one container, and none gets another's
     /// rules:
     /// <list type="bullet">
-    /// <item><see cref="IMemberQuestions{TResourceId}"/>, the access questions of the resource, answered inside the
-    /// context's own statements, which is what <see cref="MemberAccessCheck{TResource, TResourceId}"/> asks
+    /// <item><see cref="MembershipAccessManager{TResource}"/>, the access manager of the resource, per scope, answered
+    /// inside the context's own statements, which is what <see cref="MemberAccessCheck{TResource, TResourceId}"/> asks
     /// before a handler runs. That check is added for the module's request interface by the registration
     /// generated beside this one: <c>services.AddDocumentMemberAccess&lt;IDocumentsRequest&gt;()</c>
     /// (<see cref="AddMemberAccess{TResource, TResourceId, TRequests}"/>).</item>
+    /// <item>What the queries on the resource's own set ask, <c>db.Documents.WhereIHold(permission)</c>
+    /// (<see cref="MemberQueryableExtensions"/>): they find it in the services the context was made with.</item>
     /// <item><see cref="MemberAdmission{TResourceId, TMemberId, TRoleId}"/>, what a handler asks before it
     /// changes the members, over the roles the rules declare (<see cref="NamedRoles{TResourceId}"/>) or the
     /// rows of the roles kept for the resource, with the application's
@@ -179,8 +181,12 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
 
         // Each made by a factory that holds this resource's rules: the rules themselves are never a service,
         // since a second resource would be handed the first one's.
-        services.AddScoped<IMemberQuestions<TResourceId>>(provider =>
-            new EfMemberQuestions<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember, provider));
+        services.AddScoped(provider => MembershipAccessManager.Over(
+            new EfMemberQuestions<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember, provider)));
+
+        // What db.Documents.WhereIHold(permission) finds in the services its context was made with: the same questions,
+        // made for the scope the context is in when the query is made.
+        services.AddSingleton<MemberQueriesOf<TResource>>(new MemberQueriesOf<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember));
         if (rules.Roles.Kind == RolesKind.Custom)
         {
             // The rows of the application's role class, read on the request's own context. One the

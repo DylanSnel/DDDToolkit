@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// What a requirement cannot say stays in the handler, in plain sight: whether the one to be made a member is
 /// active, which roles go to a member, a second permission a command's own rule asks for, a rule of the application's
 /// own about what its caller may give. A rule that needs how or until when the caller holds the permission asks for it
-/// (<see cref="IMemberQuestions{TResourceId}.HoldAsync"/>).
+/// (<see cref="MembershipAccessManager{TResource}.HoldAsync"/>).
 /// </para>
 /// </summary>
 /// <typeparam name="TResourceId">The resource's id.</typeparam>

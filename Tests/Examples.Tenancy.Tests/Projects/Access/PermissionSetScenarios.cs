@@ -127,7 +127,7 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
 
             counter.WatchThisFlow();
             await using var reading = scope.ServiceProvider.GetRequiredService<IProjectReads>().Open();
-            var held = await reading.PermissionsOnAsync(projects, access.PermissionsReachFor([ProjectPermissionNames.View, ProjectPermissionNames.Edit, ProjectPermissionNames.ChangeOwner]), Cancellation);
+            var held = await reading.PermissionsOnAsync(projects, access.KnownPermissions([ProjectPermissionNames.View, ProjectPermissionNames.Edit, ProjectPermissionNames.ChangeOwner]), Cancellation);
 
             var statement = counter.Commands.Should().ContainSingle("the permissions of every project asked about come in one statement").Which;
             statement.Should().MatchRegex(SeatRights, "the organization's permissions are Tenancy's answer, inside it")
@@ -144,7 +144,7 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
 
             counter.WatchThisFlow();
             await using var reading = scope.ServiceProvider.GetRequiredService<IProjectReads>().Open();
-            var held = await reading.PermissionsOnAsync([.. projects, DemoData.Meadow.ProjectNamed("Garden shed").Id], access.PermissionsReachFor([ProjectPermissionNames.View, ProjectPermissionNames.ChangeOwner]), Cancellation);
+            var held = await reading.PermissionsOnAsync([.. projects, DemoData.Meadow.ProjectNamed("Garden shed").Id], access.KnownPermissions([ProjectPermissionNames.View, ProjectPermissionNames.ChangeOwner]), Cancellation);
 
             counter.Commands.Should().ContainSingle().Which.Should().NotMatchRegex(SeatRights);
             held.Keys.Should().BeEquivalentTo(projects, "a project of another tenant is not there");

@@ -64,17 +64,17 @@ public sealed class MarkerConventionTests : IDisposable
 
     /// <summary>Marks what <see cref="StampConvention"/> maps, as a package's marker in a domain project would.</summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Property)]
-    [ModelConvention("DDDToolkit.EntityFramework.Tests.Conventions.MarkerConventionTests+StampConvention, DDDToolkit.EntityFramework.Tests")]
+    [DDDToolkit.Abstractions.Attributes.ModelConvention("DDDToolkit.EntityFramework.Tests.Conventions.MarkerConventionTests+StampConvention, DDDToolkit.EntityFramework.Tests")]
     public sealed class StampedAttribute : Attribute;
 
     /// <summary>A marker whose convention is in an assembly the application does not have.</summary>
     [AttributeUsage(AttributeTargets.Property)]
-    [ModelConvention("Nowhere.EntityFramework.ElsewhereConvention, Nowhere.EntityFramework")]
+    [DDDToolkit.Abstractions.Attributes.ModelConvention("Nowhere.EntityFramework.ElsewhereConvention, Nowhere.EntityFramework")]
     public sealed class ElsewhereAttribute : Attribute;
 
     /// <summary>A marker that names a class that is no convention.</summary>
     [AttributeUsage(AttributeTargets.Property)]
-    [ModelConvention("DDDToolkit.EntityFramework.Tests.Conventions.MarkerConventionTests+Plain, DDDToolkit.EntityFramework.Tests")]
+    [DDDToolkit.Abstractions.Attributes.ModelConvention("DDDToolkit.EntityFramework.Tests.Conventions.MarkerConventionTests+Plain, DDDToolkit.EntityFramework.Tests")]
     public sealed class NotAConventionAttribute : Attribute;
 
     /// <summary>Writes, on the model, the names of the classes with a marked property or a marked class, in order.</summary>

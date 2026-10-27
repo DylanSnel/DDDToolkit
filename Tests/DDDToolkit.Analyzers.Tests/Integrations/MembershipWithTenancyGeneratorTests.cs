@@ -773,7 +773,7 @@ public class MembershipWithTenancyGeneratorTests
             .Should().BeEquivalentTo(
                 ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2"],
                 "what the rules ask of the organization is answered by the written class, one for a scope");
-        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(IMemberQuestions<>).MakeGenericType(emitted.Type("Campus.Courses.CourseId")));
+        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<>).MakeGenericType(emitted.Type("Campus.Courses.Course")));
 
         // Said twice it is said once, as for the resource's own registration.
         var registered = services.Count;

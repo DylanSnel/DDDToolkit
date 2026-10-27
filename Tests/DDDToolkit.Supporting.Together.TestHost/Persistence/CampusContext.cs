@@ -3,7 +3,6 @@ using Campus.Courses;
 using Campus.Labs;
 using Campus.Tenants;
 using DDDToolkit.EntityFramework.Conventions;
-using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -73,16 +72,14 @@ public sealed class CampusContext(DbContextOptions<CampusContext> options) : DbC
             course.ScopeToTenant(row => row.TenantId);
             course.HasIndex(row => row.UnitId);
 
-            // The tutors and the roles they hold, and the unit a permission held in the organization is compared with.
-            course.HasMembers(row => row.Tutors);
+            // The tutors and the roles they hold, and the unit a permission held in the organization is compared with,
+            // are mapped by Membership's convention: nothing is said about them here.
         });
 
         modelBuilder.Entity<CourseRole>(role =>
         {
-            // Membership's part of a role: its name, what it is for, its permissions, its status, and the starter role it came from.
-            role.IsCustomRole();
-
-            // The application's part: whose it is. A name is used once in a college, and a college has each starter role once.
+            // Membership's part of a role, its name, what it is for, its permissions, its status and the starter role it came
+            // from, is mapped by its convention. The application's part: whose it is. A name is used once in a college, and a college has each starter role once.
             role.ScopeToTenant(row => row.TenantId);
             role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
             role.HasIndex(row => new { row.TenantId, row.MadeFrom }).IsUnique();
@@ -94,7 +91,6 @@ public sealed class CampusContext(DbContextOptions<CampusContext> options) : DbC
             lab.Property(row => row.Name).HasMaxLength(100);
             lab.ScopeToTenant(row => row.TenantId);
             lab.HasIndex(row => row.UnitId);
-            lab.HasMembers(row => row.Technicians);
         });
     }
 

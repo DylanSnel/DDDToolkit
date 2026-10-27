@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// where the rules say it does. It reads nothing itself; it becomes part of whichever statement it is put
 /// into.
 /// </summary>
-internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> : MemberReach<TResourceId>, IEfMemberReach<TResource>
+internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> : MemberReach<TResource>, IEfMemberReach<TResource>
     where TResource : AggregateRoot<TResourceId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     where TMember : MemberEntity<TId, TMemberId, TRoleId>
@@ -216,7 +216,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
                       : "This reach of " + typeof(TResource).Name + " puts the roles that give the permission into the query, the rows of its role class, "
                         + "and those are read on the context the query runs on. ")
                   + "This query does not run on the request's own context: hand over the context it was made from, "
-                  + "as in db.Set<" + typeof(TResource).Name + ">().Within(reach, db).");
+                  + "as in query.WhereIHold(permission, db), or query.Within(reach, db).");
     }
 
     /// <summary>

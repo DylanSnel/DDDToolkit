@@ -87,14 +87,14 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
                 var held = data.DocumentsHeldBy(user, permission);
                 foreach (var document in data.Documents)
                 {
-                    var hold = await filing.Services.AsAsync(caller, provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(document.Id, permission, Cancellation));
+                    var hold = await filing.Services.AsAsync(caller, provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(document.Id, permission, Cancellation));
 
                     (hold is not null).Should().Be(seen.Contains(document.Id), user + " sees " + document.Title);
                     hold?.Via.Should().Be(held.Contains(document.Id) ? MemberVia.Members : null, user + " holds " + permission + " on " + document.Title);
                 }
             }
 
-            var permissions = await filing.Services.AsAsync(caller, provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionsOnAsync([.. data.Documents.Select(document => document.Id)], FilingScenario.DocumentPermissionsAsked, Cancellation));
+            var permissions = await filing.Services.AsAsync(caller, provider => provider.GetRequiredService<MembershipAccessManager<Document>>().PermissionsOnAsync([.. data.Documents.Select(document => document.Id)], FilingScenario.DocumentPermissionsAsked, Cancellation));
             foreach (var document in data.Documents)
             {
                 (permissions.TryGetValue(document.Id, out var on) ? on : new HashSet<string>())
@@ -103,8 +103,8 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         }
 
         // A folder's questions, asked by its staff under the folder's policy.
-        (await filing.Services.AsAsync(TestCallers.Staff(data.Clerk), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Annex, FolderPermissions.HandOver, Cancellation)))!.Via.Should().Be(MemberVia.Members);
-        (await filing.Services.AsAsync(TestCallers.Staff(data.Visitor), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
+        (await filing.Services.AsAsync(TestCallers.Staff(data.Clerk), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.HandOver, Cancellation)))!.Via.Should().Be(MemberVia.Members);
+        (await filing.Services.AsAsync(TestCallers.Staff(data.Visitor), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             (await hal.ListAsync<string>("""SELECT "Title" FROM filing."Documents" """)).Should().Equal(["Notes"]);
         }
 
-        var hold = await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(notes, DocumentPermissions.Share, Cancellation));
+        var hold = await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(notes, DocumentPermissions.Share, Cancellation));
         hold!.Via.Should().Be(MemberVia.Members, "and holds every permission of it");
 
         // Nobody else sees it, and a user does not open a document in another's name.
@@ -391,7 +391,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         untouched.Shares.Single(share => share.MemberId == data.Ben).Roles.Should().BeEmpty("the owner holds no role");
 
         // The host's command checks that he holds the permission, and then saves the hand-over as its own work.
-        var held = await filing.Services.AsAsync(TestCallers.User(data.Ben), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().RequireAsync(data.Budget, DocumentPermissions.Share, Cancellation));
+        var held = await filing.Services.AsAsync(TestCallers.User(data.Ben), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().RequireAsync(data.Budget, DocumentPermissions.Share, Cancellation));
         held.Via.Should().Be(MemberVia.Members);
         await filing.Services.ChangeAsync(data.Budget, budget => budget.HandOver(data.Ada, FormerOwner.StaysAs(DocumentMembership.Onlooker), from));
 
@@ -488,7 +488,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
                 {
                     (await session.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", permission))
                         .Should().BeEquivalentTo(data.DocumentsHeldBy(user, permission).Select(id => id.Value), user + " holds " + permission);
-                    var hold = await filing.Services.AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(data.Minutes, permission, Cancellation));
+                    var hold = await filing.Services.AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(data.Minutes, permission, Cancellation));
                     (hold?.Via is not null).Should().Be(data.DocumentsHeldBy(user, permission).Contains(data.Minutes));
                 }
             }
@@ -508,7 +508,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
                 minutes.ShareWith(data.Hal, DocumentMembership.Onlooker, MemberPeriod.Open(from), from, by: data.Ada);
                 await context.SaveChangesAsync(Cancellation);
             });
-            (await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().ViaAsync(data.Minutes, DocumentPermissions.View, Cancellation)))
+            (await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().ViaAsync(data.Minutes, DocumentPermissions.View, Cancellation)))
                 .Should().Be(MemberVia.Members);
         }
         finally
@@ -588,7 +588,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             minutes.ShareWith(data.Hal, DocumentMembership.Onlooker, MemberPeriod.Open(from), from, by: data.Ada);
             await context.SaveChangesAsync(Cancellation);
         });
-        (await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().ViaAsync(data.Minutes, DocumentPermissions.View, Cancellation)))
+        (await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().ViaAsync(data.Minutes, DocumentPermissions.View, Cancellation)))
             .Should().Be(MemberVia.Members);
 
         // Who a share is of is written once: the privileges leave the column out, so not even who may share the

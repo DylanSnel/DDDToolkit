@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 namespace DDDToolkit.EntityFramework.Conventions;
 
 /// <summary>
-/// Runs the conventions that markers name with <see cref="ModelConventionAttribute"/>: a package's convention runs in
+/// Runs the conventions that markers name with <see cref="DDDToolkit.Abstractions.Attributes.ModelConventionAttribute"/>: a package's convention runs in
 /// a model that maps a class with its marker, on the class or on one of its properties. Tenancy's runs where a class
 /// marks its tenant with <c>[OfTenant]</c>. Each convention runs once per model, in the order the model first names
 /// it, and finds the marked classes itself.
@@ -70,7 +70,7 @@ public sealed class MarkerConvention : IModelFinalizingConvention
     }
 
     private static string? ConventionOf(Type attribute)
-        => Named.GetOrAdd(attribute, static type => type.GetCustomAttribute<ModelConventionAttribute>(inherit: false)?.Convention);
+        => Named.GetOrAdd(attribute, static type => type.GetCustomAttribute<DDDToolkit.Abstractions.Attributes.ModelConventionAttribute>(inherit: false)?.Convention);
 
     /// <summary>The convention <paramref name="convention"/> names, made; throws where the application does not have it.</summary>
     private static IModelFinalizingConvention Make(string convention, string place)
