@@ -75,7 +75,7 @@ crew.
 | tove | harbor, South Bay; meadow, root | meadow: Tenant admin | Surveyor on Bay bridge | Has seats in two tenants and switches between them with the `Tenant` header. She is meadow's only administrator. So in meadow she cannot revoke her grant, suspend herself or withdraw her placement (`tenancy.last-admin`). |
 | hana | harbor, root | People office | | Gives Surveyor and Observer, which she does not hold, and People office. Giving Crew lead, Area manager or Access admin to others fails with `tenancy.grant-exceeds-own`. Giving herself any role that manages access fails with `tenancy.self-appointment`. |
 | maud | harbor, root | Access admin | | Runs access and none of the work. Renaming Pier 7 fails with `projects.not-permitted` until she joins its crew as Crew lead. |
-| orla | none, an [operator](operators-and-history.md#operators) | | | A member of the application's staff. Reads every tenant and changes nothing. |
+| orla | none, an [operator](operators-and-history.md#operators) | | | A member of the application's staff. Reads every tenant. Changes one thing, a project's name, through an operator's command. |
 
 ## Who may do what, in the sample
 

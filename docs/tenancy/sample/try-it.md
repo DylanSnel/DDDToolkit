@@ -61,11 +61,11 @@ Every call takes the same path:
 1. The bearer handler finds the person from the token.
 2. The `Tenant` header and the person's seats give the seat.
 3. The request's requirement lets through a caller who may send the request.
-4. The use case refuses what the seat may not do.
+4. Tenancy's manager refuses what the seat may not do.
 
 In the example, Rhea grants Leo a role that manages access, with permissions she lacks. The requirement lets her
-through, because she holds `tenancy.grants.manage` at the unit. The use case refuses, which shows why the use case
-checks again. Green: the requirement lets the call through; red: the use case refuses it.
+through, because she holds `tenancy.grants.manage` at the unit. `SeatManager.GrantAsync` refuses. This is why the
+manager checks again. Green: the requirement lets the call through. Red: the manager refuses it.
 
 ```mermaid
 sequenceDiagram
@@ -73,7 +73,7 @@ sequenceDiagram
     box API
         participant Bearer as Supabase bearer,<br/>tenant selection
         participant Requirement
-        participant UseCase as Use case
+        participant UseCase as SeatManager
     end
 
     UI->>Bearer: POST grants as Rhea,<br/>token, Tenant: harbor

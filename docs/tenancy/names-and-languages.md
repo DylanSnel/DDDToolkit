@@ -12,24 +12,26 @@ language. The words are defined in the [overview](overview.md).
 ## Names
 
 Tenancy stores the name of each unit and each role. It stores no name for a seat. You choose how a seat is shown
-([How a seat is shown](#how-a-seat-is-shown)). A screen reads names from the **directory**, `TenancyDirectory`.
-[TenancyDirectory](reference/managers.md) in the reference lists every member.
+([How a seat is shown](#how-a-seat-is-shown)). A screen reads names through the **reads of the managers**. Each
+manager reads its own aggregate and returns your classes. The reference lists them under
+[Seats](reference/managers.md#seats), [Roles](reference/managers.md#roles) and
+[Organization](reference/managers.md#organization).
 
 | Method | Returns |
 |---|---|
-| `WhoAmIAsync()` | The calling seat's `SeatOverview`. It holds your seat object with its placements and grants, the tenant, the path of each placement's unit, the roles the grants name, and every permission the seat holds now with the units it reaches. |
-| `SeatOverviewAsync(seat)` | The same overview for any seat of the tenant ([Another seat's overview](#another-seats-overview)). |
-| `ListSeatsAsync()` | The seats the caller can read, as objects of your seat class with every field, in id order. |
-| `ListRolesAsync()` | The tenant's roles, active roles first. Each role says whether it manages access. |
-| `ListUnitsAsync()` | The units the caller is placed at and every unit below them, as objects of your unit class with path and depth (`UnitInTree`). System work gets every unit. |
-| `SeatsByIdAsync(ids)`, `RolesByIdAsync(ids)` | The seats or roles among the ids, in the same form as the lists. |
-| `UnitsByIdAsync(ids)` | Each unit among the ids, with its name, path and depth (`NamedUnit`) and no other field. |
+| `SeatManager.WhoAmIAsync()` | The calling seat's `SeatOverview`. It holds your seat object with its placements and grants, your tenant object and its name, the path of each placement's unit, your role objects that the grants name, and every permission the seat holds now with the units it reaches. |
+| `SeatManager.OverviewAsync(seat)` | The same overview for any seat of the tenant ([Another seat's overview](#another-seats-overview)). It takes your seat object or its id. |
+| `SeatManager.ListAsync()` | The seats the caller can read, as objects of your seat class with every field, in id order. |
+| `RoleManager.ListAsync()` | The tenant's roles, as objects of your role class, active roles first and then by name. `RoleManager.ManagesAccess(role)` says whether a role manages access. |
+| `OrganizationManager.ListUnitsAsync()` | The units the caller is placed at and every unit below them, as objects of your unit class with path and depth (`UnitInTree`). System work gets every unit. |
+| `SeatManager.ByIdAsync(ids)`, `RoleManager.ByIdAsync(ids)` | The seats or roles among the ids, in the same form as the lists. |
+| `OrganizationManager.UnitsByIdAsync(ids)` | Each unit among the ids, with its name, path and depth (`NamedUnit`) and no other field. |
 
 A path runs from the root down, joined with ` / `, for example `Harbor Works / North / North Coast`.
 
-- **Who may call.** Every caller that works in the tenant may call the directory: a seat of the tenant, or system
-  work in the tenant. The directory checks no permission. A caller that is nobody is refused with the code that
-  says why, such as `tenancy.not-seated`. System work outside any tenant gets an `InvalidOperationException`.
+- **Who may call.** Every caller that works in the tenant may call these reads: a seat of the tenant, or system
+  work in the tenant. The reads check no permission. A caller that is nobody is refused with the code that says
+  why, such as `tenancy.not-seated`. System work outside any tenant gets an `InvalidOperationException`.
 - **Which seats.** The seat methods return the seats the caller can read. By default that is every seat of the
   tenant. On Postgres a [read rule of yours](postgres.md#default-read-policies-for-seats-and-invitations) can narrow
   this.
@@ -41,9 +43,9 @@ A path runs from the root down, joined with ` / `, for example `Harbor Works / N
   names this way.
 - **Unknown ids.** The by-id methods leave out an id of another tenant and an id that belongs to nothing. The result
   does not say which of the two an id was.
-- **Limit.** One call takes at most `TenancyDirectory.MostIds` (200) different ids. More ids give
-  `tenancy.too-many-ids`, a 400 with the argument `Max`. The directory checks the caller first, so nobody learns
-  the limit before their own refusal.
+- **Limit.** One call takes at most `MostIds` (200) different ids, the same constant on each manager. More ids give
+  `tenancy.too-many-ids`, a 400 with the argument `Max`. The manager checks the caller first, so nobody learns the
+  limit before their own refusal.
 - **Cost.** Each call runs a fixed number of statements, whatever the number of ids. Seats take one statement,
   roles one, and units two. On Postgres, `UnitsByIdAsync` for a seat is one function call.
 - **Untracked seats.** The seats come with their placements and grants, and no context tracks them. A change you
@@ -53,14 +55,14 @@ A path runs from the root down, joined with ` / `, for example `Harbor Works / N
   (RLS), a listed seat comes with all its grants. Select a list's seats into a shape that every member may see.
 
 A page turns a module's ids into names. The page asks each owner only for the ids that the page has no name for
-yet. The purple band is the call to Tenancy's directory:
+yet. The purple band is the sample's call for Tenancy's names:
 
 ```mermaid
 sequenceDiagram
     participant Page as Page
     participant Projects as Projects API
     participant Names as Names on the page
-    participant Tenancy as Tenancy directory
+    participant Tenancy as Tenancy's managers
 
     Page->>Projects: GET /projects
     Projects-->>Page: projects with unitId,<br/>seatId and roleId
@@ -77,14 +79,14 @@ sequenceDiagram
 A screen keeps names only while it shows them. The sample's UI requests the names again at every page load. So a
 renamed seat shows its new name at the next load, and no name of one tenant shows in another tenant.
 
-The sample's route to the directory is a `POST`, because 200 ids do not fit in a request line. The code behind the
-route calls the directory like this:
+The sample's directory routes are a `POST`, because 200 ids do not fit in a request line. The code behind a route
+calls the manager like this:
 
 ```csharp
-public sealed class ProjectScreen(TenancyUseCases.TenancyDirectory directory)
+public sealed class ProjectScreen(SeatManager seats)
 {
-    public async Task<IReadOnlyDictionary<SeatId, string>> NamesOfAsync(IReadOnlyCollection<SeatId> seats, CancellationToken cancellationToken)
-        => (await directory.SeatsByIdAsync(seats, cancellationToken)).ToDictionary(seat => seat.Id, seat => seat.DisplayName);
+    public async Task<IReadOnlyDictionary<SeatId, string>> NamesOfAsync(IReadOnlyCollection<SeatId> ids, CancellationToken cancellationToken)
+        => (await seats.ByIdAsync(ids, cancellationToken)).ToDictionary(seat => seat.Id, seat => seat.DisplayName);
 }
 ```
 
@@ -115,19 +117,19 @@ public sealed partial class Seat
 }
 
 // Set the name where the seat is made: at provisioning, when a seat is added, and when an invitation is accepted.
-new TenancyUseCases.TenantToProvision(slug, name, shape, name, identity, ConfigureFirstSeat: seat => seat.Rename("Ada"));
-await seats.AddSeatAsync(identity, cancellationToken, configure: seat => seat.Rename("Leo"));
+new TenantToProvision(slug, name, shape, name, identity, ConfigureFirstSeat: seat => seat.Rename("Ada"));
+await seats.AddAsync(identity, cancellationToken, configure: seat => seat.Rename("Leo"));
 await invitations.AcceptAsync(command.Token, verifiedAddress, cancellationToken, configure: seat => seat.Rename(command.DisplayName));
 
-// Show the name with a plain Select over the seats the directory returns.
-var listed = (await directory.ListSeatsAsync(cancellationToken)).Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status));
+// Show the name with a plain Select over the seats that SeatManager returns.
+var listed = (await seats.ListAsync(cancellationToken)).Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status));
 ```
 
 - Each callback runs before anything is saved. When your rule refuses the name, nothing is saved, and an invitation
   stays open.
 - Renaming is a command of yours, under your rule. In the sample's `RenameSeat`, a seat renames itself, and a seat
   with `tenancy.seats.manage` for the whole tenant renames any seat.
-- Tenancy returns objects of your seat class with every field. The directory does this, and so does
+- Tenancy returns objects of your seat class with every field. `SeatManager` does this, and so does
   `TenantSelection.SeatsOfAsync<TSeat>(caller)`, which returns the person's seats in every tenant for a tenant
   picker. Each screen needs one `Select` and no extra query.
 - The identity is personal data, like an e-mail address. Only the fields you select leave your API. The sample's
@@ -138,7 +140,7 @@ when it gets an empty list. Purple: the methods. Green: the seats are read. Red:
 
 ```mermaid
 flowchart LR
-    lists["<b>ListSeatsAsync</b><br/><b>SeatsByIdAsync</b><br/><b>SeatOverviewAsync</b>"]
+    lists["<b>ListAsync</b><br/><b>ByIdAsync</b><br/><b>OverviewAsync</b>"]
     me["<b>WhoAmIAsync</b>"]
     picker["<b>SeatsOfAsync</b><br/><small>tenant picker</small>"]
     inTenant{"Works in<br/>the tenant?"}
@@ -158,7 +160,7 @@ flowchart LR
     inTenant -- yes --> read
     isSeat -- yes --> read
     seated -- yes --> read
-    read -- "SeatOverviewAsync" --> notFound
+    read -- "OverviewAsync" --> notFound
     read --> select
     classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
     classDef good fill:#1f8a5b26,stroke:#1f8a5b
@@ -188,11 +190,11 @@ flowchart LR
 
 ### Another seat's overview
 
-`SeatOverviewAsync(seat)` returns, for any seat of the tenant, what `WhoAmIAsync` returns for the caller. The
+`SeatManager.OverviewAsync(seat)` returns, for any seat of the tenant, what `WhoAmIAsync` returns for the caller. The
 overview is as of the moment `AsOf`. Use it for a page about one person, such as the page an administrator opens
 before changing someone's roles.
 
-- **Your request decides who may call.** The directory itself requires only a seat of the tenant or system work in
+- **Your request decides who may call.** `OverviewAsync` itself requires only a seat of the tenant or system work in
   it. The sample's `SeatGrants` requires `tenancy.seats.manage` for the whole tenant. With a unit, it requires
   `tenancy.seats.manage` at that unit, and returns the roles held there. To let unit managers see the people of
   their units, require `[InTenant]` and let the read rules decide the rest.
@@ -225,8 +227,8 @@ public sealed class SeatGrantsHandler(ITenancyReads reads) : IQueryHandler<SeatG
 {
     public async ValueTask<IReadOnlyList<SeatGrant>> Handle(SeatGrants query, CancellationToken cancellationToken)
     {
-        // Calls the directory in a separate scope. The directory refuses a seat the caller does not read.
-        var overview = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(query.Seat, cancellationToken));
+        // Calls the manager in a separate scope. The manager refuses a seat the caller does not read.
+        var overview = await reads.AskAsync((SeatManager seats) => seats.OverviewAsync(query.Seat, cancellationToken));
 
         // One row per grant, at the unit asked about or at every unit. Row uses overview.UnitOf(unit).Path,
         // overview.RoleOf(role)?.Name and grant.AppliesAt(overview.AsOf).
@@ -267,7 +269,7 @@ services.AddDDDToolkitLocalization(options => options.AddResource<TenancyFailure
   neutral file first. So a key that is only in your neutral resx gives Dutch readers your English text.
 - **For a third language**, do the same with every `tenancy.*` key.
 - **Form fields.** A refusal of the kind "invalid" about one input names that input in its `Field` argument, in the
-  use cases' word (`name`, `until`, `ids` …). A form shows the text under that input. An API that uses another
+  managers' word (`name`, `until`, `ids` …). A form shows the text under that input. An API that uses another
   name for the input maps the word. [TenancyRefusals](reference/refusals.md#tenancyrefusals) in the reference lists
   each code's field. `tenancy.tenant-required` names no field, because the tenant is named next to the command, in
   a header or the address.
@@ -275,7 +277,7 @@ services.AddDDDToolkitLocalization(options => options.AddResource<TenancyFailure
 ### Roles in the tenant's language
 
 The catalogue declares each starter role once, with one name and one description. A tenant's roles are
-copies of the packs. To give a Dutch tenant Dutch role names, implement `IStarterRoleTexts` over your resources and
+copies of the starter roles. To give a Dutch tenant Dutch role names, implement `IStarterRoleTexts` over your resources and
 register it:
 
 ```csharp
@@ -294,26 +296,28 @@ public sealed class ShopStarterRoleTexts(IStringLocalizer<ShopStarterRoles> text
 services.AddSingleton<IStarterRoleTexts, ShopStarterRoleTexts>();
 ```
 
-- The use cases call `For` each time they make a role from a pack, with the language you pass:
+- The managers call `For` each time they make a role from a starter role, with the language you pass:
   - `TenantToProvision.Language` at provisioning. Keep the same language on your tenant class in `ConfigureTenant`
     ([How your classes add behaviour](your-module.md#how-your-classes-add-behaviour)).
-  - The `language` argument of `ChangeShapeAsync`, when a change of shape copies the packs the tenant lacks.
+  - The `language` argument of `TenantManager.ChangeShapeAsync`, when a change of shape copies the starter roles
+    the tenant lacks.
 - The role gets the catalogue's texts when no language is passed, when no `IStarterRoleTexts` is registered, or when
   `For` returns `null`.
 - The texts are chosen once. After that the role belongs to the tenant and can be renamed like any role. A tenant
   that changes language keeps its role names. A role that
-  [follows its pack](roles-and-permissions.md#packs-after-provisioning) follows only the pack's permissions.
+  [follows its starter role](roles-and-permissions.md#starter-roles-after-provisioning) follows only the starter role's
+  permissions.
 - A translated name is checked like any role name. A blank or too long name gives `tenancy.name-invalid`. A name
   that another role of the tenant has, ignoring case, gives `tenancy.role-name-taken`. A flat tenant that turns
-  hierarchical gets the hierarchical packs next to the packs it has. So give every pack a distinct name in every
-  language.
+  hierarchical gets the hierarchical starter roles next to the roles it has. So give every starter role a distinct
+  name in every language.
 
-**The default administrators' role** ([The administrators' pack](roles-and-permissions.md#the-administrators-pack))
-uses the package's texts. Tenancy adds this role when you declare no administrators' pack.
+**The default administrators' role** ([The administrators' starter role](roles-and-permissions.md#the-administrators-starter-role))
+uses the package's texts. Tenancy adds this role when you declare no administrators' starter role.
 
 - The role is named Administrator in English and Beheerder in Dutch. A language the package does not ship gets the
   English name. A tenant without a language gets Administrator.
-- Your `IStarterRoleTexts` is asked first, with the pack key `administrator`.
-- While `TenancyCatalogue.Build` adds the default role, it refuses a pack of yours named Administrator or
+- Your `IStarterRoleTexts` is asked first, with the starter role key `administrator`.
+- While `TenancyCatalogue.Build` adds the default role, it refuses a starter role of yours named Administrator or
   Beheerder. `Build` does not see the names your `IStarterRoleTexts` returns. So Beheerder from your texts collides at
-  provisioning, like any two packs with the same name.
+  provisioning, like any two starter roles with the same name.

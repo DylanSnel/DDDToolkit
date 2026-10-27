@@ -22,7 +22,7 @@ The **catalogue** is every permission the application knows. It combines Tenancy
 
 | Part | What it sets | Default |
 |---|---|---|
-| `StarterRoles` | The starter roles, which shape of tenant (flat or hierarchical) gets each one, and what the first administrator holds | Tenancy's administrators' starter role only ([The administrators' pack](#the-administrators-pack)) |
+| `StarterRoles` | The starter roles, which shape of tenant (flat or hierarchical) gets each one, and what the first administrator holds | Tenancy's administrators' starter role only ([The administrators' starter role](#the-administrators-starter-role)) |
 | `Permissions` | Permissions that belong to no module | None |
 | `AccessManagingPermissions` | Permissions declared elsewhere, for example by a module, that manage access in your application | Only the permissions marked where they are declared ([Which permissions manage access](#which-permissions-manage-access)) |
 | `ContainAccessManagingPermissions` | Whether a seat may give a permission that manages access only where the seat holds that permission | On ([Containment, on or off](#containment-on-or-off)) |
@@ -132,26 +132,26 @@ builder.Services.AddTenancyPermissionsOfModules();
 - `SeededFor` selects the tenants. Without `SeededFor`, every tenant gets a copy. With a shape, only tenants of that
   shape get a copy, whether they were provisioned with that shape or changed to it later. A role has no shape.
 - A copy follows your later changes to its starter role once the host syncs them
-  ([Packs after provisioning](#packs-after-provisioning)).
+  ([Starter roles after provisioning](#starter-roles-after-provisioning)).
 - A seat that holds `tenancy.roles.manage` for the whole tenant can put any permission into any role. An
   **administrator** is an active seat, placed at the root, that holds `tenancy.roles.manage` there through a grant
   with no end.
 - [`StarterRole`](reference/catalogue.md#starterrole) lists every member.
 
-## The administrators' pack
+## The administrators' starter role
 
 A tenant's first seat gets the administrators' starter role at the root. That role holds the permissions that manage
 access, so its holder can give the next role. You do not need to declare it:
 
 | You declare | Result |
 |---|---|
-| No pack with `Administers: true` | Tenancy adds `TenancyStarterRoles.DefaultAdministrators`. Its key is `administrator`, its name is Administrator, it is seeded for every shape, and it holds every live permission. |
-| One pack with `Administers: true` and no `SeededFor`, or one administrators' pack for each shape | Tenancy uses your pack and adds no default. |
-| Administrators' packs that leave a shape without one, give a shape two, or use `SeedOnProvision: false` | `TenancyCatalogue.Build` refuses the catalogue and names the fix. |
-| No administrators' pack, and a pack of yours with the key `administrator`, or named Administrator or Beheerder (names compared ignoring case) | `Build` refuses the pack. Rename it, or make it the administrators' pack with `Administers: true`. |
+| No starter role with `Administers: true` | Tenancy adds `TenancyStarterRoles.DefaultAdministrators`. Its key is `administrator`, its name is Administrator, it is seeded for every shape, and it holds every live permission. |
+| One starter role with `Administers: true` and no `SeededFor`, or one administrators' starter role for each shape | Tenancy uses your starter role and adds no default. |
+| Administrators' starter roles that leave a shape without one, give a shape two, or use `SeedOnProvision: false` | `TenancyCatalogue.Build` refuses the catalogue and names the fix. |
+| No administrators' starter role, and a starter role of yours with the key `administrator`, or named Administrator or Beheerder (names compared ignoring case) | `Build` refuses that starter role. Rename it, or make it the administrators' starter role with `Administers: true`. |
 
 - `HasDefaultAdministrators` on the built catalogue tells you which case applies.
-- The default pack lists no permissions, so it holds every live permission. This includes a permission that a module
+- The default starter role lists no permissions, so it holds every live permission. This includes a permission that a module
   adds later. Tenants that have the role get the new permission at the next sync. So the smallest application
   declares no catalogue.
 - A tenant provisioned in Dutch gets the role as Beheerder. Tenancy first looks up the name in your `IStarterRoleTexts`,
@@ -160,7 +160,7 @@ access, so its holder can give the next role. You do not need to declare it:
   catalogue.
 
 <details>
-<summary>Show the code: no catalogue, permissions of your own and no packs, and an administrators' pack for each shape</summary>
+<summary>Show the code: no catalogue, permissions of your own and no starter roles, and an administrators' starter role for each shape</summary>
 
 ```csharp
 // No catalogue: the permissions are Tenancy's and the modules', and every tenant starts with the default
@@ -170,8 +170,9 @@ services.AddTenancy<ShopTenancyContext>();
 // Permissions the application owns itself, and still no starter role: the default administrators' role holds them too
 public static ApplicationCatalogue Application { get; } = new(Permissions: ShopPermissions.All);
 
-// A provisioned tenant names the role by the starter role's key
-var administrators = provisioned.RolesByStarterRole[TenancyStarterRoles.DefaultAdministratorsKey];
+// In a request that names the tenant: the tenant's role made from the default administrators' starter role
+var administrators = (await roles.ListAsync(cancellationToken))   // roles: RoleManager
+    .Single(role => role.FromStarterRole == TenancyStarterRoles.DefaultAdministratorsKey);
 
 // Administrators of your own, one seeded for each shape of tenant, and a starter role that every tenant gets
 public static ApplicationCatalogue Application { get; } = new(
@@ -188,30 +189,30 @@ public static ApplicationCatalogue Application { get; } = new(
 
 ### What the administrators hold
 
-- An administrators' pack that lists no permissions holds every live permission.
-- A pack that lists permissions holds only those. Use it for administrators who run access but not the modules'
-  work. The list must contain every one of Tenancy's permissions and every permission that manages access, directly
-  or through a permission that implies it. Otherwise `Build` refuses the pack. So when you mark another permission as
-  managing access, start-up fails until the pack lists it.
+- An administrators' starter role that lists no permissions holds every live permission.
+- A starter role that lists permissions holds only those. Use it for administrators who run access but not the
+  modules' work. The list must contain every one of Tenancy's permissions and every permission that manages access,
+  directly or through a permission that implies it. Otherwise `Build` refuses the starter role. So when you mark
+  another permission as managing access, start-up fails until the starter role lists it.
 - In both cases an administrator can give every role. Appointing an area manager therefore needs no system work.
 - The list sets what the role starts with. An administrator can still put any permission into any role.
 
-### Switching to the default administrators' pack
+### Switching to the default administrators' starter role
 
-When you drop your own administrators' pack and use the default, no tenant changes:
+When you drop your own administrators' starter role and use the default, no tenant changes:
 
-- Each tenant keeps the role that its old pack gave it, with the role's permissions and holders.
+- Each tenant keeps the role that its old starter role gave it, with the role's permissions and holders.
 - The default reaches a tenant only when the tenant changes from flat to hierarchical. That change copies every
   starter role seeded for the new shape that the tenant lacks, and gives the copies to nobody.
 - When the tenant still has a role with the default's name, the copy is refused with `tenancy.role-name-taken`, and
   the change of shape is refused too. Rename that role first.
 
-## Packs after provisioning
+## Starter roles after provisioning
 
 A tenant keeps the roles that its starter roles created, whatever you change in the starter roles later. When the host
 runs `SyncStarterRoles()`, those roles follow their starter roles, in every tenant. What a tenant changed itself stays.
 
-### How a role follows its pack
+### How a role follows its starter role
 
 A role made from a starter role stores what the starter role gave it, in `PermissionsFromStarterRole`. The sync compares
 that list with the starter role as your catalogue builds it now:
@@ -223,8 +224,8 @@ that list with the starter role as your catalogue builds it now:
 | that the tenant removed while the starter role still has it | leaves it out |
 | that the tenant added and the starter role never had | leaves it in |
 
-[`FollowStarterRole`](reference/aggregates.md#followstarterroletenancycatalogue-tenancyactortseatid) covers the cases that the
-comparison cannot tell apart. The cases you are likely to meet:
+[`FollowStarterRole`](reference/aggregates.md#followstarterroletenancycatalogue-tenancyactortseatid) on your role covers the cases that the comparison cannot tell
+apart. The cases you are likely to meet:
 
 - When following would take `tenancy.roles.manage` from the tenant's last administrators, the sync leaves the role as
   it is and logs a warning. The role follows once the tenant has an administrator through another role.
@@ -250,16 +251,18 @@ builder.Services.SyncStarterRoles();   // once the host has started, every tenan
 - `SyncStarterRoles()` is not a start-up check, because a start-up check changes nothing. The sync runs once per start,
   in the background. It starts after the start-up checks and after every hosted service has started, so a seeding of
   yours is done. The host serves requests while the sync runs. Calling `SyncStarterRoles()` twice runs the sync once.
-- In each active or suspended tenant, the sync runs `RoleCommands.FollowStarterRolesAsync` as Tenancy's system work, in
+- In each active or suspended tenant, the sync runs `RoleManager.FollowStarterRolesAsync` as Tenancy's system work, in
   Tenancy's scope. On Postgres it runs under the policies.
 - The sync saves once per tenant, after taking the tenant's access revision. So a second run, or a second host that
   starts at the same time, changes nothing more. When another change of the tenant's access commits first, the sync
   reads the tenant again, for at most three attempts.
 - The sync logs a tenant that fails as an error, and tries that tenant again at the next start.
 - To sync from a deployment step or an operator's endpoint, leave out the call and run
-  [`IStarterRoleSync`](reference/catalogue.md#istarterrolesync) yourself. `AddTenancy` registers it. An operator who syncs
-  one tenant runs [`FollowStarterRolesAsync`](reference/managers.md#followstarterrolesasynccancellationtoken) in that tenant, and
-  the events record the operator.
+  [`IStarterRoleSync`](reference/catalogue.md#istarterrolesync) yourself. `AddTenancy` registers it.
+- To sync one tenant for an operator, write a command marked `[Operator]` that names the tenant with a `[ForTenant]`
+  member. Its handler calls `RoleManager.FollowStarterRolesAsync` ([Roles](reference/managers.md#roles)). The handler
+  runs as operator work in that tenant, and the events record the operator. No seat may run it
+  (`access.system-only`).
 
 <details>
 <summary>Show the code: running the sync yourself</summary>
@@ -275,11 +278,18 @@ if (!report.Succeeded)
     }
 }
 
-// One tenant, for an operator. The events record the operator.
-using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
+// One tenant, for an operator. [Operator] runs the handler as operator work in the tenant the command names,
+// so the events record the operator.
+[Operator]
+public sealed record FollowStarterRolesIn([ForTenant] TenantId Tenant)
+    : ICommand<RoleManager.StarterRolesFollowed>, ITenantsRequest;
+
+public sealed class FollowStarterRolesInHandler(RoleManager roles)
+    : ICommandHandler<FollowStarterRolesIn, RoleManager.StarterRolesFollowed>
 {
-    var followed = await roles.FollowStarterRolesAsync(cancellationToken);   // roles: TenancyUseCases.RoleCommands
     // followed.Changed, followed.KeptForAnAdministrator, followed.WithoutTheirStarterRole
+    public async ValueTask<RoleManager.StarterRolesFollowed> Handle(FollowStarterRolesIn command, CancellationToken cancellationToken)
+        => await roles.FollowStarterRolesAsync(cancellationToken);
 }
 ```
 
@@ -296,7 +306,7 @@ using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
   ([Integration events](../integration-events.md)).
 
 <details>
-<summary>Show the code: mailing a tenant's administrators when a role followed its pack</summary>
+<summary>Show the code: mailing a tenant's administrators when a role followed its starter role</summary>
 
 ```csharp
 // The contract, in the module that publishes it
@@ -339,10 +349,11 @@ public sealed class TellTheAdministrators(IShopAdministrators administrators, IM
 ### The PermissionsFromStarterRole column
 
 - `PermissionsFromStarterRole` is a column on the roles table. Add it with a migration of yours. The column is nullable.
-  Rows where it is null follow as described in [How a role follows its pack](#how-a-role-follows-its-pack).
+  Rows where it is null follow as described in
+  [How a role follows its starter role](#how-a-role-follows-its-starter-role).
 - On Postgres the export protects the column ([What the policies check](postgres.md#what-the-policies-check)). No seat
-  changes it. Nobody changes the pack a role came from. A role that a seat adds names no pack, or is an exact copy of
-  one.
+  changes it. Nobody changes the starter role a role came from. A role that a seat adds names no starter role, or is
+  an exact copy of one.
 
 ## Who may give a role
 
@@ -380,10 +391,10 @@ and `projects.crew.manage`, and both manage access. At North Coast:
 - At South Bay, Rhea can give no role (`tenancy.not-permitted`).
 
 ```csharp
-// seats: TenancyUseCases.SeatCommands. GrantAsync finds the calling seat and applies the rules above before it saves.
+// seats: SeatManager. GrantAsync finds the calling seat and applies the rules above before it saves.
 try
 {
-    await seats.GrantAsync(seat, unit, role, until: null, reason: null, cancellationToken);   // until: null, for good
+    await seats.GrantAsync(leo, crewLead, northCoast, until: null, reason: null, cancellationToken);   // until: null, for good
 }
 catch (RefusalException refusal) when (refusal.Code == TenancyRefusals.GrantExceedsOwn)
 {
@@ -391,8 +402,8 @@ catch (RefusalException refusal) when (refusal.Code == TenancyRefusals.GrantExce
 }
 ```
 
-[`SeatCommands.GrantAsync`](reference/managers.md#grantasynctseatid-troleid-tunitid-datetimeoffset-string-cancellationtoken-datetimeoffset)
-lists every parameter and refusal.
+`GrantAsync` takes your `Seat`, `Role` and unit objects, or their ids. It returns the seat with its new grant.
+[`SeatManager`](reference/managers.md#seats) lists every parameter and refusal.
 
 ### Which permissions manage access
 
@@ -463,11 +474,11 @@ Each of these commands follows the rule for giving a role. With containment on:
 
 | Change | The command requires | A role that manages access also requires |
 |---|---|---|
-| Take a role away ([`RevokeAsync`](reference/managers.md#revokeasynctseatid-troleid-tunitid-cancellationtoken)) | `tenancy.grants.manage` at the unit | The role's access-managing permissions at the unit, until at least the grant's end. A seat's current grant counts as the seat's hold, so a seat can take away its own roles. |
-| Withdraw a placement and its grants ([`WithdrawAsync`](reference/managers.md#withdrawasynctseatid-tunitid-cancellationtoken)) | `tenancy.seats.manage` at the unit, plus `tenancy.grants.manage` when the placement has grants | The same, for each grant. |
-| Suspend, deactivate or reactivate a seat ([`SuspendAsync`](reference/managers.md#suspendasynctseatid-cancellationtoken)). This takes away or gives back the seat's grants. | `tenancy.seats.manage` for the whole tenant | The same, for each grant that has not ended. A seat can suspend or deactivate itself. A seat can never reactivate itself, because a suspended seat acts as nobody. |
-| Move a unit ([`MoveUnitAsync`](reference/managers.md#moveunitasynctunitid-tunitid-cancellationtoken)). This changes which grants reach the unit. | `tenancy.units.manage` at the old parent and at the new parent | Every access-managing permission that the move gives to anyone or takes from anyone, held by the mover at the unit until at least the end of that grant. Even with containment off, the move gives the mover nothing that the mover lacks at the unit, or for longer. |
-| Add or remove an access-managing permission in a role, or archive a role that holds one ([`SetPermissionsAsync`](reference/managers.md#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken)) | `tenancy.roles.manage` for the whole tenant | A caller who is an administrator, which means `tenancy.roles.manage` at the root with no end. |
+| Take a role away (`SeatManager.RevokeAsync`) | `tenancy.grants.manage` at the unit | The role's access-managing permissions at the unit, until at least the grant's end. A seat's current grant counts as the seat's hold, so a seat can take away its own roles. |
+| Withdraw a placement and its grants (`SeatManager.WithdrawAsync`) | `tenancy.seats.manage` at the unit, plus `tenancy.grants.manage` when the placement has grants | The same, for each grant. |
+| Suspend, deactivate or reactivate a seat (`SeatManager.SuspendAsync`, `DeactivateAsync`, `ReactivateAsync`). This takes away or gives back the seat's grants. | `tenancy.seats.manage` for the whole tenant | The same, for each grant that has not ended. A seat can suspend or deactivate itself. A seat can never reactivate itself, because a suspended seat acts as nobody. |
+| Move a unit (`OrganizationManager.MoveUnitAsync`). This changes which grants reach the unit. | `tenancy.units.manage` at the old parent and at the new parent | Every access-managing permission that the move gives to anyone or takes from anyone, held by the mover at the unit until at least the end of that grant. Even with containment off, the move gives the mover nothing that the mover lacks at the unit, or for longer. |
+| Add or remove an access-managing permission in a role, or archive a role that holds one (`RoleManager.SetPermissionsAsync`, `ArchiveAsync`) | `tenancy.roles.manage` for the whole tenant | A caller who is an administrator, which means `tenancy.roles.manage` at the root with no end. |
 
 - The refusal is `tenancy.grant-exceeds-own`, and it names what the seat lacks. The last administrator always stays.
 - Only an administrator changes an access-managing permission in a role, because the change reaches every holder at
@@ -524,7 +535,7 @@ Keep containment on when clients can reach the database directly, for example th
   - gives itself a role that manages access;
   - breaks either of these rules through an invitation;
   - changes the status of a seat whose access-managing grants it could not take away or give back.
-- Only the C# use cases check durations, changes to a role's permissions, and moves
+- Only the C# managers check durations, changes to a role's permissions, and moves
   ([What stays in C#](postgres.md#rules-checked-only-in-c)).
 - With containment off, a grants manager at a unit can give every role there, also through the Data API.
 
@@ -532,13 +543,14 @@ Keep containment on when clients can reach the database directly, for example th
 
 - System work in a tenant holds every permission in that tenant, with containment on or off.
 - To give a role that manages access when a condition of yours is met, such as a passed quiz, keep containment on.
-  Your handler checks the condition, then grants the role inside `TenancyUseCases.BeginSystemIn(tenant)`. The
-  grant names no giver, and its event records the system with your reason ("passed Safety quiz").
+  Your handler checks the condition, then grants the role inside `access.BeginSystemIn(tenant)`. The grant names no
+  giver (`GrantedBy` is empty) and stores your reason ("passed Safety quiz"). Its event records the system as `By`.
 - Leave the acting seat out here. An acting seat is the person who asked for the work, such as the administrator who
   starts an import. The seat that receives the role did not ask for it; as acting seat, the history would read
   "system, for Leo", which looks as if Leo gave himself the role.
-- System work gives whatever it is told to give. So take the tenant and the seat from the caller, and refuse a caller
-  that is not a seat. Take the role and the unit from your records. Never take any of the four from the request.
+- System work gives whatever it is told to give. So take the tenant and the seat from `access.CurrentTenant`, and
+  refuse a caller that is not a seat. Take the role and the unit from your records. Never take any of the four from
+  the request.
   Otherwise anyone who passes the quiz gets any role they name, including the administrators' role.
 
 ### The setting in the host and the export
@@ -568,30 +580,35 @@ public static class ShopCatalogue
 ```
 
 ```csharp
-// Your handler, with containment on. The request names the quiz and carries the answers. The seat that passed is
-// the caller, and the role and the unit come from the quiz. System work gives whatever it is told, so the client
-// chooses neither.
-public sealed class QuizDesk(TenancyUseCases.SeatCommands seats, IQuizzes quizzes)
-{
-    public async Task PassAsync(QuizId quizId, QuizAnswers answers, CancellationToken cancellationToken)
-    {
-        if (TenancyUseCases.CurrentCaller() is not { Kind: TenancyCallerKind.Seat, Tenant: { } tenant, Seat: { } seat })
-        {
-            throw QuizRefusals.Refuse(QuizRefusals.SeatsOnly);
-        }
+// Your request and its handler, with containment on. The request names the quiz and carries the answers. The seat
+// that passed is the caller, and the role and the unit come from the quiz. System work gives whatever it is told, so
+// the client chooses neither.
+[InTenant]
+public sealed record PassQuiz(QuizId Quiz, QuizAnswers Answers) : ICommand, ITenantsRequest;
 
-        var quiz = await quizzes.FindAsync(quizId, cancellationToken) ?? throw QuizRefusals.Refuse(QuizRefusals.NotFound);
-        if (!quiz.Passes(answers))
+public sealed class PassQuizHandler(SeatManager seats, TenancyAccessManager access, IQuizzes quizzes)
+    : ICommandHandler<PassQuiz>
+{
+    public async ValueTask<Unit> Handle(PassQuiz command, CancellationToken cancellationToken)
+    {
+        // The tenant the request names, and the caller's seat in it. System work in the tenant has no seat here.
+        var current = access.CurrentTenant.Require();
+        var seat = current.Seat ?? throw QuizRefusals.Refuse(QuizRefusals.SeatsOnly);
+
+        var quiz = await quizzes.FindAsync(command.Quiz, cancellationToken) ?? throw QuizRefusals.Refuse(QuizRefusals.NotFound);
+        if (!quiz.Passes(command.Answers))
         {
             throw QuizRefusals.Refuse(QuizRefusals.NotPassed);
         }
 
         // An administrator set the quiz's role and unit when making the quiz. No person asks for this grant, so
-        // the system work names no acting seat; the reason says why the role was given.
-        using (TenancyUseCases.BeginSystemIn(tenant))
+        // the system work names no acting seat. The reason says why the role was given.
+        using (access.BeginSystemIn(current.Id))
         {
-            await seats.GrantAsync(seat, quiz.Unit, quiz.Role, until: null, reason: "passed " + quiz.Name, cancellationToken);
+            await seats.GrantAsync(seat, quiz.Role, quiz.Unit, until: null, reason: "passed " + quiz.Name, cancellationToken);
         }
+
+        return Unit.Value;
     }
 }
 ```

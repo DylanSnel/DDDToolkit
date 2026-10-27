@@ -22,7 +22,7 @@ The package reads only these lines of [the document example](resources-and-membe
 | The permissions class | Each permission is named once. The request requires it, the rules read it, and the functions are written from it. A permission that is in no class is held by nobody. |
 | The roles in the rules | Your product decides which roles exist and what each role gives. |
 | The two registrations | Only you know which context maps the resource and which rules apply. A check is added for one request interface, and a module may have several resources. |
-| `MemberAdmission<DocumentId, UserId, NamedRole>` | The use cases are generic over your ids only, so a module with several resources names each use case by its ids. Unlike [Tenancy's use cases](../tenancy/your-module.md#calling-a-use-case), none is nested in a class that you could alias. |
+| `MemberAdmission<DocumentId, UserId, NamedRole>` | The use cases are generic over your ids only, so a module with several resources names each use case by its ids. Unlike [Tenancy's use cases](../tenancy/your-module.md#the-managers-and-the-access-manager), none is nested in a class that you could alias. |
 
 ## Limits
 
