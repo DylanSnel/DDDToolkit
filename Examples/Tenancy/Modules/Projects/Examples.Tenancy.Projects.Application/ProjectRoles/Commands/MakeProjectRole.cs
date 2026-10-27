@@ -51,9 +51,9 @@ public sealed record MakeProjectRole(string Name, string? Description, IReadOnly
 /// <param name="store">Where project roles are added and saved.</param>
 /// <param name="membership">The projects' rules, which a role's permissions are held to.</param>
 /// <param name="catalogue">The permissions the application knows.</param>
-/// <param name="answers">Tenancy's answers about the current caller: the tenant the role is made in.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller: the tenant the role is made in.</param>
 /// <param name="checks">The module's access checks, which hold a request to what it declared.</param>
-public sealed class MakeProjectRoleHandler(IProjectStore store, ProjectMembership membership, TenancyCatalogue catalogue, SampleAnswers answers, AccessChecks<IProjectsRequest> checks)
+public sealed class MakeProjectRoleHandler(IProjectStore store, ProjectMembership membership, TenancyCatalogue catalogue, SampleTenancy tenancy, AccessChecks<IProjectsRequest> checks)
     : ICommandHandler<MakeProjectRole, ProjectRoleId>
 {
     /// <inheritdoc />
@@ -68,7 +68,7 @@ public sealed class MakeProjectRoleHandler(IProjectStore store, ProjectMembershi
         await checks.RequireAsync(command, cancellationToken);
 
         var permissions = MakeProjectRole.Known(command.Permissions, catalogue);
-        var role = new ProjectRole(ProjectRoleId.Create(), answers.RequireTenant().Tenant, new CustomRoleDraft(command.Name, command.Description, permissions), membership.Rules);
+        var role = new ProjectRole(ProjectRoleId.Create(), tenancy.RequireTenant().Tenant, new CustomRoleDraft(command.Name, command.Description, permissions), membership.Rules);
 
         store.Add(role);
         await store.SaveAsync(cancellationToken);

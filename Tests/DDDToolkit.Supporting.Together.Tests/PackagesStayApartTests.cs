@@ -18,7 +18,7 @@ public sealed class PackagesStayApartTests
         [typeof(MembershipRules).Assembly, typeof(MembershipModel).Assembly, typeof(MembershipPostgresChecks).Assembly];
 
     private static readonly Assembly[] TenancyPackages =
-        [typeof(TenancyRefusals).Assembly, typeof(TenancyAnswersEntityFrameworkExtensions).Assembly, typeof(TenancyPostgresChecks).Assembly];
+        [typeof(TenancyRefusals).Assembly, typeof(TenancyEntityFrameworkExtensions).Assembly, typeof(TenancyPostgresChecks).Assembly];
 
     [Fact]
     public void The_membership_packages_reference_no_mediator_and_no_tenancy_package()

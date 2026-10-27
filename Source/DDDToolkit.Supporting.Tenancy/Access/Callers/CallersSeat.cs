@@ -16,8 +16,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// operator, and system work, which holds every permission in its tenant and acts for a seat at most as who is recorded, with no
 /// rights of that seat's.
 /// </remarks>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
-internal sealed class CallersSeat<TTenantId, TSeatId, TUnitId, TRoleId>(ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId> answers) : ICallersOwn<TSeatId>
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
+internal sealed class CallersSeat<TTenantId, TSeatId, TUnitId, TRoleId>(ITenancy<TTenantId, TSeatId, TUnitId, TRoleId> tenancy) : ICallersOwn<TSeatId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -25,5 +25,5 @@ internal sealed class CallersSeat<TTenantId, TSeatId, TUnitId, TRoleId>(ITenancy
 {
     /// <inheritdoc />
     public TSeatId? Find(Caller caller)
-        => answers.Caller is { Kind: TenancyCallerKind.Seat, Seat: { } seat } ? seat : null;
+        => tenancy.Caller is { Kind: TenancyCallerKind.Seat, Seat: { } seat } ? seat : null;
 }

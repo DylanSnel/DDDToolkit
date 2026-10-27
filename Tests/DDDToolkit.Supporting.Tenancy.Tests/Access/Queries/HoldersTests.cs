@@ -21,8 +21,8 @@ public class HoldersTests
     {
         using (TenancyCallers.Begin(caller))
         {
-            var answers = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(_harness.Catalogue, _harness.Clock);
-            return [.. answers.Over(source ?? _harness.Store, _harness.Store).SeatsHoldingPermissionAt(permission, unit)];
+            var tenancy = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(_harness.Catalogue, _harness.Clock);
+            return [.. tenancy.In(source ?? _harness.Store, _harness.Store).SeatsHoldingPermissionAt(permission, unit)];
         }
     }
 
@@ -162,7 +162,7 @@ public class HoldersTests
         Holders(asAda, HostCatalogue.WidgetCreate, NorthCoast).Should().BeEquivalentTo([ada, bert]);
         using (TenancyCallers.Begin(asAda))
         {
-            new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(retired, _harness.Clock).Over(_harness.Store, _harness.Store)
+            new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(retired, _harness.Clock).In(_harness.Store, _harness.Store)
                 .SeatsHoldingPermissionAt(HostCatalogue.WidgetCreate, NorthCoast).Should().BeEmpty("the rights for it are still stored, and a retired permission holds nowhere");
         }
     }

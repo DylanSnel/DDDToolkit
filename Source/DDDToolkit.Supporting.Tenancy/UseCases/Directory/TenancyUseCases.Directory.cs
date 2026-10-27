@@ -342,7 +342,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
             IEnumerable<TUnitId> readable = gate.BySystem
                 ? units.Ids
-                : await store.Queries.ListAsync(gate.Questions.ReadableUnits(), cancellationToken).ConfigureAwait(false);
+                : await store.Queries.ListAsync(gate.Queries.ReadableUnits(), cancellationToken).ConfigureAwait(false);
 
             return units.InTree(readable);
         }

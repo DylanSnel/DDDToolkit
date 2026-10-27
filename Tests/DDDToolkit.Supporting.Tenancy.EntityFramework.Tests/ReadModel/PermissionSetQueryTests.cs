@@ -54,9 +54,9 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
     {
         await _services.BySeat(_harbor.Tenant, _grace, async services =>
         {
-            foreach (DbContext context in new DbContext[] { services.Tenancy(), services.Widgets() })
+            foreach (DbContext context in new DbContext[] { services.TenancyContext(), services.Widgets() })
             {
-                var held = services.Answers().Over(context).WhereIHold(Keys);
+                var held = services.Tenancy().In(context).WhereIHold(Keys);
 
                 _services.Commands.Reset();
                 (await held.ToListAsync(Cancellation)).Should().BeEquivalentTo(
@@ -71,7 +71,7 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
 
             // Inside a module's own query it is a part of that query: each widget with a permission held where it hangs.
             var widgets = services.Widgets();
-            var pairs = services.Answers().Over(widgets).WhereIHold(Keys);
+            var pairs = services.Tenancy().In(widgets).WhereIHold(Keys);
             var listed = from widget in widgets.Widgets
                          join pair in pairs on widget.UnitId equals pair.Unit
                          orderby widget.Name, pair.Permission
@@ -98,12 +98,12 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
     {
         await _services.BySeat(_harbor.Tenant, _lin, async services =>
         {
-            foreach (DbContext context in new DbContext[] { services.Tenancy(), services.Widgets() })
+            foreach (DbContext context in new DbContext[] { services.TenancyContext(), services.Widgets() })
             {
-                var tenancy = services.Answers().Over(context);
+                var queries = services.Tenancy().In(context);
 
                 _services.Commands.Reset();
-                var roles = await tenancy.RolePermissions([HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage]).ToListAsync(Cancellation);
+                var roles = await queries.RolePermissions([HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage]).ToListAsync(Cancellation);
                 _services.Commands.Count.Should().Be(1, "in " + context.GetType().Name);
                 roles.Should().BeEquivalentTo(
                     new RoleWithPermission<RoleId>[]
@@ -114,13 +114,13 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
                     });
 
                 _services.Commands.Reset();
-                (await tenancy.UnitsUnder(_north).ToListAsync(Cancellation)).Should().BeEquivalentTo([_north, _coast]);
+                (await queries.UnitsUnder(_north).ToListAsync(Cancellation)).Should().BeEquivalentTo([_north, _coast]);
                 _services.Commands.Count.Should().Be(1);
             }
 
             // The widgets that hang under North, in one statement of the module's own.
             var widgets = services.Widgets();
-            var under = services.Answers().Over(widgets).UnitsUnder(_north);
+            var under = services.Tenancy().In(widgets).UnitsUnder(_north);
             _services.Commands.Reset();
             (await widgets.Widgets.Where(widget => under.Contains(widget.UnitId)).Select(widget => widget.Name).ToListAsync(Cancellation))
                 .Should().BeEquivalentTo(["at North", "at Coast"]);
@@ -157,12 +157,12 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
         async Task<(List<(OrganizationUnitId Unit, string Key)> Held, List<OrganizationUnitId> Under, List<OrganizationUnitId> UnderOther, List<(RoleId Role, string Key)> Roles)> AskAsync(HostCaller caller)
             => await _services.RunAsync(caller, async services =>
             {
-                var tenancy = services.Answers().Over(services.Widgets());
+                var queries = services.Tenancy().In(services.Widgets());
                 return (
-                    (await tenancy.WhereIHold(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Unit, pair.Permission)).ToList(),
-                    await tenancy.UnitsUnder(_harbor.RootUnit).ToListAsync(Cancellation),
-                    await tenancy.UnitsUnder(other.RootUnit).ToListAsync(Cancellation),
-                    (await tenancy.RolePermissions(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Role, pair.Permission)).ToList());
+                    (await queries.WhereIHold(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Unit, pair.Permission)).ToList(),
+                    await queries.UnitsUnder(_harbor.RootUnit).ToListAsync(Cancellation),
+                    await queries.UnitsUnder(other.RootUnit).ToListAsync(Cancellation),
+                    (await queries.RolePermissions(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Role, pair.Permission)).ToList());
             });
     }
 

@@ -172,7 +172,7 @@ public abstract class TenantFilterTests(TestDatabases databases) : IAsyncLifetim
         _services.Commands.Count.Should().Be(1, "the seats are read with the tenants they are found in");
 
         mine[0].Seat.Rename("changed by the application");
-        scope.ServiceProvider.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("nothing done to a seat it answered is saved");
+        scope.ServiceProvider.TenancyContext().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("nothing done to a seat it answered is saved");
 
         // A class the seats derive from is a seat as well; a class they are not is refused before anything is read.
         (await directory.AllOfAsync<SeatAggregate<SeatId, TenantId, OrganizationUnitId, RoleId>>(person, TestContext.Current.CancellationToken))

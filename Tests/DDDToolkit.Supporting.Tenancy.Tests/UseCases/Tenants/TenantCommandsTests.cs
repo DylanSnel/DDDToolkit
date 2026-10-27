@@ -64,8 +64,8 @@ public class TenantCommandsTests
         var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var tenantWide = await harness.Run(caller, async h =>
         {
-            var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-            return await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => questions.HoldsAtTenantAsync(permission, default)));
+            var queries = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).In(h.Store, h.Store);
+            return await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => queries.HoldsAtTenantAsync(permission, default)));
         });
 
         tenantWide.Should().OnlyContain(held => held, "the administrators' role holds every live permission, granted at the root");
@@ -131,8 +131,8 @@ public class TenantCommandsTests
             var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
             var held = await harness.Run(caller, async h =>
             {
-                var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-                return await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => questions.HoldsAtTenantAsync(permission, default)));
+                var queries = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).In(h.Store, h.Store);
+                return await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => queries.HoldsAtTenantAsync(permission, default)));
             });
             held.Should().OnlyContain(holds => holds, "the default administrators' role holds every live permission, granted at the root");
 
@@ -178,8 +178,8 @@ public class TenantCommandsTests
         var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var held = await harness.Run(caller, async h =>
         {
-            var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-            var answers = await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => questions.HoldsAtTenantAsync(permission, default)));
+            var queries = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).In(h.Store, h.Store);
+            var answers = await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => queries.HoldsAtTenantAsync(permission, default)));
             return h.Catalogue.LivePermissions.Where((_, index) => answers[index]).ToArray();
         });
         held.Should().Equal(listed).And.NotContain(widgets);

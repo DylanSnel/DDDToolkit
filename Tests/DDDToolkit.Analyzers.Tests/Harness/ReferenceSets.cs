@@ -137,14 +137,14 @@ public static class ReferenceSets
     ];
 
     /// <summary>
-    /// DDDToolkit.Supporting.Tenancy with its Entity Framework package: the questions and answers, the catalogue,
-    /// and the way the questions are asked over a context.
+    /// DDDToolkit.Supporting.Tenancy with its Entity Framework package: ITenancy and its queries, the catalogue,
+    /// and the way the queries are asked in a context.
     /// </summary>
     public static ImmutableArray<PortableExecutableReference> TenancyOnEntityFramework =>
     [
         .. EntityFrameworkRuntime,
         .. Tenancy,
-        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.EntityFramework.TenancyAnswersEntityFrameworkExtensions)),
+        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.EntityFramework.TenancyEntityFrameworkExtensions)),
     ];
 
     /// <summary>

@@ -124,7 +124,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
                 Harbor,
                 async scoped =>
                 {
-                    var tenancy = scoped.Tenancy();
+                    var tenancy = scoped.TenancyContext();
                     var seth = await tenancy.Set<HostSeat>().SingleAsync(seat => seat.Id == Seth.Seat, Cancellation);
                     seth.ChangeJobTitle("Foreman");
                     await tenancy.SaveChangesAsync(Cancellation);
@@ -214,7 +214,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         // A right no grant backs, written through the store's own context: not a refusal of any use case.
         var failure = await FluentActions.Awaiting(() => services.BySystemIn(Harbor, async scoped =>
             {
-                scoped.Tenancy().Add(new SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>
+                scoped.TenancyContext().Add(new SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>
                 {
                     TenantId = Harbor,
                     SeatId = Oli.Seat,

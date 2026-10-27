@@ -37,7 +37,7 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
 
         report.Failed.Should().BeEmpty();
         report.Should().BeEquivalentTo(new { Tenants = 3, RolesChanged = 1, RolesKeptForAnAdministrator = 0, RolesWithoutTheirPack = 0 }, "Quay is suspended, and visited all the same");
-        var operatorRole = await services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<HostRole>().AsNoTracking().SingleAsync(role => role.Id == HarborRoles.Operator, Cancellation));
+        var operatorRole = await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostRole>().AsNoTracking().SingleAsync(role => role.Id == HarborRoles.Operator, Cancellation));
         operatorRole.Permissions.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
         operatorRole.PermissionsFromPack.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
         (await OlisPermissionsAsync(services)).Should().Contain(HostCatalogue.WidgetCreate, "the database wrote the rights of every holder as the role changed");
@@ -146,7 +146,7 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
 
     /// <summary>The permissions Oli holds by Harbor's Operator role at North Pier, as the database wrote them, read by system work in Harbor.</summary>
     private static Task<List<string>> OlisPermissionsAsync(TenancyServices services)
-        => services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
+        => services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
             .Where(right => right.SeatId == Oli.Seat && right.RoleId == HarborRoles.Operator && right.UnitId == NorthPier)
             .Select(right => right.Permission)
             .ToListAsync(Cancellation));
@@ -154,7 +154,7 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
     /// <summary>Harbor's history rows of a role that followed its pack: who acted, and what it says.</summary>
     private static async Task<List<(string ActedByKind, string Payload)>> FollowedAsync(TenancyServices services)
     {
-        var rows = await services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<EventLogEntry>()
+        var rows = await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<EventLogEntry>()
             .Where(entry => entry.EventName == RoleFollowedItsPack)
             .Select(entry => new { entry.ActedByKind, entry.Payload })
             .ToListAsync(Cancellation));

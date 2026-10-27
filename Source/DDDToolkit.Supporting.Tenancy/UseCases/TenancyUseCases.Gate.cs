@@ -30,7 +30,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     {
         private readonly IStore _store;
         private readonly TenancyCatalogue _catalogue;
-        private ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>? _questions;
+        private ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>? _queries;
 
         public Gate(IStore store, TenancyCatalogue catalogue, TimeProvider clock)
         {
@@ -83,9 +83,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// </summary>
         public TenancyActor<TSeatId>? By => Caller.Actor;
 
-        /// <summary>The access questions for the caller, over the store's reads; made when first asked for.</summary>
-        public ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId> Questions
-            => _questions ??= new TenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>(_store.Reads, _store.Queries, _catalogue, Caller, Now);
+        /// <summary>The access queries for the caller, over the store's reads; made when first asked for.</summary>
+        public ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> Queries
+            => _queries ??= new TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(_store.Reads, _store.Queries, _catalogue, Caller, Now);
 
         /// <summary>The tenant a seat or system work in a tenant acts in. Reads nothing.</summary>
         /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
@@ -159,7 +159,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return;
             }
 
-            if (!await Questions.HoldsAtTenantAsync(permission, cancellationToken).ConfigureAwait(false))
+            if (!await Queries.HoldsAtTenantAsync(permission, cancellationToken).ConfigureAwait(false))
             {
                 throw NotPermitted(permission, unit: null);
             }
@@ -175,7 +175,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return;
             }
 
-            if (!await Questions.HoldsAtAsync(permission, unit, cancellationToken).ConfigureAwait(false))
+            if (!await Queries.HoldsAtAsync(permission, unit, cancellationToken).ConfigureAwait(false))
             {
                 throw NotPermitted(permission, unit);
             }

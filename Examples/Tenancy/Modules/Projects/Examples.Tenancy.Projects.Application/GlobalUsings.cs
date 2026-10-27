@@ -18,15 +18,15 @@ global using Examples.Tenancy.Projects.Domain.Aggregates.Projects.ValueObjects;
 global using Examples.Tenancy.Shared.Domain.ValueObjects;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 
-// Tenancy's answers, closed over the application's ids. Every class here that asks who may do what asks
+// Tenancy, closed over the application's ids. Every class here that asks who may do what asks
 // through this one interface, so it is named once. An alias is global only in the project that declares it, and
 // reads its target as if no other using existed, hence the full names.
-global using SampleAnswers = DDDToolkit.Supporting.Tenancy.Access.ITenancyAnswers<
+global using SampleTenancy = DDDToolkit.Supporting.Tenancy.Access.ITenancy<
     Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;
-global using SampleQuestions = DDDToolkit.Supporting.Tenancy.Access.ITenancyQuestions<
+global using SampleTenancyQueries = DDDToolkit.Supporting.Tenancy.Access.ITenancyQueries<
     Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,

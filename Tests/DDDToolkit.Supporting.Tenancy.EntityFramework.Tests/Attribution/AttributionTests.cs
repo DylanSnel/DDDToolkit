@@ -158,7 +158,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
 
         TenancyModel.RecordsWhoChanged(widget).Should().BeTrue();
         model.GetEntityTypes().Where(entityType => TenancyModel.RecordsWhoChanged(entityType)).Should().ContainSingle("the rows of the read model keep nothing of the kind");
-        scope.ServiceProvider.Tenancy().Model.GetEntityTypes().Should().NotContain(entityType => TenancyModel.RecordsWhoChanged(entityType));
+        scope.ServiceProvider.TenancyContext().Model.GetEntityTypes().Should().NotContain(entityType => TenancyModel.RecordsWhoChanged(entityType));
 
         TenancyAttribution.Columns.Should().Equal(
             TenancyAttribution.CreatedBySeat, TenancyAttribution.CreatedByKind, TenancyAttribution.CreatedByIdentity,
@@ -180,7 +180,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
 
         // The tenant of a row is fixed as well, in a module's model and in Tenancy's own.
         widget.FindProperty(nameof(Widget.TenantId))!.GetAfterSaveBehavior().Should().Be(PropertySaveBehavior.Throw);
-        foreach (var entityType in scope.ServiceProvider.Tenancy().Model.GetEntityTypes())
+        foreach (var entityType in scope.ServiceProvider.TenancyContext().Model.GetEntityTypes())
         {
             if (TenancyModel.TenantPropertyOf(entityType) is { } tenant)
             {

@@ -158,7 +158,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var open = await invitations.ListOpenAsync(tenantId, gate.Now, cancellationToken).ConfigureAwait(false);
             if (!gate.BySystem)
             {
-                var managed = (await store.Queries.ListAsync(gate.Questions.UnitsWhereIHold(TenancyPermissions.SeatsManage), cancellationToken).ConfigureAwait(false)).ToHashSet();
+                var managed = (await store.Queries.ListAsync(gate.Queries.UnitsWhereIHold(TenancyPermissions.SeatsManage), cancellationToken).ConfigureAwait(false)).ToHashSet();
                 open = [.. open.Where(invitation => managed.Contains(invitation.UnitId))];
             }
 
@@ -195,7 +195,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             var cancelled = await invitations.FindAsync(invitation, cancellationToken).ConfigureAwait(false);
             if (cancelled is null
-                || (!gate.BySystem && !await gate.Questions.HoldsAtAsync(TenancyPermissions.SeatsManage, cancelled.UnitId, cancellationToken).ConfigureAwait(false)))
+                || (!gate.BySystem && !await gate.Queries.HoldsAtAsync(TenancyPermissions.SeatsManage, cancelled.UnitId, cancellationToken).ConfigureAwait(false)))
             {
                 throw TenancyRefusals.Refuse(TenancyRefusals.InvitationNotFound);
             }

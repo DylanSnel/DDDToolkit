@@ -215,7 +215,7 @@ public sealed class ReadFunctionModelTests
         using var scope = services.Scope();
 
         TenancyModel.ReadsThroughFunctions(scope.ServiceProvider.Widgets().Model).Should().BeFalse("it maps the views");
-        TenancyModel.ReadsThroughFunctions(scope.ServiceProvider.Tenancy().Model).Should().BeFalse("it maps the tables");
+        TenancyModel.ReadsThroughFunctions(scope.ServiceProvider.TenancyContext().Model).Should().BeFalse("it maps the tables");
         scope.ServiceProvider.Widgets().Model.GetDbFunctions().Should().BeEmpty();
     }
 
@@ -227,21 +227,21 @@ public sealed class ReadFunctionModelTests
         using var keeping = new TestServices(configure: services => services.Configure<TenancyStoreOptions>(options => options.DatabaseKeepsRights = true));
         await keeping.BySystemIn(new TenantId(1), scoped =>
         {
-            var answers = scoped.Answers();
+            var tenancy = scoped.Tenancy();
 
-            FluentActions.Invoking(() => answers.Over(scoped.Widgets())).Should().Throw<InvalidOperationException>().WithMessage(
+            FluentActions.Invoking(() => tenancy.In(scoped.Widgets())).Should().Throw<InvalidOperationException>().WithMessage(
                 "'TestWidgetContext' maps Tenancy's read model as views over Tenancy's tables, with AddTenancyReadModel, and the database keeps the rights*" +
                 "no module reads Tenancy's tables*Map the read model with modelBuilder.AddTenancyReadFunctions<TTenantId, TSeatId, TUnitId, TRoleId>(schema)*");
             FluentActions.Invoking(() => new EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>(scoped.Widgets())).Should().Throw<InvalidOperationException>();
 
             // Tenancy's own context reads its own tables, and a module that maps the functions reads none of them.
-            FluentActions.Invoking(() => answers.Over(scoped.Tenancy())).Should().NotThrow();
+            FluentActions.Invoking(() => tenancy.In(scoped.TenancyContext())).Should().NotThrow();
             using var functions = new ThroughFunctions(new DbContextOptionsBuilder<ThroughFunctions>().UseSqlite(keeping.Sqlite.Connection).UseApplicationServiceProvider(scoped).Options);
-            FluentActions.Invoking(() => answers.Over(functions)).Should().NotThrow();
+            FluentActions.Invoking(() => tenancy.In(functions)).Should().NotThrow();
 
             // A context made by hand, which knows no application, is read as one whose database does not keep them.
             using var byHand = new TestWidgetContext(new DbContextOptionsBuilder<TestWidgetContext>().UseSqlite(keeping.Sqlite.Connection).Options);
-            FluentActions.Invoking(() => answers.Over(byHand)).Should().NotThrow();
+            FluentActions.Invoking(() => tenancy.In(byHand)).Should().NotThrow();
             return Task.CompletedTask;
         });
 
@@ -249,7 +249,7 @@ public sealed class ReadFunctionModelTests
         using var writing = new TestServices();
         await writing.BySystemIn(new TenantId(1), scoped =>
         {
-            FluentActions.Invoking(() => scoped.Answers().Over(scoped.Widgets())).Should().NotThrow();
+            FluentActions.Invoking(() => scoped.Tenancy().In(scoped.Widgets())).Should().NotThrow();
             return Task.CompletedTask;
         });
     }

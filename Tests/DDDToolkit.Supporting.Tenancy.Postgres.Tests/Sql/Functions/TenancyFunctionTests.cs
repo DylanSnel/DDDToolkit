@@ -198,17 +198,17 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
 
         using (TenancyCallers.Begin(caller))
         {
-            var questions = scope.ServiceProvider.Answers().Over(scope.ServiceProvider.Tenancy());
+            var queries = scope.ServiceProvider.Tenancy().In(scope.ServiceProvider.TenancyContext());
             var answers = new Answers(
                 caller.Seat?.Value,
                 caller.Kind == TenancyCallerKind.Seat ? caller.Tenant?.Value : null,
-                [.. (await questions.ReadableUnits().ToListAsync(Cancellation)).Select(unit => unit.Value)]);
+                [.. (await queries.ReadableUnits().ToListAsync(Cancellation)).Select(unit => unit.Value)]);
 
             foreach (var permission in permissions)
             {
-                answers.Held[permission] = [.. (await questions.UnitsWhereIHold(permission).ToListAsync(Cancellation)).Select(unit => unit.Value)];
-                answers.Roles[permission] = [.. (await questions.RolesWithPermission(permission).ToListAsync(Cancellation)).Select(role => role.Value)];
-                answers.AtTheRoot[permission] = await questions.HoldsAtTenantAsync(permission, Cancellation);
+                answers.Held[permission] = [.. (await queries.UnitsWhereIHold(permission).ToListAsync(Cancellation)).Select(unit => unit.Value)];
+                answers.Roles[permission] = [.. (await queries.RolesWithPermission(permission).ToListAsync(Cancellation)).Select(role => role.Value)];
+                answers.AtTheRoot[permission] = await queries.HoldsAtTenantAsync(permission, Cancellation);
             }
 
             return answers;

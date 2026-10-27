@@ -19,7 +19,7 @@ Namespace `DDDToolkit.Supporting.Tenancy.Postgres`.
 public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunctions
 ```
 
-Tenancy's row level security, written from each context's model when the policies are exported: the SQL functions rules ask ([`TenancyRowAccess`](questions.md#tenancyrowaccess)), the policies on Tenancy's own tables and on every table a module keeps to a tenant, and the triggers that check at commit what no policy can see. This package declares it with `[assembly: RowAccessContribution]`, so the Supabase export of every application that references the package writes it, and the application writes nothing for it but, where it has them, two marks:
+Tenancy's row level security, written from each context's model when the policies are exported: the SQL functions rules ask ([`TenancyRowAccess`](queries.md#tenancyrowaccess)), the policies on Tenancy's own tables and on every table a module keeps to a tenant, and the triggers that check at commit what no policy can see. This package declares it with `[assembly: RowAccessContribution]`, so the Supabase export of every application that references the package writes it, and the application writes nothing for it but, where it has them, two marks:
 
 ```csharp
 [TenancyCatalogue]
@@ -150,7 +150,7 @@ The function that answers who the caller is as an `id`, without parameters, or `
 
 **Remarks**
 
-[`TenancyFunctions.CallerSeat`](questions.md#tenancyfunctions) for the application's seat id, where the context maps Tenancy's tables or its read model, which knows it: so a resource whose members are seats has its functions ask the caller's seat without its rules naming one.
+[`TenancyFunctions.CallerSeat`](queries.md#tenancyfunctions) for the application's seat id, where the context maps Tenancy's tables or its read model, which knows it: so a resource whose members are seats has its functions ask the caller's seat without its rules naming one.
 
 #### `PlacesWhereCallerHolds(DbContext, Type)`
 
@@ -167,7 +167,7 @@ The function that answers, for a key given as text, the places of type `place` t
 
 **Remarks**
 
-[`TenancyFunctions.UnitsWhereIHold`](questions.md#tenancyfunctions) for the application's unit id, where the context maps Tenancy's tables or its read model: so a resource that hangs at a unit is reached from above through Tenancy's grants without its rules naming a function.
+[`TenancyFunctions.UnitsWhereIHold`](queries.md#tenancyfunctions) for the application's unit id, where the context maps Tenancy's tables or its read model: so a resource that hangs at a unit is reached from above through Tenancy's grants without its rules naming a function.
 
 ### `TenancyRowLevelSecurity`
 

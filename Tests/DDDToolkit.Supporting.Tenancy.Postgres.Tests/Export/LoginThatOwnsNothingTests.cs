@@ -107,7 +107,7 @@ public sealed class LoginThatOwnsNothingTests(TenancyPostgres postgres)
         // And the checks a host runs at start-up, the core's and Tenancy's, all pass on it.
         await services.InScopeAsync(async scoped =>
         {
-            foreach (var context in new DbContext[] { scoped.Tenancy(), scoped.Widgets() })
+            foreach (var context in new DbContext[] { scoped.TenancyContext(), scoped.Widgets() })
             {
                 PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
                 await PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, Cancellation);

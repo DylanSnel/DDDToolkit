@@ -19,15 +19,15 @@ namespace DDDToolkit.Supporting.Tenancy;
 public static class TenancyServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the catalogue, the access answers, tenant selection and the use cases, everything except
-    /// the store and the seat directory.
+    /// Registers the catalogue, <see cref="ITenancy{TTenantId, TSeatId, TUnitId, TRoleId}"/>, tenant selection and the use
+    /// cases, everything except the store and the seat directory.
     /// <list type="bullet">
     /// <item>The catalogue is built once, from <see cref="TenancyOptions{TTenantId, TSeatId, TUnitId, TRoleId}.Catalogue"/>,
     /// or from none when it is not set, and every <see cref="PermissionContribution"/>, the first time it is asked
     /// for; resolve it at start-up to have a catalogue that does not hold together stop the application there.</item>
-    /// <item>The answers are one for the application; selection and the use cases are made per scope. Selection is
-    /// registered without its id types as well, <see cref="ITenantSelection"/>, the same instance, unless a host
-    /// registered its own before: that one stays.</item>
+    /// <item><see cref="ITenancy{TTenantId, TSeatId, TUnitId, TRoleId}"/> is one for the application; selection and the use
+    /// cases are made per scope. Selection is registered without its id types as well, <see cref="ITenantSelection"/>,
+    /// the same instance, unless a host registered its own before: that one stays.</item>
     /// <item>The toolkit's caller accessor a host registered before stays; otherwise the ambient caller is read.</item>
     /// <item>What the caller's own seat is, for a request about it (<c>[OrOwn] SeatId Seat</c>, <c>TenancyAccess.Own(seat)</c>):
     /// the caller's seat in the tenant, unless a host registered its own before with <c>AddCallersOwn</c>.</item>
@@ -78,7 +78,7 @@ public static class TenancyServiceCollectionExtensions
         services.AddSingleton(serviceProvider => TenancyCatalogue.Build(
             options.Catalogue ?? new ApplicationCatalogue(),
             serviceProvider.GetServices<PermissionContribution>().SelectMany(contribution => contribution.Permissions)));
-        services.AddSingleton<ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>>();
+        services.AddSingleton<ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>, CurrentTenancy<TTenantId, TSeatId, TUnitId, TRoleId>>();
 
         // What a request about the caller's own seat compares its seat with, [OrOwn] SeatId: the caller's seat in the
         // tenant. A host that says it otherwise registered its own already, with AddCallersOwn, and that one stays.

@@ -29,7 +29,7 @@ namespace Examples.Tenancy.Projects.Application.StoredProjects;
 /// roles and units that reaches; the reading writes the statement around it, with the projects' own columns.
 /// <para>
 /// The projects and the project roles keep to the current caller's tenant, as the storage's tenant filter does:
-/// a row of another tenant is simply not there. Tenancy's questions keep what they read of <see cref="Tenancy"/>
+/// a row of another tenant is simply not there. Tenancy's queries keep what they read of <see cref="Tenancy"/>
 /// to the caller's tenant themselves.
 /// </para>
 /// </remarks>

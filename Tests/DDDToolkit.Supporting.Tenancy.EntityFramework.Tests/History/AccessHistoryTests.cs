@@ -54,7 +54,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         // Every event is there once, with the id of its outbox row, and under the tenant it names.
         await using (var scope = _services.Scope())
         {
-            var sent = await scope.ServiceProvider.Tenancy().Set<OutboxMessage>().Select(message => message.Id).ToListAsync(Cancellation);
+            var sent = await scope.ServiceProvider.TenancyContext().Set<OutboxMessage>().Select(message => message.Id).ToListAsync(Cancellation);
             kept.Select(row => row.Id).Should().BeEquivalentTo(sent, "a row of the history is written next to the event's outbox row, in the same save");
         }
 
@@ -131,7 +131,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
 
         var kept = await KeptAsync();
         await using var scope = _services.Scope();
-        var sent = await scope.ServiceProvider.Tenancy().Set<OutboxMessage>().Select(message => new { message.Id, message.EventName }).ToListAsync(Cancellation);
+        var sent = await scope.ServiceProvider.TenancyContext().Set<OutboxMessage>().Select(message => new { message.Id, message.EventName }).ToListAsync(Cancellation);
 
         // The script raised every event Tenancy has. The history has each one that changes access, under the id of its
         // outbox row, and none of the renames.
@@ -172,7 +172,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         await using (var scope = _services.Scope())
         using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
         {
-            var tenancy = scope.ServiceProvider.Tenancy();
+            var tenancy = scope.ServiceProvider.TenancyContext();
             await using var transaction = await tenancy.Database.BeginTransactionAsync(Cancellation);
             await scope.ServiceProvider.Organization().AddUnitAsync(harbor.RootUnit, "North", Cancellation);
 
@@ -263,7 +263,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         fields.Should().ContainSingle("AddTenancy registers the one that fills the tenant, once");
 
         await using var scope = _services.Scope();
-        var tenancy = scope.ServiceProvider.Tenancy();
+        var tenancy = scope.ServiceProvider.TenancyContext();
 
         // An event of the application's own, raised in Tenancy's context, which names no tenant.
         using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
@@ -297,7 +297,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
     public async Task The_history_is_the_event_log_with_the_tenant_and_an_index_to_page_one_tenant_by()
     {
         await using var scope = _services.Scope();
-        var model = scope.ServiceProvider.Tenancy().Model;
+        var model = scope.ServiceProvider.TenancyContext().Model;
 
         var found = TenancyModel.EventLogOf(model);
         found.Should().NotBeNull();
@@ -405,7 +405,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
     private async Task<List<Kept>> KeptAsync()
     {
         await using var scope = _services.Scope();
-        return await scope.ServiceProvider.Tenancy().Set<EventLogEntry>()
+        return await scope.ServiceProvider.TenancyContext().Set<EventLogEntry>()
             .Select(entry => new Kept(entry.Id, entry.EventName, EF.Property<TenantId>(entry, TenancyEventLogTable.TenantId), entry.ActedByKind, entry.ActedById, entry.Payload))
             .ToListAsync(Cancellation);
     }

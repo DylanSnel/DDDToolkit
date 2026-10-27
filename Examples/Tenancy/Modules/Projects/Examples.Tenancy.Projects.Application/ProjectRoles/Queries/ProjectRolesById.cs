@@ -46,6 +46,6 @@ public sealed class ProjectRolesByIdHandler(IProjectReads reads, ProjectAccess a
         // The roles, and whether the caller holds the permission their permissions are answered to, only when any is the tenant's.
         await using var reading = reads.Open();
         var roles = await reading.ProjectRolesAsync(ids, cancellationToken);
-        return ProjectRoleListings.Answered(roles, roles.Count > 0 && await access.Questions(reading).HoldsAtTenantAsync(ProjectRoleListing.ManageRolesPermission, cancellationToken));
+        return ProjectRoleListings.Answered(roles, roles.Count > 0 && await access.TenancyIn(reading).HoldsAtTenantAsync(ProjectRoleListing.ManageRolesPermission, cancellationToken));
     }
 }

@@ -31,15 +31,15 @@ public sealed record MarkTenantAsDemo : ICommand, ITenantsRequest;
 /// module's access behavior out of the pipeline as much as in the host.
 /// </remarks>
 /// <param name="store">Where Tenancy's aggregates are loaded and saved: one unit of work per request.</param>
-/// <param name="answers">Tenancy's answers about the current caller, for the tenant it works in.</param>
-public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, SampleAnswers answers) : ICommandHandler<MarkTenantAsDemo>
+/// <param name="tenancy">Tenancy, asked about the current caller, for the tenant it works in.</param>
+public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, SampleTenancy tenancy) : ICommandHandler<MarkTenantAsDemo>
 {
     /// <inheritdoc />
     /// <exception cref="RefusalException"><c>access.system-only</c> for a seat, whatever it holds.</exception>
     /// <exception cref="InvalidOperationException">The tenant the caller works in is not there: it was never provisioned.</exception>
     public async ValueTask<Unit> Handle(MarkTenantAsDemo command, CancellationToken cancellationToken)
     {
-        var scope = answers.RequireTenant();
+        var scope = tenancy.RequireTenant();
         if (!scope.BySystem)
         {
             throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);

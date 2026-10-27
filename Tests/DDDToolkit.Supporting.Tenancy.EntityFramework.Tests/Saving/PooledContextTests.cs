@@ -28,7 +28,7 @@ public sealed class PooledContextTests
         var rented = new List<DbContext>();
         Task<T> AsHarborsAdministrator<T>(Func<IServiceProvider, Task<T>> act) => services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
         {
-            var context = scoped.Tenancy();
+            var context = scoped.TenancyContext();
             context.IsPooled().Should().BeTrue();
             FluentActions.Invoking(() => TenancyChecks.EnsureWired(context)).Should().NotThrow("a pooled context is wired like any other");
             rented.Add(context);
@@ -59,7 +59,7 @@ public sealed class PooledContextTests
         // And each save stored its events with what it changed.
         await using (var scope = services.Scope())
         {
-            var stored = await scope.ServiceProvider.Tenancy().Set<OutboxMessage>()
+            var stored = await scope.ServiceProvider.TenancyContext().Set<OutboxMessage>()
                 .Select(message => new { message.EventName, message.AggregateId })
                 .ToListAsync(Cancellation);
             stored.Where(message => message.AggregateId!.Contains(grace.Value.ToString(), StringComparison.OrdinalIgnoreCase))
@@ -112,7 +112,7 @@ public sealed class PooledContextTests
         // pool those are the services the pool's options were built with, and the context is the one AddScopedFromPool
         // binds to that scope: a second one of the pool, while the caller holds its own.
         await using var scope = services.Scope();
-        var asking = scope.ServiceProvider.Tenancy();
+        var asking = scope.ServiceProvider.TenancyContext();
 
         services.Commands.Reset();
         var tenants = await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(asking, "widgets", Cancellation);

@@ -428,12 +428,12 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
             var caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(identity), slug, Cancellation);
             using (TenancyCallers.Begin(caller))
             {
-                var questions = scope.ServiceProvider.Answers().Over(scope.ServiceProvider.Tenancy());
+                var queries = scope.ServiceProvider.Tenancy().In(scope.ServiceProvider.TenancyContext());
                 foreach (var permission in permissions)
                 {
                     foreach (var unit in Units)
                     {
-                        csharp[(permission, unit)] = [.. (await questions.SeatsHoldingPermissionAt(permission, unit).ToListAsync(Cancellation)).Select(seat => seat.Value)];
+                        csharp[(permission, unit)] = [.. (await queries.SeatsHoldingPermissionAt(permission, unit).ToListAsync(Cancellation)).Select(seat => seat.Value)];
                     }
                 }
             }
@@ -485,13 +485,13 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         await using var services = new TenancyServices(database, contexts: options => options.AddInterceptors(recorder));
         async Task<List<SeatId>> ActiveHoldersAsync(IServiceProvider scoped, DbContext context)
         {
-            var holders = scoped.Answers().Over(context).SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, NorthPier);
+            var holders = scoped.Tenancy().In(context).SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, NorthPier);
             return await context.Set<SeatRow<TenantId, SeatId>>().Where(seat => holders.Contains(seat.Id) && seat.Status == SeatStatus.Active).Select(seat => seat.Id).ToListAsync(Cancellation);
         }
 
         foreach (var module in new[] { false, true })
         {
-            DbContext Context(IServiceProvider scoped) => module ? scoped.Widgets() : scoped.Tenancy();
+            DbContext Context(IServiceProvider scoped) => module ? scoped.Widgets() : scoped.TenancyContext();
 
             (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => ActiveHoldersAsync(scoped, Context(scoped)))).Should().Equal(Oli.Seat);
             recorder.Sent.Should().ContainSingle("one statement answers it").Which.Text.Should().Contain("seats_holding_permission_at");

@@ -83,12 +83,12 @@ internal static class TenancyReference
                     new("Requirements", [new(Tenancy, Folder: "Access/RequiredAccess")]),
                 ]),
             new(
-                "questions.md",
-                "Questions and row access",
-                "What a module asks about the caller's rights, the read model the answers are read from, the projection that keeps "
-                + "it, and the row access rules a database enforces.",
+                "queries.md",
+                "ITenancy, its queries and row access",
+                "`ITenancy`, through which a module asks about the caller, and the queries it gives in a context; the read model "
+                + "they read, the projection that keeps it, and the row access rules a database enforces.",
                 [
-                    new("Questions", [new(Tenancy, Folder: "Access/Questions")]),
+                    new("Queries", [new(Tenancy, Folder: "Access/Queries")], Lead: ["ITenancy", "ITenancyQueries", "CurrentTenancy"]),
                     new("Read model", [new(Tenancy, Folder: "Access/ReadModel")]),
                     new("Projection", [new(Tenancy, Folder: "Access/Projection")]),
                     new("Row access", [new(Tenancy, Folder: "Access/RowAccess")]),

@@ -98,9 +98,9 @@ public class TenancyRequirementTests
     }
 
     [Fact]
-    public void The_requirements_live_with_the_access_questions()
+    public void The_requirements_live_with_ITenancy()
     {
-        typeof(TenancyRequirement).Namespace.Should().Be(typeof(ITenancyAnswers<,,,>).Namespace, "a module that asks Tenancy names both with one using");
+        typeof(TenancyRequirement).Namespace.Should().Be(typeof(ITenancy<,,,>).Namespace, "a module that asks Tenancy names both with one using");
         typeof(TenancyAccess).Namespace.Should().Be(typeof(TenancyRequirement).Namespace, "and the methods a request spells them with as well");
     }
 

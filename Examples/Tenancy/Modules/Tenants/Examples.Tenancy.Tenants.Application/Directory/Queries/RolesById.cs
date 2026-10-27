@@ -23,8 +23,8 @@ public sealed record RolesById(IReadOnlyList<RoleId> Ids) : IQuery<IReadOnlyList
 /// permissions asked beside it.
 /// </summary>
 /// <param name="reads">Where Tenancy is read: the directory in a scope of this query's own, the permission on a context of its own.</param>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
-public sealed class RolesByIdHandler(ITenancyReads reads, SampleAnswers answers) : IQueryHandler<RolesById, IReadOnlyList<RoleListing>>
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
+public sealed class RolesByIdHandler(ITenancyReads reads, SampleTenancy tenancy) : IQueryHandler<RolesById, IReadOnlyList<RoleListing>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
@@ -36,6 +36,6 @@ public sealed class RolesByIdHandler(ITenancyReads reads, SampleAnswers answers)
         var roles = await reads.AskDirectoryAsync(directory => directory.RolesByIdAsync(query.Ids, cancellationToken));
         return roles.Count == 0
             ? []
-            : RoleListing.From(roles, withKeys: await AtTenantPermission.IsHeldAsync(answers, reads, RoleListing.ManageRolesPermission, cancellationToken));
+            : RoleListing.From(roles, withKeys: await AtTenantPermission.IsHeldAsync(tenancy, reads, RoleListing.ManageRolesPermission, cancellationToken));
     }
 }

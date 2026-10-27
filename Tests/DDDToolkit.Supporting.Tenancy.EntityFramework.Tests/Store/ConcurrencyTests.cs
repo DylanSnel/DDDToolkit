@@ -70,7 +70,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         DbContext? grantorContext = null;
         await _services.BySeat(_harbor.Tenant, _grace, async services =>
         {
-            grantorContext = services.Tenancy();
+            grantorContext = services.TenancyContext();
             _services.Commands.Reset();
             _services.Hook.AfterCommand(
                 grantorContext,
@@ -236,7 +236,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         conflict.AggregateType.Should().Be<HostOrganization>("a rename does not take the access revision; the organization's version keeps the edits apart");
         await _services.BySystemIn(_harbor.Tenant, async services =>
         {
-            var organization = await services.Tenancy().Set<HostOrganization>().SingleAsync(TestContext.Current.CancellationToken);
+            var organization = await services.TenancyContext().Set<HostOrganization>().SingleAsync(TestContext.Current.CancellationToken);
             organization.FindUnit(_north)!.Name.Should().Be("North");
             organization.FindUnit(west).Should().NotBeNull();
         });
@@ -254,7 +254,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         var caller = interruptedSeat is { } seat ? HostCaller.InSeat(_harbor.Tenant, seat) : HostCaller.SystemIn(_harbor.Tenant);
         var conflict = await _services.RunAsync(caller, async services =>
         {
-            _services.Hook.BeforeSave(services.Tenancy(), () => _services.BySystemIn(_harbor.Tenant, interrupting));
+            _services.Hook.BeforeSave(services.TenancyContext(), () => _services.BySystemIn(_harbor.Tenant, interrupting));
             return (await FluentActions.Awaiting(() => interrupted(services)).Should().ThrowAsync<ConcurrencyConflictException>()).Which;
         });
 
@@ -283,14 +283,14 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
     /// <summary>The units a seat is placed in, as saved.</summary>
     private Task<List<OrganizationUnitId>> PlacementsAsync(SeatId seat)
         => _services.BySystemIn(_harbor.Tenant, async services =>
-            (await services.Tenancy().Set<HostSeat>().SingleAsync(row => row.Id == seat, TestContext.Current.CancellationToken)).Placements
+            (await services.TenancyContext().Set<HostSeat>().SingleAsync(row => row.Id == seat, TestContext.Current.CancellationToken)).Placements
                 .Select(placement => placement.UnitId)
                 .ToList());
 
     /// <summary>A seat's grants as saved, as (unit, role).</summary>
     private Task<List<(OrganizationUnitId Unit, RoleId Role)>> GrantsAsync(SeatId seat)
         => _services.BySystemIn(_harbor.Tenant, async services =>
-            (await services.Tenancy().Set<HostSeat>().SingleAsync(row => row.Id == seat, TestContext.Current.CancellationToken)).Placements
+            (await services.TenancyContext().Set<HostSeat>().SingleAsync(row => row.Id == seat, TestContext.Current.CancellationToken)).Placements
                 .SelectMany(placement => placement.Grants.Select(grant => (placement.UnitId, grant.RoleId)))
                 .ToList());
 }

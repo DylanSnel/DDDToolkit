@@ -41,11 +41,11 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
             (await seth.ScalarAsync<long>("SELECT count(*) FROM ddd.\"EventLog\"", Cancellation)).Should().Be(0);
         }
 
-        (await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Tenancy().Set<EventLogEntry>().CountAsync(Cancellation))).Should().Be(0);
+        (await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.TenancyContext().Set<EventLogEntry>().CountAsync(Cancellation))).Should().Be(0);
 
         // Held below the root, the permission is not held for the whole tenant: still nothing.
         await TenancySeed.HoldAtAsync(database, Seth, North, [TenancyPermissions.HistoryView], Cancellation);
-        (await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Tenancy().Set<EventLogEntry>().CountAsync(Cancellation))).Should().Be(0);
+        (await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.TenancyContext().Set<EventLogEntry>().CountAsync(Cancellation))).Should().Be(0);
 
         // An anonymous caller reads none either, and a person in a tenant where they have no seat.
         await using (var anonymous = await AsCaller.AnonymousAsync(database, Cancellation))
@@ -88,7 +88,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
         // The permission alone is enough, given for the whole tenant: reading what happened manages no access, so the
         // role that holds it is given like any other.
         await TenancySeed.HoldAtAsync(database, Hiro, HarborRoot, [TenancyPermissions.HistoryView], Cancellation);
-        var read = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Tenancy().Set<EventLogEntry>()
+        var read = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.TenancyContext().Set<EventLogEntry>()
             .Select(entry => EF.Property<TenantId>(entry, EntityFramework.TenancyEventLogTable.TenantId))
             .ToListAsync(Cancellation));
         read.Should().HaveCountGreaterThan((int)ofHarbor, "what was just done for Hiro is in the history too").And.OnlyContain(tenant => tenant == Harbor);
@@ -314,7 +314,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
 
     /// <summary>Harbor's history, as Ada reads it: its administrator holds the permission that reads it.</summary>
     private static Task<List<Kept>> HistoryOfHarborAsync(TenancyServices services)
-        => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Tenancy().Set<EventLogEntry>()
+        => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.TenancyContext().Set<EventLogEntry>()
             .Select(entry => new Kept(entry.Id, entry.EventName, entry.ActedByKind, entry.ActedById, entry.Payload))
             .ToListAsync(Cancellation));
 

@@ -9,8 +9,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </summary>
 /// <param name="catalogue">The catalogue every permission asked about is checked against.</param>
 /// <param name="clock">What "now" is, for whether a grant applies.</param>
-public sealed class TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>(TenancyCatalogue catalogue, TimeProvider clock)
-    : ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>
+public sealed class CurrentTenancy<TTenantId, TSeatId, TUnitId, TRoleId>(TenancyCatalogue catalogue, TimeProvider clock)
+    : ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -35,13 +35,13 @@ public sealed class TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>(Tenancy
     }
 
     /// <inheritdoc />
-    public ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId> Over(
+    public ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In(
         ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
         IQueryExecutor executor)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(executor);
 
-        return new TenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>(source, executor, catalogue, Caller, clock.GetUtcNow());
+        return new TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(source, executor, catalogue, Caller, clock.GetUtcNow());
     }
 }

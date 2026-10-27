@@ -38,7 +38,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         await using (var scope = _services.Scope())
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            _services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => _services.ProvisionAsync("orchard"));
+            _services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => _services.ProvisionAsync("orchard"));
 
             var refusal = await Refused.WithCodeAsync(TenancyRefusals.SlugTaken, () => scope.ServiceProvider.Tenants().ProvisionAsync(
                 new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid()),
@@ -53,7 +53,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         var bert = Guid.NewGuid();
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            _services.Hook.BeforeSave(services.Tenancy(), () => _services.AddSeatAsync(harbor.Tenant, bert, "Bert"));
+            _services.Hook.BeforeSave(services.TenancyContext(), () => _services.AddSeatAsync(harbor.Tenant, bert, "Bert"));
 
             Same(
                 await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => services.Seats().AddSeatAsync(bert, Cancellation)),
@@ -64,7 +64,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         // name as the role has it.
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            _services.Hook.BeforeSave(services.Tenancy(), () => _services.BySystemIn(harbor.Tenant, racing =>
+            _services.Hook.BeforeSave(services.TenancyContext(), () => _services.BySystemIn(harbor.Tenant, racing =>
                 racing.Roles().CreateAsync("Élan", "Keeps going", [HostCatalogue.WidgetRead], Cancellation)));
 
             Same(

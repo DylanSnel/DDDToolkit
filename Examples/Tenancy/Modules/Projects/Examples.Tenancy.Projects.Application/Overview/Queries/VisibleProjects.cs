@@ -48,7 +48,7 @@ public sealed record VisibleProjects(
 
 /// <summary>
 /// Answers <see cref="VisibleProjects"/> in one statement, on a reading of this query's own, however many projects
-/// there are: the page, with Tenancy's answers subqueries of it and the count, when asked, a part of it.
+/// there are: the page, with Tenancy's queries subqueries of it and the count, when asked, a part of it.
 /// </summary>
 /// <param name="reads">Where projects are read: a context per query.</param>
 /// <param name="access">Who reaches which project.</param>
@@ -77,7 +77,7 @@ public sealed class VisibleProjectsHandler(IProjectReads reads, ProjectAccess ac
         var reach = access.ReachFor(VisibleProjects.RequiredPermission);
         var filter = new ProjectListFilter(
             query.State,
-            query.Unit is { } unit ? access.Questions(reading).UnitsUnder(unit) : null,
+            query.Unit is { } unit ? access.TenancyIn(reading).UnitsUnder(unit) : null,
             string.IsNullOrWhiteSpace(query.Text) ? null : query.Text.Trim());
 
         return await reading.PageAsync(reach, filter, paging, cancellationToken);

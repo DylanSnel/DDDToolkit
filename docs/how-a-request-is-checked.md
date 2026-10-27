@@ -406,15 +406,15 @@ public bool Decides(AccessRequirement requirement) => requirement is TenancyRequ
 switch (requirement)
 {
     case TenancyRequirement.InTenant:
-        answers.RequireTenant();                                 // a seat here, or system work here
+        tenancy.RequireTenant();                                 // a seat here, or system work here
         break;
     case TenancyRequirement.AtTenant required:
-        answers.RequireTenant();                                 // nobody is refused without a statement
+        tenancy.RequireTenant();                                 // nobody is refused without a statement
         if (!await HoldsAtTenantAsync(required.Permission, cancellationToken))
             throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission));
         break;
     case TenancyRequirement.AtUnit<TUnitId> required:
-        answers.RequireTenant();
+        tenancy.RequireTenant();
         if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken))
             throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission), ("Unit", required.Unit));
         break;
@@ -488,7 +488,7 @@ SELECT EXISTS (
 <summary>Show the code: Tenancy's two questions, Membership's, and the SQL each sends</summary>
 
 ```csharp shortened
-// TenancyQuestions, shortened: the two questions a check asks
+// TenancyQueries, shortened: the two queries a check asks
 public Task<bool> HoldsAtTenantAsync(string permission, CancellationToken cancellationToken)
     => executor.AnyAsync(
         from right in source.SeatRights
@@ -930,14 +930,14 @@ public interface ITenantPlans
 
 // The check: Decides is a type test; RequireAsync asks who is calling before it reads, then returns or refuses
 // with the module's code
-public sealed class PlanCheck(ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> answers, ITenantPlans plans) : IAccessCheck
+public sealed class PlanCheck(ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy, ITenantPlans plans) : IAccessCheck
 {
     public bool Decides(AccessRequirement requirement) => requirement is PlanAtLeast;
 
     public async ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
     {
         var required = (PlanAtLeast)requirement;
-        var tenant = answers.RequireTenant().Tenant;             // nobody in the tenant: refused with its own reason
+        var tenant = tenancy.RequireTenant().Tenant;             // nobody in the tenant: refused with its own reason
         if (await plans.CurrentAsync(tenant, cancellationToken) < required.Plan)
         {
             throw new RefusalException("boards.plan-too-low", RefusalKind.NotPermitted, "That takes a higher plan.");
@@ -974,9 +974,9 @@ partial interface IBoardsRequest
 ```
 
 The two attributes are `All` of their calls, in the order they are written, so the plan is asked first. Like the
-packages' checks, `PlanCheck` asks who is calling before it reads anything. Tenancy's answers, which come with
-Tenancy closed over the application's ids, as the sample's own checks take them, read nothing for
-`RequireTenant()`, since the seat was found when the request came in, and refuse a caller who is nobody in the
+packages' checks, `PlanCheck` asks who is calling before it reads anything. `ITenancy`, which comes with
+Tenancy closed over the application's ids, as the sample's own checks take it, reads nothing for
+`RequireTenant()`, since the seat was found when the request came in, and refuses a caller who is nobody in the
 tenant with its own reason, `tenancy.not-seated`. So the new sign-in, an operator and an anonymous caller never
 learn a tenant's plan. A seat of a tenant on the Free plan is refused with `boards.plan-too-low` before the permission is
 asked; on Pro the permission is asked next, and its refusal is Tenancy's own. The set gives `PlanAtLeast` to `PlanCheck`,

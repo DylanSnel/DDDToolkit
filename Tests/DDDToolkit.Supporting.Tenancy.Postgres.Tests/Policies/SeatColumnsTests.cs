@@ -68,7 +68,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database);
         var linking = await FluentActions.Awaiting(() => services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped =>
             {
-                var tenancy = scoped.Tenancy();
+                var tenancy = scoped.TenancyContext();
                 var oli = await tenancy.Set<HostSeat>().SingleAsync(seat => seat.Id == Oli.Seat, Cancellation);
                 tenancy.Entry(oli).Property(seat => seat.Identity).CurrentValue = Guid.NewGuid();
                 await tenancy.SaveChangesAsync(Cancellation);
@@ -102,13 +102,13 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         var imported = SeatId.CreateSequential();
         var person = Guid.NewGuid();
         await services.BySystemIn(Harbor, scoped => scoped.Seats().AddSeatAsync(person, Cancellation, imported, seat => seat.Rename("Imported")));
-        (await services.BySystemIn(dock, scoped => scoped.Tenancy().Set<HostSeat>().CountAsync(seat => seat.Identity == first, Cancellation))).Should().Be(1);
-        (await services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<HostSeat>().CountAsync(seat => seat.Id == imported && seat.Identity == person, Cancellation))).Should().Be(1);
+        (await services.BySystemIn(dock, scoped => scoped.TenancyContext().Set<HostSeat>().CountAsync(seat => seat.Identity == first, Cancellation))).Should().Be(1);
+        (await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostSeat>().CountAsync(seat => seat.Id == imported && seat.Identity == person, Cancellation))).Should().Be(1);
 
         // No use case changes a seat's identity. A one-off of the application's own, as Tenancy's system work in the
         // seat's tenant, links Oli's seat to the identity a new sign-in provider gave him, the way the docs give it.
         var relinked = Guid.NewGuid();
-        (await services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<HostSeat>()
+        (await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostSeat>()
             .Where(seat => seat.Id == Oli.Seat)
             .ExecuteUpdateAsync(set => set.SetProperty(seat => seat.Identity, relinked), Cancellation))).Should().Be(1);
         (await OlisSeatAsync(database)).Should().Be((relinked, Harbor.Value));
@@ -156,7 +156,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database);
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().SuspendAsync(Oli.Seat, Cancellation));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().ReactivateAsync(Oli.Seat, Cancellation));
-        (await services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<HostSeat>().Where(seat => seat.Id == Oli.Seat).Select(seat => seat.Status).SingleAsync(Cancellation)))
+        (await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostSeat>().Where(seat => seat.Id == Oli.Seat).Select(seat => seat.Status).SingleAsync(Cancellation)))
             .Should().Be(SeatStatus.Active);
     }
 
@@ -217,7 +217,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         }
 
         Task<long> OlisVersionAsync()
-            => services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<HostSeat>().Where(seat => seat.Id == Oli.Seat).Select(seat => seat.Version).SingleAsync(Cancellation));
+            => services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostSeat>().Where(seat => seat.Id == Oli.Seat).Select(seat => seat.Version).SingleAsync(Cancellation));
     }
 
     [Fact]

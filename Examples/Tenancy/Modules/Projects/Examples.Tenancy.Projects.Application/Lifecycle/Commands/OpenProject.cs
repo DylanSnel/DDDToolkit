@@ -59,16 +59,16 @@ public sealed record OpenProject(string Number, string Name, OrganizationUnitId 
 /// </summary>
 /// <param name="store">Where projects are added and saved.</param>
 /// <param name="reads">Where Tenancy's rows are read, for the unit.</param>
-/// <param name="tenancy">What the tenant allows: an active unit.</param>
+/// <param name="organization">What the tenant allows: an active unit.</param>
 /// <param name="admission">Whether the owner may go on a crew.</param>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
 /// <param name="clock">What "now" is.</param>
 public sealed class OpenProjectHandler(
     IProjectStore store,
     IProjectReads reads,
-    ProjectTenancy tenancy,
+    ProjectTenancy organization,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    SampleAnswers answers,
+    SampleTenancy tenancy,
     TimeProvider clock)
     : ICommandHandler<OpenProject, ProjectId>
 {
@@ -83,7 +83,7 @@ public sealed class OpenProjectHandler(
     {
         // The unit the command names, which is the one its access check asked about.
         var unit = command.UnitId;
-        var scope = answers.RequireTenant();
+        var scope = tenancy.RequireTenant();
 
         // The id is nobody's to choose through a client: only work the application does itself knows one beforehand.
         if (command.Id is not null && !scope.BySystem)
@@ -99,7 +99,7 @@ public sealed class OpenProjectHandler(
         // The permissions were checked at the door, the owner's included: whether the unit takes anything new is the tenant's
         // state, not the caller's right, so it is asked here, on a reading of this command's own.
         await using var reading = reads.Open();
-        await tenancy.RequireActiveUnitAsync(reading, unit, cancellationToken);
+        await organization.RequireActiveUnitAsync(reading, unit, cancellationToken);
 
         // Whether the owner may be on a crew: the projects' rules answer it, on the request's context.
         await admission.RequireMemberAsync(owner, cancellationToken);

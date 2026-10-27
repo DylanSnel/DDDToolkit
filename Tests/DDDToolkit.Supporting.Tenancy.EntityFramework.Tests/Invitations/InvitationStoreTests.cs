@@ -54,7 +54,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
     /// <summary>Reads through Tenancy's context as system work in a tenant, in a scope of its own.</summary>
     private Task<T> InAsync<T>(TenantId tenant, Func<TestTenancyContext, Task<T>> read)
-        => _services.BySystemIn(tenant, services => read(services.Tenancy()));
+        => _services.BySystemIn(tenant, services => read(services.TenancyContext()));
 
     [Fact]
     public async Task An_invitation_and_the_digest_of_its_token_are_two_rows_written_by_one_save()
@@ -149,7 +149,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         using (Callers.Begin(Caller.User(Wren)))
         using (TenancyCallers.BeginNone())
         {
-            acceptors = scope.ServiceProvider.Tenancy();
+            acceptors = scope.ServiceProvider.TenancyContext();
             _services.Commands.Reset();
             await scope.ServiceProvider.Invitations().AcceptAsync(elsewhere.Token, verifiedAddress: null, Cancellation);
         }
@@ -200,9 +200,9 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         // A row of another tenant is refused by the save check, whoever made it.
         await Refused.WithCodeAsync(TenancyRefusals.OtherTenant, () => _services.BySystemIn(_harbor.Tenant, async services =>
         {
-            services.Tenancy().Add(TenancyInstances.NewInvitation<HostInvitation, InvitationId, TenantId, OrganizationUnitId, RoleId, SeatId>(
+            services.TenancyContext().Add(TenancyInstances.NewInvitation<HostInvitation, InvitationId, TenantId, OrganizationUnitId, RoleId, SeatId>(
                 InvitationId.CreateSequential(), _meadow.Tenant, Address, _meadow.RootUnit, Watcher, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(1)));
-            await services.Tenancy().SaveChangesAsync(Cancellation);
+            await services.TenancyContext().SaveChangesAsync(Cancellation);
         }));
     }
 
@@ -217,7 +217,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         using (Callers.Begin(Caller.User(Wren)))
         using (TenancyCallers.BeginNone())
         {
-            _services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => _services.AcceptAsync(other, issued.Token, displayName: "Lark"));
+            _services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => _services.AcceptAsync(other, issued.Token, displayName: "Lark"));
 
             var conflict = await FluentActions.Awaiting(() => scope.ServiceProvider.Invitations().AcceptAsync(issued.Token, verifiedAddress: null, Cancellation))
                 .Should().ThrowAsync<ConcurrencyConflictException>();
@@ -241,7 +241,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         await _services.BySystemIn(_harbor.Tenant, async services =>
         {
-            var context = services.Tenancy();
+            var context = services.TenancyContext();
             var invitation = await context.Set<HostInvitation>().SingleAsync(row => row.Id == issued.Id, Cancellation);
 
             // The class has no method that changes it; a change made past the class is refused by the model.

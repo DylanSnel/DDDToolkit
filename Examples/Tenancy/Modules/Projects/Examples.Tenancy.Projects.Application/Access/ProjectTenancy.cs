@@ -8,13 +8,13 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// </summary>
 /// <remarks>
 /// Not a question of who may do what, which the access checks answer, but of what the tenant allows at all,
-/// whoever asks, and Tenancy's to answer: it is put to Tenancy's questions (<see cref="ProjectAccess.Questions"/>),
+/// whoever asks, and Tenancy's to answer: it is put to Tenancy's queries (<see cref="ProjectAccess.TenancyIn"/>),
 /// over the rows this module reads next to its projects, in one statement on the reading it is given. What a
 /// command asks about a seat and a project role, whether a seat may go on a crew, whether a role is one of the
 /// tenant's project roles in use, the Membership package's admission answers
 /// (<c>MemberAdmission</c>), from the projects' rules.
 /// </remarks>
-/// <param name="access">Tenancy's questions, as this module asks them.</param>
+/// <param name="access">Tenancy's queries, as this module asks them.</param>
 public sealed class ProjectTenancy(ProjectAccess access)
 {
     /// <summary>Requires <paramref name="unit"/> to be an active unit of the tenant. Nothing new goes to an archived unit; what is already there stays.</summary>
@@ -26,7 +26,7 @@ public sealed class ProjectTenancy(ProjectAccess access)
     {
         ArgumentNullException.ThrowIfNull(reading);
 
-        var active = access.Questions(reading).Units().Where(row => row.Id == unit && row.Status == UnitStatus.Active);
+        var active = access.TenancyIn(reading).Units().Where(row => row.Id == unit && row.Status == UnitStatus.Active);
         if (!await reading.Queries.AnyAsync(active, cancellationToken))
         {
             throw ProjectRefusals.Refuse(ProjectRefusals.UnitNotActive, ("Unit", unit));

@@ -27,10 +27,10 @@ public sealed record TakeCrewRole([OnResource] ProjectId Project, SeatId Seat, P
 /// Any role can be taken, one the tenant has since archived too: what was given once can always be taken back.
 /// </remarks>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="answers">Tenancy's answers about the current caller: whether the seat is the caller's own.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller: whether the seat is the caller's own.</param>
 public sealed class TakeCrewRoleHandler(
     IProjectStore store,
-    SampleAnswers answers)
+    SampleTenancy tenancy)
     : ICommandHandler<TakeCrewRole>
 {
     /// <inheritdoc />
@@ -49,7 +49,7 @@ public sealed class TakeCrewRoleHandler(
         // A role of the caller's own may be the one this very change was allowed by, once this command's check
         // let it through: see OwnPlaceOnTheCrew. Either way it writes this project and nothing an earlier command
         // may have left in the unit of work.
-        using (OwnPlaceOnTheCrew.BeginSave(command, command.Seat, answers.RequireTenant()))
+        using (OwnPlaceOnTheCrew.BeginSave(command, command.Seat, tenancy.RequireTenant()))
         {
             await store.SaveOnlyAsync(project, cancellationToken);
         }

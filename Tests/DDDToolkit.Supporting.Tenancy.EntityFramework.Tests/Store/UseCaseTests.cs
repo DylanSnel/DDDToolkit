@@ -373,7 +373,7 @@ public sealed class UseCaseTests : IDisposable
 
         // Read again, by a scope of its own: the unit's own column went with the unit.
         await _services.BySeat(_harbor.Tenant, _grace, async scoped =>
-            (await scoped.Tenancy().Set<HostOrganization>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken))
+            (await scoped.TenancyContext().Set<HostOrganization>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken))
                 .FindUnit(bay)!.CostCentre.Should().Be("BA-001"));
 
         // The application's rule about its own field holds as it does on every save: nothing is added.
@@ -425,9 +425,9 @@ public sealed class UseCaseTests : IDisposable
         {
             (await scoped.Directory().ListRolesAsync(TestContext.Current.CancellationToken)).Select(role => (role.Name, role.FromPack)).Should().Equal(
                 ("Bediener", HostCatalogue.OperatorPack), ("Hoofdgebruiker", HostCatalogue.AdministratorPack), ("Toeschouwer", HostCatalogue.WatcherPack));
-            (await scoped.Tenancy().Set<HostTenant>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).IsDemo.Should().BeTrue();
-            (await scoped.Tenancy().Set<HostSeat>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).JobTitle.Should().Be("Dijkgraaf");
-            (await scoped.Tenancy().Set<HostOrganization>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).Root.CostCentre.Should().Be("PO-001");
+            (await scoped.TenancyContext().Set<HostTenant>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).IsDemo.Should().BeTrue();
+            (await scoped.TenancyContext().Set<HostSeat>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).JobTitle.Should().Be("Dijkgraaf");
+            (await scoped.TenancyContext().Set<HostOrganization>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).Root.CostCentre.Should().Be("PO-001");
         });
 
         // A change of shape names the new roles in the language it is given, and the unique index on a tenant's
@@ -483,7 +483,7 @@ public sealed class UseCaseTests : IDisposable
     private Task BySystem(Func<IServiceProvider, Task> act) => _services.BySystemIn(_harbor.Tenant, act);
 
     private Task<bool> GraceHoldsAtAsync(string permission, OrganizationUnitId unit)
-        => AsGrace(services => services.Answers().Over(services.Tenancy()).HoldsAtAsync(permission, unit, TestContext.Current.CancellationToken));
+        => AsGrace(services => services.Tenancy().In(services.TenancyContext()).HoldsAtAsync(permission, unit, TestContext.Current.CancellationToken));
 
     private async Task<List<(OrganizationUnitId Unit, string Key)>> KeysAsync(SeatId seat)
         => [.. (await _services.StoredRightsAsync(seat)).Select(right => (right.UnitId, right.Permission))];

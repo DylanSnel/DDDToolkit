@@ -60,7 +60,7 @@ public sealed class TenancyModelTests : IDisposable
             [typeof(SeatRow<TenantId, SeatId>)] = "TenantId",
         };
 
-        var tenancy = _scope.ServiceProvider.Tenancy().Model;
+        var tenancy = _scope.ServiceProvider.TenancyContext().Model;
         var widgets = _scope.ServiceProvider.Widgets().Model;
 
         // The rows Tenancy's database functions answer are mapped to nothing: no table of Tenancy's, and no tenant
@@ -222,7 +222,7 @@ public sealed class TenancyModelTests : IDisposable
     [Fact]
     public void Tenancys_own_model_is_not_judged()
     {
-        var tenancy = _scope.ServiceProvider.Tenancy().Model;
+        var tenancy = _scope.ServiceProvider.TenancyContext().Model;
 
         // It maps every table of Tenancy's, in the schema asked about, and the host's own note on a tenant as well.
         tenancy.GetEntityTypes().Should().Contain(entityType => entityType.ClrType == typeof(HostSeat) && entityType.GetSchema() == TestTenancyContext.Schema);

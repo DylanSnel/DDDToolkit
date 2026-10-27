@@ -226,7 +226,7 @@ public sealed class TestServices : IDisposable
     public async Task<List<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>> StoredRightsAsync(SeatId? seat = null)
     {
         await using var scope = Scope();
-        var rights = scope.ServiceProvider.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().IgnoreQueryFilters().AsNoTracking();
+        var rights = scope.ServiceProvider.TenancyContext().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().IgnoreQueryFilters().AsNoTracking();
         if (seat is { } only)
         {
             rights = rights.Where(right => right.SeatId == only);
@@ -239,7 +239,7 @@ public sealed class TestServices : IDisposable
     public async Task<List<OrganizationUnitPath<TenantId, OrganizationUnitId>>> StoredPathsAsync(TenantId tenant)
     {
         await using var scope = Scope();
-        return await scope.ServiceProvider.Tenancy().Set<OrganizationUnitPath<TenantId, OrganizationUnitId>>()
+        return await scope.ServiceProvider.TenancyContext().Set<OrganizationUnitPath<TenantId, OrganizationUnitId>>()
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(path => path.TenantId == tenant)
@@ -300,10 +300,10 @@ public static class ScopedServices
     public static HostTenancy.InvitationCommands<HostInvitation, InvitationId> Invitations(this IServiceProvider services)
         => services.GetRequiredService<HostTenancy.InvitationCommands<HostInvitation, InvitationId>>();
 
-    public static ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> Answers(this IServiceProvider services)
-        => services.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>();
+    public static ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> Tenancy(this IServiceProvider services)
+        => services.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>();
 
-    public static TestTenancyContext Tenancy(this IServiceProvider services) => services.GetRequiredService<TestTenancyContext>();
+    public static TestTenancyContext TenancyContext(this IServiceProvider services) => services.GetRequiredService<TestTenancyContext>();
 
     public static TestWidgetContext Widgets(this IServiceProvider services) => services.GetRequiredService<TestWidgetContext>();
 }

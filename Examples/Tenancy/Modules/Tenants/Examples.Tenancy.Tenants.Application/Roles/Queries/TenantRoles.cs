@@ -20,8 +20,8 @@ public sealed record TenantRoles : IQuery<IReadOnlyList<RoleListing>>, ITenantsR
 /// permissions asked beside it.
 /// </summary>
 /// <param name="reads">Where Tenancy is read: the directory in a scope of this query's own, the permission on a context of its own.</param>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
-public sealed class TenantRolesHandler(ITenancyReads reads, SampleAnswers answers) : IQueryHandler<TenantRoles, IReadOnlyList<RoleListing>>
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
+public sealed class TenantRolesHandler(ITenancyReads reads, SampleTenancy tenancy) : IQueryHandler<TenantRoles, IReadOnlyList<RoleListing>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">The caller's own refusal when it is nobody.</exception>
@@ -29,6 +29,6 @@ public sealed class TenantRolesHandler(ITenancyReads reads, SampleAnswers answer
     {
         // The directory first: it refuses a caller who may not ask, before anything else is read.
         var roles = await reads.AskDirectoryAsync(directory => directory.ListRolesAsync(cancellationToken));
-        return RoleListing.From(roles, withKeys: await AtTenantPermission.IsHeldAsync(answers, reads, RoleListing.ManageRolesPermission, cancellationToken));
+        return RoleListing.From(roles, withKeys: await AtTenantPermission.IsHeldAsync(tenancy, reads, RoleListing.ManageRolesPermission, cancellationToken));
     }
 }

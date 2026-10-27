@@ -71,7 +71,7 @@ public static class ProjectsInfrastructure
         // The projects as the Membership package keeps them, over this module's context, with the projects' rules:
         // the access questions about a project, answered inside this context's statements, and the admission of a
         // seat or a project role to a crew. A crew member is a seat, so what the rules ask of the organization is
-        // answered by a class the package's generator writes here from Tenancy's own answers. Projects declares
+        // answered by a class the package's generator writes here from Tenancy's own queries. Projects declares
         // none of Tenancy's classes, so the ids that class cannot be given are written out. Then the package's
         // check, for a permission held on a project, added for this module's request interface: who may change a crew,
         // or name an owner, is still what each command requires, here and in the database alike.

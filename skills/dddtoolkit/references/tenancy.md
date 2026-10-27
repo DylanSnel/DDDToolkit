@@ -182,7 +182,7 @@ public sealed partial class ShopSeat
 
 - **Ask inside the module's own statement.** The module's context maps Tenancy's read model
   (`AddTenancyReadModel`, or `AddTenancyReadFunctions` on Postgres), and
-  `answers.Over(db).UnitsWhereIHold(permission)` is a query, not a list: use it in `Where(project =>
+  `tenancy.In(db).UnitsWhereIHold(permission)` is a query, not a list: use it in `Where(project =>
   held.Contains(project.UnitId))` and it becomes a subquery. Do not fetch the units first, and do not ask
   `HoldsAtAsync` per row.
 - **Permission sets draw a screen; a command asks again.** A list may carry what the caller can do with each row.
@@ -256,7 +256,7 @@ puts the same rules in row level security under the application's checks, and br
 as start-up checks, which `services.RunStartupChecks()` runs with the others. A module's rule asks through `TenancyRowAccess.UnitsWhereIHold<TUnitId>(permission)`, which is
 set-shaped: once per statement, never per row. There a seat reads its own rights and grants, and another seat's
 grants only at the units where it holds `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage`,
-or all of them with `tenancy.roles.manage` for the whole tenant; `ITenancyQuestions.SeatsHoldingPermissionAt` answers by the
+or all of them with `tenancy.roles.manage` for the whole tenant; `ITenancyQueries.SeatsHoldingPermissionAt` answers by the
 same rule on every database. The database guards Tenancy's own columns of a seat (no seat changes its id, identity
 or tenant; its status only as the use cases do) and none of yours: a field you add to the seat class is as writable
 as the row, by the seat itself and by a seat that manages seats or grants anywhere in the tenant, until a column
@@ -270,7 +270,7 @@ which no rule takes away. Write it with `TenancyRowAccess`'s questions (`CallerS
 `UnitsWhereIHold`, `SeatsInMyUnits`: the seats placed at or below the caller's units; `CallerSeat<Seat>().Kind`, a
 field of the caller's own seat), or a module's `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]`
 (declaring `static partial AccessSet<SeatId> Ids();`), the people on the caller's projects. It changes what a read of the
-seats answers, a direct read, the directory, `tenant_seats()` and `ITenancyQuestions.Seats()`, so Membership's
+seats answers, a direct read, the directory, `tenant_seats()` and `ITenancyQueries.Seats()`, so Membership's
 admission then takes only seats the caller reads (`member-not-active` otherwise); never Tenancy's questions about
 the caller and rights, the placements (every member still reads each seat's id and units), or who writes. A read
 rule on any other class of Tenancy's is refused.

@@ -96,13 +96,13 @@ public abstract class RolePackSyncTests(TestDatabases databases) : IAsyncLifetim
     /// <summary>The permissions of a tenant's role made from <paramref name="pack"/>, as saved.</summary>
     private Task<List<string>> KeysAsync(HostTenancy.ProvisionedTenant tenant, string pack)
         => _services.BySystemIn(tenant.Tenant, async services =>
-            (await services.Tenancy().Set<HostRole>().SingleAsync(role => role.Id == tenant.RolesByPack[pack], Cancellation)).Permissions.ToList());
+            (await services.TenancyContext().Set<HostRole>().SingleAsync(role => role.Id == tenant.RolesByPack[pack], Cancellation)).Permissions.ToList());
 
     /// <summary>The access history's rows of roles that followed their pack, in every tenant.</summary>
     private async Task<List<(TenantId Tenant, string ActedByKind)>> FollowedAsync()
     {
         await using var scope = _services.Scope();
-        var rows = await scope.ServiceProvider.Tenancy().Set<EventLogEntry>()
+        var rows = await scope.ServiceProvider.TenancyContext().Set<EventLogEntry>()
             .Where(entry => entry.EventName == RoleFollowedItsPack)
             .Select(entry => new { Tenant = EF.Property<TenantId>(entry, TenancyEventLogTable.TenantId), entry.ActedByKind })
             .ToListAsync(Cancellation);
