@@ -35,9 +35,10 @@ namespace DDDToolkit.Supporting.Membership.Analyzers;
 /// </para>
 /// <para>
 /// <b>What it reports.</b> A level on a class that is no resource with members, and a second permission of one
-/// resource that every member holds or that locks the members or the owner (DDD00093); and rules made of a resource
-/// no permission is declared on (DDD00094). A permission without a level, and a class that is not static, are the
-/// core's to report (DDD00092).
+/// resource that every member holds or that locks the members or the owner (DDD00093); rules made of a resource
+/// no permission is declared on (DDD00094); a property marked <c>[At]</c> that is not the one place an aggregate root
+/// hangs at (DDD00097); and rules that reach from above a resource that marks no place (DDD00098). A permission without
+/// a level, and a class that is not static, are the core's to report (DDD00092).
 /// </para>
 /// <para>
 /// The package's types are named here by their metadata names, as text: this assembly references nothing of the
@@ -55,6 +56,9 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
     private const string Rules = Package + ".Access.MembershipRules";
     private const string Registry = Package + ".Access.MembershipPermissions";
     private const string ResourceInterface = Package + ".IMembershipResource";
+
+    /// <summary>Where a resource hangs: <c>[At]</c>, in the package's markers.</summary>
+    private const string AtAttribute = Package + ".AtAttribute";
 
     /// <summary>The class written into a project that declares or reads permissions.</summary>
     public const string ClassName = "GeneratedMembershipPermissions";
@@ -95,6 +99,9 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(
             own.Combine(resources).Combine(calls).Combine(referenced),
             static (production, all) => Execute(production, all.Left.Left.Left, all.Left.Left.Right, all.Left.Right, all.Right));
+
+        // Where a resource hangs is Membership's marker, so a misplaced [At] is reported here, where the marker ships.
+        context.RegisterSourceOutput(context.MisplacedPlaces(AtAttribute), static (production, diagnostic) => diagnostic.Report(production));
     }
 
     // ------------------------------------------------------------------ what is declared
@@ -279,7 +286,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
     {
         for (var current = resource; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
         {
-            if (current.GetMembers().OfType<IPropertySymbol>().Any(static property => property.GetAttributes().Any(static each => each.AttributeClass?.ToDisplayString() == KnownTypes.AtAttribute)))
+            if (current.GetMembers().OfType<IPropertySymbol>().Any(static property => property.GetAttributes().Any(static each => each.AttributeClass?.ToDisplayString() == AtAttribute)))
             {
                 return true;
             }

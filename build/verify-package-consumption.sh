@@ -25,7 +25,8 @@
 #      told that it is no module, and none that imports the targets file is.
 #   5. The supporting domains: an application with Tenancy and Membership, in a domain project on their
 #      domain packages, an infrastructure project on their Postgres packages and a host, builds with
-#      everything it needs arriving as a dependency, Membership's two generators among it, which ship
+#      everything it needs arriving as a dependency, the markers its domain classes carry among it, from the
+#      two domains' Abstractions packages, and Membership's two generators, which ship
 #      inside Membership's packages and write nothing in the host; Tenancy's generator, which ships inside
 #      Tenancy's package and writes the module's list of permissions where its [Permissions] class is, and
 #      the modules' lists into the host, and nothing into the infrastructure project; the toolkit's, which
@@ -406,11 +407,13 @@ expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
 expect_module ContractsOnly ""
 
 # ---------------------------------------------------------------------------------------------------
-# The supporting domains, Tenancy and Membership, three packages each.
+# The supporting domains, Tenancy and Membership, four packages each: the markers for domain classes, the
+# domain package, Entity Framework and Postgres.
 #
 # SupportingDomains is an application with both, in the layers an application has. Its domain project
 # declares Tenancy's classes with the package's templates, and a resource with members and a role it
-# keeps for that resource with Membership's, and references the two domain packages alone. Its
+# keeps for that resource with Membership's, and references the two domain packages alone. The markers
+# its classes carry, [OfTenant] and [At], arrive with those as a dependency, from the Abstractions packages. Its
 # infrastructure project maps and registers them and references only the two Postgres packages of the
 # supporting domains, beside the Supabase export and the provider it needs, so the Entity Framework
 # packages, the toolkit's own and every generator it needs have to arrive as a dependency, at the version
@@ -538,6 +541,12 @@ for project in Infrastructure Host; do
 done
 
 echo "    SupportingDomains/Domain: TenancyUseCases, which the host names Tenancy's use cases through"
+
+# The markers the domain project's classes carry, which arrived as a dependency of the two domain packages: the
+# build above compiled only because they did, and this names the package when one did not.
+expect_in_package "${prefix}DDDToolkit.Supporting.Tenancy.Abstractions" lib/net10.0/DDDToolkit.Supporting.Tenancy.Abstractions.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership.Abstractions" lib/net10.0/DDDToolkit.Supporting.Membership.Abstractions.dll
+echo "    SupportingDomains/Domain: the markers of both domains, from their Abstractions packages"
 
 # Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll

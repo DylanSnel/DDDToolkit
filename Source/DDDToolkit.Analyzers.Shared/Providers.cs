@@ -317,13 +317,14 @@ internal static class Providers
 
     /// <summary>
     /// DDD00097 for every property marked <c>[At]</c> that is not the one place an aggregate root hangs at: on another
-    /// type, static, a second one, or one that may be empty.
+    /// type, static, a second one, or one that may be empty. The package that declares the marker reports it, and names
+    /// the marker by <paramref name="marker"/>, its metadata name.
     /// </summary>
-    public static IncrementalValuesProvider<DiagnosticInfo> MisplacedPlaces(this IncrementalGeneratorInitializationContext context)
+    public static IncrementalValuesProvider<DiagnosticInfo> MisplacedPlaces(this IncrementalGeneratorInitializationContext context, string marker)
         => context.SyntaxProvider.ForAttributeWithMetadataName(
-                KnownTypes.AtAttribute,
+                marker,
                 predicate: static (node, _) => node is PropertyDeclarationSyntax,
-                transform: static (syntaxContext, _) => OwnerDeclarations.CheckPlace(syntaxContext))
+                transform: (syntaxContext, _) => OwnerDeclarations.CheckPlace(syntaxContext, marker))
             .Where(static diagnostic => diagnostic is not null)
             .Select(static (diagnostic, _) => diagnostic!);
 

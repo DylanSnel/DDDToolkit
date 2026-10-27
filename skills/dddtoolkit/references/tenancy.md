@@ -10,6 +10,8 @@ every 3.x package, and their names can change until a release that is not one; r
 before writing against them.
 
 Packages: `DDDToolkit.Supporting.Tenancy` (the model, its rules, its use cases, no database),
+`DDDToolkit.Supporting.Tenancy.Abstractions` (`[OfTenant]`, the marker of a row's tenant, for a module's domain
+project that sees only Tenancy's ids; the first package references it),
 `DDDToolkit.Supporting.Tenancy.EntityFramework` (`AddTenancy()`, the read model, the questions as queries)
 and `DDDToolkit.Supporting.Tenancy.Postgres` (the same questions as SQL functions and row level security).
 

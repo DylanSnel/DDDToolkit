@@ -60,13 +60,9 @@ public sealed class PressContext(DbContextOptions<PressContext> options) : DbCon
     {
         modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>(TenancyContext.Schema);
 
-        // The manuscript and its role mark their house [OfTenant], and a manuscript's editors and the roles of
-        // manuscripts are mapped by Membership's convention: AddDDDToolkitConventions() brings both, with no call of
-        // either package's here.
-        modelBuilder.Entity<ManuscriptRole>(role =>
-        {
-            role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
-        });
+        // Nothing for the manuscripts and their roles. Both mark their house [OfTenant], and AddDDDToolkitConventions()
+        // keeps both to the caller's. Membership's convention maps a manuscript's editors and the roles of manuscripts,
+        // and gives a role's name and starter role once per house.
     }
 
     /// <inheritdoc />

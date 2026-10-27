@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
 using Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles.Events;

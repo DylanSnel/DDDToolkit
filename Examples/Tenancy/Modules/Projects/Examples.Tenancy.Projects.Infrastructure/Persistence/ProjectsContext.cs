@@ -33,8 +33,9 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 /// they are stored. The crew is the Membership package's, and <c>HasMembers</c> maps it, under the tables and the
 /// column it has always had: the members owned by their project, a member's roles owned by the member, each in a
 /// table of its own, and the unit a project hangs at as where a permission held above reaches it. The package maps
-/// the crew by itself as well, under names of its own; <c>HasMembers</c> is here for the names, and wins. It maps the
-/// package's part of a project role with no call here; that a name is used once in a tenant is said here.</item>
+/// the crew by itself as well, under names of its own. <c>HasMembers</c> is here for the names, and wins. The package
+/// maps a project role with no call here: its own part, and, since the role marks its tenant, a name and a starter role
+/// once per tenant. The refusal a second name gets is the module's, and is said here.</item>
 /// </list>
 /// Table names carry the module's name where Tenancy's could be meant: a crew member's table says whose it is
 /// without its schema.
@@ -145,12 +146,11 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
 
             // The package's part of a role, its name, what it is for, its permissions, its status and the starter role it
             // came from, is mapped by the package's convention, with no call here. Whose a role is, the role says with
-            // [OfTenant]. This module's: a name is used once in a tenant, and a tenant has each starter role once, which
-            // also keeps two set-ups of one tenant at the same moment apart.
+            // [OfTenant], and the package's mapping then keeps a name once in a tenant and each starter role once in a
+            // tenant, in two unique indexes. This module's: two roles of one name made at the same moment are refused with
+            // the module's own code and text, which the command answers when it finds the name taken first.
             role.HasIndex(row => new { row.TenantId, row.Name })
-                .IsUnique()
                 .RefusesAs(ProjectRefusals.RoleNameTaken, ProjectRefusals.TemplateOf(ProjectRefusals.RoleNameTaken));
-            role.HasIndex(row => new { row.TenantId, row.MadeFrom }).IsUnique();
         });
 
         // Projects raises domain events, stored with the change that raised them.

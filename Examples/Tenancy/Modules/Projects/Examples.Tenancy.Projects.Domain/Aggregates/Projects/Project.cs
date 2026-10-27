@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Membership;
 using Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles.ValueObjects;
 using Examples.Tenancy.Projects.Domain.Aggregates.Projects.Entities;

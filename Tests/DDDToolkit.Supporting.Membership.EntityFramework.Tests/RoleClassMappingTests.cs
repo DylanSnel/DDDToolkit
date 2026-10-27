@@ -221,6 +221,9 @@ public sealed class RoleClassMappingTests
 
         byConvention.ToDebugString(Microsoft.EntityFrameworkCore.Infrastructure.MetadataDebugStringOptions.LongDefault).Should().Be(byHand.ToDebugString(Microsoft.EntityFrameworkCore.Infrastructure.MetadataDebugStringOptions.LongDefault));
         byConvention.FindEntityType(typeof(PlotRole))!.FindAnnotation(MembershipModel.RoleOfAnnotation)!.Value.Should().Be(typeof(Plot).FullName);
+
+        // A garden is the host's own column, which the package knows nothing of: the indexes over it are the host's to say.
+        byConvention.FindEntityType(typeof(PlotRole))!.GetIndexes().Should().BeEmpty();
     }
 
     /// <summary>The model of a context that maps what <paramref name="map"/> says.</summary>

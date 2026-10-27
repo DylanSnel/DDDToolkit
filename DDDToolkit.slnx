@@ -35,10 +35,12 @@
     <Project Path="Source/DDDToolkit.NewtonSoft.Json/DDDToolkit.NewtonSoft.Json.csproj" />
     <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Tenancy/DDDToolkit.Supporting.Tenancy.csproj" />
+    <Project Path="Source/DDDToolkit.Supporting.Tenancy.Abstractions/DDDToolkit.Supporting.Tenancy.Abstractions.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Tenancy.Analyzers/DDDToolkit.Supporting.Tenancy.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Tenancy.EntityFramework/DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Tenancy.Postgres/DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Membership/DDDToolkit.Supporting.Membership.csproj" />
+    <Project Path="Source/DDDToolkit.Supporting.Membership.Abstractions/DDDToolkit.Supporting.Membership.Abstractions.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Membership.Analyzers/DDDToolkit.Supporting.Membership.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Membership.EntityFramework/DDDToolkit.Supporting.Membership.EntityFramework.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.csproj" />

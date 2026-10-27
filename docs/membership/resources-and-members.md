@@ -11,12 +11,14 @@ names, and several kinds of resource in one module. The [tutorial](tutorial.md) 
 ## The packages
 
 > [!NOTE]
-> The packages are published as `Temp.DDDToolkit.Supporting.Membership`, `.EntityFramework` and `.Postgres`
-> ([the package ids](../migrating-to-3.md#the-package-ids)). They are prereleases, so their names can still change.
+> The packages are published as `Temp.DDDToolkit.Supporting.Membership`, `.Abstractions`, `.EntityFramework` and
+> `.Postgres` ([the package ids](../migrating-to-3.md#the-package-ids)). They are prereleases, so their names can
+> still change.
 
 | Package | What it holds |
 |---|---|
 | `DDDToolkit.Supporting.Membership` | The templates, the member list and the generator that writes it, the rules, the questions and the requirements. It has no database code. |
+| `DDDToolkit.Supporting.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on the property that says where a resource hangs. No Entity Framework. `DDDToolkit.Supporting.Membership` references it. |
 | `DDDToolkit.Supporting.Membership.EntityFramework` | `HasMembers()`, `IsCustomRole()`, the registrations, and the questions inside your queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
 | `DDDToolkit.Supporting.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
 

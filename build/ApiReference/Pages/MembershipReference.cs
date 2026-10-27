@@ -3,12 +3,13 @@ namespace DDDToolkit.Build.ApiReference.Pages;
 /// <summary>
 /// Membership's reference, in <c>docs/membership/reference</c>: which types each page holds. The folders are where the
 /// packages keep their code; a type in a folder no claim takes still gets a section, under "Other" on its package's last
-/// page, and the tool says so. Four attributes of <c>DDDToolkit.Abstractions</c> that a resource with members is declared
+/// page, and the tool says so. Three attributes of <c>DDDToolkit.Abstractions</c> that a resource with members is declared
 /// and asked about with are taken by name, beside the package's own types.
 /// </summary>
 internal static class MembershipReference
 {
     public const string Membership = "DDDToolkit.Supporting.Membership";
+    public const string Markers = "DDDToolkit.Supporting.Membership.Abstractions";
     public const string EntityFramework = "DDDToolkit.Supporting.Membership.EntityFramework";
     public const string Postgres = "DDDToolkit.Supporting.Membership.Postgres";
 
@@ -18,7 +19,7 @@ internal static class MembershipReference
     public static readonly ReferencePlan Plan = new(
         "Membership",
         "docs/membership/reference",
-        [Membership, EntityFramework, Postgres],
+        [Membership, Markers, EntityFramework, Postgres],
         [
             new(
                 "resource-and-members.md",
@@ -55,11 +56,12 @@ internal static class MembershipReference
                             new(Membership, Type: "IMembershipResource"),
                             new(Membership, Type: "MembersAttribute"),
                             new(Abstractions, Type: "OwnerAttribute"),
-                            new(Abstractions, Type: "AtAttribute"),
+                            new(Markers, Type: "AtAttribute"),
                         ],
                         "What the resource's own class says, or has written onto it: its name, its codes, its owner and where it "
-                        + "hangs. `[Owner]` and `[At]` are the toolkit's, from `DDDToolkit.Abstractions`, and say what they say "
-                        + "for every package that reads them."),
+                        + "hangs. `[At]` is Membership's, from `DDDToolkit.Supporting.Membership.Abstractions`. `[Owner]` is the "
+                        + "toolkit's, from `DDDToolkit.Abstractions`, and says what it says "
+                        + "for every package that reads it."),
                     new("Custom role", [new(Membership, Folder: "Aggregates/Roles")]),
                 ]),
             new(

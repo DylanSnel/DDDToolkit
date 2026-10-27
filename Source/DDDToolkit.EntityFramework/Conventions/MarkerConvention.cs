@@ -7,14 +7,21 @@ using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 namespace DDDToolkit.EntityFramework.Conventions;
 
 /// <summary>
-/// Runs the conventions that markers name with <see cref="DDDToolkit.Abstractions.Attributes.ModelConventionAttribute"/>: a package's convention runs in
+/// Runs the conventions that markers name with <see cref="ModelConventionAttribute"/>: a package's convention runs in
 /// a model that maps a class with its marker, on the class or on one of its properties. Tenancy's runs where a class
-/// marks its tenant with <c>[OfTenant]</c>. Each convention runs once per model, in the order the model first names
-/// it, and finds the marked classes itself.
+/// marks its tenant with <c>[OfTenant]</c>, and Membership's where a class is declared with <c>[Member&lt;…&gt;]</c> or
+/// <c>[CustomRole&lt;…&gt;]</c>. Each convention runs once per model, in the order the model first names it, and finds
+/// the marked classes itself.
+/// <para>
+/// Every class the model maps counts: one the context names, one Entity Framework reaches through a navigation of
+/// another, and one the context owns, also where two owners share it. A marker may be generic: the marker's definition
+/// names the convention, and every class declared with it over any type arguments runs that convention.
+/// </para>
 /// <para>
 /// A model whose classes carry no such marker is not touched. A convention the application does not have refuses the
-/// model while it is built, naming the class, the marker and the assembly to reference: without it the marker would
-/// map nothing, and nothing would say so.
+/// model while it is built, naming the class, the marker and the assembly to reference. Without it the marker would
+/// map nothing, and nothing would say so. The conventions are found from the classes the model maps and from nothing
+/// registered, so <c>dotnet ef</c> builds the model the application runs with.
 /// </para>
 /// </summary>
 public sealed class MarkerConvention : IModelFinalizingConvention
@@ -27,8 +34,9 @@ public sealed class MarkerConvention : IModelFinalizingConvention
     {
         // Each convention once, with the first place that names it, which a refusal names.
         var conventions = new Dictionary<string, string>(StringComparer.Ordinal);
+        // A type two owners share is mapped under a name of each, over the one class. A property bag has no class of its own.
         var types = modelBuilder.Metadata.GetEntityTypes()
-            .Where(static entityType => !entityType.HasSharedClrType)
+            .Where(static entityType => !entityType.IsPropertyBag)
             .Select(static entityType => entityType.ClrType)
             .Distinct();
 
@@ -69,8 +77,11 @@ public sealed class MarkerConvention : IModelFinalizingConvention
         }
     }
 
+    /// <summary>The convention the marker <paramref name="attribute"/> names, read off its definition where the marker is generic.</summary>
     private static string? ConventionOf(Type attribute)
-        => Named.GetOrAdd(attribute, static type => type.GetCustomAttribute<DDDToolkit.Abstractions.Attributes.ModelConventionAttribute>(inherit: false)?.Convention);
+        => Named.GetOrAdd(
+            attribute,
+            static type => (type.IsConstructedGenericType ? type.GetGenericTypeDefinition() : type).GetCustomAttribute<ModelConventionAttribute>(inherit: false)?.Convention);
 
     /// <summary>The convention <paramref name="convention"/> names, made; throws where the application does not have it.</summary>
     private static IModelFinalizingConvention Make(string convention, string place)
@@ -88,8 +99,8 @@ public sealed class MarkerConvention : IModelFinalizingConvention
         if (!typeof(IModelFinalizingConvention).IsAssignableFrom(type) || type.GetConstructor(Type.EmptyTypes) is null)
         {
             throw new InvalidOperationException(
-                place + ", which names the convention '" + type.FullName + "'. A convention a marker names is a public class with a public constructor "
-                + "that takes nothing, and implements IModelFinalizingConvention.");
+                place + ", which names the convention '" + type.FullName + "'. A convention a marker names has a public constructor that takes nothing, "
+                + "and implements IModelFinalizingConvention.");
         }
 
         return (IModelFinalizingConvention)Activator.CreateInstance(type)!;

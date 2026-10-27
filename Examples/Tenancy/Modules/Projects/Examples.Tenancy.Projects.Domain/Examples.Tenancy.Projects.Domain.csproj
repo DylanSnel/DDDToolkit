@@ -13,7 +13,8 @@
     converters generated there, and registers these domain events under their names, because it declares the
     same module. The Membership package is here for the crew: a crew member is declared with its member template,
     a project role with its role template, and the project keeps its crew through the member list the package's
-    generator writes on it. Tenancy's ids come from its contracts, never from the Tenants module.
+    generator writes on it. Tenancy's ids come from its contracts, never from the Tenants module, and Tenancy's marker
+    of a row's tenant, [OfTenant], from Tenancy's abstractions, the one Tenancy package here.
   -->
   <ItemGroup>
     <ProjectReference Include="..\Examples.Tenancy.Projects.Contracts\Examples.Tenancy.Projects.Contracts.csproj" />
@@ -23,6 +24,8 @@
     <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Domain\Examples.Tenancy.Shared.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Membership\DDDToolkit.Supporting.Membership.csproj" />
+    <!-- [OfTenant], which says on a project and a project role which tenant it belongs to. No Entity Framework in it. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy.Abstractions\DDDToolkit.Supporting.Tenancy.Abstractions.csproj" />
   </ItemGroup>
 
   <!-- The generators. A NuGet consumer gets them through the packages above; inside this repository they are wired by hand. -->

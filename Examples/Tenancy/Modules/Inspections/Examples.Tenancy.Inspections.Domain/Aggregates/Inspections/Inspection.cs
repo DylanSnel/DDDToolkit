@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Supporting.Tenancy;
 using Examples.Tenancy.Inspections.Domain.Aggregates.Inspections.Events;
 using Examples.Tenancy.Inspections.Domain.Aggregates.Inspections.ValueObjects;
 

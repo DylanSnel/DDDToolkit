@@ -19,11 +19,16 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// <c>IsCustomRole()</c> maps it.</item>
 /// </list>
 /// <para>
-/// It runs when the model is finished, after <c>OnModelCreating</c>, and maps only what the context did not map by hand:
-/// a resource whose members the context mapped with <c>HasMembers</c>, under table names of its own say, and a role class
-/// it mapped with <c>IsCustomRole</c>, keep what the context said. The context names the package by nothing: the package's
-/// assembly names this convention (<c>[assembly: ModelConvention]</c>), and the toolkit finds it through the context's
-/// references, at design time as when the application runs.
+/// It runs when the model is finished, after <c>OnModelCreating</c>, and maps only what the context did not map by hand.
+/// A resource whose members the context mapped with <c>HasMembers</c>, under table names of its own say, keeps what the
+/// context said, and so does a role class it mapped with <c>IsCustomRole</c>. A collection the context ignores stays
+/// ignored.
+/// </para>
+/// <para>
+/// The context names the package by nothing. The two templates name this convention (<c>[ModelConvention]</c>), and the
+/// toolkit's <c>MarkerConvention</c> runs it in every model that maps a class declared with one of them. A model with
+/// such a class and without this package in the application is refused while it is built. The convention is found from
+/// the classes the model maps, so <c>dotnet ef</c> builds the model the application runs with.
 /// </para>
 /// </summary>
 internal sealed class MembershipModelConvention : IModelFinalizingConvention

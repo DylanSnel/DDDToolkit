@@ -19,7 +19,9 @@ namespace Campus.Persistence;
 /// over Tenancy's tables, which are in the same database. A model is built once for the provider its context
 /// runs on, so the choice is the same for every instance.</item>
 /// <item><b>The tenant.</b> A course, a lab and a role of courses are each a college's, and kept to it by
-/// Tenancy's own rule: neither is read or written from another tenant. Membership knows nothing of it.</item>
+/// Tenancy's own rule: none is read or written from another tenant. The course and the lab say it here, with
+/// <c>ScopeToTenant</c>. The role of courses marks its college <c>[OfTenant]</c>, so the toolkit's conventions keep it,
+/// and Membership's mapping adds a name and a starter role once per college.</item>
 /// <item><b>Where a resource sits.</b> Said with its members, <c>at:</c>: the unit a permission held in the
 /// organization is compared with.</item>
 /// </list>
@@ -76,14 +78,8 @@ public sealed class CampusContext(DbContextOptions<CampusContext> options) : DbC
             // are mapped by Membership's convention: nothing is said about them here.
         });
 
-        modelBuilder.Entity<CourseRole>(role =>
-        {
-            // Membership's part of a role, its name, what it is for, its permissions, its status and the starter role it came
-            // from, is mapped by its convention. The application's part: whose it is. A name is used once in a college, and a college has each starter role once.
-            role.ScopeToTenant(row => row.TenantId);
-            role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
-            role.HasIndex(row => new { row.TenantId, row.MadeFrom }).IsUnique();
-        });
+        // Nothing for the roles of courses: Membership's convention maps the package's part of a role, Tenancy's keeps it to
+        // its college by the [OfTenant] it marks, and Membership's mapping gives a name and a starter role once per college.
 
         modelBuilder.Entity<Lab>(lab =>
         {

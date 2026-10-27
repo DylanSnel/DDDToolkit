@@ -177,9 +177,11 @@ of another fails restore with NU1605, a package downgrade, or fails at run time 
 | `DDDToolkit.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.9 or later. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
 | `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, and the access questions. No database in it. |
+| `DDDToolkit.Supporting.Tenancy.Abstractions` | Tenancy's markers for domain classes, `[OfTenant]` on the property that says which tenant a row belongs to, for a module's domain project that sees only Tenancy's ids. Tenancy's package references it. |
 | `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with the access questions as Entity Framework queries, on every provider. |
 | `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's questions as SQL functions, its row level security policies, and the start-up checks. |
 | `DDDToolkit.Supporting.Membership` | [Membership](docs/membership/overview.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
+| `DDDToolkit.Supporting.Membership.Abstractions` | Membership's markers for domain classes, `[At]` on the property that says where a resource hangs. Membership's package references it. |
 | `DDDToolkit.Supporting.Membership.EntityFramework` | A resource's members in a context of your own, a registration named after each resource, and the access questions inside your own statements. Its generator joins a resource to Tenancy where an application has both. |
 | `DDDToolkit.Supporting.Membership.Postgres` | A resource's access questions as SQL functions for your row access rules, and a start-up check. |
 | `DDDToolkit.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |

@@ -3,6 +3,7 @@ using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
+using DDDToolkit.Supporting.Tenancy;
 
 namespace Acme.Press.Manuscripts;
 

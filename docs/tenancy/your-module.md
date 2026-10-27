@@ -15,6 +15,7 @@ defines the words.
 | Package | What it contains | Where it goes |
 |---|---|---|
 | `DDDToolkit.Supporting.Tenancy` | The model, its rules, its use cases and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
+| `DDDToolkit.Supporting.Tenancy.Abstractions` | Tenancy's markers for domain classes: `[OfTenant]`, on the property that says which tenant a row belongs to ([Keeping tenants apart](keeping-tenants-apart.md)). No Entity Framework. `DDDToolkit.Supporting.Tenancy` references it. | The domain project of another module, which sees only Tenancy's ids |
 | `DDDToolkit.Supporting.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, and Tenancy's queries as Entity Framework queries. It works with every provider. | The infrastructure project, which has the context |
 | `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's queries as SQL functions, and row level security (RLS) policies, written by the [export](../supabase.md). It references the Entity Framework package. | The infrastructure project, on Postgres |
 

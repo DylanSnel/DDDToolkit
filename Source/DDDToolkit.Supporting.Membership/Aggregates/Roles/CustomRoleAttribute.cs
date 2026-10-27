@@ -31,7 +31,19 @@ namespace DDDToolkit.Supporting.Membership;
 /// </summary>
 /// <typeparam name="TRoleId">The role class's id, a <c>readonly partial record struct</c> marked <c>[EntityId&lt;T&gt;]</c>: what a member holds a role by.</typeparam>
 /// <typeparam name="TResource">The resource the roles are of: the application's aggregate whose members hold them.</typeparam>
+/// <remarks>
+/// Membership's Entity Framework package maps the class, through <c>AddDDDToolkitConventions()</c>, as
+/// <c>IsCustomRole</c> does: the template names that convention. A model that maps the class without that package in
+/// the application is refused while it is built.
+/// <para>
+/// A class that marks the organization its rows are of, with the marker the organization's package gives a domain class
+/// for it, gets two unique indexes from that mapping: a name once in an organization, and a starter role once in an
+/// organization. A customer of another kind is the application's own column, and its indexes are the application's to
+/// declare.
+/// </para>
+/// </remarks>
 [AggregateRootTemplate(typeof(CustomRoleAggregate<>), AllowSeveral = true)]
+[ModelConvention("DDDToolkit.Supporting.Membership.EntityFramework.MembershipModelConvention, DDDToolkit.Supporting.Membership.EntityFramework")]
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class CustomRoleAttribute<TRoleId, TResource> : Attribute
     where TResource : class;

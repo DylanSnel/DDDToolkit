@@ -15,6 +15,9 @@ Tenancy adds two checks in C#, so they work on every database. `AddTenancy()` ad
 class of yours gets them when it marks the property that holds its tenant with `[OfTenant]`:
 
 ```csharp
+using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Supporting.Tenancy;
+
 [AggregateRoot<ProjectId>]
 public sealed partial class Project
 {
@@ -25,6 +28,18 @@ public sealed partial class Project
 
 The marker is a fact about the class, like `[Owner]`, so it goes on the domain class. `AddDDDToolkitConventions()` in
 the context's `ConfigureConventions` finds the marker and adds both checks. The context needs no line for the class.
+
+- **The marker's package.** `[OfTenant]` is in `DDDToolkit.Supporting.Tenancy.Abstractions`, in the namespace
+  `DDDToolkit.Supporting.Tenancy`. The package holds Tenancy's markers for domain classes and has no Entity Framework.
+  Tenancy's own package references it. A module's domain project that sees only Tenancy's ids references the marker's
+  package by itself.
+- **The marker names its convention.** The marker carries `[ModelConvention]`, which names `OfTenantConvention` in
+  Tenancy's Entity Framework package. A context that maps a marked class while that package is not in the
+  application is refused while its model is built, and the message names the package to reference.
+- **A role class of Membership.** A class declared with `[CustomRole<…>]` that marks its tenant also gets two unique
+  indexes from Membership's mapping: a name once per tenant, and a starter role once per tenant. Entity Framework names
+  them `IX_{table}_TenantId_Name` and `IX_{table}_TenantId_MadeFrom`. A refusal of your own for a name used twice goes
+  on the same index: `role.HasIndex(row => new { row.TenantId, row.Name }).RefusesAs(code, message)`.
 
 For a class without the marker, or a tenant that the context reads from another property, call `ScopeToTenant` in
 `OnModelCreating`. The call wins over the marker:
