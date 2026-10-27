@@ -86,7 +86,11 @@ public sealed partial class Project
         RaiseDomainEvent(new ProjectOpened(id, tenantId, unitId, owner));
     }
 
-    /// <summary>The tenant the project belongs to. It never changes; the tenant filter reads it.</summary>
+    /// <summary>
+    /// The tenant the project belongs to. It never changes. <c>[OfTenant]</c> says so in the domain: every context that
+    /// maps the project keeps it to the caller's tenant by this property, with the tenant filter and the save check.
+    /// </summary>
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     /// <summary>The project's number, such as <c>P-001</c>, unique in its tenant and never changed.</summary>

@@ -11,11 +11,26 @@ table that belongs to a tenant, configure a context, or write a job, an import o
 
 ## The tenant filter and the save check
 
-Tenancy adds two checks in C#, so they work on every database. `AddTenancy()` adds them to Tenancy's classes.
-`ScopeToTenant` adds them to a class of yours:
+Tenancy adds two checks in C#, so they work on every database. `AddTenancy()` adds them to Tenancy's classes. A
+class of yours gets them when it marks the property that holds its tenant with `[OfTenant]`:
 
 ```csharp
-modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId);
+[AggregateRoot<ProjectId>]
+public sealed partial class Project
+{
+    [OfTenant]
+    public TenantId TenantId { get; private set; }
+}
+```
+
+The marker is a fact about the class, like `[Owner]`, so it goes on the domain class. `AddDDDToolkitConventions()` in
+the context's `ConfigureConventions` finds the marker and adds both checks. The context needs no line for the class.
+
+For a class without the marker, or a tenant that the context reads from another property, call `ScopeToTenant` in
+`OnModelCreating`. The call wins over the marker:
+
+```csharp
+modelBuilder.Entity<Delivery>().ScopeToTenant(delivery => delivery.ShipperTenantId);
 ```
 
 | Check | What it does |
@@ -45,14 +60,16 @@ covered by the same `UseDDDToolkit` call.
 | Context | What the check does at a save |
 |---|---|
 | Tenancy's context | Checks the rows. Writes the closure (one row for each pair of a unit and a unit at or below it) and the rights that the save changes. Where the database keeps the rights, as on Postgres with row level security, the database writes the rights and the save writes only the closure. |
-| A module's context with `ScopeToTenant` | Checks the rows of the classes that `ScopeToTenant` marks. |
+| A module's context with `[OfTenant]` or `ScopeToTenant` | Checks the rows of the classes that are kept to a tenant. |
 | A context with neither | Nothing. |
 
 ### A context without the save check
 
-- `ScopeToTenant` records in the model that its context needs the save check
+- `[OfTenant]` and `ScopeToTenant` record in the model that its context needs the save check
   ([A part a model cannot do without](../entity-framework.md#parts-a-model-requires)). A context without
   the check fails at its first save, before anything is written. The error message names the missing call.
+- A context whose `ConfigureConventions` leaves out `AddDDDToolkitConventions()` keeps no marked class to a tenant.
+  The save check refuses its first save, and the error message names the missing call.
 - `UseDDDToolkitCore` adds the toolkit's interceptors and no package's part. After it, add the save check with
   `.UseTenancy(serviceProvider)`. With `UseTenancy` first, `TenancyChecks.EnsureWired` fails.
 - A context configured with `UseDDDToolkitCore` runs as the login role. Where that role

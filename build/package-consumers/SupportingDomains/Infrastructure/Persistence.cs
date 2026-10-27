@@ -59,16 +59,12 @@ public sealed class PressContext(DbContextOptions<PressContext> options) : DbCon
     {
         modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>(TenancyContext.Schema);
 
-        modelBuilder.Entity<Manuscript>(manuscript =>
-        {
-            manuscript.ScopeToTenant(row => row.TenantId);
-            manuscript.HasMembers(row => row.Editors);
-        });
+        // The manuscript and its role mark their house [OfTenant]: AddDDDToolkitConventions() keeps both to the caller's.
+        modelBuilder.Entity<Manuscript>(manuscript => manuscript.HasMembers(row => row.Editors));
 
         modelBuilder.Entity<ManuscriptRole>(role =>
         {
             role.IsCustomRole();
-            role.ScopeToTenant(row => row.TenantId);
             role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
         });
     }

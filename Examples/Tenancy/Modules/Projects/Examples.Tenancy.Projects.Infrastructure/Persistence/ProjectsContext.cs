@@ -21,10 +21,11 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 /// reads no table of Tenancy's, only what Tenancy offers it. The questions are asked over them as over tables,
 /// and stay one statement. Tenancy's access file makes the functions and Entity Framework creates none, so this
 /// context's migrations never touch them.</item>
-/// <item><b>The tenant.</b> <c>ScopeToTenant</c> puts the tenant filter on <see cref="Project"/> and on
-/// <see cref="ProjectRole"/>, next to any filter of the module's own, and marks them for Tenancy's save check,
-/// which <c>UseDDDToolkit</c> adds: a project or a project role of another tenant is neither read nor written,
-/// whoever loaded or made it. The crew is kept to its project's tenant through the project that owns it.</item>
+/// <item><b>The tenant.</b> <see cref="Project"/> and <see cref="ProjectRole"/> mark their tenant with
+/// <c>[OfTenant]</c> in the domain, so <c>AddDDDToolkitConventions()</c> puts the tenant filter on them, next to any
+/// filter of the module's own, and marks them for Tenancy's save check, which <c>UseDDDToolkit</c> adds: a project or a
+/// project role of another tenant is neither read nor written, whoever loaded or made it. This context writes no line
+/// for it. The crew is kept to its project's tenant through the project that owns it.</item>
 /// <item><b>Instants.</b> Every <see cref="DateTimeOffset"/> is stored as its UTC instant, whatever offset it
 /// was written with, so a crew member's period and a crew role's are compared in SQL, and Tenancy's grant
 /// periods in the read model the same way.</item>
@@ -32,8 +33,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 /// they are stored. The crew is the Membership package's, and <c>HasMembers</c> maps it, under the tables and the
 /// column it has always had: the members owned by their project, a member's roles owned by the member, each in a
 /// table of its own, and the unit a project hangs at as where a permission held above reaches it. <c>IsCustomRole</c>
-/// maps the package's part of a project role; whose a role is, and that a name is used once in a tenant, are
-/// said here.</item>
+/// maps the package's part of a project role; that a name is used once in a tenant is said here.</item>
 /// </list>
 /// Table names carry the module's name where Tenancy's could be meant: a crew member's table says whose it is
 /// without its schema.
@@ -103,7 +103,6 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
         modelBuilder.Entity<Project>(project =>
         {
             project.ToTable(ProjectsTable);
-            project.ScopeToTenant(row => row.TenantId);
 
             // Who opened a project and who changed it last: the seat, an operator or the system, as ids. Tenancy's
             // save check fills the columns, and a trigger of the database holds a caller to its own seat in them.
@@ -146,9 +145,8 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
             // The package's part of a role: its name, what it is for, its permissions, its status, and the starter role it came from.
             role.IsCustomRole();
 
-            // This module's: whose a role is. A name is used once in a tenant, and a tenant has each starter role
-            // once, which also keeps two set-ups of one tenant at the same moment apart.
-            role.ScopeToTenant(row => row.TenantId);
+            // This module's: a name is used once in a tenant, and a tenant has each starter role once, which also keeps
+            // two set-ups of one tenant at the same moment apart. Whose a role is, the role says with [OfTenant].
             role.HasIndex(row => new { row.TenantId, row.Name })
                 .IsUnique()
                 .RefusesAs(ProjectRefusals.RoleNameTaken, ProjectRefusals.TemplateOf(ProjectRefusals.RoleNameTaken));
@@ -161,7 +159,8 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
-        // The same conventions in every context: read-only collections, [Internal] members, Version.
+        // The same conventions in every context: read-only collections, [Internal] members, Version, and the tenant
+        // filter and save check on every class that marks its tenant [OfTenant].
         configurationBuilder.AddDDDToolkitConventions();
 
         // Every instant as UTC, whatever offset it was written with: crew and grant periods are compared in SQL,

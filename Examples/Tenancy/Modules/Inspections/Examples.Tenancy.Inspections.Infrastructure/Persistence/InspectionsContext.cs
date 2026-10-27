@@ -14,9 +14,10 @@ namespace Examples.Tenancy.Inspections.Infrastructure.Persistence;
 /// <item><b>No read model.</b> Unlike Projects, this context maps nothing of Tenancy's: whether the caller may
 /// see or record on a project is Projects' answer, asked through its gate, not a question this module asks in
 /// its own queries.</item>
-/// <item><b>The tenant.</b> <c>ScopeToTenant</c> puts the tenant filter on <see cref="Inspection"/> and marks it
-/// for Tenancy's save check, which <c>UseDDDToolkit</c> adds: an inspection of another tenant is neither read nor
-/// written, whoever loaded or made it.</item>
+/// <item><b>The tenant.</b> <see cref="Inspection"/> marks its tenant with <c>[OfTenant]</c> in the domain, so
+/// <c>AddDDDToolkitConventions()</c> puts the tenant filter on it and marks it for Tenancy's save check, which
+/// <c>UseDDDToolkit</c> adds: an inspection of another tenant is neither read nor written, whoever loaded or made it.
+/// This context writes no line for it.</item>
 /// <item><b>Instants.</b> Every <see cref="DateTimeOffset"/> is stored as its UTC instant, whatever offset it
 /// was written with, so a project's inspections are ordered in SQL.</item>
 /// </list>
@@ -57,7 +58,6 @@ public sealed class InspectionsContext(DbContextOptions<InspectionsContext> opti
         modelBuilder.Entity<Inspection>(inspection =>
         {
             inspection.ToTable(InspectionsTable);
-            inspection.ScopeToTenant(row => row.TenantId);
 
             // Who recorded an inspection and who changed it last, as ids: see the same call in Projects' context.
             inspection.RecordsWhoChanged<Inspection, SeatId>();
@@ -86,7 +86,8 @@ public sealed class InspectionsContext(DbContextOptions<InspectionsContext> opti
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
-        // The same conventions in every context: read-only collections, [Internal] members, Version.
+        // The same conventions in every context: read-only collections, [Internal] members, Version, and the tenant
+        // filter and save check on every class that marks its tenant [OfTenant].
         configurationBuilder.AddDDDToolkitConventions();
 
         // Every instant as UTC, whatever offset it was written with: inspections are ordered in SQL, and the

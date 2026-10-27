@@ -60,6 +60,31 @@ public static class ContextPartRequirements
     public static void RequireContextPart(this IMutableModel model, string part, Type interceptor, string registeredWith, string addedWith)
     {
         ArgumentNullException.ThrowIfNull(model);
+
+        model.SetAnnotation(AnnotationPrefix + part, Stated(part, interceptor, registeredWith, addedWith));
+    }
+
+    /// <summary>
+    /// <see cref="RequireContextPart(IMutableModel, string, Type, string, string)"/> from a package's convention, which
+    /// is handed the model as Entity Framework's conventions see it: <c>modelBuilder.Metadata</c>.
+    /// </summary>
+    /// <param name="model">The model being built, as a convention sees it.</param>
+    /// <param name="part">The part's name, as its registration names it (<see cref="ContextPart{TBuilder}.Name"/>).</param>
+    /// <param name="interceptor">The interceptor the part adds, by which a context is seen to have it.</param>
+    /// <param name="registeredWith">The registration that brings the part, as a developer writes it.</param>
+    /// <param name="addedWith">The part's own call on a context's options, as a developer writes it.</param>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="part"/>, <paramref name="registeredWith"/> or <paramref name="addedWith"/> is empty, or holds a line break.</exception>
+    public static void RequireContextPart(this IConventionModel model, string part, Type interceptor, string registeredWith, string addedWith)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+
+        model.SetAnnotation(AnnotationPrefix + part, Stated(part, interceptor, registeredWith, addedWith));
+    }
+
+    /// <summary>The value of the annotation that states a requirement, checked.</summary>
+    private static string Stated(string part, Type interceptor, string registeredWith, string addedWith)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(part);
         ArgumentNullException.ThrowIfNull(interceptor);
         ArgumentException.ThrowIfNullOrWhiteSpace(registeredWith);
@@ -70,7 +95,7 @@ public static class ContextPartRequirements
             throw new ArgumentException("What a context is told to write is one line.", registeredWith.Contains(Separator, StringComparison.Ordinal) ? nameof(registeredWith) : nameof(addedWith));
         }
 
-        model.SetAnnotation(AnnotationPrefix + part, string.Join(Separator, interceptor.FullName ?? interceptor.Name, registeredWith, addedWith));
+        return string.Join(Separator, interceptor.FullName ?? interceptor.Name, registeredWith, addedWith);
     }
 
     /// <summary>

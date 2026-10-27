@@ -109,6 +109,9 @@ projects build with 0 warnings.
 - **Custom role**: a role stored as a row of the tenant. The tenant may rename it and change it. The role template
   has the name, the permissions, and the starter role it was made from. You add the role's tenant, `TenantId`,
   yourself, because Membership does not know about tenants.
+- **The tenant of a row**: `[OfTenant]` marks the property that says which tenant a board or a role belongs to. The
+  marker is a fact about the class, like `[Owner]`, so it goes on the domain class. Step 3 shows what the context does
+  with it.
 - **The rules are passed in**: the role checks its permissions against the rules (step 2). The rules live in the
   application layer, and the role's constructor takes them. The domain describes what a board is. The application
   layer decides who may do what with a board.
@@ -246,7 +249,7 @@ change to them raises the board's version. The board does not read a clock, so t
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
-```csharp {17,26-27,29}
+```csharp {17,20,27-28,30}
 using DDDToolkit.Abstractions.Attributes;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
@@ -266,6 +269,7 @@ public sealed partial class Board
         Members.Open(now);
     }
 
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     public OrganizationUnitId UnitId { get; private set; }
@@ -279,12 +283,13 @@ public sealed partial class Board
 }
 ```
 
-**The role class.** **Why:** a role belongs to a tenant, so it has a `TenantId`. The constructor takes the rules, so
-a role cannot give a permission that the rules do not allow in a role.
+**The role class.** **Why:** a role belongs to a tenant, so it has a `TenantId`, marked `[OfTenant]`. The constructor
+takes the rules, so a role cannot give a permission that the rules do not allow in a role.
 
 **`Harbor.Boards.Domain/Aggregates/BoardRoles/BoardRole.cs`**
 
-```csharp {9,12-13,15}
+```csharp {10,13-14,16-17}
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
@@ -299,6 +304,7 @@ public sealed partial class BoardRole
     public BoardRole(BoardRoleId id, TenantId tenantId, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules)
         => TenantId = tenantId;
 
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 }
 ```
@@ -487,8 +493,9 @@ rules for the export.
   starter role the role was made from (`MadeFrom`).
 - **The role's tenant is yours to map**: you add two unique indexes. One allows each role name once per tenant. The
   other allows each starter role once per tenant.
-- `ScopeToTenant` adds Tenancy's tenant filter and save check to the board and to the role, as for every class that
-  belongs to a tenant.
+- **The tenant filter and the save check**: `AddDDDToolkitConventions()` adds both to every class with a property
+  marked `[OfTenant]`, here the board and the role. You write no line for them in the context. A query returns only
+  the rows of the caller's tenant. The save check refuses a row of another tenant.
 - `AddTenancyReadFunctions` maps Tenancy's rows, the rights and the units, through Tenancy's database functions. So a
   question such as "does Rhea hold `boards.create` at North" becomes part of this context's query. The query reads
   no Tenancy table directly. Boards knows Tenancy's ids but not its classes, so the call names the four id types.
@@ -530,11 +537,11 @@ joins Membership to Tenancy (step 5).
 ```
 
 **The context.** **Why:** your context builds the model. It says which collection is the member list, what the tables
-are called, and which tenant a role belongs to.
+are called, and that a role's name is used once per tenant.
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardsContext.cs`**
 
-```csharp {27,31-32,37-40,48}
+```csharp {27,31,36-38,44,46}
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Supporting.Membership.EntityFramework;
@@ -565,14 +572,12 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
 
         modelBuilder.Entity<Board>(board =>
         {
-            board.ScopeToTenant(row => row.TenantId);
             board.HasMembers(row => row.People);
         });
 
         modelBuilder.Entity<BoardRole>(role =>
         {
             role.IsCustomRole();
-            role.ScopeToTenant(row => row.TenantId);
             role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
             role.HasIndex(row => new { row.TenantId, row.MadeFrom }).IsUnique();
         });
@@ -1473,7 +1478,7 @@ is "a closed board takes no new members". The member list applies the other rule
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
-```csharp {2,4,33,35-37}
+```csharp {2,4,34,36-38}
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Membership;
 using Harbor.Boards.Contracts.ValueObjects;
@@ -1495,6 +1500,7 @@ public sealed partial class Board
         Members.Open(now);
     }
 
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     public OrganizationUnitId UnitId { get; private set; }
@@ -1891,7 +1897,7 @@ board he is a member of.
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
-```csharp {24-25}
+```csharp {25-26}
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Membership;
 using Harbor.Boards.Contracts.ValueObjects;
@@ -1913,6 +1919,7 @@ public sealed partial class Board
         Members.Open(now);
     }
 
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     // Where the board hangs: a permission held here, or above, reaches the board.
@@ -1955,7 +1962,7 @@ public static class BoardMembership
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardsContext.cs`**
 
-```csharp {34-35}
+```csharp {33-34}
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Supporting.Membership.EntityFramework;
@@ -1986,7 +1993,6 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
 
         modelBuilder.Entity<Board>(board =>
         {
-            board.ScopeToTenant(row => row.TenantId);
             board.HasMembers(row => row.People);
 
             // Where a board hangs decides who reaches it from above, so no statement moves it once it is there.
@@ -1996,7 +2002,6 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
         modelBuilder.Entity<BoardRole>(role =>
         {
             role.IsCustomRole();
-            role.ScopeToTenant(row => row.TenantId);
             role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
             role.HasIndex(row => new { row.TenantId, row.MadeFrom }).IsUnique();
         });

@@ -537,6 +537,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   below it has, so the registration registers what the application's code takes; without one, with the package's
   class itself.
 
+- **The tenant of a row, said in the domain: `[OfTenant]`.** It marks the property of an aggregate root that says
+  which tenant the aggregate belongs to, `[OfTenant] public TenantId TenantId { get; private set; }`: a fact about the
+  aggregate, beside its `[Owner]` and its `[At]`, in `DDDToolkit.Abstractions.Attributes`, so a domain project that
+  sees only Tenancy's ids marks it without a Tenancy package. Tenancy's Entity Framework package maps it (under
+  Tenancy, below).
+- **A package's marker names the convention that maps it: `[ModelConvention]`.** A package marks an attribute of its
+  own, which domain classes carry without Entity Framework, with the assembly-qualified name of an
+  `IModelFinalizingConvention` in its package for Entity Framework: `[ModelConvention("Billing.EntityFramework.BilledToConvention,
+  Billing.EntityFramework")]`. `AddDDDToolkitConventions()` runs that convention, once per model, in every model that
+  maps a class with the marker, on the class or on a property; a model without one is not touched. A model with a
+  marked class whose convention the application does not have is refused while it is built, naming the class, the
+  marker and the assembly to reference.
+
 #### Entity Framework and row level security
 
 - **The owner of an aggregate is read with nothing written.** `AddDDDToolkitEntityFramework` registers
@@ -1004,6 +1017,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   database's alone, so services on another database never wait for it. On by default; a context leaves it out with
   `WithoutDatabaseMigrationLock()` after the toolkit's call. SQL Server and SQLite are unchanged: their lock is the
   database's already. See [Several services on one database](docs/entity-framework.md#several-services-on-one-database).
+
+- **`MarkerConvention` in `AddDDDToolkitConventions()`, and `RequireContextPart` from a convention.** The convention
+  runs the conventions that markers name with `[ModelConvention]`, as `[OfTenant]` names Tenancy's. A package's
+  convention states the part its model requires with the new overload on `IConventionModel`,
+  `modelBuilder.Metadata.RequireContextPart(...)`, as its mapping does on `IMutableModel`.
 
 #### Supabase and Auth
 
@@ -1902,6 +1920,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `EnsurePoliciesAreInPlaceAsync` checks that these functions and the ones that take the tenant are in the
   database, running as their owner.
 
+- **A class that marks its tenant `[OfTenant]` is kept to it with no line in its context.** `OfTenantConvention`,
+  which `AddDDDToolkitConventions()` runs because the marker names it, gives every class with an `[OfTenant]` property
+  what `ScopeToTenant(row => row.TenantId)` gives: the tenant filter beside the class's other named filters, the
+  property for the save check, which `UseDDDToolkit` adds, the requirement of that save check, and the property fixed
+  once the row is there. A context that calls `ScopeToTenant` on the class keeps its own mapping: the call wins, for a
+  tenant held in another property. The marked property is the application's tenant id, never nullable, one per
+  class, on the root of a hierarchy stored in one table; a type the context owns is kept through its owner, so a marker
+  on it maps nothing. A model that breaks one of these is refused while it is built. A context whose
+  `ConfigureConventions` leaves `AddDDDToolkitConventions()` out is refused at its first save, since nothing keeps its
+  marked classes to a tenant. See [Keeping tenants apart](docs/tenancy/keeping-tenants-apart.md).
+
 #### Membership
 
 - **A member list makes a new row's id with `TId.Create()`.** `MemberList` takes no id factory any more,
@@ -2695,6 +2724,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   ids anyway. `SourceTreeTests` holds every file of the sample and of its tests to closing Tenancy's use cases
   nowhere. Tenancy's own test host names its class `HostTenancy` with one `[assembly: TemplateFacadeName]`, so its
   three test projects drop their nine-type aliases too.
+
+- **The Tenancy sample's classes mark their tenant in the domain.** `Project`, `ProjectRole` and `Inspection` mark
+  their `TenantId` `[OfTenant]`, and `ProjectsContext` and `InspectionsContext` drop their `ScopeToTenant` calls: the
+  toolkit's conventions keep them to the caller's tenant. The project roles' two unique indexes, a name and a starter
+  role once per tenant, stay in the context. The Membership tutorial's board and board role do the same, as does the
+  application the package check builds.
 
 #### Docs
 

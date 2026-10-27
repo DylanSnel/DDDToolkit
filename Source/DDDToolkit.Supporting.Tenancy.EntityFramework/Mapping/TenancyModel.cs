@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore.Metadata;
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
-/// What a model built with <c>AddTenancy</c>, <c>AddTenancyReadModel</c>, <c>AddTenancyReadFunctions</c> and
-/// <c>ScopeToTenant</c> says about tenancy, for a package that works from the model, such as one that writes
+/// What a model built with <c>AddTenancy</c>, <c>AddTenancyReadModel</c>, <c>AddTenancyReadFunctions</c>,
+/// <c>ScopeToTenant</c> and <c>[OfTenant]</c> says about tenancy, for a package that works from the model, such as one that writes
 /// database policies: which entity types are Tenancy's own tables, which property holds the tenant of an entity
 /// type kept to one, whether the model reads Tenancy through its functions, whether a module's model reads
 /// more of Tenancy's than the access facts of its read model, which entity types keep who changed their rows,
@@ -168,8 +168,8 @@ public static class TenancyModel
     }
 
     /// <summary>
-    /// The property that holds the tenant of <paramref name="entityType"/>, as <c>ScopeToTenant</c> or
-    /// <c>AddTenancy</c> marked it: the property the tenant filter reads and the save check checks. For a type
+    /// The property that holds the tenant of <paramref name="entityType"/>, as <c>ScopeToTenant</c>, <c>[OfTenant]</c>
+    /// or <c>AddTenancy</c> marked it: the property the tenant filter reads and the save check checks. For a type
     /// derived in a hierarchy, its root's. <see langword="null"/> for an entity type not kept to a tenant, such as
     /// an owned type, which is kept through its owner.
     /// </summary>

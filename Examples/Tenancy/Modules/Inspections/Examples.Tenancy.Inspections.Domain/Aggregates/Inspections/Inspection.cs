@@ -71,7 +71,8 @@ public sealed partial class Inspection
         RaiseDomainEvent(new InspectionRecorded(id, tenantId, projectId, recordedBy));
     }
 
-    /// <summary>The tenant the inspection belongs to. It never changes; the tenant filter reads it.</summary>
+    /// <summary>The tenant the inspection belongs to. It never changes; marked <c>[OfTenant]</c>, so the tenant filter reads it.</summary>
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     /// <summary>The project it is about.</summary>
