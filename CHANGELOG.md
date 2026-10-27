@@ -333,7 +333,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   reports `[OrOwn]` without a key or beside a marker that names none, `[AtUnit]`, `[Own]` without `[OwnOnly]` and the
   other way round, and a member marked twice; DDD00086 `[OrOwn]` or `[Own]` on a type nothing says the caller's own of,
   one that may be null, or a `string`, a class or an enum, which never has one. See
-  [Yours, or the key](docs/access-requirements.md#yours-or-the-key).
+  [Yours, or the key](docs/access-requirements.md#yours-or-the-permission).
 - **The owner of an aggregate: the fact in the domain, the policy at the door.** An aggregate root marks the property
   that names its owner `[Owner]`, `[Owner] public UserId Owner { get; private set; }`, a fact about what it is and no
   rule; it may be nullable, and a row whose owner is null is nobody's. A request about the owner's own says the policy
@@ -1177,7 +1177,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   rule nobody can answer is refused, never allowed: a parent type with nothing registered, a field without a
   parent, a rule that names roles or is applied after the resolver or during validation. It replaces any
   other authorization handler of the application, HotChocolate's ASP.NET Core policies included. See
-  [A permission key on a field](docs/graphql.md#a-permission-key-on-a-field).
+  [A permission key on a field](docs/graphql.md#a-permission-on-a-field).
 - **Paging by an id.** A generated struct identifier is a key HotChocolate's paging can order a list by:
   `OrderBy(order => order.Id)` and `ThenBy(order => order.Id)` in front of `ToPageAsync`, where HotChocolate
   answered "The key type is not supported". `SingleValueCursorKeySerializer<T, TValue>`, new in
