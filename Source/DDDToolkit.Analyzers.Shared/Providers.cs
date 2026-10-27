@@ -112,12 +112,14 @@ internal static class Providers
         => context.TemplateDefaultsPlan()
             .Combine(context.CompilationProvider)
             .Combine(context.ProjectFile())
+            .Combine(context.RootNamespace())
             .SelectMany(static (all, cancellationToken) => TemplateRegistrations.Resolve(
-                ImmutableArray.CreateRange(all.Left.Left.Entities),
-                all.Left.Right,
+                ImmutableArray.CreateRange(all.Left.Left.Left.Entities),
+                all.Left.Left.Right,
                 cancellationToken,
-                projectFile: all.Right,
-                standingBack: all.Left.Left.Blocked));
+                projectFile: all.Left.Right,
+                standingBack: all.Left.Left.Left.Blocked,
+                rootNamespace: all.Right));
 
     /// <summary>
     /// The classes a package asks with <c>[assembly: TemplateFacade]</c>, closed over the classes this project
@@ -133,13 +135,20 @@ internal static class Providers
             .Combine(context.CompilationProvider)
             .Combine(context.RegistrationName())
             .Combine(context.ProjectFile())
+            .Combine(context.RootNamespace())
             .SelectMany(static (all, cancellationToken) => TemplateFacades.Resolve(
-                ImmutableArray.CreateRange(all.Left.Left.Left.Entities),
+                ImmutableArray.CreateRange(all.Left.Left.Left.Left.Entities),
+                all.Left.Left.Left.Right,
                 all.Left.Left.Right,
                 all.Left.Right,
-                all.Right,
                 cancellationToken,
-                standingBack: all.Left.Left.Left.Blocked));
+                standingBack: all.Left.Left.Left.Left.Blocked,
+                rootNamespace: all.Right));
+
+    /// <summary>The project's <c>RootNamespace</c>, which the SDK hands every analyzer; null where it does not arrive.</summary>
+    public static IncrementalValueProvider<string?> RootNamespace(this IncrementalGeneratorInitializationContext context)
+        => context.AnalyzerConfigOptionsProvider.Select(static (provider, _) =>
+            provider.GlobalOptions.TryGetValue("build_property.RootNamespace", out var rootNamespace) ? rootNamespace : null);
 
     /// <summary>
     /// Every class declared with a template attribute, before any is resolved: what <see cref="TemplateEntities"/>

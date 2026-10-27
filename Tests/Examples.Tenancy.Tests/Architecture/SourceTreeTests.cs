@@ -435,21 +435,23 @@ public sealed partial class SourceTreeTests
 
     /// <summary>
     /// What is called rather than named is closed over the Tenants module's ids: the system work and the current
-    /// caller wherever its classes are seen, through <c>TenancyUseCases</c>, and the registrations in the module's
-    /// infrastructure project, where they are generated. So no file of a project that sees those classes names
-    /// Tenancy's ids where a closed form exists: the Tenants module's own, the host, the export and these tests. A type
-    /// generic over the ids keeps them, as the Tenants module's reads name the selection and the read source. Projects
-    /// and Inspections see the ids alone, which say nothing of being Tenancy's, so they name them where they register;
-    /// where the ids are arguments, C# infers them there too.
+    /// tenant wherever its classes are seen, through the access manager, <c>TenancyAccessManager</c>, and the
+    /// registrations in the module's infrastructure project, where they are generated. Projects and Inspections see the
+    /// ids alone, and say once which of them are Tenancy's, <c>[assembly: TenancyIds&lt;...&gt;]</c>: they get their own
+    /// access manager and registrations closed over them. So no file of the sample names Tenancy's ids where a closed
+    /// form exists, and neither do these tests. A type generic over the ids keeps them, as the Tenants module's reads name
+    /// the selection and the read source.
     /// </summary>
     [Fact]
-    public void No_project_that_sees_the_tenancy_classes_names_tenancys_ids_where_a_closed_form_exists()
+    public void No_project_of_the_sample_names_tenancys_ids_where_a_closed_form_exists()
     {
         var root = SampleLayout.RepositoryRoot();
         var sample = Path.Combine(root, "Examples", "Tenancy");
         string[] seeing =
         [
             Path.Combine(sample, "Modules", "Tenants"),
+            Path.Combine(sample, "Modules", "Projects"),
+            Path.Combine(sample, "Modules", "Inspections"),
             DirectoryOfProject("Examples.Tenancy.Host"),
             DirectoryOfProject("Examples.Tenancy.Exporter"),
             DirectoryOfProject(TheseTests),
@@ -464,16 +466,11 @@ public sealed partial class SourceTreeTests
 
         FilesUnder(seeing)
             .SelectMany(file => NamesTenancysIdsInACall().Matches(file.Value).Select(found => file.Key + ": " + found.Value))
-            .Should().BeEmpty("TenancyUseCases.BeginSystem(), TenancyUseCases.CurrentCaller() and outbox.AddTenancyDomainEvents() name no id");
+            .Should().BeEmpty("access.BeginSystem(), services.AddTenancyAccess<TRequests, TContext>() and outbox.AddTenancyDomainEvents() name no id");
 
-        // The scan would see it: the modules that see only the ids name them where they register.
-        FilesUnder(Path.Combine(sample, "Modules", "Projects"), Path.Combine(sample, "Modules", "Inspections"))
-            .Where(file => NamesTenancysIdsInACall().IsMatch(file.Value)).Select(file => file.Key)
-            .Should().Contain(
-            [
-                "Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs",
-                "Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/InspectionsInfrastructure.cs",
-            ]);
+        // The scan would see it: a call that writes the ids out, put together here so this file says none.
+        NamesTenancysIdsInACall().IsMatch(string.Concat("services.AddTenancyAccess", "<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>();")).Should().BeTrue();
+        NamesTenancysIdsInACall().IsMatch(string.Concat("TenancyWork.BeginSystem", "<TenantId, SeatId>()")).Should().BeTrue();
     }
 
     /// <summary>

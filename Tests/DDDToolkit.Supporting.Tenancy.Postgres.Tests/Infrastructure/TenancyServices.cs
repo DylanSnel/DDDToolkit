@@ -227,8 +227,15 @@ public static class ScopedServices
 
     public static TallyContext Tallies(this IServiceProvider services) => services.GetRequiredService<TallyContext>();
 
-    public static ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> Tenancy(this IServiceProvider services)
-        => services.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>();
+    /// <summary>The access manager the test host's code takes: the class the generator wrote into the test host.</summary>
+    public static TenancyAccessManager Access(this IServiceProvider services) => services.GetRequiredService<TenancyAccessManager>();
+
+    /// <summary>
+    /// Tenancy's queries over <paramref name="context"/>, as an application's <c>db.Tenancy()</c> asks them: the
+    /// package's method with the host's ids, which the generator closes over them in the test host, internal to it.
+    /// </summary>
+    public static ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId> Tenancy(this DbContext context)
+        => context.Tenancy<TenantId, SeatId, OrganizationUnitId, RoleId>();
 
     /// <summary>
     /// The host's own use case that renames a seat by the name the host keeps on it: Tenancy has none. It loads the

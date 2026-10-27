@@ -25,7 +25,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// <param name="reads">Where projects, and Tenancy's rows next to them, are read: a context per reading.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller.</param>
 /// <param name="catalogue">The permissions the application knows.</param>
-public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectReads reads, SampleTenancy tenancy, TenancyCatalogue catalogue) : IProjectGate
+public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectReads reads, TenancyAccessManager tenancy, TenancyCatalogue catalogue) : IProjectGate
 {
     /// <summary>
     /// Tenancy's queries about the current caller, in a reading's rows. Everything in this project that asks
@@ -101,7 +101,7 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
         // every permission at every unit, so the same statement answers all of them for it.
         var queries = TenancyIn(reading);
         var roots = queries.Units().Where(unit => !unit.ParentId.HasValue).Select(unit => unit.Id);
-        var held = queries.WhereIHold(permissions).Where(pair => roots.Contains(pair.Unit)).Select(pair => pair.Permission).Distinct();
+        var held = queries.UnitsWhereIHold(permissions).Where(pair => roots.Contains(pair.Unit)).Select(pair => pair.Permission).Distinct();
 
         return [.. (await reading.Queries.ListAsync(held, cancellationToken)).Order(StringComparer.Ordinal)];
     }
@@ -122,7 +122,7 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
     public async Task RequireAtAsync(OrganizationUnitId unit, string permission, CancellationToken cancellationToken)
     {
         // The caller before anything is opened: nobody is refused as nobody, without a reading made for it.
-        tenancy.RequireTenant();
+        tenancy.CurrentTenant.Require();
 
         await using var reading = reads.Open();
         if (!await TenancyIn(reading).HoldsAtAsync(permission, unit, cancellationToken))

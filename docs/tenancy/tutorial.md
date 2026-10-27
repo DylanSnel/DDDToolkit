@@ -864,15 +864,15 @@ namespace Harbor.Tenancy.Application.Tenants.ProvisionTenant;
 public sealed record ProvisionTenant(string Slug, string Name)
     : ICommand<TenancyUseCases.ProvisionedTenant>, ITenancyRequest;
 
-public sealed class ProvisionTenantHandler(TenancyUseCases.TenantCommands tenants, ICallerAccessor callers)
+public sealed class ProvisionTenantHandler(TenancyUseCases.TenantCommands tenants, TenancyAccessManager access)
     : ICommandHandler<ProvisionTenant, TenancyUseCases.ProvisionedTenant>
 {
     public async ValueTask<TenancyUseCases.ProvisionedTenant> Handle(ProvisionTenant command, CancellationToken cancellationToken)
     {
         // The caller becomes the administrator. Read it before BeginSystem(), which makes the system the caller.
-        var admin = callers.Current.UserId ?? throw new InvalidOperationException("The caller has no user id.");
+        var admin = access.CurrentUser.Id ?? throw new InvalidOperationException("The caller has no user id.");
 
-        using (TenancyUseCases.BeginSystem())
+        using (access.BeginSystem())
         {
             return await tenants.ProvisionAsync(
                 new TenancyUseCases.TenantToProvision(
@@ -1629,12 +1629,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Harbor.Tenancy.Infrastructure.Persistence;
 
-internal sealed class UnitReads(TenancyContext db, ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy) : IUnitReads
+internal sealed class UnitReads(TenancyContext db) : IUnitReads
 {
     public async Task<IReadOnlyList<ManageableUnit>> ManageableAsync(CancellationToken cancellationToken)
     {
         // Entity Framework puts this query into the one below, as a subquery.
-        var held = tenancy.In(db).UnitsWhereIHold(TenancyPermissions.UnitsManage);
+        var held = db.Tenancy().UnitsWhereIHold(TenancyPermissions.UnitsManage);
 
         return await db.Set<Organization>()
             .SelectMany(organization => organization.Units)

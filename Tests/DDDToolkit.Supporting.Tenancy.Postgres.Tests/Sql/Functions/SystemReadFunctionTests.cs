@@ -107,7 +107,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         // The round of any module asks, in its own scope and in no tenant, and learns the ids.
         foreach (var scope in scopes)
         {
-            var asked = await services.InScopeAsync(scoped => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), scope, Cancellation));
+            var asked = await services.InScopeAsync(scoped => scoped.Access().TenantsToSweepAsync(scope, Cancellation));
             asked.Should().BeEquivalentTo([Harbor, Orchard, Quay], "asked in the scope {0}", scope);
         }
 
@@ -117,14 +117,14 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
 
         // A scope that is none is refused before anything is asked.
         recorder.Clear();
-        await FluentActions.Awaiting(() => services.InScopeAsync(scoped => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "Not a scope", Cancellation)))
+        await FluentActions.Awaiting(() => services.InScopeAsync(scoped => scoped.Access().TenantsToSweepAsync("Not a scope", Cancellation)))
             .Should().ThrowAsync<ArgumentException>().WithMessage("*'Not a scope'*");
         recorder.Sent.Should().BeEmpty();
 
         // What the ids are for: the module's own system work in each tenant in turn, under its own scope, which reads
         // that tenant's rows and no other's.
         var visited = new Dictionary<TenantId, List<string>>();
-        foreach (var tenant in await services.InScopeAsync(scoped => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "widgets", Cancellation)))
+        foreach (var tenant in await services.InScopeAsync(scoped => scoped.Access().TenantsToSweepAsync("widgets", Cancellation)))
         {
             visited[tenant] = await services.BySystemIn(
                 tenant,
@@ -158,9 +158,11 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         // In the middle of Oli's work: the read's own context is taken as scoped system work in no tenant, not as Oli.
         (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped =>
             {
-                var like = scoped.TenancyContext();
+                // The scope's own context, which names the type and the services, is taken before: what is taken after
+                // is the read's own.
+                _ = scoped.TenancyContext();
                 taken.Clear();
-                return TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(like, "widgets", Cancellation);
+                return scoped.Access().TenantsToSweepAsync("widgets", Cancellation);
             }))
             .Should().BeEquivalentTo([Harbor, Orchard, Quay]);
         var asked = taken.Should().ContainSingle().Subject;
@@ -186,7 +188,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         await using var services = new TenancyServices(database);
 
         Task<IReadOnlyList<TenantId>> ToSweepAsync()
-            => services.InScopeAsync(scoped => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "widgets", Cancellation));
+            => services.InScopeAsync(scoped => scoped.Access().TenantsToSweepAsync("widgets", Cancellation));
 
         // Harbor and Orchard are active, Quay is suspended: a suspended tenant is still visited, to end what ends in it.
         (await ToSweepAsync()).Should().BeEquivalentTo([Harbor, Orchard, Quay]);
@@ -301,7 +303,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         var (unknown, tenants) = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, async scoped =>
         {
             var permissions = await TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.TenancyContext(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation);
-            var ids = await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "widgets", Cancellation);
+            var ids = await scoped.Access().TenantsToSweepAsync("widgets", Cancellation);
 
             // His own work goes on as it was: as him, in his seat.
             Callers.Ambient!.UserId.Should().Be(Oli.Identity);
@@ -332,7 +334,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         {
             for (var round = 0; round < 3; round++)
             {
-                (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "widgets", Cancellation)))
+                (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Access().TenantsToSweepAsync("widgets", Cancellation)))
                     .Should().BeEquivalentTo([Harbor, Orchard, Quay]);
                 (await services.BySeat(Odette.Identity, Orchard, Odette.Seat, scoped => scoped.TenancyContext().Set<SeatRow<TenantId, SeatId>>().CountAsync(Cancellation)))
                     .Should().Be(2, "Orchard's seats, read by a seat on a context a read across tenants may just have given back");
@@ -395,7 +397,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
 
         callers.During = Reads;
         (await services.InScopeAsync(scoped => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.TenancyContext(), catalogue, Cancellation))).Should().BeEmpty();
-        (await services.InScopeAsync(scoped => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "widgets", Cancellation)))
+        (await services.InScopeAsync(scoped => scoped.Access().TenantsToSweepAsync("widgets", Cancellation)))
             .Should().BeEquivalentTo([Harbor, Orchard, Quay]);
 
         callers.During = Checks;

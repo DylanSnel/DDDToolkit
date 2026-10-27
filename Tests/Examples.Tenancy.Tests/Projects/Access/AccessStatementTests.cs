@@ -136,7 +136,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
 
         // The projects' own system work in the tenant reaches all of it, by neither way: the filter is left out of
         // the statement, and the tenant filter keeps it to that tenant.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             var (reach, projects) = await ListedAsync(sample, counter);
 
@@ -206,7 +206,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         }
 
         // The projects' own system work in the tenant: one statement too, and it holds every permission by neither way.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();

@@ -109,7 +109,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
             await using var widgets = await scoped.GetRequiredService<IDbContextFactory<WidgetContext>>().CreateDbContextAsync(Cancellation);
             rented.Add(widgets);
 
-            var held = scoped.Tenancy().In(widgets).UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             return await widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).OrderBy(widget => widget.Name).Select(widget => widget.Name).ToListAsync(Cancellation);
         }
 
@@ -403,7 +403,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         var readable = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped =>
         {
             await using var widgets = await scoped.GetRequiredService<IDbContextFactory<WidgetContext>>().CreateDbContextAsync(Cancellation);
-            var held = scoped.Tenancy().In(widgets).UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             return await widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).OrderBy(widget => widget.Name).Select(widget => widget.Name).ToListAsync(Cancellation);
         });
         readable.Should().Equal("Gauge", "Pump", "Valve");
@@ -464,7 +464,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         await using var context = await scoped.GetRequiredService<IDbContextFactory<TContext>>().CreateDbContextAsync(Cancellation);
         rented(context);
 
-        var holders = scoped.Tenancy().In(context).SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, unit);
+        var holders = context.Tenancy().SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, unit);
         return await context.Set<SeatRow<TenantId, SeatId>>().Where(seat => holders.Contains(seat.Id)).Select(seat => seat.Id).ToListAsync(Cancellation);
     }
 }

@@ -227,21 +227,21 @@ public sealed class ReadFunctionModelTests
         using var keeping = new TestServices(configure: services => services.Configure<TenancyStoreOptions>(options => options.DatabaseKeepsRights = true));
         await keeping.BySystemIn(new TenantId(1), scoped =>
         {
-            var tenancy = scoped.Tenancy();
-
-            FluentActions.Invoking(() => tenancy.In(scoped.Widgets())).Should().Throw<InvalidOperationException>().WithMessage(
+            FluentActions.Invoking(() => scoped.Widgets().Tenancy()).Should().Throw<InvalidOperationException>().WithMessage(
                 "'TestWidgetContext' maps Tenancy's read model as views over Tenancy's tables, with AddTenancyReadModel, and the database keeps the rights*" +
                 "no module reads Tenancy's tables*Map the read model with modelBuilder.AddTenancyReadFunctions<TTenantId, TSeatId, TUnitId, TRoleId>(schema)*");
             FluentActions.Invoking(() => new EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>(scoped.Widgets())).Should().Throw<InvalidOperationException>();
 
             // Tenancy's own context reads its own tables, and a module that maps the functions reads none of them.
-            FluentActions.Invoking(() => tenancy.In(scoped.TenancyContext())).Should().NotThrow();
+            FluentActions.Invoking(() => scoped.TenancyContext().Tenancy()).Should().NotThrow();
             using var functions = new ThroughFunctions(new DbContextOptionsBuilder<ThroughFunctions>().UseSqlite(keeping.Sqlite.Connection).UseApplicationServiceProvider(scoped).Options);
-            FluentActions.Invoking(() => tenancy.In(functions)).Should().NotThrow();
+            FluentActions.Invoking(() => functions.Tenancy()).Should().NotThrow();
 
-            // A context made by hand, which knows no application, is read as one whose database does not keep them.
+            // A context made by hand, which knows no application, is read as one whose database does not keep them: over
+            // the long form, since db.Tenancy() finds the catalogue in the application's services, which it has none of.
             using var byHand = new TestWidgetContext(new DbContextOptionsBuilder<TestWidgetContext>().UseSqlite(keeping.Sqlite.Connection).Options);
-            FluentActions.Invoking(() => tenancy.In(byHand)).Should().NotThrow();
+            FluentActions.Invoking(() => scoped.Access().In(new EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>(byHand), EfQueryExecutor.Instance)).Should().NotThrow();
+            FluentActions.Invoking(() => byHand.Tenancy()).Should().Throw<InvalidOperationException>().WithMessage("*UseDDDToolkit(serviceProvider)*");
             return Task.CompletedTask;
         });
 
@@ -249,7 +249,7 @@ public sealed class ReadFunctionModelTests
         using var writing = new TestServices();
         await writing.BySystemIn(new TenantId(1), scoped =>
         {
-            FluentActions.Invoking(() => scoped.Tenancy().In(scoped.Widgets())).Should().NotThrow();
+            FluentActions.Invoking(() => scoped.Widgets().Tenancy()).Should().NotThrow();
             return Task.CompletedTask;
         });
     }

@@ -47,7 +47,7 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
                 select path.DescendantId).Distinct();
     }
 
-    public IQueryable<UnitPermission<TUnitId>> WhereIHold(IReadOnlyCollection<string> permissions)
+    public IQueryable<UnitPermission<TUnitId>> UnitsWhereIHold(IReadOnlyCollection<string> permissions)
     {
         var kind = Kind();
         var asked = LiveAmong(permissions);
@@ -126,7 +126,7 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
             .Select(path => path.DescendantId);
     }
 
-    public IQueryable<RoleWithPermission<TRoleId>> RolePermissions(IReadOnlyCollection<string> permissions)
+    public IQueryable<RoleWithPermission<TRoleId>> RolesWithPermission(IReadOnlyCollection<string> permissions)
     {
         var kind = Kind();
         var asked = LiveAmong(permissions);
@@ -305,7 +305,7 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
         => caller.Kind == TenancyCallerKind.System
             ? throw new InvalidOperationException(
                 "System work outside any tenant asks Tenancy nothing: it holds nothing in any tenant. "
-                + SystemWorkAdvice.BeginInATenant<TTenantId, TSeatId>("for work inside one"))
+                + SystemWorkAdvice.BeginInATenant("for work inside one"))
             : caller.Kind;
 
     /// <summary>

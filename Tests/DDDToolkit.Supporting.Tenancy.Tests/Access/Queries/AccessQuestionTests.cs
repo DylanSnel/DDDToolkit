@@ -42,7 +42,7 @@ public class AccessQuestionTests
     {
         using (TenancyCallers.Begin(caller))
         {
-            var tenancy = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(catalogue ?? _harbor.Catalogue, _clock);
+            var tenancy = new TenancyAccessManager(catalogue ?? _harbor.Catalogue, _clock, NoServices.Instance);
             return ask(tenancy.In(source ?? _store, _store));
         }
     }
@@ -215,8 +215,8 @@ public class AccessQuestionTests
 
         using (TenancyCallers.Begin(nobody))
         {
-            var tenancy = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(_harbor.Catalogue, _clock);
-            Refused.With(TenancyRefusals.NotSeated, () => tenancy.RequireTenant());
+            var access = new TenancyAccessManager(_harbor.Catalogue, _clock, NoServices.Instance);
+            Refused.With(TenancyRefusals.NotSeated, () => access.CurrentTenant.Require());
         }
     }
 
@@ -246,7 +246,7 @@ public class AccessQuestionTests
 
         using (TenancyCallers.Begin(system))
         {
-            new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(_harbor.Catalogue, _clock).RequireTenant()
+            new TenancyAccessManager(_harbor.Catalogue, _clock, NoServices.Instance).CurrentTenant.Require()
                 .Should().Be(new TenantInScope<TenantId, SeatId>(_harbor.Tenant.Id, null, BySystem: true));
         }
     }
@@ -271,15 +271,15 @@ public class AccessQuestionTests
 
         foreach (var question in questions)
         {
-            question.Should().Throw<InvalidOperationException>().WithMessage("*Begin TenancyUseCases.BeginSystemIn(tenant) for work inside one, or TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant)*");
+            question.Should().Throw<InvalidOperationException>().WithMessage("*Begin access.BeginSystemIn(tenant) for work inside one, on the TenancyAccessManager your code takes.");
         }
 
         using (TenancyCallers.Begin(system))
         {
-            FluentActions.Invoking(() => new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(_harbor.Catalogue, _clock).RequireTenant())
+            FluentActions.Invoking(() => new TenancyAccessManager(_harbor.Catalogue, _clock, NoServices.Instance).CurrentTenant.Require())
                 .Should().Throw<InvalidOperationException>()
-                .WithMessage("System work outside any tenant has no tenant. Begin TenancyUseCases.BeginSystemIn(tenant) for work inside one, "
-                    + "or TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant) in a project that sees only the ids (TenancyUseCases is the class your use cases are named through).");
+                .WithMessage("System work outside any tenant has no tenant. Begin access.BeginSystemIn(tenant) for work inside one, "
+                    + "on the TenancyAccessManager your code takes.");
         }
     }
 
@@ -308,8 +308,8 @@ public class AccessQuestionTests
 
         using (TenancyCallers.Begin(administrator))
         {
-            var live = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(harbor.Catalogue, _clock).In(store, store);
-            var now = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(retired, _clock).In(store, store);
+            var live = new TenancyAccessManager(harbor.Catalogue, _clock, NoServices.Instance).In(store, store);
+            var now = new TenancyAccessManager(retired, _clock, NoServices.Instance).In(store, store);
 
             live.UnitsWhereIHold("gauges.read").Should().HaveCount(4, "the administrators' role was made while the permission was live");
             now.UnitsWhereIHold("gauges.read").Should().BeEmpty("the rows are still there, and the permission is retired");

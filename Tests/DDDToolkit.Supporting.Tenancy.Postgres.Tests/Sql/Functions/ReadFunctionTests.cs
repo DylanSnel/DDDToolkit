@@ -81,7 +81,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, async scoped =>
         {
             var widgets = scoped.Widgets();
-            var queries = scoped.Tenancy().In(widgets);
+            var queries = widgets.Tenancy();
 
             // Written as a module writes it, the questions inside its own query: the widgets at the units where Seth
             // holds the permission to read them and where he belongs, each with the unit its own unit hangs under, how many
@@ -151,7 +151,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         var plan = await services.BySeat(Seth.Identity, Harbor, Seth.Seat, async scoped =>
         {
             var widgets = scoped.Widgets();
-            var held = scoped.Tenancy().In(widgets).UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             await using var asked = widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).Select(widget => widget.Name).CreateDbCommand();
             asked.CommandText.Should().Contain("tenancy.caller_permissions()").And.Contain("tenancy.tenant_unit_paths()");
             return await seth.PlanAsync(asked, Cancellation);
@@ -334,7 +334,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         await services.BySystemIn(tenant, async scoped =>
         {
             var widgets = scoped.Widgets();
-            var queries = scoped.Tenancy().In(widgets);
+            var queries = widgets.Tenancy();
 
             (await queries.Seats().Where(seat => seat.Status == SeatStatus.Suspended).Select(seat => seat.Id).ToListAsync(Cancellation)).Should().Equal(new SeatId(bert));
             (await queries.Seats().ToListAsync(Cancellation)).Select(seat => (seat.Id, seat.Status))
@@ -508,23 +508,21 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
 
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, async scoped =>
         {
-            var tenancy = scoped.Tenancy();
-
             // A module's context that maps the views over Tenancy's tables is refused before it reads anything,
             // whether it is the request's own, made by hand, or taken from a pool.
             await using var views = new WidgetViews(Options(scoped));
-            var asking = () => tenancy.In(views);
+            var asking = () => views.Tenancy();
             asking.Should().Throw<InvalidOperationException>().WithMessage(
                 "'WidgetViews' maps Tenancy's read model as views over Tenancy's tables*no module reads Tenancy's tables*modelBuilder.AddTenancyReadFunctions<TTenantId, TSeatId, TUnitId, TRoleId>(schema)*");
 
             await using var pooled = await scoped.GetRequiredService<IDbContextFactory<WidgetViews>>().CreateDbContextAsync(Cancellation);
-            FluentActions.Invoking(() => tenancy.In(pooled)).Should().Throw<InvalidOperationException>().WithMessage("*AddTenancyReadFunctions*");
+            FluentActions.Invoking(() => pooled.Tenancy()).Should().Throw<InvalidOperationException>().WithMessage("*AddTenancyReadFunctions*");
             FluentActions.Invoking(() => new EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>(views)).Should().Throw<InvalidOperationException>()
                 .WithMessage("*AddTenancyReadFunctions*", "the rows' source refuses it, however the questions are built over it");
 
             // The module's context that maps the functions is asked, and so is Tenancy's own, whose tables these are.
-            (await tenancy.In(scoped.Widgets()).UnitsWhereIHold(HostCatalogue.WidgetRead).ToListAsync(Cancellation)).Should().BeEquivalentTo([North, NorthPier]);
-            (await tenancy.In(scoped.TenancyContext()).UnitsWhereIHold(HostCatalogue.WidgetRead).ToListAsync(Cancellation)).Should().BeEquivalentTo([North, NorthPier]);
+            (await scoped.Widgets().Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead).ToListAsync(Cancellation)).Should().BeEquivalentTo([North, NorthPier]);
+            (await scoped.TenancyContext().Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead).ToListAsync(Cancellation)).Should().BeEquivalentTo([North, NorthPier]);
         });
 
         using (var functions = names.WidgetModel())
@@ -540,7 +538,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         await writing.BySeat(Seth.Identity, Harbor, Seth.Seat, async scoped =>
         {
             await using var views = new WidgetViews(Options(scoped));
-            (await scoped.Tenancy().In(views).UnitsWhereIHold(HostCatalogue.WidgetRead).ToListAsync(Cancellation)).Should().BeEquivalentTo([North, NorthPier]);
+            (await views.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead).ToListAsync(Cancellation)).Should().BeEquivalentTo([North, NorthPier]);
         });
     }
 
@@ -550,7 +548,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
     /// </summary>
     private static async Task<List<string>> AnswersAsync(IServiceProvider scoped, DbContext context, IReadOnlyList<string> permissions)
     {
-        var queries = scoped.Tenancy().In(context);
+        var queries = context.Tenancy();
         var lines = new List<string>();
         void Line(string question, IEnumerable<string> answer) => lines.Add(question + ": " + string.Join(", ", answer.Order(StringComparer.Ordinal)));
         async Task IdsAsync<TId>(string question, IQueryable<TId> answer)
@@ -585,7 +583,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
 
         // The rows the questions are worked out from, read as sets: the seat's own rights, which is all of them it
         // reads under the policies, and its tenant's placements and tree.
-        var rights = scoped.Tenancy().Caller.Seat is { } seat
+        var rights = scoped.Access().CurrentTenant.Seat is { } seat
             ? await context.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().AsNoTracking().Where(right => right.SeatId == seat).ToListAsync(Cancellation)
             : [];
         Line("Rights", rights.Select(right => $"{right.SeatId} at {right.UnitId} by {right.RoleId} '{right.Permission}' of {right.TenantId} from {right.StartsAt:O} to {right.EndsAt:O}"));

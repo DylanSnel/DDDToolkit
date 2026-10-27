@@ -300,8 +300,15 @@ public static class ScopedServices
     public static HostTenancy.InvitationCommands<HostInvitation, InvitationId> Invitations(this IServiceProvider services)
         => services.GetRequiredService<HostTenancy.InvitationCommands<HostInvitation, InvitationId>>();
 
-    public static ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> Tenancy(this IServiceProvider services)
-        => services.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>();
+    /// <summary>The access manager the test host's code takes: the class the generator wrote into the test host.</summary>
+    public static TenancyAccessManager Access(this IServiceProvider services) => services.GetRequiredService<TenancyAccessManager>();
+
+    /// <summary>
+    /// Tenancy's queries over <paramref name="context"/>, as an application's <c>db.Tenancy()</c> asks them: the
+    /// package's method with the host's ids, which the generator closes over them in the test host, internal to it.
+    /// </summary>
+    public static ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId> Tenancy(this DbContext context)
+        => context.Tenancy<TenantId, SeatId, OrganizationUnitId, RoleId>();
 
     public static TestTenancyContext TenancyContext(this IServiceProvider services) => services.GetRequiredService<TestTenancyContext>();
 

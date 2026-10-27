@@ -95,6 +95,20 @@ namespace DDDToolkit.Analyzers.Common;
 /// gives a name a namespace or a type in the global namespace has already, which would leave the class out with no
 /// word, and the projects above with only CS0234; an alias of that name the project writes itself stays its own.
 /// </para>
+/// <para>
+/// <b>A class the container makes.</b> A package's class that is not abstract is a service, as Tenancy's access manager
+/// is: the application's class is sealed, and has each public constructor of the package's class, closed over the
+/// same types. The package's registration registers it, filling a type parameter marked <c>[TemplateFacade]</c> with it
+/// (<see cref="Written"/>, <see cref="WrittenInReferences"/>).
+/// </para>
+/// <para>
+/// <b>For a module that sees only the ids.</b> A project that declares none of the classes and says which of its ids
+/// are a package's with a line marked <c>[TemplateIds]</c> (<see cref="TemplateIdLines"/>) gets each class whose type
+/// parameters all take ids, closed over the line's. It goes in the project's root namespace, not the global one: it is
+/// the module's own name for the package's class, and in the global namespace it would meet the class of the module that
+/// declares the classes in every project that sees both. So the module's code under that namespace names it, and no
+/// other module sees it there. What is in the way of it is judged in that namespace, as in the global one for the others.
+/// </para>
 /// </summary>
 internal static class TemplateFacades
 {
@@ -105,13 +119,15 @@ internal static class TemplateFacades
     /// <param name="projectFile">The project file: where DDD00075 goes for two classes the projects this one references have.</param>
     /// <param name="cancellationToken">Stops the work.</param>
     /// <param name="standingBack">The templates whose class a package's switch was asked to write and could not: DDD00066 says why, and nothing is said again here.</param>
+    /// <param name="rootNamespace">The project's <c>RootNamespace</c>, where a class closed over a line's ids is written; the assembly's name stands in without it.</param>
     public static ImmutableArray<FacadeOutcome> Resolve(
         ImmutableArray<EntityDefinition> declared,
         Compilation compilation,
         string moduleName,
         LocationInfo? projectFile,
         CancellationToken cancellationToken,
-        IReadOnlyCollection<string>? standingBack = null)
+        IReadOnlyCollection<string>? standingBack = null,
+        string? rootNamespace = null)
     {
         // Most projects reference no package that asks for a class and name none, and are done here, having read the
         // attributes of their references once each.
@@ -131,9 +147,9 @@ internal static class TemplateFacades
             ? new Dictionary<string, List<INamedTypeSymbol>>(StringComparer.Ordinal)
             : WrittenInReferences(compilation, cancellationToken);
 
-        var own = declared.IsDefaultOrEmpty || asked.Count == 0
+        var own = asked.Count == 0
             ? new List<(Closing Closing, FacadeOutcome? Outcome)>()
-            : Own(declared, compilation, asked, names, outcomes, cancellationToken, standingBack);
+            : Own(declared.IsDefault ? ImmutableArray<EntityDefinition>.Empty : declared, compilation, asked, names, outcomes, cancellationToken, standingBack, rootNamespace);
 
         // A line that names a class of a package this project declares none of the classes of names nothing here: the
         // class is written where they are.
@@ -151,9 +167,9 @@ internal static class TemplateFacades
         var said = own.Where(static each => each.Outcome is not null).Select(static each => (each.Closing, Outcome: each.Outcome!)).ToList();
         var taken = said.Count == 0 ? new HashSet<string>(StringComparer.Ordinal) : AliasesIn(compilation, cancellationToken);
         var metHere = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var named in said.GroupBy(static each => each.Outcome.Name, StringComparer.Ordinal))
+        foreach (var named in said.GroupBy(static each => (each.Closing.Namespace, each.Outcome.Name)))
         {
-            var name = named.Key;
+            var (space, name) = named.Key;
             var mine = named.ToList();
             if (taken.Contains(name))
             {
@@ -162,8 +178,9 @@ internal static class TemplateFacades
 
             // What the global namespace has of the name already stays: the package's name stands back for it without
             // a word, as the application's own way of naming the classes. A name the application gave is another
-            // matter: the line would leave the class out and say nothing, so it is told at the line.
-            if (TakenInTheGlobalNamespace(name, compilation, written) is { } what)
+            // matter: the line would leave the class out and say nothing, so it is told at the line. A class written
+            // into the project's root namespace is judged there.
+            if ((space.Length == 0 ? TakenInTheGlobalNamespace(name, compilation, written) : TakenIn(space, name, compilation)) is { } what)
             {
                 foreach (var each in mine)
                 {
@@ -190,7 +207,7 @@ internal static class TemplateFacades
             // module's classes, and every project above sees two, which DDD00075 says there and CS0433 stops at the
             // first use. Without its own, its code and every project above would name the other module's classes,
             // and only this warning would say so. It is said here, on the classes.
-            if (files.Count == 1 && written.TryGetValue(name, out var others))
+            if (space.Length == 0 && files.Count == 1 && written.TryGetValue(name, out var others))
             {
                 metHere.Add(name);
                 outcomes.AddRange(mine.Select(static each => each.Outcome));
@@ -219,9 +236,70 @@ internal static class TemplateFacades
     }
 
     /// <summary>
+    /// The files of the classes this project gets, as <see cref="Resolve"/> writes them: for a registration whose type
+    /// parameter takes one, which registers the class the project's code names.
+    /// </summary>
+    /// <param name="declared">The classes this project declares with a template.</param>
+    /// <param name="compilation">The project.</param>
+    /// <param name="rootNamespace">The project's <c>RootNamespace</c>.</param>
+    /// <param name="cancellationToken">Stops the work.</param>
+    /// <param name="standingBack">The templates whose class a package's switch was asked to write and could not.</param>
+    public static IReadOnlyList<FacadeFile> Written(
+        ImmutableArray<EntityDefinition> declared,
+        Compilation compilation,
+        string? rootNamespace,
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<string>? standingBack = null)
+        => Resolve(declared, compilation, string.Empty, projectFile: null, cancellationToken, standingBack, rootNamespace)
+            .Select(static outcome => outcome.File)
+            .OfType<FacadeFile>()
+            .ToList();
+
+    /// <summary>
+    /// The classes the generator wrote for <paramref name="facade"/> into the projects this one references, in any
+    /// namespace, that this project can see: the class of the module that declares the classes, and the one a project
+    /// with a line has in its root namespace.
+    /// </summary>
+    /// <param name="compilation">The project.</param>
+    /// <param name="facade">The package's open class.</param>
+    /// <param name="cancellationToken">Stops the work.</param>
+    public static IEnumerable<INamedTypeSymbol> WrittenInReferences(Compilation compilation, INamedTypeSymbol facade, CancellationToken cancellationToken)
+    {
+        // Only an assembly that references the package can derive from its class: the framework's are not walked.
+        var package = facade.ContainingAssembly.Identity.Name;
+        foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!assembly.Modules.Any(part => part.ReferencedAssemblySymbols.Any(reference => reference.Identity.Name == package)))
+            {
+                continue;
+            }
+
+            foreach (var type in AnyWhereByAssembly.GetValue(assembly, WrittenAnywhereIn))
+            {
+                if (SymbolEqualityComparer.Default.Equals(type.BaseType!.OriginalDefinition, facade.OriginalDefinition)
+                    && compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
+                {
+                    yield return type;
+                }
+            }
+        }
+    }
+
+    /// <summary>The classes a referenced assembly was given in any namespace, read once per assembly.</summary>
+    private static readonly ConditionalWeakTable<IAssemblySymbol, INamedTypeSymbol[]> AnyWhereByAssembly = new();
+
+    private static INamedTypeSymbol[] WrittenAnywhereIn(IAssemblySymbol assembly)
+        => DefinitionFactory.TypesIn(assembly.GlobalNamespace, CancellationToken.None)
+            .Where(static type => type is { TypeKind: TypeKind.Class, Arity: 0, ContainingType: null, BaseType: { IsGenericType: true, OriginalDefinition: { ContainingAssembly: { } package } definition } }
+                                  && ByAssembly.GetValue(package, FacadeTypesOf).Contains(definition, SymbolEqualityComparer.Default))
+            .ToArray();
+
+    /// <summary>
     /// The classes this project gets, each with its outcome before the names are compared: the class's file, DDD00065
     /// for one that cannot be written, or none when what is wrong is said elsewhere. Every class whose templates the
-    /// project declares a class of is here, so a line that names one of them names something.
+    /// project declares a class of is here, so a line that names one of them names something. So is every class whose
+    /// type parameters all take an id a line of this project names, when it declares none of the classes.
     /// </summary>
     private static List<(Closing Closing, FacadeOutcome? Outcome)> Own(
         ImmutableArray<EntityDefinition> declared,
@@ -230,8 +308,13 @@ internal static class TemplateFacades
         Dictionary<INamedTypeSymbol, GivenName> names,
         List<FacadeOutcome> outcomes,
         CancellationToken cancellationToken,
-        IReadOnlyCollection<string>? standingBack)
+        IReadOnlyCollection<string>? standingBack,
+        string? rootNamespace)
     {
+        // The ids this project's own lines name, and the namespace a class closed over them is written into.
+        var lines = TemplateIdLines.Here(compilation, cancellationToken);
+        var scope = Identifiers.NamespaceFrom(string.IsNullOrWhiteSpace(rootNamespace) ? compilation.AssemblyName : rootNamespace!.Trim());
+
         // Whether a class of this project can be generated is only known once every template class is resolved.
         ImmutableArray<EntityDefinition>? resolved = null;
         ImmutableArray<EntityDefinition> Resolved() => resolved ??= DefinitionFactory.ResolveTemplates(declared, compilation, cancellationToken);
@@ -295,6 +378,11 @@ internal static class TemplateFacades
             var takes = read.Select(static take => take!).ToArray();
             if (declared.FirstOrDefault(definition => definition.TemplateKey is { } key && takes.Any(take => take.Key == key)) is not { } anchor)
             {
+                if (ClosedOverALine(type, takes, lines, names, scope, module, compilation, cancellationToken) is { } closedOverALine)
+                {
+                    own.Add(closedOverALine);
+                }
+
                 continue;
             }
 
@@ -324,6 +412,49 @@ internal static class TemplateFacades
         return own;
     }
 
+    /// <summary>
+    /// The class closed over the ids this project's lines name, when every type parameter takes an id and a line names
+    /// one for each: in the project's root namespace, named as the package's class is unless a line of this project
+    /// names it. Null for a class a type parameter of which takes a class, or an id no line names, which is not for a
+    /// project that sees only the ids.
+    /// </summary>
+    private static (Closing Closing, FacadeOutcome? Outcome)? ClosedOverALine(
+        INamedTypeSymbol type,
+        TemplateRegistrations.Take[] takes,
+        List<TemplateIdLines.NamedId> lines,
+        Dictionary<INamedTypeSymbol, GivenName> names,
+        string scope,
+        string? module,
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        if (lines.Count == 0 || takes.Any(static take => take.TakeType || take.Argument != 0))
+        {
+            return null;
+        }
+
+        var fromLines = new Dictionary<string, List<DefinitionFactory.TemplateSource>>(StringComparer.Ordinal);
+        foreach (var take in takes)
+        {
+            if (!fromLines.ContainsKey(take.Key))
+            {
+                fromLines.Add(take.Key, TemplateIdLines.SourcesFor(take, lines));
+            }
+        }
+
+        if (fromLines.Values.Any(static found => found.Count == 0))
+        {
+            return null;
+        }
+
+        var where = fromLines.Values.SelectMany(static found => found).Select(static source => source.LineLocation).FirstOrDefault(static location => location is not null);
+        var line = names.TryGetValue(type, out var here) ? here : null;
+        var name = line?.Name ?? type.Name;
+        var closing = new Closing(type, name, takes, where, module, line, scope);
+        var outcome = Closed(closing, take => fromLines[take.Key], static _ => false, compilation, cancellationToken);
+        return (closing, outcome?.File is not null && OwnTypeNamed(name, compilation, cancellationToken, except: scope) is { } mine ? HiddenBy(closing, mine) : outcome);
+    }
+
     /// <summary>What one asked class is closed over, and what is said about it.</summary>
     /// <param name="Type">The package's open generic class.</param>
     /// <param name="Name">What the application's class is called.</param>
@@ -334,7 +465,11 @@ internal static class TemplateFacades
     /// The <c>[assembly: TemplateFacadeName]</c> the application named the class with, in this project or in a project
     /// of its module it takes classes from; null when it is named as the package's class is.
     /// </param>
-    private sealed record Closing(INamedTypeSymbol Type, string Name, TemplateRegistrations.Take[] Takes, LocationInfo? Where, string? Module, GivenName? Line);
+    /// <param name="Namespace">
+    /// Where the class is written: the global namespace, empty, for a class closed over classes; the project's root
+    /// namespace for one closed over a line's ids.
+    /// </param>
+    private sealed record Closing(INamedTypeSymbol Type, string Name, TemplateRegistrations.Take[] Takes, LocationInfo? Where, string? Module, GivenName? Line, string Namespace = "");
 
     /// <summary>
     /// The package's class closed over the one class of each of its templates; DDD00065 instead when a template
@@ -349,7 +484,7 @@ internal static class TemplateFacades
         Compilation compilation,
         CancellationToken cancellationToken)
     {
-        var (type, name, takes, _, module, line) = closing;
+        var (type, name, takes, _, module, line, space) = closing;
         var parameters = type.TypeParameters;
         var texts = new string[parameters.Length];
         var symbols = new ITypeSymbol?[parameters.Length];
@@ -358,6 +493,13 @@ internal static class TemplateFacades
         {
             var take = takes[position];
             var found = candidatesFor(take);
+            if (found.Count > 1 && found[0].IsLine)
+            {
+                return NotWritten(closing, "the lines of this project name "
+                                           + DefinitionFactory.Listed(found.Select(static source => "'" + source.IdType.Replace("global::", string.Empty) + "'"))
+                                           + " for [" + take.AttributeName + "], and it is closed over one; keep one");
+            }
+
             if (found.Count != 1)
             {
                 return saidElsewhere(take)
@@ -383,7 +525,9 @@ internal static class TemplateFacades
             }
             else if (take.Argument == 0)
             {
-                if (!source.IdIsEntityId)
+                // A class that cannot be generated says why itself, DDD00053 for an id its parent does not take, and its
+                // id is not said again here. An id a line names has no class to say it.
+                if (!source.IdIsEntityId || (!source.IsLine && !source.CanGenerate))
                 {
                     return null;
                 }
@@ -464,18 +608,43 @@ internal static class TemplateFacades
         // Public where everything it is closed over is, so the projects above see it; otherwise as far as the
         // application's own internal class reaches, which a public class could not derive over.
         var isPublic = IsPublicEverywhere(type) && symbols.All(static symbol => symbol is null || IsPublicEverywhere(symbol));
-        var over = module is not null ? "the classes of the module " + module : "the classes of this project";
+        var over = space.Length > 0 ? "the ids this project's line names as the package's"
+            : module is not null ? "the classes of the module " + module
+            : "the classes of this project";
+
+        // A class the container makes has each public constructor of the package's class, closed over the same types.
+        var constructors = new List<FacadeConstructor>();
+        if (!type.IsAbstract)
+        {
+            var valueTypes = new bool[parameters.Length];
+            for (var position = 0; position < parameters.Length; position++)
+            {
+                valueTypes[position] = symbols[position]?.IsValueType ?? !takes[position].TakeType;
+            }
+
+            foreach (var constructor in type.InstanceConstructors.Where(static constructor => constructor.DeclaredAccessibility == Accessibility.Public))
+            {
+                var (declaredParameters, arguments) = TemplateRegistrations.ParametersOver(constructor, parameters, texts, valueTypes);
+                constructors.Add(new FacadeConstructor(declaredParameters, arguments));
+            }
+        }
+
         return new FacadeOutcome(
             name,
             new FacadeFile(
-                HintName: name + ".TemplateFacade.g.cs",
+                HintName: (space.Length > 0 ? space + "." : string.Empty) + name + ".TemplateFacade.g.cs",
                 Name: name,
                 IsPublic: isPublic,
                 BaseType: qualifier + type.Name + "<" + string.Join(", ", texts) + ">",
                 Summary: CodeWriter.XmlText(type.Name + ", closed over " + over + ": " + DefinitionFactory.Listed(shown) + "."),
                 Naming: CodeWriter.XmlText(line is not null
                     ? "Named by " + line.Written + "."
-                    : "Named as the package's class is; [assembly: TemplateFacadeName(\"" + type.Name + "\", \"...\")] in this project names it otherwise.")),
+                    : "Named as the package's class is; [assembly: TemplateFacadeName(\"" + type.Name + "\", \"...\")] in this project names it otherwise."))
+            {
+                Namespace = space,
+                IsService = !type.IsAbstract,
+                Constructors = constructors.ToEquatableArray(),
+            },
             Diagnostic: null);
     }
 
@@ -491,12 +660,13 @@ internal static class TemplateFacades
     /// the package is compiled with the application, is told apart by its type parameters, so neither is any matter.
     /// Null when there is none, which the declarations tell cheaply.
     /// </summary>
-    private static INamedTypeSymbol? OwnTypeNamed(string name, Compilation compilation, CancellationToken cancellationToken)
+    private static INamedTypeSymbol? OwnTypeNamed(string name, Compilation compilation, CancellationToken cancellationToken, string? except = null)
         => !compilation.ContainsSymbolsWithName(name, SymbolFilter.Type, cancellationToken)
             ? null
             : compilation.GetSymbolsWithName(name, SymbolFilter.Type, cancellationToken)
                 .OfType<INamedTypeSymbol>()
-                .Where(static symbol => symbol.ContainingType is null && symbol.Arity == 0 && !symbol.ContainingNamespace.IsGlobalNamespace)
+                .Where(symbol => symbol.ContainingType is null && symbol.Arity == 0 && !symbol.ContainingNamespace.IsGlobalNamespace
+                                 && symbol.ContainingNamespace.ToDisplayString() != except)
                 .OrderBy(static symbol => symbol.ToDisplayString(), StringComparer.Ordinal)
                 .FirstOrDefault();
 
@@ -510,7 +680,8 @@ internal static class TemplateFacades
                 LocationInfo.From(own) ?? closing.Where,
                 closing.Name,
                 closing.Type.Name,
-                "this project declares '" + own.ToDisplayString() + "', which a class of that name in the global namespace would hide in every file that imports '"
+                "this project declares '" + own.ToDisplayString() + "', which a class of that name in "
+                + (closing.Namespace.Length > 0 ? "'" + closing.Namespace + "'" : "the global namespace") + " would hide in every file that imports '"
                 + own.ContainingNamespace.ToDisplayString() + "' with a using; name the class otherwise, with "
                 + (closing.Line is { } line ? "another name in " + line.Written : NameLine(closing.Type.Name, "...") + " in this project")
                 + ", or rename '" + own.Name + "'"));
@@ -545,6 +716,33 @@ internal static class TemplateFacades
                 _ => null,
             })
             .FirstOrDefault(static what => what is not null);
+
+    /// <summary>
+    /// What the project's root namespace has of a name already, which a class closed over a line's ids cannot have as
+    /// well: a namespace, or a type without type parameters this project can see, its own or a referenced one. Null when
+    /// the name is free there.
+    /// </summary>
+    private static string? TakenIn(string space, string name, Compilation compilation)
+    {
+        INamespaceSymbol? container = compilation.GlobalNamespace;
+        foreach (var part in space.Split('.'))
+        {
+            container = container.GetNamespaceMembers().FirstOrDefault(member => member.Name == part);
+            if (container is null)
+            {
+                return null;
+            }
+        }
+
+        return container.GetMembers(name)
+            .Select(member => member switch
+            {
+                INamespaceSymbol => "a namespace in '" + space + "'",
+                INamedTypeSymbol { Arity: 0 } type when compilation.IsSymbolAccessibleWithin(type, compilation.Assembly) => "a type in '" + space + "'",
+                _ => null,
+            })
+            .FirstOrDefault(static what => what is not null);
+    }
 
     /// <summary>
     /// DDD00075 on the first of this project's classes: two classes it gets come to one name, and neither is written.
@@ -677,7 +875,7 @@ internal static class TemplateFacades
 
     private static INamedTypeSymbol[] WrittenIn(IAssemblySymbol assembly)
         => assembly.GlobalNamespace.GetTypeMembers()
-            .Where(static type => type is { TypeKind: TypeKind.Class, IsAbstract: true, Arity: 0, BaseType: { IsGenericType: true, OriginalDefinition: { ContainingAssembly: { } package } definition } }
+            .Where(static type => type is { TypeKind: TypeKind.Class, Arity: 0, BaseType: { IsGenericType: true, OriginalDefinition: { ContainingAssembly: { } package } definition } }
                                   && ByAssembly.GetValue(package, FacadeTypesOf).Contains(definition, SymbolEqualityComparer.Default))
             .ToArray();
 
@@ -897,10 +1095,15 @@ internal static class TemplateFacades
         return false;
     }
 
-    /// <summary>Whether a class of the application, in another assembly, can derive from the type: a constructor without parameters it can call.</summary>
+    /// <summary>
+    /// Whether a class of the application, in another assembly, can derive from the type: an abstract class with a
+    /// constructor without parameters it can call, or a class the container makes with a public constructor it passes on.
+    /// </summary>
     private static bool CanBeDerivedFrom(INamedTypeSymbol type)
-        => type.InstanceConstructors.Any(static constructor => constructor.Parameters.Length == 0
-                                                             && constructor.DeclaredAccessibility is Accessibility.Public or Accessibility.Protected or Accessibility.ProtectedOrInternal);
+        => type.IsAbstract
+            ? type.InstanceConstructors.Any(static constructor => constructor.Parameters.Length == 0
+                                                                && constructor.DeclaredAccessibility is Accessibility.Public or Accessibility.Protected or Accessibility.ProtectedOrInternal)
+            : type.InstanceConstructors.Any(static constructor => constructor.DeclaredAccessibility == Accessibility.Public);
 
     /// <summary>
     /// The names this project gives an alias of its own, global or not, at the top of a file, where a class of the
@@ -946,4 +1149,22 @@ internal sealed record FacadeOutcome(string Name, FacadeFile? File, DiagnosticIn
 /// <param name="BaseType">The package's class closed over the application's, fully qualified.</param>
 /// <param name="Summary">What it is closed over, for its documentation, escaped for XML.</param>
 /// <param name="Naming">Where its name comes from, and how to give it another, for its documentation, escaped for XML.</param>
-internal sealed record FacadeFile(string HintName, string Name, bool IsPublic, string BaseType, string Summary, string Naming);
+internal sealed record FacadeFile(string HintName, string Name, bool IsPublic, string BaseType, string Summary, string Naming)
+{
+    /// <summary>The namespace it is written into: empty for the global namespace.</summary>
+    public string Namespace { get; init; } = string.Empty;
+
+    /// <summary>Whether it is a class the container makes, sealed with constructors, rather than a name alone.</summary>
+    public bool IsService { get; init; }
+
+    /// <summary>The constructors of a class the container makes.</summary>
+    public EquatableArray<FacadeConstructor> Constructors { get; init; } = EquatableArray<FacadeConstructor>.Empty;
+
+    /// <summary>The class as code names it in full: <c>global::TenancyAccessManager</c>, or with its namespace.</summary>
+    public string FullName => "global::" + (Namespace.Length > 0 ? Namespace + "." : string.Empty) + Name;
+}
+
+/// <summary>One constructor of a class the container makes, passed on to the package's class.</summary>
+/// <param name="Parameters">Its parameters as declared, fully qualified.</param>
+/// <param name="Arguments">What it passes on to the package's constructor.</param>
+internal sealed record FacadeConstructor(string Parameters, string Arguments);

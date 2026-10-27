@@ -41,7 +41,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         {
             foreach (DbContext context in new DbContext[] { services.TenancyContext(), services.Widgets() })
             {
-                var held = services.Tenancy().In(context).UnitsWhereIHold(HostCatalogue.WidgetChange);
+                var held = context.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetChange);
 
                 _services.Commands.Reset();
                 (await held.ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_north, _coast], "a permission held at North reaches the units below it, in " + context.GetType().Name);
@@ -64,7 +64,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         {
             foreach (DbContext context in new DbContext[] { services.TenancyContext(), services.Widgets() })
             {
-                var queries = services.Tenancy().In(context);
+                var queries = context.Tenancy();
                 var holders = queries.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast);
 
                 _services.Commands.Reset();
@@ -87,7 +87,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         {
             foreach (DbContext context in new DbContext[] { services.TenancyContext(), services.Widgets() })
             {
-                var queries = services.Tenancy().In(context);
+                var queries = context.Tenancy();
                 _services.Commands.Reset();
                 (await queries.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_grace, _lin], "asked in " + context.GetType().Name);
                 _services.Commands.Count.Should().Be(1);
@@ -98,7 +98,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         // Lin operates widgets at Coast and manages nothing: Lin learns about Lin, in one statement all the same.
         await _services.BySeat(_harbor.Tenant, _lin, async services =>
         {
-            var queries = services.Tenancy().In(services.Widgets());
+            var queries = services.Widgets().Tenancy();
             _services.Commands.Reset();
             (await queries.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken)).Should().Equal(_lin);
             (await queries.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
@@ -106,7 +106,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         });
 
         // System work in the tenant learns every holder.
-        var all = await _services.BySystemIn(_harbor.Tenant, services => services.Tenancy().In(services.Widgets()).SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken));
+        var all = await _services.BySystemIn(_harbor.Tenant, services => services.Widgets().Tenancy().SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken));
         all.Should().BeEquivalentTo([_harbor.AdminSeat, _grace, _lin]);
     }
 
@@ -128,7 +128,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         await _services.BySeat(_harbor.Tenant, hal, async services =>
         {
             var widgets = services.Widgets();
-            var queries = services.Tenancy().In(widgets);
+            var queries = widgets.Tenancy();
 
             // Written as a module writes it, the questions inside its own query: the widgets Hal may change where
             // he holds the permission, and those handed to a role that changes widgets in the units he belongs to. Each
@@ -168,7 +168,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
 
         await _services.BySeat(_harbor.Tenant, hal, services =>
         {
-            var sql = services.Tenancy().In(services.Widgets()).UnitsWhereIHold(HostCatalogue.WidgetRead).ToQueryString();
+            var sql = services.Widgets().Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead).ToQueryString();
             sql.Should().MatchRegex("\"StartsAt\" <= @").And.MatchRegex("\"EndsAt\" IS NULL OR \"?\\w+\"?\\.\"EndsAt\" > @", "the moment is compared in SQL");
             return Task.CompletedTask;
         });
@@ -219,7 +219,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         {
             foreach (DbContext context in new DbContext[] { services.TenancyContext(), services.Widgets() })
             {
-                var roles = services.Tenancy().In(context).RolesWithPermission(HostCatalogue.WidgetRead);
+                var roles = context.Tenancy().RolesWithPermission(HostCatalogue.WidgetRead);
                 roles.ToQueryString().Should().Contain(_services.Database.PermissionsContain, "the permissions are read in SQL: the JSON on SQLite, the array on Postgres");
                 (await roles.ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo(readers);
             }
@@ -227,7 +227,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
 
         await _services.BySystemIn(_harbor.Tenant, services => services.Roles().ArchiveAsync(watcher, TestContext.Current.CancellationToken));
         await _services.BySeat(_harbor.Tenant, _lin, async services =>
-            (await services.Tenancy().In(services.Widgets()).RolesWithPermission(HostCatalogue.WidgetRead).ToListAsync(TestContext.Current.CancellationToken))
+            (await services.Widgets().Tenancy().RolesWithPermission(HostCatalogue.WidgetRead).ToListAsync(TestContext.Current.CancellationToken))
                 .Should().BeEquivalentTo(readers.Where(role => role != watcher), "an archived role gives no rights"));
     }
 
@@ -238,7 +238,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
 
         await _services.BySeat(_harbor.Tenant, _grace, async services =>
         {
-            var queries = services.Tenancy().In(services.TenancyContext());
+            var queries = services.TenancyContext().Tenancy();
             var supervisor = await services.TenancyContext().Set<HostRole>().SingleAsync(role => role.Id == _harbor.RolesByPack[HostCatalogue.SupervisorPack], TestContext.Current.CancellationToken);
 
             (await queries.PermissionsIHoldAt(_coast).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo(supervisor.Permissions, "what Grace holds at North reaches Coast");
@@ -249,7 +249,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         // System work holds every live permission: an answer from the catalogue, in memory, which the executor runs as it is.
         await _services.BySystemIn(_harbor.Tenant, async services =>
         {
-            var permissions = services.Tenancy().In(services.TenancyContext()).PermissionsIHoldAt(_south);
+            var permissions = services.TenancyContext().Tenancy().PermissionsIHoldAt(_south);
             var catalogue = services.GetRequiredService<TenancyCatalogue>();
 
             _services.Commands.Reset();
@@ -268,12 +268,12 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         await _services.BySeat(_harbor.Tenant, _grace, async services =>
         {
             var widgets = services.Widgets();
-            var held = services.Tenancy().In(widgets).UnitsWhereIHold(HostCatalogue.WidgetChange);
+            var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetChange);
             var inOneStatement = await widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).Select(widget => widget.Name).OrderBy(name => name).ToListAsync(TestContext.Current.CancellationToken);
 
             // Modules in different databases: ask Tenancy's own context first, then pass the units in.
             _services.Commands.Reset();
-            var units = await services.Tenancy().In(services.TenancyContext()).UnitsWhereIHold(HostCatalogue.WidgetChange).ToListAsync(TestContext.Current.CancellationToken);
+            var units = await services.TenancyContext().Tenancy().UnitsWhereIHold(HostCatalogue.WidgetChange).ToListAsync(TestContext.Current.CancellationToken);
             var inTwoSteps = await widgets.Widgets.Where(widget => units.Contains(widget.UnitId)).Select(widget => widget.Name).OrderBy(name => name).ToListAsync(TestContext.Current.CancellationToken);
 
             inTwoSteps.Should().Equal(inOneStatement).And.Equal("at Coast", "at North");
@@ -308,7 +308,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
     private Task<List<string>> ReadableWidgetsAsync(SeatId seat)
         => _services.BySeat(_harbor.Tenant, seat, async services =>
         {
-            var held = services.Tenancy().In(services.Widgets()).UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = services.Widgets().Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             return await services.Widgets().Widgets.Where(widget => held.Contains(widget.UnitId)).Select(widget => widget.Name).ToListAsync(TestContext.Current.CancellationToken);
         });
 
@@ -319,7 +319,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
     private Task<bool> AskAsync(SeatId seat, Func<ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId>, Task<bool>> ask)
         => _services.BySeat(_harbor.Tenant, seat, async services =>
         {
-            var queries = services.Tenancy().In(services.Widgets());
+            var queries = services.Widgets().Tenancy();
             _services.Commands.Reset();
             var answer = await ask(queries);
             _services.Commands.Count.Should().Be(1, "the executor runs the question in the database, once");

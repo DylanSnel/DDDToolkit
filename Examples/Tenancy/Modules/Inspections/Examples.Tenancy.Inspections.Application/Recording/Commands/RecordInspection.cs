@@ -58,7 +58,7 @@ public sealed record RecordInspection(ProjectId Project, string Title, DateRange
 /// <param name="projects">Projects' answer about the project: the days it is planned for.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller.</param>
 /// <param name="clock">What "now" is.</param>
-public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate projects, SampleTenancy tenancy, TimeProvider clock)
+public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate projects, TenancyAccessManager tenancy, TimeProvider clock)
     : ICommandHandler<RecordInspection, InspectionId>
 {
     /// <inheritdoc />
@@ -70,14 +70,14 @@ public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate
     /// </exception>
     public async ValueTask<InspectionId> Handle(RecordInspection command, CancellationToken cancellationToken)
     {
-        var scope = tenancy.RequireTenant();
+        var scope = tenancy.CurrentTenant.Require();
         var project = await projects.AskAsync(command.Project, RecordInspection.RequiredPermission, cancellationToken);
         InspectionsAccessCheck.Require(project, RecordInspection.RequiredPermission, open: true);
 
         var now = clock.GetUtcNow();
         var inspection = new Inspection(
             InspectionId.Create(),
-            scope.Tenant,
+            scope.Id,
             command.Project,
             command.Title,
             command.Days ?? DateRange.OneDay(DateOnly.FromDateTime(now.UtcDateTime)),

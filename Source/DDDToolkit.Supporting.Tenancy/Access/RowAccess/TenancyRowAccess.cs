@@ -58,7 +58,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// Every unit where the calling seat holds <paramref name="permission"/> now: the units it is held at, and every unit
-    /// below them. As <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.UnitsWhereIHold"/>.
+    /// below them. As <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.UnitsWhereIHold(string)"/>.
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     [AccessSet("units_where_i_hold_permission")]
@@ -93,7 +93,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// The active roles of the caller's tenant that grant <paramref name="permission"/>. As
-    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.RolesWithPermission"/>.
+    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.RolesWithPermission(string)"/>.
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     [AccessSet("roles_with_permission")]

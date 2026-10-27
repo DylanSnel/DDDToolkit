@@ -42,7 +42,7 @@ public sealed class ProvisioningTests : IDisposable
     {
         TenancyUseCases.ProvisionedTenant provisioned;
         await using (var scope = _services.CreateAsyncScope())
-        using (TenancyUseCases.BeginSystem())
+        using (scope.ServiceProvider.GetRequiredService<TenancyAccessManager>().BeginSystem())
         {
             provisioned = await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
                 new TenancyUseCases.TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid()),
@@ -50,7 +50,7 @@ public sealed class ProvisioningTests : IDisposable
         }
 
         await using var read = _services.CreateAsyncScope();
-        using var inTheTenant = TenancyUseCases.BeginSystemIn(provisioned.Tenant);
+        using var inTheTenant = read.ServiceProvider.GetRequiredService<TenancyAccessManager>().BeginSystemIn(provisioned.Tenant);
         var context = read.ServiceProvider.GetRequiredService<ShopContext>();
 
         var tenant = await context.Set<Tenant>().SingleAsync(TestContext.Current.CancellationToken);

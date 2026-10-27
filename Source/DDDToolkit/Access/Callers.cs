@@ -63,7 +63,7 @@ public static class Callers
     /// <summary>
     /// Refuses everyone but the application's own work that trusted code began on purpose for this flow:
     /// <see cref="Caller.System"/> or a scoped <see cref="Caller.SystemIn"/>, made current with <see cref="Begin"/>
-    /// or a supporting domain's own way, such as Tenancy's <c>TenancyUseCases.BeginSystem()</c>. For a handler, a
+    /// or a supporting domain's own way, such as Tenancy's <c>access.BeginSystem()</c>. For a handler, a
     /// job's step or a use case that only system work may run: it asks past the door, where the request has passed
     /// its requirement, who may send it, and the handler says what only the application itself may do.
     /// <code>

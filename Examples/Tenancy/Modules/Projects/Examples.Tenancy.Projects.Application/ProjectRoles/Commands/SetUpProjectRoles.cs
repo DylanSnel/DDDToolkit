@@ -21,7 +21,7 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// <para>
 /// Who may send it is a caller in the tenant, <c>[InTenant]</c>, the module's default, which it takes by saying nothing
 /// of its own: the one requirement that lets the system work that sends it through. Nothing requires system work at
-/// the door, since system work is a scope the sender begins around the send, <c>TenancyUseCases.BeginSystemIn(tenant)</c>,
+/// the door, since system work is a scope the sender begins around the send, <c>access.BeginSystemIn(tenant)</c>,
 /// as the seeding does. What the work then may do is the handler's to say, and it says only system work in the tenant
 /// sets a tenant up: a seat that sends it gets past the door and is refused there, <c>access.system-only</c>.
 /// </para>
@@ -43,7 +43,7 @@ public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId
 /// <param name="membership">The projects' rules and starter roles.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller: the tenant being set up.</param>
 /// <param name="checks">The module's access checks, which hold a request to what it declared.</param>
-public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembership membership, SampleTenancy tenancy, AccessChecks<IProjectsRequest> checks) : ICommandHandler<SetUpProjectRoles>
+public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembership membership, TenancyAccessManager tenancy, AccessChecks<IProjectsRequest> checks) : ICommandHandler<SetUpProjectRoles>
 {
     /// <inheritdoc />
     /// <exception cref="RefusalException"><c>access.system-only</c>: anybody but system work in the tenant.</exception>
@@ -51,13 +51,13 @@ public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembers
     {
         await checks.RequireAsync(command, cancellationToken);
 
-        var scope = tenancy.RequireTenant();
+        var scope = tenancy.CurrentTenant.Require();
         if (!scope.BySystem)
         {
             throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
         }
 
-        var tenant = scope.Tenant;
+        var tenant = scope.Id;
         var missing = StarterRoles.Missing(membership.Rules, await store.RolesOfTheTenantAsync(cancellationToken));
         if (missing.Count == 0)
         {

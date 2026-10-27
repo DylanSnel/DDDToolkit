@@ -52,9 +52,10 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
     /// <summary>
     /// What the sample declares elsewhere and the page's requests name: the ids, a listing and a kind of unit, the
-    /// projects' permissions, and the module interfaces in the sample's namespaces. And what a test adds to run the
-    /// requirement of the module's own: a plan it answers, stand-ins for Tenancy, asked about the caller, and for
-    /// its check of the permission, and counts of how often each is asked.
+    /// projects' permissions, and the module interfaces in the sample's namespaces, with the line that says which ids are
+    /// Tenancy's, so the project gets the access manager the page's check takes. And what a test adds to run the
+    /// requirement of the module's own: a plan it answers, a stand-in for Tenancy's check of the permission, and counts of
+    /// how often each is asked.
     /// </summary>
     private const string TestOnly =
         """
@@ -66,6 +67,8 @@ public partial class HowARequestIsCheckedDocsExampleTests
         using DDDToolkit.Access;
         using DDDToolkit.Exceptions;
         using DDDToolkit.Supporting.Tenancy.Access;
+
+        [assembly: DDDToolkit.Supporting.Tenancy.TenancyIds<Examples.Tenancy.TenantId, Examples.Tenancy.SeatId, Examples.Tenancy.OrganizationUnitId, Examples.Tenancy.RoleId>]
 
         namespace Examples.Tenancy
         {
@@ -113,26 +116,6 @@ public partial class HowARequestIsCheckedDocsExampleTests
                     AskedFor = tenant;
                     return ValueTask.FromResult(Plan);
                 }
-            }
-
-            /// <summary>Tenancy, asked about the caller: a seat of the tenant, or nobody there, refused as Tenancy refuses one.</summary>
-            public sealed class TenancyOfTheTest : ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>
-            {
-                public bool Seated { get; set; } = true;
-
-                public TenantId Tenant { get; } = TenantId.Create();
-
-                public TenancyCaller<TenantId, SeatId> Caller => throw new NotSupportedException("The page's check asks RequireTenant alone.");
-
-                public TenantInScope<TenantId, SeatId> RequireTenant()
-                    => Seated
-                        ? new TenantInScope<TenantId, SeatId>(Tenant, SeatId.Create(), BySystem: false)
-                        : throw DDDToolkit.Supporting.Tenancy.TenancyRefusals.Refuse(DDDToolkit.Supporting.Tenancy.TenancyRefusals.NotSeated);
-
-                public ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId> In(
-                    ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId> source,
-                    IQueryExecutor executor)
-                    => throw new NotSupportedException("The page's check asks RequireTenant alone.");
             }
 
             public sealed class PermissionOfTheTest
@@ -302,9 +285,10 @@ public partial class HowARequestIsCheckedDocsExampleTests
         var emitted = Run().Emit();
         var plan = emitted.New("Examples.Tenancy.PlanOfTheTest")!;
         var permission = emitted.New("Examples.Tenancy.PermissionOfTheTest")!;
-        var tenancy = emitted.New("Examples.Tenancy.TenancyOfTheTest")!;
-        using var provider = Services(emitted, plan, permission, tenancy, withPlanCheck: true);
+        using var provider = Services(emitted, plan, permission, withPlanCheck: true);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
+        var tenant = emitted.New("Examples.Tenancy.TenantId", Guid.NewGuid())!;
+        using var seated = AsSeatOf(emitted, tenant);
 
         Required(export).Should().Be(
             AccessRequirement.All((AccessRequirement)emitted.CallStatic("Examples.Tenancy.PlanAtLeast", "RequiresPlan", PlanOf(emitted, "Pro"))!, TenancyAccess.AtTenant("boards.export")),
@@ -315,7 +299,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
         Set(emitted, permission, "Held", true);
         Refusal(provider, emitted, export).Code.Should().Be("boards.plan-too-low");
         emitted.Property(permission, "Asked").Should().Be(0, "the first case refused, so the second is not asked");
-        emitted.Property(plan, "AskedFor").Should().Be(emitted.Property(tenancy, "Tenant"), "the plan read is the one of the tenant the caller works in");
+        emitted.Property(plan, "AskedFor").Should().Be(tenant, "the plan read is the one of the tenant the caller works in");
 
         // On the Pro plan the permission is asked next, and its refusal is its own.
         Set(emitted, plan, "Plan", PlanOf(emitted, "Pro"));
@@ -333,12 +317,11 @@ public partial class HowARequestIsCheckedDocsExampleTests
         var emitted = Run().Emit();
         var plan = emitted.New("Examples.Tenancy.PlanOfTheTest")!;
         var permission = emitted.New("Examples.Tenancy.PermissionOfTheTest")!;
-        var tenancy = emitted.New("Examples.Tenancy.TenancyOfTheTest")!;
-        using var provider = Services(emitted, plan, permission, tenancy, withPlanCheck: true);
+        using var provider = Services(emitted, plan, permission, withPlanCheck: true);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
-        // The new sign-in, an operator or an anonymous caller: nobody in the tenant, so no tenant's plan to learn.
-        Set(emitted, tenancy, "Seated", false);
+        // The new sign-in, an operator or an anonymous caller: nobody in the tenant, as outside any seat begun, so no
+        // tenant's plan to learn.
         Set(emitted, plan, "Plan", PlanOf(emitted, "Free"));
         Refusal(provider, emitted, export).Code.Should().Be("tenancy.not-seated", "the caller's own reason comes before anything is read");
         emitted.Property(plan, "Asked").Should().Be(0, "a caller who is nobody in the tenant learns nothing of its plan");
@@ -349,7 +332,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
     public void A_module_that_forgets_its_check_has_the_request_stopped_with_the_registration_named()
     {
         var emitted = Run().Emit();
-        using var provider = Services(emitted, emitted.New("Examples.Tenancy.PlanOfTheTest")!, emitted.New("Examples.Tenancy.PermissionOfTheTest")!, emitted.New("Examples.Tenancy.TenancyOfTheTest")!, withPlanCheck: false);
+        using var provider = Services(emitted, emitted.New("Examples.Tenancy.PlanOfTheTest")!, emitted.New("Examples.Tenancy.PermissionOfTheTest")!, withPlanCheck: false);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
         FluentActions.Invoking(() => Require(provider, emitted, export))
@@ -529,8 +512,11 @@ public partial class HowARequestIsCheckedDocsExampleTests
         return host.WithAssemblyName("Examples.Tenancy").WithTenancy().WithMembershipAlone().WithMediator().RunCore();
     }
 
-    /// <summary>The module of the boards with its check, or without it, beside the test's stand-ins for Tenancy and its check.</summary>
-    private static ServiceProvider Services(EmittedAssembly emitted, object plan, object permission, object tenancy, bool withPlanCheck)
+    /// <summary>
+    /// The module of the boards with its check, or without it, beside the access manager the generator wrote for the
+    /// project's line and the test's stand-in for Tenancy's check.
+    /// </summary>
+    private static ServiceProvider Services(EmittedAssembly emitted, object plan, object permission, bool withPlanCheck)
     {
         var services = new ServiceCollection();
         if (withPlanCheck)
@@ -540,12 +526,22 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
         services.AddSingleton(emitted.Type("Examples.Tenancy.ITenantPlans"), plan);
         services.AddSingleton(emitted.Type("Examples.Tenancy.PermissionOfTheTest"), permission);
-        services.AddSingleton(tenancy.GetType().GetInterfaces().Single(each => each.Name.StartsWith("ITenancy", StringComparison.Ordinal)), tenancy);
+        services.AddSingleton(DDDToolkit.Supporting.Tenancy.Catalogue.TenancyCatalogue.Build(new DDDToolkit.Supporting.Tenancy.Catalogue.ApplicationCatalogue(), []));
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped(emitted.Type("Examples.Tenancy.TenancyAccessManager"));
         typeof(AccessCheckServiceCollectionExtensions).GetMethod(nameof(AccessCheckServiceCollectionExtensions.AddAccessCheck))!
             .MakeGenericMethod(emitted.Type("Examples.Tenancy.IBoardsRequest"), emitted.Type("Examples.Tenancy.PermissionCheckOfTheTest"))
             .Invoke(null, [services]);
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+    }
+
+    /// <summary>Makes a seat of <paramref name="tenant"/> the Tenancy caller until disposed, as tenant selection does for a request.</summary>
+    private static IDisposable AsSeatOf(EmittedAssembly emitted, object tenant)
+    {
+        var caller = typeof(TenancyCaller<,>).MakeGenericType(emitted.Type("Examples.Tenancy.TenantId"), emitted.Type("Examples.Tenancy.SeatId"));
+        var seat = emitted.New("Examples.Tenancy.SeatId", Guid.NewGuid());
+        return TenancyCallers.Begin((ITenancyCaller)caller.GetMethod("InSeat")!.Invoke(null, [tenant, seat])!);
     }
 
     /// <summary>Asks the boards' checks about <paramref name="request"/> in a scope of its own, and throws what they throw.</summary>

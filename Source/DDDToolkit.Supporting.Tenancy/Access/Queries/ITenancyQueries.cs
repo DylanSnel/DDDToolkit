@@ -3,9 +3,9 @@ using DDDToolkit.Abstractions.Interfaces;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// What the current caller may do, asked over one read source. Made by
-/// <see cref="ITenancy{TTenantId, TSeatId, TUnitId, TRoleId}.In"/>, which fixes the caller and the
-/// moment "now" once, so every answer of one set of queries agrees with the others.
+/// What the current caller may do, asked over one read source. Made by <c>db.Tenancy()</c> over a context, or by
+/// <see cref="TenancyAccessManager{TTenantId, TSeatId, TUnitId, TRoleId}.In"/> over another read source. Either fixes the
+/// caller and the moment "now" once, so every answer of one set of queries agrees with the others.
 /// <para>
 /// The queries are not run here: a module composes them into its own query, where they become subqueries,
 /// or runs them itself. A permission granted at the root holds for the whole tenant; one granted lower down covers
@@ -32,13 +32,13 @@ public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
 
     /// <summary>
     /// Every pair of a unit and a permission of <paramref name="permissions"/> the caller holds there now: for each permission, the
-    /// units it is held at and every unit below them. It is <see cref="UnitsWhereIHold"/> for several permissions in one
+    /// units it is held at and every unit below them. It is <see cref="UnitsWhereIHold(string)"/> for several permissions in one
     /// query, so a list that shows what the caller may do with each row asks once, not once per permission:
     /// <code>
-    /// var held = queries.WhereIHold(["projects.edit", "projects.close"]);
-    /// var abilities = from project in projects
+    /// var held = db.Tenancy().UnitsWhereIHold(["projects.edit", "projects.close"]);
+    /// var abilities = from project in db.Projects
     ///                 join pair in held on project.UnitId equals pair.Unit
-    ///                 select new { project.Id, pair.Key };
+    ///                 select new { project.Id, pair.Permission };
     /// </code>
     /// <para>
     /// The answer is for showing what a caller can do, a button or a menu. Whether a command may run is still
@@ -49,7 +49,7 @@ public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     /// <exception cref="ArgumentNullException"><paramref name="permissions"/> is null.</exception>
     /// <exception cref="ArgumentException">The catalogue does not know one of <paramref name="permissions"/>: a typo in code.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    IQueryable<UnitPermission<TUnitId>> WhereIHold(IReadOnlyCollection<string> permissions);
+    IQueryable<UnitPermission<TUnitId>> UnitsWhereIHold(IReadOnlyCollection<string> permissions);
 
     /// <summary>The units the caller belongs to: each unit it is placed in, and every unit below it.</summary>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
@@ -71,13 +71,13 @@ public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
 
     /// <summary>
     /// Every pair of one of the tenant's active roles and a permission of <paramref name="permissions"/> it grants:
-    /// <see cref="RolesWithPermission"/> for several permissions in one query.
+    /// <see cref="RolesWithPermission(string)"/> for several permissions in one query.
     /// </summary>
     /// <param name="permissions">Permissions of the catalogue. A retired permission is granted by no role here, and none at all answers nothing.</param>
     /// <exception cref="ArgumentNullException"><paramref name="permissions"/> is null.</exception>
     /// <exception cref="ArgumentException">The catalogue does not know one of <paramref name="permissions"/>.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    IQueryable<RoleWithPermission<TRoleId>> RolePermissions(IReadOnlyCollection<string> permissions);
+    IQueryable<RoleWithPermission<TRoleId>> RolesWithPermission(IReadOnlyCollection<string> permissions);
 
     /// <summary>Every live permission the caller holds now that reaches <paramref name="unit"/>, each once. A retired permission is never among them.</summary>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>

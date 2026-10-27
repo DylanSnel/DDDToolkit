@@ -33,13 +33,13 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// caller it begins ends with the query.
 /// </para>
 /// </summary>
-public static class TenancySystemReads
+internal static class TenancySystemReads
 {
     /// <summary>
     /// The ids of the tenants a round of system work visits: the active and the suspended ones, in no order. A
-    /// loop of any module asks this first, outside any tenant, and then begins its own system work in each
-    /// tenant in turn (<see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>,
-    /// in its own scope). The ids are all it learns here: they name no person and no row.
+    /// loop of any module asks the access manager, <see cref="TenancyAccessManager{TTenantId, TSeatId, TUnitId, TRoleId}.TenantsToSweepAsync"/>,
+    /// which reads it here, outside any tenant, and then begins its own system work in each tenant in turn, in its
+    /// own scope. The ids are all it learns here: they name no person and no row.
     /// <para>
     /// Where the database keeps the rights, the read runs as <c>Caller.SystemIn(<paramref name="scope"/>)</c> in
     /// no tenant and asks the database's function <see cref="TenancyFunctionNames.TenantsToSweep"/>, which
@@ -62,7 +62,7 @@ public static class TenancySystemReads
     /// <paramref name="context"/> is not Tenancy's: its model does not map the tenants; or it was not made by the
     /// application's services.
     /// </exception>
-    public static Task<IReadOnlyList<TTenantId>> TenantsToSweepAsync<TTenant, TTenantId>(DbContext context, string scope, CancellationToken cancellationToken)
+    internal static Task<IReadOnlyList<TTenantId>> TenantsToSweepAsync<TTenant, TTenantId>(DbContext context, string scope, CancellationToken cancellationToken)
         where TTenant : TenantAggregate<TTenantId>
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     {

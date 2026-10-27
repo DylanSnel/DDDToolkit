@@ -66,7 +66,7 @@ public static class ProjectsInfrastructure
         // or is an operator. The package's check for those cases, added for this module's request interface and
         // over this module's context, which maps Tenancy's read model. Projects declares none of Tenancy's classes,
         // so the application's four ids are written out, as where the read model is mapped.
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>();
+        services.AddTenancyAccess<IProjectsRequest, ProjectsContext>();
 
         // The projects as the Membership package keeps them, over this module's context, with the projects' rules:
         // the access questions about a project, answered inside this context's statements, and the admission of a
@@ -75,7 +75,7 @@ public static class ProjectsInfrastructure
         // none of Tenancy's classes, so the ids that class cannot be given are written out. Then the package's
         // check, for a permission held on a project, added for this module's request interface: who may change a crew,
         // or name an owner, is still what each command requires, here and in the database alike.
-        services.AddProjectMembershipWithTenancy<ProjectsContext, TenantId, OrganizationUnitId, RoleId>(membership.Rules);
+        services.AddProjectMembershipWithTenancy<ProjectsContext>(membership.Rules);
         services.AddProjectMemberAccess<IProjectsRequest>();
 
         // The Membership package's start-up check: the database answers the projects' membership as the rules

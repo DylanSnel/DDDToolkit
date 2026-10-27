@@ -930,6 +930,8 @@ global using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 global using Harbor.Boards.Domain.Aggregates.Boards;
 global using Harbor.Tenancy.Contracts.ValueObjects;
 global using Mediator;
+
+[assembly: DDDToolkit.Supporting.Tenancy.TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]
 ```
 
 **The application's registration.** **Why:** the generator writes the behavior next to `IBoardsRequest`, in this
@@ -977,10 +979,10 @@ public static class BoardsInfrastructure
             .UseDDDToolkit(provider));
 
         // Tenancy's checks for Boards' requests: in the tenant, a permission at a unit or for the whole tenant.
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBoardsRequest, BoardsContext>();
+        services.AddTenancyAccess<IBoardsRequest, BoardsContext>();
 
         // The boards with their members, joined to Tenancy, and Membership's check for a permission on a board.
-        services.AddBoardMembershipWithTenancy<BoardsContext, TenantId, OrganizationUnitId, RoleId>(BoardMembership.Rules);
+        services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules);
         services.AddBoardMemberAccess<IBoardsRequest>();
         services.AddMembershipPostgres();
         return services;
@@ -1236,10 +1238,10 @@ public static class BoardsInfrastructure
             .UseDDDToolkit(provider));
 
         // Tenancy's checks for Boards' requests: in the tenant, a permission at a unit or for the whole tenant.
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBoardsRequest, BoardsContext>();
+        services.AddTenancyAccess<IBoardsRequest, BoardsContext>();
 
         // The boards with their members, joined to Tenancy, and Membership's check for a permission on a board.
-        services.AddBoardMembershipWithTenancy<BoardsContext, TenantId, OrganizationUnitId, RoleId>(BoardMembership.Rules);
+        services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules);
         services.AddBoardMemberAccess<IBoardsRequest>();
         services.AddMembershipPostgres();
 
@@ -1262,16 +1264,16 @@ public sealed record OpenBoard([AtUnit] OrganizationUnitId Unit, string Name) : 
 
 public sealed class OpenBoardHandler(
     IBoardRepository boards,
-    ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy,
+    TenancyAccessManager access,
     TimeProvider clock) : ICommandHandler<OpenBoard, BoardId>
 {
     public async ValueTask<BoardId> Handle(OpenBoard command, CancellationToken cancellationToken)
     {
         // The caller's tenant and seat: the board is the tenant's, and the caller owns it.
-        var scope = tenancy.RequireTenant();
+        var scope = access.CurrentTenant.Require();
         var owner = scope.Seat ?? throw new InvalidOperationException("A board is opened by a seat.");
 
-        var board = new Board(BoardId.Create(), scope.Tenant, command.Unit, command.Name, owner, clock.GetUtcNow());
+        var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, owner, clock.GetUtcNow());
         boards.Add(board);
         await boards.SaveAsync(cancellationToken);
         return board.Id;
@@ -1579,10 +1581,10 @@ public static class BoardsInfrastructure
             .UseDDDToolkit(provider));
 
         // Tenancy's checks for Boards' requests: in the tenant, a permission at a unit or for the whole tenant.
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBoardsRequest, BoardsContext>();
+        services.AddTenancyAccess<IBoardsRequest, BoardsContext>();
 
         // The boards with their members, joined to Tenancy, and Membership's check for a permission on a board.
-        services.AddBoardMembershipWithTenancy<BoardsContext, TenantId, OrganizationUnitId, RoleId>(BoardMembership.Rules);
+        services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules);
         services.AddBoardMemberAccess<IBoardsRequest>();
         services.AddMembershipPostgres();
 
@@ -1608,12 +1610,12 @@ public sealed record SetUpBoardRoles : ICommand<int>, IBoardsRequest;
 
 public sealed class SetUpBoardRolesHandler(
     IBoardRoleRepository roles,
-    ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy) : ICommandHandler<SetUpBoardRoles, int>
+    TenancyAccessManager access) : ICommandHandler<SetUpBoardRoles, int>
 {
     public async ValueTask<int> Handle(SetUpBoardRoles command, CancellationToken cancellationToken)
     {
         // The starter roles this tenant does not have yet; a role made from one before is not made again.
-        var tenant = tenancy.RequireTenant().Tenant;
+        var tenant = access.CurrentTenant.Require().Id;
         var missing = StarterRoles.Missing(BoardMembership.Rules, await roles.ListAsync(cancellationToken));
         foreach (var draft in missing)
         {
@@ -1662,7 +1664,7 @@ public sealed record AddMember([OnResource] BoardId Board, SeatId Seat, BoardRol
 public sealed class AddMemberHandler(
     IBoardRepository boards,
     MemberAdmission<BoardId, SeatId, BoardRoleId> admission,
-    ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy,
+    TenancyAccessManager access,
     TimeProvider clock) : ICommandHandler<AddMember>
 {
     public async ValueTask<Unit> Handle(AddMember command, CancellationToken cancellationToken)
@@ -1674,7 +1676,7 @@ public sealed class AddMemberHandler(
         var board = await boards.FindAsync(command.Board, cancellationToken)
             ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
         var now = clock.GetUtcNow();
-        board.AddMember(command.Seat, command.Role, MemberPeriod.Open(now), now, addedBy: tenancy.RequireTenant().Seat);
+        board.AddMember(command.Seat, command.Role, MemberPeriod.Open(now), now, addedBy: access.CurrentTenant.Require().Seat);
         await boards.SaveAsync(cancellationToken);
         return Unit.Value;
     }

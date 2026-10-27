@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Access;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Examples.Tenancy.Host.Access;
@@ -14,7 +15,7 @@ public sealed class SeatRequirementHandler : AuthorizationHandler<SeatRequiremen
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (SeatRequirement.RefusalFor(TenancyUseCases.CurrentCaller()) is { } refusal)
+        if (SeatRequirement.RefusalFor(TenancyCallers.Ambient) is { } refusal)
         {
             context.Fail(new AuthorizationFailureReason(this, refusal.Code));
         }

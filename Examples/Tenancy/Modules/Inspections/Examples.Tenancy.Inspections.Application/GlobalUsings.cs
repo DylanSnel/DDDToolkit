@@ -14,11 +14,7 @@ global using Examples.Tenancy.Projects.Contracts.ValueObjects;
 global using Examples.Tenancy.Shared.Domain.ValueObjects;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 
-// Tenancy, closed over the application's ids: the tenant the caller works in, and its seat. An alias is
-// global only in the project that declares it, and reads its target as if no other using existed, hence the full
-// names.
-global using SampleTenancy = DDDToolkit.Supporting.Tenancy.Access.ITenancy<
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;
+// Which of the ids this module sees are Tenancy's, once: the generator writes TenancyAccessManager into this project,
+// closed over them, for the tenant the caller works in and its seat, and the infrastructure project's
+// AddTenancyAccess<IInspectionsRequest, InspectionsContext>().
+[assembly: DDDToolkit.Supporting.Tenancy.TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]

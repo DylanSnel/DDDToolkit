@@ -99,7 +99,7 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
             database,
 
             // A module that only asks Tenancy declares none of its classes, and writes the four ids out.
-            configure: registered => registered.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, WidgetContext>(),
+            configure: registered => registered.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, WidgetContext>(),
             contexts: options => options.AddInterceptors(recorder));
         var request = new OfWidgetsDeclaring(ManagesSeats);
 

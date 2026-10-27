@@ -68,7 +68,7 @@ public sealed class OpenProjectHandler(
     IProjectReads reads,
     ProjectTenancy organization,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    SampleTenancy tenancy,
+    TenancyAccessManager tenancy,
     TimeProvider clock)
     : ICommandHandler<OpenProject, ProjectId>
 {
@@ -83,7 +83,7 @@ public sealed class OpenProjectHandler(
     {
         // The unit the command names, which is the one its access check asked about.
         var unit = command.UnitId;
-        var scope = tenancy.RequireTenant();
+        var scope = tenancy.CurrentTenant.Require();
 
         // The id is nobody's to choose through a client: only work the application does itself knows one beforehand.
         if (command.Id is not null && !scope.BySystem)
@@ -110,7 +110,7 @@ public sealed class OpenProjectHandler(
             throw ProjectRefusals.Refuse(ProjectRefusals.NumberTaken, ("Number", number));
         }
 
-        var opened = new Project(command.Id ?? ProjectId.Create(), scope.Tenant, number, command.Name, unit, owner, clock.GetUtcNow(), command.Planned);
+        var opened = new Project(command.Id ?? ProjectId.Create(), scope.Id, number, command.Name, unit, owner, clock.GetUtcNow(), command.Planned);
         store.Add(opened);
         await store.SaveAsync(cancellationToken);
         return opened.Id;

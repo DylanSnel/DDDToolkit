@@ -758,7 +758,15 @@ public sealed class LayerReferenceTests
     /// host may name those.
     /// </summary>
     private static bool IsServiceOfAModule(Type type)
-        => HostRegistrations.Services.Contains(type) && SampleLayout.Holds(type.Assembly.GetName().Name!);
+        => HostRegistrations.Services.Contains(type) && SampleLayout.Holds(type.Assembly.GetName().Name!) && !IsTheAccessManager(type);
+
+    /// <summary>
+    /// Whether <paramref name="type"/> is the access manager: the package's class, which the generator closed over the
+    /// Tenants module's ids in its domain project. It answers who acts and begins the work that is not a caller's own,
+    /// as the host's seeding does; it is the package's, and no way round a module's check.
+    /// </summary>
+    private static bool IsTheAccessManager(Type type)
+        => type.BaseType is { IsGenericType: true } parent && parent.GetGenericTypeDefinition() == typeof(DDDToolkit.Supporting.Tenancy.Access.TenancyAccessManager<,,,>);
 
     /// <summary>Whether <paramref name="type"/> is a use-case class of the Tenancy package that the host registers.</summary>
     private static bool IsUseCaseOfThePackage(Type type)

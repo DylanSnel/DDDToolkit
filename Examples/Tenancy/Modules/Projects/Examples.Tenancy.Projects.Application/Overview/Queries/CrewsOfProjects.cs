@@ -40,7 +40,7 @@ public sealed record ProjectCrew(IReadOnlyList<CrewOverview> Members, IReadOnlyL
 /// <param name="reads">Where projects are read: a context per query.</param>
 /// <param name="access">Who reaches which project.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller: its seat, whose own roles are answered.</param>
-public sealed class CrewsOfProjectsHandler(IProjectReads reads, ProjectAccess access, SampleTenancy tenancy) : IQueryHandler<CrewsOfProjects, IReadOnlyDictionary<ProjectId, ProjectCrew>>
+public sealed class CrewsOfProjectsHandler(IProjectReads reads, ProjectAccess access, TenancyAccessManager tenancy) : IQueryHandler<CrewsOfProjects, IReadOnlyDictionary<ProjectId, ProjectCrew>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException"><c>projects.too-many-ids</c>, with <c>Max</c>.</exception>
@@ -59,8 +59,7 @@ public sealed class CrewsOfProjectsHandler(IProjectReads reads, ProjectAccess ac
         var crews = await reading.CrewsOfAsync(projects, see, manage, cancellationToken);
 
         // Only a seat is on a crew: system work that acts for a seat holds no role of its own.
-        var caller = tenancy.Caller;
-        SeatId? mine = caller.Kind == TenancyCallerKind.Seat ? caller.Seat : null;
+        SeatId? mine = tenancy.CurrentUser.IsSystem ? null : tenancy.CurrentTenant.Seat;
 
         // The caller's own roles are read from what the reading returned, before the roles of a crew the caller
         // does not manage are left out of its members.

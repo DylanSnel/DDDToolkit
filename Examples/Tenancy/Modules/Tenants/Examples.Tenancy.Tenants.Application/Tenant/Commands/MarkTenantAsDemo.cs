@@ -11,7 +11,7 @@ namespace Examples.Tenancy.Tenants.Application.Tenant.Commands;
 /// <see cref="Domain.Aggregates.Tenants.Tenant.IsDemo"/> is state the application adds to the package's tenant, so
 /// no use case of the package sets it. Nobody in a tenant decides that their tenant is a demonstration; whoever
 /// seeds one does, and no route sends it. The seeding sends it as system work in the tenant it marks, begun around
-/// the send, <c>TenancyUseCases.BeginSystemIn(tenant)</c>: system work is that scope, not a requirement of the
+/// the send, <c>access.BeginSystemIn(tenant)</c>: system work is that scope, not a requirement of the
 /// request. Who may send it is a caller in the tenant, <c>[InTenant]</c>, which lets that system work through, and
 /// the handler says what only system work may do: every seat is refused there, whatever it holds,
 /// <c>access.system-only</c>.
@@ -32,20 +32,20 @@ public sealed record MarkTenantAsDemo : ICommand, ITenantsRequest;
 /// </remarks>
 /// <param name="store">Where Tenancy's aggregates are loaded and saved: one unit of work per request.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller, for the tenant it works in.</param>
-public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, SampleTenancy tenancy) : ICommandHandler<MarkTenantAsDemo>
+public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, TenancyAccessManager tenancy) : ICommandHandler<MarkTenantAsDemo>
 {
     /// <inheritdoc />
     /// <exception cref="RefusalException"><c>access.system-only</c> for a seat, whatever it holds.</exception>
     /// <exception cref="InvalidOperationException">The tenant the caller works in is not there: it was never provisioned.</exception>
     public async ValueTask<Unit> Handle(MarkTenantAsDemo command, CancellationToken cancellationToken)
     {
-        var scope = tenancy.RequireTenant();
+        var scope = tenancy.CurrentTenant.Require();
         if (!scope.BySystem)
         {
             throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
         }
 
-        var tenant = scope.Tenant;
+        var tenant = scope.Id;
         var marked = await store.FindTenantAsync(tenant, cancellationToken)
             ?? throw new InvalidOperationException($"The tenant {tenant} is not there to mark: provision it first.");
 

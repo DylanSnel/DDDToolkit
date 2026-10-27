@@ -23,7 +23,7 @@ public static class SampleTenants
     public static async Task<TenancyUseCases.ProvisionedTenant> ProvisionAsync(SampleFactory host, string slug, string name)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyUseCases.BeginSystem())
+        using (SampleAccess.Manager.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
@@ -46,7 +46,7 @@ public static class SampleTenants
     public static async Task<TResponse> SendAsSystemAsync<TResponse>(SampleFactory host, TenantId tenant, ICommand<TResponse> command)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyUseCases.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
@@ -57,7 +57,7 @@ public static class SampleTenants
     public static async Task SendAsSystemAsync(SampleFactory host, TenantId tenant, ICommand command)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyUseCases.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
@@ -68,7 +68,7 @@ public static class SampleTenants
     public static async Task<TResponse> AskAsSystemAsync<TResponse>(SampleFactory host, TenantId tenant, IQuery<TResponse> query)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyUseCases.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ISender>().Send(query, Cancellation);

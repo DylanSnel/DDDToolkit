@@ -23,12 +23,12 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <c>AddTenancyAccess</c>, never the check.
 /// </para>
 /// </remarks>
-/// <param name="tenancy">Tenancy, asked about the current caller.</param>
+/// <param name="access">Tenancy's access manager, asked about the current caller and for the queries over the context.</param>
 /// <param name="options">Which token roles are operators'.</param>
 /// <param name="callers">Who is calling, as the toolkit says: what says whether the caller is an operator.</param>
 /// <param name="services">The services of the scope the check runs in, for the context a permission is asked over.</param>
 internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, TContext>(
-    ITenancy<TTenantId, TSeatId, TUnitId, TRoleId> tenancy,
+    TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId> access,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
     ICallerAccessor callers,
     IServiceProvider services) : IAccessCheck
@@ -55,12 +55,12 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
         switch (requirement)
         {
             case TenancyRequirement.InTenant:
-                tenancy.RequireTenant();
+                access.CurrentTenant.Require();
                 break;
 
             case TenancyRequirement.AtTenant required:
                 // The caller before anything is opened: nobody is refused as nobody, without a context made for it.
-                tenancy.RequireTenant();
+                access.CurrentTenant.Require();
                 if (!await HoldsAtTenantAsync(required.Permission, cancellationToken).ConfigureAwait(false))
                 {
                     throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission));
@@ -70,7 +70,7 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
 
             case TenancyRequirement.AtUnit<TUnitId> required:
                 // As for the whole tenant: the caller first, then one statement.
-                tenancy.RequireTenant();
+                access.CurrentTenant.Require();
                 if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken).ConfigureAwait(false))
                 {
                     throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission), ("Unit", required.Unit));
@@ -108,13 +108,17 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
     {
         if (services.GetService<IDbContextFactory<TContext>>() is not { } contexts)
         {
-            return await ask(tenancy.In(services.GetRequiredService<TContext>())).ConfigureAwait(false);
+            return await ask(QueriesOver(services.GetRequiredService<TContext>())).ConfigureAwait(false);
         }
 
         var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (context.ConfigureAwait(false))
         {
-            return await ask(tenancy.In(context)).ConfigureAwait(false);
+            return await ask(QueriesOver(context)).ConfigureAwait(false);
         }
     }
+
+    /// <summary>Tenancy's queries for the current caller over <paramref name="context"/>, at this moment.</summary>
+    private ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> QueriesOver(TContext context)
+        => access.In(new EfTenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>(context), EfQueryExecutor.Instance);
 }

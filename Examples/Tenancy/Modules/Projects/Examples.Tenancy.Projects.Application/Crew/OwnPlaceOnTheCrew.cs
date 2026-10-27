@@ -1,5 +1,3 @@
-using DDDToolkit.Supporting.Tenancy.Access;
-
 namespace Examples.Tenancy.Projects.Application.Crew;
 
 /// <summary>
@@ -26,8 +24,8 @@ namespace Examples.Tenancy.Projects.Application.Crew;
 /// there, its own place or not.
 /// </para>
 /// <para>
-/// The work names neither of Tenancy's ids: this module sees only the ids, not the classes Tenancy is closed over,
-/// and C# infers both from the tenant and the seat it is begun for.
+/// The work names neither of Tenancy's ids: it is begun on the module's access manager, which the generator closed over
+/// the ids the module's line names.
 /// </para>
 /// <para>
 /// What was checked is one change to one project, so that is all such a save may write: the two commands save
@@ -55,10 +53,14 @@ internal static class OwnPlaceOnTheCrew
     /// </summary>
     /// <param name="command">The command being handled, the very one its handler was handed.</param>
     /// <param name="seat">The seat whose role is taken, or that is taken off the crew.</param>
-    /// <param name="caller">The tenant the caller acts in, and its seat.</param>
+    /// <param name="tenancy">Who acts, and in which tenant: the module's access manager, which begins the work.</param>
     /// <returns>What ends the work when disposed; <see langword="null"/> when the save runs as the caller.</returns>
-    public static IDisposable? BeginSave(IProjectsRequest command, SeatId seat, TenantInScope<TenantId, SeatId> caller)
-        => caller.Seat == seat && !caller.BySystem && ReferenceEquals(RequestInHand.Current?.Request, command)
-            ? TenancyWork.BeginSystemIn(caller.Tenant, seat, Scope)
+    /// <exception cref="Exceptions.RefusalException">The caller is nobody; the refusal is the one it was given.</exception>
+    public static IDisposable? BeginSave(IProjectsRequest command, SeatId seat, TenancyAccessManager tenancy)
+    {
+        var caller = tenancy.CurrentTenant.Require();
+        return caller.Seat == seat && !caller.BySystem && ReferenceEquals(RequestInHand.Current?.Request, command)
+            ? tenancy.BeginSystemIn(caller.Id, seat, Scope)
             : null;
+    }
 }

@@ -24,6 +24,12 @@ namespace DDDToolkit.Analyzers.Tests.Generation;
 /// <c>[assembly: TemplateFacadeName]</c>. Two modules that each declare the classes get two classes of one name, which
 /// meet in a project that sees both: DDD00075 says so there, with the line that names one of them.
 /// </para>
+/// <para>
+/// Tenancy asks for a second class as well, its access manager, <c>TenancyAccessManager</c>, closed over the ids, which
+/// is held to the same rules. These tests are about the use cases' class; where something is said of both, they read
+/// what is said of that one (<see cref="About"/>), and the access manager's own tests are with the class the container
+/// makes, below.
+/// </para>
 /// </summary>
 public class TemplateFacadeTests
 {
@@ -115,6 +121,16 @@ public class TemplateFacadeTests
     /// <summary>The line an application names Tenancy's use cases with, in place of the package's name.</summary>
     private static string NamedItself(string name, string facade = Default)
         => "[assembly: DDDToolkit.Abstractions.Attributes.TemplateFacadeName(\"" + facade + "\", \"" + name + "\")]\n";
+
+    /// <summary>The access manager's name when nobody names it: Tenancy's class's, without its type parameters.</summary>
+    private const string AccessManager = "TenancyAccessManager";
+
+    /// <summary>
+    /// The one diagnostic of <paramref name="id"/> said of the class called <paramref name="name"/>, the use cases' unless
+    /// said otherwise: Tenancy asks for its access manager too, and what keeps one out often keeps both.
+    /// </summary>
+    private static Diagnostic About(IEnumerable<Diagnostic> diagnostics, string id, string name = Default)
+        => diagnostics.Where(diagnostic => diagnostic.Id == id && diagnostic.GetMessage().Contains("'" + name + "'", StringComparison.Ordinal)).Should().ContainSingle().Subject;
 
     /// <summary>The snippet without these lines: a class left out of <see cref="Classes"/>, its attribute and its declaration.</summary>
     private static string Without(string source, params string[] lines)
@@ -338,7 +354,7 @@ public class TemplateFacadeTests
             .Run([.. GeneratorTestHost.CoreGenerators(), new DescribesGenerator()]);
 
         domain.ShouldCompile();
-        domain.HintNames.Should().NotContain("TemplateFacade");
+        domain.HintNames.Should().NotContain(Default + ".TemplateFacade");
         domain.ReportedDiagnostics.Should().BeEmpty("the alias is the application's own way of naming the classes");
         domain.ShouldContain("SeatOverviewType.Describes", "// resolved");
         domain.ShouldContain("SeatOverviewType.Describes", "typeof(global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<global::Shop.Domain.Tenant, ");
@@ -414,8 +430,10 @@ public class TemplateFacadeTests
         var first = OrganizationProject()(Project("namespace Shop.Organization; public sealed class Nothing;")).WithAssemblyName("Shop.Organization").RunCore();
         first.ShouldCompile();
         first.HintNames.Should().NotContain("TemplateFacade", "without a seat and a role there is nothing to close over yet");
-        first.ReportedDiagnostics.Should().ContainSingle()
-            .Which.Severity.Should().Be(DiagnosticSeverity.Info, "the first project of a split module is told, and nothing in it is wrong");
+        About(first.ReportedDiagnostics, "DDD00065")
+            .Severity.Should().Be(DiagnosticSeverity.Info, "the first project of a split module is told, and nothing in it is wrong");
+        About(first.ReportedDiagnostics, "DDD00065", AccessManager).Severity.Should().Be(DiagnosticSeverity.Info, "and so it is of the access manager, which takes the seat's id");
+        first.ReportedDiagnostics.Should().HaveCount(2);
 
         var second = Project(PeopleHalf, module: "Shop")
             .WithReferencedProject("Shop.Organization", OrganizationProject())
@@ -471,7 +489,10 @@ public class TemplateFacadeTests
             .RunCore();
 
         host.ShouldCompile();
-        var told = host.GeneratorDiagnostics.Should().ContainSingle().Subject;
+        host.GeneratorDiagnostics.Should().HaveCount(2, "the use cases' class and the access manager each meet the other module's");
+        About(host.GeneratorDiagnostics, "DDD00075", AccessManager).GetMessage().Should().EndWith(
+            "[assembly: TemplateFacadeName(\"TenancyAccessManager\", \"CustomersTenancyAccessManager\")] in 'Customers.Domain'.");
+        var told = About(host.GeneratorDiagnostics, "DDD00075");
         told.Id.Should().Be("DDD00075");
         told.Severity.Should().Be(DiagnosticSeverity.Warning);
         told.Location.GetLineSpan().Path.Should().Be("src/DDDToolkit.Sample/DDDToolkit.Sample.csproj", "no line of the host is wrong, so it is said at the project file");
@@ -491,7 +512,7 @@ public class TemplateFacadeTests
             .RunCore();
 
         host.CompilationErrors.Select(error => error.Id).Should().Contain("CS0433", "the type exists in both modules' domain projects");
-        host.ShouldHaveExactlyDiagnostics("DDD00075");
+        host.ShouldHaveExactlyDiagnostics("DDD00075", "DDD00075");
     }
 
     [Fact]
@@ -499,7 +520,8 @@ public class TemplateFacadeTests
     {
         var host = Project(HandlerOf("Customers", "CustomersTenancyUseCases"))
             .WithSource(HandlerOf("Partners", Default), "Partners.cs")
-            .WithReferencedProject("Customers.Domain", project => ModuleOfItsOwn("Customers")(project).WithSource(NamedItself("CustomersTenancyUseCases"), "Named.cs"))
+            .WithReferencedProject("Customers.Domain", project => ModuleOfItsOwn("Customers")(project)
+                .WithSource(NamedItself("CustomersTenancyUseCases") + NamedItself("CustomersAccess", AccessManager), "Named.cs"))
             .WithReferencedProjectBeside("Partners.Domain", ModuleOfItsOwn("Partners"))
             .RunCore();
 
@@ -528,13 +550,14 @@ public class TemplateFacadeTests
         partners.ShouldHaveGenerated("TenancyUseCases.TemplateFacade");
         TypeOf(partners, "Host.Partners.SeatsOfMine", "Seats").ContainingType!.TypeArguments[0].ToDisplayString().Should().Be("Partners.Domain.Tenant", "the module's own code names its own module's classes");
         partners.CompilationDiagnostics.Select(diagnostic => diagnostic.Id).Should().Contain("CS0436", "the compiler says which of the two it took");
-        var told = partners.ShouldHaveDiagnostic("DDD00075", at: "Tenant");
+        partners.ShouldHaveDiagnostic("DDD00075", at: "Tenant");
+        var told = About(partners.ReportedDiagnostics, "DDD00075");
         told.Severity.Should().Be(DiagnosticSeverity.Warning);
         told.GetMessage().Should().Be(
             "'TenancyUseCases' is the name of more than one class in this project: it gets one for the module Partners, which its own code names, and sees "
             + "the one 'Customers.Domain' has for the module Customers, which every project above it sees beside it. Give one of them a name of its own, "
             + "with [assembly: TemplateFacadeName(\"TenancyUseCases\", \"PartnersTenancyUseCases\")] in this project.");
-        partners.Count("DDD00075").Should().Be(1, "the project file is not told the same again");
+        partners.Count("DDD00075").Should().Be(2, "once for each class, the use cases' and the access manager, and the project file is not told the same again");
 
         // A project above sees both, is told at its project file, and cannot name either: nothing there is closed over
         // the wrong module's classes without a word.
@@ -543,13 +566,13 @@ public class TemplateFacadeTests
             .WithReferencedProject("Partners.Domain", ModuleOfItsOwn("Partners"))
             .RunCore();
         above.CompilationErrors.Select(error => error.Id).Should().Contain("CS0433", "the type exists in both modules' domain projects");
-        above.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00075")
-            .Which.Location.GetLineSpan().Path.Should().Be("src/DDDToolkit.Sample/DDDToolkit.Sample.csproj", "no line of the project above is wrong");
+        About(above.ReportedDiagnostics, "DDD00075")
+            .Location.GetLineSpan().Path.Should().Be("src/DDDToolkit.Sample/DDDToolkit.Sample.csproj", "no line of the project above is wrong");
 
         var named = Project(HandlerOf("Partners", "PartnersTenancyUseCases"))
             .WithAssemblyName("Partners.Domain")
             .WithSource(ModuleAttribute("Partners"), "Module.cs")
-            .WithSource(NamedItself("PartnersTenancyUseCases"), "Named.cs")
+            .WithSource(NamedItself("PartnersTenancyUseCases") + NamedItself("PartnersAccess", AccessManager), "Named.cs")
             .WithSource(Ids.Replace("Shop.Contracts", "Partners.Contracts"), "Ids.cs")
             .WithSource(Classes.Replace("Shop.Contracts", "Partners.Contracts").Replace("Shop.Domain", "Partners.Domain"), "Classes.cs")
             .WithReferencedProject("Customers.Domain", ModuleOfItsOwn("Customers"))
@@ -569,7 +592,7 @@ public class TemplateFacadeTests
             .RunCore();
 
         host.ShouldCompile();
-        host.GeneratorDiagnostics.Should().ContainSingle().Which.GetMessage().Should().Contain(
+        About(host.GeneratorDiagnostics, "DDD00075").GetMessage().Should().Contain(
             "'Customers.Domain' has for the module Customers, the one 'Partners.Domain' has for the module Partners and the one 'Suppliers.Domain' has "
             + "for the module Suppliers. Give each of them but one a name of its own");
     }
@@ -581,7 +604,8 @@ public class TemplateFacadeTests
         // application named that module's class: the package asks for its own types, and the host gets its own class
         // under the package's name, and no second one under the name the other project chose.
         var host = Project(HandlerOf("Customers", "CustomersUseCases"))
-            .WithReferencedProject("Customers.Domain", project => ModuleOfItsOwn("Customers")(project).WithSource(NamedItself("CustomersUseCases"), "Named.cs"))
+            .WithReferencedProject("Customers.Domain", project => ModuleOfItsOwn("Customers")(project)
+                .WithSource(NamedItself("CustomersUseCases") + NamedItself("CustomersAccess", AccessManager), "Named.cs"))
             .WithSource(Ids.Replace("Shop.Contracts", "Partners.Contracts"), "Ids.cs")
             .WithSource(Classes.Replace("Shop.Contracts", "Partners.Contracts").Replace("Shop.Domain", "Partners.Domain"), "Classes.cs")
             .WithSource(ModuleAttribute("Partners"), "Module.cs")
@@ -590,7 +614,8 @@ public class TemplateFacadeTests
         host.ShouldCompile();
         host.ReportedDiagnostics.Should().BeEmpty();
         host.ShouldHaveGenerated("TenancyUseCases.TemplateFacade");
-        host.GeneratedSources.Where(source => source.HintName.EndsWith(".TemplateFacade.g.cs", StringComparison.Ordinal)).Should().ContainSingle();
+        host.GeneratedSources.Where(source => source.HintName.EndsWith(".TemplateFacade.g.cs", StringComparison.Ordinal)).Select(source => source.HintName)
+            .Should().Equal(["TenancyAccessManager.TemplateFacade.g.cs", "TenancyUseCases.TemplateFacade.g.cs"], "one of each, under the package's names");
     }
 
     // ------------------------------------------------------------------ what keeps it from being written
@@ -607,12 +632,13 @@ public class TemplateFacadeTests
 
         result.ShouldCompile();
         result.HintNames.Should().NotContain("TemplateFacade");
-        var told = result.ShouldHaveDiagnostic("DDD00065", at: "Tenant");
+        result.ShouldHaveDiagnostic("DDD00065", at: "Tenant");
+        var told = About(result.ReportedDiagnostics, "DDD00065");
         told.Severity.Should().Be(DiagnosticSeverity.Info, "a module still declaring its classes, or split over two projects, is not warned");
         told.GetMessage().Should().Be(
             "'TenancyUseCases' is not written, so no project can name the types nested in TenancyUseCases through it: no class is declared with "
             + "[SeatAggregate], in this project or in a project of the module Shop that it references");
-        result.Count("DDD00065").Should().Be(1);
+        result.Count("DDD00065").Should().Be(2, "once for each class, the access manager takes the seat's id as well");
     }
 
     [Fact]
@@ -702,7 +728,7 @@ public class TemplateFacadeTests
             .RunCore();
 
         result.ShouldCompile();
-        result.HintNames.Should().NotContain("TemplateFacade");
+        result.HintNames.Should().NotContain(Default + ".TemplateFacade");
     }
 
     [Fact]
@@ -738,7 +764,7 @@ public class TemplateFacadeTests
             .RunCore();
 
         result.ShouldCompile();
-        result.HintNames.Should().NotContain("TemplateFacade", "a second type of the name would be the compiler's error");
+        result.HintNames.Should().NotContain(Default + ".TemplateFacade", "a second type of the name would be the compiler's error");
         result.ReportedDiagnostics.Should().BeEmpty("the type is the application's own, and not a class written for another module");
     }
 
@@ -789,7 +815,7 @@ public class TemplateFacadeTests
             .RunCore();
 
         result.ShouldCompile();
-        result.HintNames.Should().NotContain("TemplateFacade");
+        result.HintNames.Should().NotContain(Default + ".TemplateFacade");
         var told = result.ShouldHaveDiagnostic("DDD00065", at: "TenancyUseCases");
         told.Location.GetLineSpan().Path.Should().Be("Settings.cs", "it is said on the type the class would hide");
         told.GetMessage().Should().EndWith(
@@ -860,14 +886,14 @@ public class TemplateFacadeTests
             .WithSource("global using ShopTenancy = " + ClosedOverShop + ";", "GlobalUsings.cs")
             .RunCore();
         aliased.ShouldCompile();
-        aliased.HintNames.Should().NotContain("TemplateFacade");
+        aliased.HintNames.Should().NotContain("ShopTenancy.TemplateFacade");
         aliased.ReportedDiagnostics.Should().BeEmpty();
 
         var hidden = Domain("Shop")(Project("namespace Shop.Settings; public static class ShopTenancy { public const int Mine = 1; }"))
             .WithSource(NamedItself("ShopTenancy"), "Named.cs")
             .RunCore();
         hidden.ShouldCompile();
-        hidden.HintNames.Should().NotContain("TemplateFacade");
+        hidden.HintNames.Should().NotContain("ShopTenancy.TemplateFacade");
         hidden.ShouldHaveDiagnostic("DDD00065", at: "ShopTenancy");
 
         var above = Project(Handler("ShopTenancy"), module: "Shop")
@@ -886,7 +912,7 @@ public class TemplateFacadeTests
             .WithSource(NamedItself("Customers"), "Named.cs")
             .RunCore();
         rooted.ShouldCompile();
-        rooted.HintNames.Should().NotContain("TemplateFacade");
+        rooted.HintNames.Should().NotContain("Customers.TemplateFacade");
         rooted.ShouldHaveDiagnostic("DDD00076", at: "DDDToolkit.Abstractions.Attributes.TemplateFacadeName(\"TenancyUseCases\", \"Customers\")").GetMessage().Should().Be(
             "[assembly: TemplateFacadeName(\"TenancyUseCases\", \"Customers\")] changes nothing: 'Customers' is the name of a namespace this project sees, "
             + "which the class cannot have as well; give another name");
@@ -895,7 +921,7 @@ public class TemplateFacadeTests
             .WithSource(NamedItself("ShopTenancy"), "Named.cs")
             .RunCore();
         typed.ShouldCompile();
-        typed.HintNames.Should().NotContain("TemplateFacade");
+        typed.HintNames.Should().NotContain("ShopTenancy.TemplateFacade");
         typed.ShouldHaveDiagnostic("DDD00076", at: "DDDToolkit.Abstractions.Attributes.TemplateFacadeName(\"TenancyUseCases\", \"ShopTenancy\")").GetMessage().Should().EndWith(
             "changes nothing: 'ShopTenancy' is the name of a type in the global namespace this project sees, which the class cannot have as well; give another name");
     }
@@ -915,14 +941,15 @@ public class TemplateFacadeTests
             .WithSource(NamedItself("SharedTenancy"), "Named.cs")
             .WithReferencedProject("Customers.Domain", project => ModuleOfItsOwn("Customers")(project).WithSource(NamedItself("SharedTenancy"), "Named.cs"))
             .RunCore();
-        partners.ShouldHaveDiagnostic("DDD00075", at: "Tenant").GetMessage().Should().EndWith(
+        partners.ShouldHaveDiagnostic("DDD00075", at: "Tenant");
+        About(partners.ReportedDiagnostics, "DDD00075", "SharedTenancy").GetMessage().Should().EndWith(
             "Give one of them a name of its own, with another name in [assembly: TemplateFacadeName(\"TenancyUseCases\", \"SharedTenancy\")] in this project.");
 
         var host = Project("namespace Host; public sealed class Nothing;")
             .WithReferencedProject("Customers.Domain", project => ModuleOfItsOwn("Customers")(project).WithSource(NamedItself("SharedTenancy"), "Named.cs"))
             .WithReferencedProjectBeside("Partners.Domain", project => ModuleOfItsOwn("Partners")(project).WithSource(NamedItself("SharedTenancy"), "Named.cs"))
             .RunCore();
-        host.GeneratorDiagnostics.Should().ContainSingle().Which.GetMessage().Should().EndWith(
+        About(host.GeneratorDiagnostics, "DDD00075", "SharedTenancy").GetMessage().Should().EndWith(
             "Give one of them a name of its own, with another name in [assembly: TemplateFacadeName(\"TenancyUseCases\", \"SharedTenancy\")] in 'Customers.Domain'.");
 
         var twice = GeneratorTestHost.Create(Package.Replace(", IAudited", string.Empty), "Package.cs")
@@ -945,7 +972,7 @@ public class TemplateFacadeTests
         told.Severity.Should().Be(DiagnosticSeverity.Warning);
         told.GetMessage().Should().Be(
             "[assembly: TemplateFacadeName(\"TenancyUsecases\", \"ShopTenancy\")] changes nothing: no package this project references asks for a class of that "
-            + "name; it can name 'TenancyUseCases'");
+            + "name; it can name 'TenancyAccessManager' and 'TenancyUseCases'");
     }
 
     [Fact]

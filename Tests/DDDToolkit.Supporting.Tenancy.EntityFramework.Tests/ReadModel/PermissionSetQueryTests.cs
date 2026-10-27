@@ -56,7 +56,7 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
         {
             foreach (DbContext context in new DbContext[] { services.TenancyContext(), services.Widgets() })
             {
-                var held = services.Tenancy().In(context).WhereIHold(Keys);
+                var held = context.Tenancy().UnitsWhereIHold(Keys);
 
                 _services.Commands.Reset();
                 (await held.ToListAsync(Cancellation)).Should().BeEquivalentTo(
@@ -71,7 +71,7 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
 
             // Inside a module's own query it is a part of that query: each widget with a permission held where it hangs.
             var widgets = services.Widgets();
-            var pairs = services.Tenancy().In(widgets).WhereIHold(Keys);
+            var pairs = widgets.Tenancy().UnitsWhereIHold(Keys);
             var listed = from widget in widgets.Widgets
                          join pair in pairs on widget.UnitId equals pair.Unit
                          orderby widget.Name, pair.Permission
@@ -100,10 +100,10 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
         {
             foreach (DbContext context in new DbContext[] { services.TenancyContext(), services.Widgets() })
             {
-                var queries = services.Tenancy().In(context);
+                var queries = context.Tenancy();
 
                 _services.Commands.Reset();
-                var roles = await queries.RolePermissions([HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage]).ToListAsync(Cancellation);
+                var roles = await queries.RolesWithPermission([HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage]).ToListAsync(Cancellation);
                 _services.Commands.Count.Should().Be(1, "in " + context.GetType().Name);
                 roles.Should().BeEquivalentTo(
                     new RoleWithPermission<RoleId>[]
@@ -120,7 +120,7 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
 
             // The widgets that hang under North, in one statement of the module's own.
             var widgets = services.Widgets();
-            var under = services.Tenancy().In(widgets).UnitsUnder(_north);
+            var under = widgets.Tenancy().UnitsUnder(_north);
             _services.Commands.Reset();
             (await widgets.Widgets.Where(widget => under.Contains(widget.UnitId)).Select(widget => widget.Name).ToListAsync(Cancellation))
                 .Should().BeEquivalentTo(["at North", "at Coast"]);
@@ -157,12 +157,12 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
         async Task<(List<(OrganizationUnitId Unit, string Key)> Held, List<OrganizationUnitId> Under, List<OrganizationUnitId> UnderOther, List<(RoleId Role, string Key)> Roles)> AskAsync(HostCaller caller)
             => await _services.RunAsync(caller, async services =>
             {
-                var queries = services.Tenancy().In(services.Widgets());
+                var queries = services.Widgets().Tenancy();
                 return (
-                    (await queries.WhereIHold(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Unit, pair.Permission)).ToList(),
+                    (await queries.UnitsWhereIHold(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Unit, pair.Permission)).ToList(),
                     await queries.UnitsUnder(_harbor.RootUnit).ToListAsync(Cancellation),
                     await queries.UnitsUnder(other.RootUnit).ToListAsync(Cancellation),
-                    (await queries.RolePermissions(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Role, pair.Permission)).ToList());
+                    (await queries.RolesWithPermission(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Role, pair.Permission)).ToList());
             });
     }
 

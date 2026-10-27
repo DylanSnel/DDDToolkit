@@ -262,8 +262,9 @@ public class TemplateDefaultsTests
         result.ShouldHaveDiagnostic("DDD00067", at: "TenantId").GetMessage().Should().StartWith(
             "'TenantId' has no public static Create(), and 'Tenant' is declared with [TenantAggregate], whose package makes each new TenantId with TenantId.Create()");
         ParentOf(result, "DDDToolkit.Sample.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<DDDToolkit.Sample.Contracts.TenantId>");
-        result.HintNames.Should().NotContain("TemplateFacade", "the class the use cases are named through is closed over the id");
-        result.CompilationErrors.Should().BeEmpty("nothing closed over the id is written, so the compiler has nothing to say in code nobody wrote");
+        result.HintNames.Should().NotContain("TenancyUseCases.TemplateFacade", "the class the use cases are named through is closed over the id");
+        result.ShouldHaveGenerated("TenancyAccessManager.TemplateFacade");
+        result.CompilationErrors.Should().BeEmpty("nothing that makes a new id is written, so the compiler has nothing to say in code nobody wrote; the access manager makes none");
         result.ShouldNotCrash();
     }
 
@@ -291,7 +292,7 @@ public class TemplateDefaultsTests
         result.ShouldHaveDiagnostic("DDD00067", at: "DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses")
             .Properties.Should().Contain("IdMetadataName", "Shop.Contracts.TenantId");
         ParentOf(result, "Shop.Domain.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<Shop.Contracts.TenantId>");
-        result.HintNames.Should().NotContain("TemplateFacade");
+        result.HintNames.Should().NotContain("TenancyUseCases.TemplateFacade");
         result.CompilationErrors.Should().BeEmpty();
     }
 

@@ -20,5 +20,5 @@ internal static class ActingSeat
     public static SeatId From(TenantInScope<TenantId, SeatId> scope)
         => scope.Seat
             ?? throw new InvalidOperationException(
-                "System work records an inspection for the seat it acts for: begin it with TenancyWork.BeginSystemIn(tenant, actingSeat).");
+                "System work records an inspection for the seat it acts for: begin it with access.BeginSystemIn(tenant, actingSeat).");
 }

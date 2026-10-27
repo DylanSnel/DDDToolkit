@@ -103,7 +103,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             // It finds no project to change, so one is put before it: loaded as harbor's own work, which reads
             // harbor's rows, and changed and saved once that work has ended and the system caller is all there is.
             Project pier;
-            using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+            using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
             {
                 pier = await projects.Projects.AsTracking().SingleAsync(project => project.Id == pierSeven.Id, Cancellation);
             }
@@ -124,7 +124,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         var host = onPostgres.Host;
         var gardenShed = Meadow.ProjectNamed("Garden shed");
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             // It reads all of harbor, and nothing of meadow.
             await using (var scope = host.Services.CreateAsyncScope())
@@ -145,7 +145,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             {
                 var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
                 Project shed;
-                using (TenancyUseCases.BeginSystemIn(Meadow.Id, Meadow.Administrator.Id))
+                using (SampleAccess.Manager.BeginSystemIn(Meadow.Id, Meadow.Administrator.Id))
                 {
                     shed = await projects.Projects.AsTracking().SingleAsync(project => project.Id == gardenShed.Id, Cancellation);
                 }
@@ -201,7 +201,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         IReadOnlyList<string> answered;
         JsonElement me;
         JsonElement seats;
-        using (TenancyUseCases.BeginSystemIn(Meadow.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Meadow.Id))
         {
             answered = [.. (await rhea.VisibleProjectsAsync()).Names()];
             me = await rhea.GetFromJsonAsync<JsonElement>("/me", Cancellation);

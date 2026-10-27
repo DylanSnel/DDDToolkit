@@ -165,7 +165,7 @@ public static class TenancyPostgresChecks
     /// <summary>
     /// Proves Tenancy's reads across tenants answer, with nothing running past the policies: the few reads made
     /// before any tenant is known, the permissions stored on every tenant's roles among them
-    /// (<see cref="TenancySystemReads"/>). They run as the scoped system role in no tenant, where the policies show
+    /// and the tenants a round of system work visits. They run as the scoped system role in no tenant, where the policies show
     /// it no row, and ask three functions of the database, which run as their owner:
     /// <see cref="TenancyFunctionNames.RolePermissionsInUse"/>, <see cref="TenancyFunctionNames.TenantsToSweep"/> and
     /// <see cref="TenancyFunctionNames.SeatsOfIdentity"/>. This proves that

@@ -100,7 +100,7 @@ public sealed class SystemReadTests
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, async scoped =>
         {
             services.Commands.Reset();
-            var tenants = await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "widgets", Cancellation);
+            var tenants = await scoped.Access().TenantsToSweepAsync("widgets", Cancellation);
 
             tenants.Should().BeEquivalentTo([harbor.Tenant, meadow.Tenant], "a suspended tenant is still visited, and a closed one is not");
             var read = services.Commands.Sent.Should().ContainSingle("the read is one query").Which;
@@ -109,12 +109,9 @@ public sealed class SystemReadTests
             Regex.Match(read.Text, @"^SELECT (.+?)\s+FROM", RegexOptions.Singleline).Groups[1].Value.Trim()
                 .Should().MatchRegex(@"^""\w+""\.""Id""$", "it projects the ids and nothing else of any tenant");
 
-            // A scope that is none is refused the same here, where the scope travels nowhere; and so is a module's own
-            // context, which maps no tenants.
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "Not a scope", Cancellation))
+            // A scope that is none is refused the same here, where the scope travels nowhere.
+            await FluentActions.Awaiting(() => scoped.Access().TenantsToSweepAsync("Not a scope", Cancellation))
                 .Should().ThrowAsync<ArgumentException>();
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.Widgets(), "widgets", Cancellation))
-                .Should().ThrowAsync<InvalidOperationException>().WithMessage("'TestWidgetContext' does not map HostTenant*modelBuilder.AddTenancy()*");
             services.Commands.Count.Should().Be(1);
         });
     }
@@ -132,7 +129,7 @@ public sealed class SystemReadTests
             services.Commands.Reset();
             await FluentActions.Awaiting(() => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.TenancyContext(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation))
                 .Should().ThrowAsync<DbException>();
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.TenancyContext(), "widgets", Cancellation))
+            await FluentActions.Awaiting(() => scoped.Access().TenantsToSweepAsync("widgets", Cancellation))
                 .Should().ThrowAsync<DbException>();
 
             services.Commands.Sent.Select(command => (Text: command.Text.Trim(), Caller: command.Caller!.ToString())).Should().Equal(

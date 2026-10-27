@@ -521,6 +521,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   builder cannot tell yet it goes on, and what it adds passes over at use what it has nothing to do for.
   `services.GetContextParts<TBuilder>()` reads them before the host is built. `UseDDDToolkit` applies the parts
   of a context's options, below. See [A part of your own](docs/entity-framework.md#writing-a-context-part).
+- **A line that says which of a project's ids are a package's: `[TemplateIds]`.** A package marks a generic assembly
+  attribute of its own `[TemplateIds]`, each of its type parameters with the `[TemplateType]` of the template whose
+  class's id it is, as Tenancy's `TenancyIds<TTenantId, TSeatId, TUnitId, TRoleId>` is. A module that sees those ids
+  and none of the classes writes the line once, `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`,
+  and gets what the package closes over ids alone, as the module that declares the classes does: the class the
+  package asks for with `[TemplateFacade]`, in the project with the line, in its root namespace, so it never meets the
+  declaring module's class in the global namespace; and every `[TemplateRegistration]` whose type parameters take only
+  ids, in the project of the module that holds its context. What takes a class says nothing there. A class a project
+  or its module declares with a template wins over the line.
+- **A class the container makes, from `[TemplateFacade]`.** A package's class that is not abstract gets a sealed class
+  of the application's own with its public constructors, closed over the application's classes or a line's ids,
+  rather than an abstract name. A type parameter of a `[TemplateRegistration]` method marked
+  `[TemplateFacade(typeof(...))]` is filled with that class, the project's own or the one a project of its module
+  below it has, so the registration registers what the application's code takes; without one, with the package's
+  class itself.
 
 #### Entity Framework and row level security
 
@@ -2792,6 +2807,33 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **Tenancy: `TenancyAccessManager` answers who acts, in which tenant, and begins the work that is not the caller's
+  own.** Your code takes `TenancyAccessManager`, a class the generator writes closed over your ids, with no type
+  argument: in the global namespace of the project that declares Tenancy's classes, and in the root namespace of a
+  project of another module that says which of its ids are Tenancy's with `[assembly: TenancyIds<TenantId, SeatId,
+  OrganizationUnitId, RoleId>]`. `AddTenancy<TContext>()` registers the declaring module's per scope, and
+  `AddTenancyAccess<TRequests, TContext>()` the module's it is called for. `access.CurrentUser` says who acts (`Id`,
+  null for system work and anonymous; `IsAuthenticated`, `IsSystem`, `Role`); `access.CurrentTenant` the tenant and
+  the seat (`Id`, `Seat`, `IsAvailable`, `Require()`); `access.BeginSystem()`, `access.BeginSystemIn(tenant,
+  actingSeat, scope)` and `access.BeginTokenIn(tenant, seat, scope)` begin the work they began before, and
+  `access.TenantsToSweepAsync(scope, cancellationToken)` reads the tenants a round of system work visits.
+  Tenancy's queries over a context are `db.Tenancy()`, which the generator writes for your ids into the project that
+  holds the context; `access.In(source, executor)` asks over a read source that is not Entity Framework.
+  - **Breaking.** `ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>`, `CurrentTenancy<...>` and
+    `tenancy.In(db)` are gone: take `TenancyAccessManager`, and ask `db.Tenancy()`. `RequireTenant()` is
+    `access.CurrentTenant.Require()`, and the tenant it answers is `Id`, no longer `Tenant`.
+    `TenancyUseCases.BeginSystem()`, `BeginSystemIn(...)`, `BeginTokenIn(...)` and `CurrentCaller()` are gone: begin
+    the work on the access manager, and read the caller from `access.CurrentTenant`, or without the ids from
+    `TenancyCallers.Ambient`. `TenancySystemReads.TenantsToSweepAsync<TTenant, TTenantId>(context, ...)` is
+    `access.TenantsToSweepAsync(scope, ...)`, which reads over Tenancy's own context. The queries for several
+    permissions are overloads of the one-permission names: `WhereIHold(permissions)` is
+    `UnitsWhereIHold(permissions)` and `RolePermissions(permissions)` is `RolesWithPermission(permissions)`.
+    `AddTenancy` and `AddTenancyAccess` take the access manager to register as a type parameter: the generated calls
+    fill it in, and a call that names every type argument passes the application's `TenancyAccessManager`, or the
+    package's class closed over the ids. A module that wrote its ids where it registered, `AddTenancyAccess<TenantId,
+    SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>()`, writes the line once instead, and calls
+    `AddTenancyAccess<IBillingRequest, BillingContext>()`, `modelBuilder.AddTenancyReadFunctions()` and
+    `AddBillingMembershipWithTenancy<BillingContext>(rules)`.
 - **`UseDDDToolkit` keeps a context's migration history in its default schema.** A context whose model has a
   default schema, `modelBuilder.HasDefaultSchema("ordering")`, keeps its history in
   `ordering."__EFMigrationsHistory"` without its options naming it, so the modules that share a database each keep

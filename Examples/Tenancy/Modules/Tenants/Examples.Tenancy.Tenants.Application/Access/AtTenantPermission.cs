@@ -20,7 +20,7 @@ internal static class AtTenantPermission
     /// <param name="permission">The permission asked about.</param>
     /// <param name="cancellationToken">Cancels the question.</param>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    public static async Task<bool> IsHeldAsync(SampleTenancy tenancy, ITenancyReads reads, string permission, CancellationToken cancellationToken)
+    public static async Task<bool> IsHeldAsync(TenancyAccessManager tenancy, ITenancyReads reads, string permission, CancellationToken cancellationToken)
     {
         await using var reading = reads.Open();
         return await tenancy.In(reading.Rows, reading.Queries).HoldsAtTenantAsync(permission, cancellationToken);

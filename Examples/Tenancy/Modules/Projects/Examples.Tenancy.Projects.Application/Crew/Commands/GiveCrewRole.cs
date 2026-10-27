@@ -40,7 +40,7 @@ public sealed record GiveCrewRole([OnResource] ProjectId Project, SeatId Seat, P
 public sealed class GiveCrewRoleHandler(
     IProjectStore store,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    SampleTenancy tenancy,
+    TenancyAccessManager tenancy,
     TimeProvider clock)
     : ICommandHandler<GiveCrewRole>
 {
@@ -59,7 +59,7 @@ public sealed class GiveCrewRoleHandler(
         await admission.RequireRoleAsync(command.Role, cancellationToken);
 
         var now = clock.GetUtcNow();
-        project.GiveCrewRole(command.Seat, command.Role, CrewPeriod.Between(now, command.Until), now, tenancy.RequireTenant().Seat);
+        project.GiveCrewRole(command.Seat, command.Role, CrewPeriod.Between(now, command.Until), now, tenancy.CurrentTenant.Require().Seat);
         await store.SaveAsync(cancellationToken);
         return Unit.Value;
     }

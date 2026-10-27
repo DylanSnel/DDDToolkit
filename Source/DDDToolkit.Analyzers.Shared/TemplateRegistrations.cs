@@ -79,6 +79,19 @@ namespace DDDToolkit.Analyzers.Common;
 /// it, and wrappers of its own would make it name the registrations' package, Entity Framework included, in code
 /// nobody wrote there. It calls the lower project's own public registration instead.
 /// </para>
+/// <para>
+/// A module that sees a package's ids and none of its classes says which of its ids they are with a line marked
+/// <c>[TemplateIds]</c>, <c>[assembly: TenancyIds&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;]</c>
+/// (<see cref="TemplateIdLines"/>). A registration whose <c>[TemplateType]</c>s take only ids is then closed over them,
+/// in the project with the line or in the lowest project of its module that sees the registration, as for classes. One
+/// that takes a class is not for such a module, and says nothing there.
+/// </para>
+/// <para>
+/// A type parameter marked <c>[TemplateFacade(typeof(TenancyAccessManager&lt;,,,&gt;))]</c> is filled with the class the
+/// project gets for that class of the package's, closed over the same ids as the method, or the one a project of its
+/// module below it has: the class the container makes, which the registration registers. Where there is none, it is
+/// filled with the package's class itself, closed over them.
+/// </para>
 /// </summary>
 internal static class TemplateRegistrations
 {
@@ -104,27 +117,38 @@ internal static class TemplateRegistrations
     /// The templates whose class a package's switch was asked to write and could not, which DDD00066 says why: a
     /// registration that misses one of them stands back behind it, as one does behind DDD00044.
     /// </param>
+    /// <param name="rootNamespace">The project's <c>RootNamespace</c>, where a class a package asks for is written for a line's ids.</param>
     public static ImmutableArray<RegistrationFile> Resolve(
         ImmutableArray<EntityDefinition> declared,
         Compilation compilation,
         CancellationToken cancellationToken,
         Func<IMethodSymbol, bool>? only = null,
         LocationInfo? projectFile = null,
-        IReadOnlyCollection<string>? standingBack = null)
+        IReadOnlyCollection<string>? standingBack = null,
+        string? rootNamespace = null)
     {
+        // The class a package asks for that this project gets itself, for a registration that registers it: worked out
+        // the first time one asks, as the generator that writes it works it out.
+        IReadOnlyList<FacadeFile>? facades = null;
+        IReadOnlyList<FacadeFile> Facades() => facades ??= TemplateFacades.Written(declared, compilation, rootNamespace, cancellationToken, standingBack);
+
         if (declared.IsDefaultOrEmpty)
         {
-            // The common case, and the cheap one: a project that declares no template class and no module needs
-            // nothing more. One that declares a module may be the project of it that holds the context, next to
-            // the domain project that declares the classes.
-            if (ModuleBoundary.ModuleOf(compilation.Assembly) is not { } module)
+            // The common case, and the cheap one: a project that declares no template class, no module and no line
+            // needs nothing more. One that declares a module may be the project of it that holds the context, next to
+            // the domain project that declares the classes, or next to the project that says which ids are a
+            // package's.
+            var module = ModuleBoundary.ModuleOf(compilation.Assembly);
+            var lines = TemplateIdLines.Here(compilation, cancellationToken);
+            if (module is null && lines.Count == 0)
             {
                 return ImmutableArray<RegistrationFile>.Empty;
             }
 
+            lines.AddRange(TemplateIdLines.InModule(compilation, module, cancellationToken));
             LocationInfo? moduleAttribute = null;
-            LocationInfo? ModuleAttribute() => moduleAttribute ??= ModuleBoundary.WhereTheModuleIsDeclared(compilation, projectFile, cancellationToken);
-            return Collapsed(Files(compilation, method => ResolveModuleMethod(method, module, ModuleAttribute, compilation, cancellationToken), only, cancellationToken));
+            LocationInfo? ModuleAttribute() => moduleAttribute ??= module is null ? null : ModuleBoundary.WhereTheModuleIsDeclared(compilation, projectFile, cancellationToken);
+            return Collapsed(Files(compilation, method => ResolveModuleMethod(method, module, lines, ModuleAttribute, Facades, compilation, cancellationToken), only, cancellationToken));
         }
 
         // Whether a class can be generated is only known once every template class is resolved, and only a
@@ -143,7 +167,31 @@ internal static class TemplateRegistrations
                 .Concat(standingBack ?? []),
             StringComparer.Ordinal);
 
-        return Collapsed(Files(compilation, method => ResolveMethod(method, declared, Resolved, takenByAParent, compilation, cancellationToken), only, cancellationToken));
+        // A method none of whose templates the project declares a class of is closed over the ids a line names, where
+        // the project or its module has one: a module of only the ids may declare classes of another package's.
+        var declaringModule = ModuleBoundary.ModuleOf(compilation.Assembly);
+        List<TemplateIdLines.NamedId>? namedIds = null;
+        List<TemplateIdLines.NamedId> NamedIds()
+        {
+            if (namedIds is null)
+            {
+                namedIds = TemplateIdLines.Here(compilation, cancellationToken);
+                namedIds.AddRange(TemplateIdLines.InModule(compilation, declaringModule, cancellationToken));
+            }
+
+            return namedIds;
+        }
+
+        LocationInfo? declaredModuleAttribute = null;
+        LocationInfo? DeclaredModuleAttribute()
+            => declaredModuleAttribute ??= declaringModule is null ? null : ModuleBoundary.WhereTheModuleIsDeclared(compilation, projectFile, cancellationToken);
+
+        return Collapsed(Files(
+            compilation,
+            method => ResolveMethod(method, declared, Resolved, takenByAParent, Facades, compilation, cancellationToken)
+                      ?? (NamedIds().Count > 0 ? ResolveModuleMethod(method, declaringModule, NamedIds(), DeclaredModuleAttribute, Facades, compilation, cancellationToken) : null),
+            only,
+            cancellationToken));
     }
 
     /// <summary>
@@ -409,6 +457,7 @@ internal static class TemplateRegistrations
         ImmutableArray<EntityDefinition> declared,
         Func<ImmutableArray<EntityDefinition>> resolved,
         HashSet<string> takenByAParent,
+        Func<IReadOnlyList<FacadeFile>> facades,
         Compilation compilation,
         CancellationToken cancellationToken)
     {
@@ -456,6 +505,7 @@ internal static class TemplateRegistrations
             anchor.Type.Location,
             take => MissingTemplateClass.Properties(compilation, take.MetadataName, anchor.Type.Name, anchor.Template?.AttributeName),
             take => takenByAParent.Contains(take.Key),
+            facades,
             compilation,
             cancellationToken);
     }
@@ -474,11 +524,19 @@ internal static class TemplateRegistrations
     /// classes are not in this project; DDD00049 then carries nothing for the code fix, which would declare the
     /// class in the wrong project.
     /// </para>
+    /// <para>
+    /// A template whose class no project of the module declares takes the id a line of the project, or of a project of
+    /// its module it references, names (<paramref name="lines"/>). A method none of whose templates has a class there is
+    /// closed over the lines alone, and only when they fill every one of its templates: a method that takes a class is
+    /// not for a module that sees only the ids, and it says nothing. A project of no module has its own lines only.
+    /// </para>
     /// </summary>
     private static MethodClosing? ResolveModuleMethod(
         IMethodSymbol method,
-        string module,
+        string? module,
+        List<TemplateIdLines.NamedId> lines,
         Func<LocationInfo?> moduleAttribute,
+        Func<IReadOnlyList<FacadeFile>> facades,
         Compilation compilation,
         CancellationToken cancellationToken)
     {
@@ -494,24 +552,47 @@ internal static class TemplateRegistrations
         {
             if (takes[position] is { } take)
             {
-                sources[position] = DefinitionFactory.ReferencedSources(compilation, take.MetadataName, cancellationToken, module);
+                sources[position] = module is null ? [] : DefinitionFactory.ReferencedSources(compilation, take.MetadataName, cancellationToken, module);
                 anchored |= sources[position]!.Count > 0;
             }
         }
 
-        if (!anchored || HeldBelow(method, sources, module, compilation, cancellationToken))
+        // The ids a line names, for the templates whose class no project of the module declares.
+        var named = false;
+        var unfilled = false;
+        LocationInfo? line = null;
+        for (var position = 0; position < parameters.Length; position++)
+        {
+            if (takes[position] is not { } take || sources[position] is not { Count: 0 })
+            {
+                continue;
+            }
+
+            var fromLines = TemplateIdLines.SourcesFor(take, lines);
+            sources[position] = fromLines;
+            named |= fromLines.Count > 0;
+            unfilled |= fromLines.Count == 0;
+            line ??= fromLines.Select(static source => source.LineLocation).FirstOrDefault(static where => where is not null);
+        }
+
+        if (!anchored && (!named || unfilled))
         {
             return null;
         }
 
-        var at = moduleAttribute();
+        if (module is not null && HeldBelow(method, sources, module, compilation, cancellationToken))
+        {
+            return null;
+        }
+
+        var at = (anchored ? null : line) ?? moduleAttribute();
         var candidates = new List<Candidate>?[parameters.Length];
         for (var position = 0; position < parameters.Length; position++)
         {
-            candidates[position] = sources[position]?.Select(source => new Candidate(source, at)).ToList();
+            candidates[position] = sources[position]?.Select(source => new Candidate(source, source.LineLocation ?? at)).ToList();
         }
 
-        return Closing(method, takes, naming, candidates, at, static _ => EquatableArray<string>.Empty, static _ => false, compilation, cancellationToken);
+        return Closing(method, takes, naming, candidates, at, static _ => EquatableArray<string>.Empty, static _ => false, facades, compilation, cancellationToken);
     }
 
     /// <summary>
@@ -538,7 +619,8 @@ internal static class TemplateRegistrations
         {
             foreach (var source in found ?? Enumerable.Empty<DefinitionFactory.TemplateSource>())
             {
-                if (source.SymbolIn(compilation)?.ContainingAssembly is { } assembly)
+                // A line's ids count where the line is: the project that says them is the one the classes would be in.
+                if ((source.LineIn ?? source.SymbolIn(compilation)?.ContainingAssembly) is { } assembly)
                 {
                     declaring.Add(assembly.Identity.Name);
                 }
@@ -741,6 +823,7 @@ internal static class TemplateRegistrations
     /// Whether a missing template is reported already, as DDD00044 on a class whose parent takes a type from it:
     /// the method then has no wrapper, and says nothing more.
     /// </param>
+    /// <param name="facades">The classes a package asks for that this project gets itself, for a type parameter that takes one.</param>
     /// <param name="compilation">The project.</param>
     /// <param name="cancellationToken">Stops the work.</param>
     private static MethodClosing Closing(
@@ -751,6 +834,7 @@ internal static class TemplateRegistrations
         LocationInfo? where,
         Func<Take, EquatableArray<string>> missingProperties,
         Func<Take, bool> saidElsewhere,
+        Func<IReadOnlyList<FacadeFile>> facades,
         Compilation compilation,
         CancellationToken cancellationToken)
     {
@@ -803,7 +887,7 @@ internal static class TemplateRegistrations
         foreach (var each in classes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (ClosedOver(method, takes, naming, candidates, repeated?.Key, each, diagnostics, compilation, cancellationToken) is { } wrapper)
+            if (ClosedOver(method, takes, naming, candidates, repeated?.Key, each, diagnostics, facades, compilation, cancellationToken) is { } wrapper)
             {
                 closed.Add((each, wrapper.Name, wrapper.Wrapper, wrapper.NamedAfter));
             }
@@ -921,6 +1005,7 @@ internal static class TemplateRegistrations
     /// <param name="repeatedKey">The template the method is closed once per class of, or null.</param>
     /// <param name="each">The class of that template this wrapper is closed over, and named after; null when there is one closing.</param>
     /// <param name="diagnostics">Where DDD00050 is added.</param>
+    /// <param name="facades">The classes a package asks for that this project gets itself, for a type parameter that takes one.</param>
     /// <param name="compilation">The project.</param>
     /// <param name="cancellationToken">Stops the work.</param>
     private static (string Name, RegistrationWrapper Wrapper, ITypeSymbol? NamedAfter)? ClosedOver(
@@ -931,6 +1016,7 @@ internal static class TemplateRegistrations
         string? repeatedKey,
         DefinitionFactory.TemplateSource? each,
         List<DiagnosticInfo> diagnostics,
+        Func<IReadOnlyList<FacadeFile>> facades,
         Compilation compilation,
         CancellationToken cancellationToken)
     {
@@ -1115,6 +1201,26 @@ internal static class TemplateRegistrations
             return null;
         }
 
+        // A type parameter that takes the class the project gets for a class of the package's, closed over the same
+        // types as the method: written once every other one is known.
+        var closedPositions = new bool[parameters.Length];
+        for (var position = 0; position < parameters.Length; position++)
+        {
+            closedPositions[position] = takes[position] is not null;
+            if (FacadeOf(parameters[position]) is not { } facade)
+            {
+                continue;
+            }
+
+            if (FacadeClassFor(facade, takes, texts, facades, compilation, cancellationToken) is not { } facadeText)
+            {
+                return null;
+            }
+
+            texts[position] = facadeText;
+            closedPositions[position] = true;
+        }
+
         var name = each is null ? method.Name : method.Name + PerClassInfix + each.Name;
         ITypeSymbol? namedAfter = null;
         if (naming is not null)
@@ -1143,7 +1249,79 @@ internal static class TemplateRegistrations
             name = called.ToString();
         }
 
-        return (name, Wrapper(method, name, texts, symbols, generatedIds, takes), namedAfter);
+        return (name, Wrapper(method, name, texts, symbols, generatedIds, takes, closedPositions), namedAfter);
+    }
+
+    /// <summary>The class of the package's a type parameter's <c>[TemplateFacade]</c> names, open; null for a type parameter without one.</summary>
+    private static INamedTypeSymbol? FacadeOf(ITypeParameterSymbol parameter)
+    {
+        foreach (var attribute in parameter.GetAttributes())
+        {
+            if (attribute.AttributeClass is { } attributeClass
+                && EntityDeclarations.Is(attributeClass, KnownTypes.TemplateFacadeAttribute)
+                && attribute.ConstructorArguments.Length == 1
+                && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Type, Value: INamedTypeSymbol { IsGenericType: true } facade })
+            {
+                return facade.OriginalDefinition;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The class that fills a type parameter marked <c>[TemplateFacade]</c>, fully qualified: the one this project gets for
+    /// <paramref name="facade"/> closed over the types the method's other type parameters are closed over; else the one a
+    /// project of its module it references has, or, for a project of no module, a project of no module; else the
+    /// package's class itself, closed over them. Null when a type parameter of the package's class takes something the
+    /// method does not: the package's mistake, which its own tests show.
+    /// </summary>
+    private static string? FacadeClassFor(
+        INamedTypeSymbol facade,
+        Take?[] takes,
+        string?[] texts,
+        Func<IReadOnlyList<FacadeFile>> facades,
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        if (TakesOf(facade.TypeParameters) is not { } wanted)
+        {
+            return null;
+        }
+
+        var arguments = new string[wanted.Length];
+        for (var position = 0; position < wanted.Length; position++)
+        {
+            var index = wanted[position] is { } take ? Array.FindIndex(takes, own => own == take) : -1;
+            if (index < 0 || texts[index] is not { } text)
+            {
+                return null;
+            }
+
+            arguments[position] = text;
+        }
+
+        var package = facade.ContainingType is { } outer
+            ? outer.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + facade.Name
+            : "global::" + (facade.ContainingNamespace is { IsGlobalNamespace: false } scope ? scope.ToDisplayString() + "." : string.Empty) + facade.Name;
+        var closed = package + "<" + string.Join(", ", arguments) + ">";
+
+        // This project's own, the one its code names first.
+        if (facades().FirstOrDefault(file => file.BaseType == closed) is { } own)
+        {
+            return own.FullName;
+        }
+
+        // A project of its module below it, which wrote the class for the same classes or the same line.
+        var module = ModuleBoundary.ModuleOf(compilation.Assembly);
+        var below = TemplateFacades.WrittenInReferences(compilation, facade, cancellationToken)
+            .Where(written => string.Equals(ModuleBoundary.ModuleOf(written.ContainingAssembly), module, StringComparison.Ordinal)
+                              && written.BaseType!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == closed)
+            .Select(static written => written.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+        return below ?? closed;
     }
 
     /// <summary>
@@ -1233,7 +1411,8 @@ internal static class TemplateRegistrations
     /// writes as well, which has none either, and for one the compiler could not bind.
     /// </summary>
     internal static ITypeSymbol? IdSymbolOf(DefinitionFactory.TemplateSource source, INamedTypeSymbol? symbol, Compilation compilation)
-        => (symbol is null ? null : EntityDeclarations.IdArgumentOf(symbol))
+        => source.IdSymbol
+           ?? (symbol is null ? null : EntityDeclarations.IdArgumentOf(symbol))
            ?? (source.IdType.StartsWith("global::", StringComparison.Ordinal) && source.IdType.IndexOf('<') < 0
                ? compilation.GetTypeByMetadataName(source.IdType.Substring("global::".Length))
                : null);
@@ -1364,7 +1543,7 @@ internal static class TemplateRegistrations
     private readonly record struct Closed(string Text, bool IsValueType);
 
     /// <summary>The wrapper called <paramref name="wrapperName"/> that forwards to <paramref name="method"/> closed over <paramref name="texts"/>.</summary>
-    private static RegistrationWrapper Wrapper(IMethodSymbol method, string wrapperName, string?[] texts, ITypeSymbol?[] symbols, bool[] generatedIds, Take?[] takes)
+    private static RegistrationWrapper Wrapper(IMethodSymbol method, string wrapperName, string?[] texts, ITypeSymbol?[] symbols, bool[] generatedIds, Take?[] takes, bool[] closedPositions)
     {
         var closed = new Dictionary<ITypeParameterSymbol, Closed>(SymbolEqualityComparer.Default);
         var open = new List<ITypeParameterSymbol>();
@@ -1372,7 +1551,7 @@ internal static class TemplateRegistrations
         for (var position = 0; position < method.TypeParameters.Length; position++)
         {
             var parameter = method.TypeParameters[position];
-            if (takes[position] is not null && texts[position] is { } text)
+            if (closedPositions[position] && texts[position] is { } text)
             {
                 closed.Add(parameter, new Closed(text, symbols[position]?.IsValueType ?? generatedIds[position]));
                 typeArguments.Add(text);
@@ -1426,6 +1605,39 @@ internal static class TemplateRegistrations
                       + DefinitionFactory.Listed(over) + (open.Count > 0 ? ", with " + DefinitionFactory.Listed(open.Select(static parameter => parameter.Name)) + " still to choose." : ".");
 
         return new RegistrationWrapper(CodeWriter.XmlText(summary),signature.ToString(), constraints, call, wrapperName, typeArguments.ToEquatableArray());
+    }
+
+    /// <summary>
+    /// A constructor's parameters as a class that derives from its type, closed over <paramref name="texts"/>, declares
+    /// them, and the arguments it passes on to it: what a class the container makes repeats of the package's class.
+    /// </summary>
+    /// <param name="constructor">A constructor of the package's open class.</param>
+    /// <param name="typeParameters">The class's type parameters.</param>
+    /// <param name="texts">What fills each, fully qualified.</param>
+    /// <param name="valueTypes">Whether what fills each is a value type.</param>
+    internal static (string Parameters, string Arguments) ParametersOver(
+        IMethodSymbol constructor,
+        ImmutableArray<ITypeParameterSymbol> typeParameters,
+        string[] texts,
+        bool[] valueTypes)
+    {
+        var closed = new Dictionary<ITypeParameterSymbol, Closed>(SymbolEqualityComparer.Default);
+        for (var position = 0; position < typeParameters.Length; position++)
+        {
+            closed.Add(typeParameters[position], new Closed(texts[position], valueTypes[position]));
+        }
+
+        var declared = new List<string>();
+        var passed = new List<string>();
+        foreach (var parameter in constructor.Parameters)
+        {
+            var name = Identifier(parameter.Name);
+            declared.Add((parameter.IsParams ? "params " : string.Empty) + RefKindOf(parameter.RefKind) + Render(parameter.Type, closed) + " " + name
+                         + (parameter.HasExplicitDefaultValue ? " = " + DefaultValueOf(parameter, closed) : string.Empty));
+            passed.Add(RefKindOf(parameter.RefKind is RefKind.RefReadOnlyParameter ? RefKind.In : parameter.RefKind) + name);
+        }
+
+        return (string.Join(", ", declared), string.Join(", ", passed));
     }
 
     /// <summary>The constraint clause of a type parameter the wrapper keeps open, or null when it has none.</summary>

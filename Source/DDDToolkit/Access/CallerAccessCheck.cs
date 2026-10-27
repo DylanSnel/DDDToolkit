@@ -34,7 +34,7 @@ namespace DDDToolkit.Access;
 /// <para>
 /// The application's own work is no case of it. System work is a scope trusted code begins around the work,
 /// <c>Callers.Begin(Caller.System)</c> or a supporting domain's own way such as Tenancy's
-/// <c>TenancyUseCases.BeginSystem()</c>, and a request it sends declares who may send it like any other: what only
+/// <c>access.BeginSystem()</c>, and a request it sends declares who may send it like any other: what only
 /// system work may do, a supporting domain's use case refuses everyone else, with
 /// <see cref="ToolkitRefusals.SystemOnly"/>. System work is nobody's sign-in, and has no value of its own, so it is
 /// refused here as any caller who did not sign in is.

@@ -73,7 +73,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
             pooled: pooled,
 
             // A module that only asks Tenancy declares none of its classes, and writes the four ids out.
-            afterTenancy: registered => registered.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, TestWidgetContext>());
+            afterTenancy: registered => registered.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, TestWidgetContext>());
         services.Provider.GetRequiredService<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>>().OperatorTokenRoles.Add(OperatorRole);
         return services;
     }
@@ -519,14 +519,14 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     public void Adding_the_check_for_an_interface_twice_adds_it_once()
     {
         var services = new ServiceCollection();
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, TestWidgetContext>();
+        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, TestWidgetContext>();
         var registered = services.Count;
 
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, TestWidgetContext>();
+        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, TestWidgetContext>();
 
         services.Should().HaveCount(registered);
         services.Should().OnlyContain(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped, "the check, the set and what a check keeps live as long as a request");
-        FluentActions.Invoking(() => TenancyEntityFrameworkServiceCollectionExtensions.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, TestWidgetContext>(null!))
+        FluentActions.Invoking(() => TenancyEntityFrameworkServiceCollectionExtensions.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, TestWidgetContext>(null!))
             .Should().Throw<ArgumentNullException>();
     }
 

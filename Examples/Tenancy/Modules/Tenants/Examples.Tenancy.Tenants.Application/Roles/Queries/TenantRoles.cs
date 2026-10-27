@@ -21,7 +21,7 @@ public sealed record TenantRoles : IQuery<IReadOnlyList<RoleListing>>, ITenantsR
 /// </summary>
 /// <param name="reads">Where Tenancy is read: the directory in a scope of this query's own, the permission on a context of its own.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller.</param>
-public sealed class TenantRolesHandler(ITenancyReads reads, SampleTenancy tenancy) : IQueryHandler<TenantRoles, IReadOnlyList<RoleListing>>
+public sealed class TenantRolesHandler(ITenancyReads reads, TenancyAccessManager tenancy) : IQueryHandler<TenantRoles, IReadOnlyList<RoleListing>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">The caller's own refusal when it is nobody.</exception>

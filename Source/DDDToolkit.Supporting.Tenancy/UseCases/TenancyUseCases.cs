@@ -33,9 +33,9 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// </para>
 /// <para>
 /// A static member is found through a derived class as a nested type is, so the same class closes over the ids what
-/// is called rather than named: system work, <c>TenancyUseCases.BeginSystem()</c> and <c>TenancyUseCases.BeginSystemIn(tenant)</c>,
-/// and the current caller, <c>TenancyUseCases.CurrentCaller()</c>. <see cref="Access.TenancyWork"/> and
-/// <see cref="Access.TenancyCallers"/> keep them generic over the ids, for code that sees only those.
+/// is called rather than named: an operator's work, <c>TenancyUseCases.BeginOperatorIn(tenant, identity)</c>. Who acts,
+/// the tenant they act in and system work are the access manager's, <c>TenancyAccessManager</c>, which the generator
+/// writes closed over the ids as well.
 /// </para>
 /// <para>
 /// They are plain services, not handlers: each method checks the Tenancy caller, loads what it needs

@@ -44,7 +44,7 @@ public sealed record HeldUnits(IReadOnlyList<OrganizationUnitId> Units, bool AtT
 /// <param name="reads">Where Tenancy is read: a context of this query's own.</param>
 /// <param name="catalogue">The permissions the application knows, for a permission that comes from outside.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller.</param>
-public sealed class UnitsWhereIHoldHandler(ITenancyReads reads, TenancyCatalogue catalogue, SampleTenancy tenancy) : IQueryHandler<UnitsWhereIHold, HeldUnits>
+public sealed class UnitsWhereIHoldHandler(ITenancyReads reads, TenancyCatalogue catalogue, TenancyAccessManager tenancy) : IQueryHandler<UnitsWhereIHold, HeldUnits>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException"><c>tenancy.unknown-permission</c> for a permission the catalogue does not know.</exception>

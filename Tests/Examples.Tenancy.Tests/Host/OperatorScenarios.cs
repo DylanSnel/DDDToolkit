@@ -154,7 +154,7 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
             new TenantProjectInspections(Harbor.Id, Harbor.ProjectNamed("Pier 7").Id),
         ];
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();

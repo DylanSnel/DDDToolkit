@@ -69,6 +69,9 @@ internal static class KnownTypes
     /// <summary>Marks a package's assembly attribute as the switch that has the generator write the classes of the templates it names, and their ids, where a project leaves them out.</summary>
     public const string TemplateDefaultsAttribute = AttributesNamespace + ".TemplateDefaultsAttribute";
 
+    /// <summary>Marks a package's generic assembly attribute as the line that says which of a project's ids are the ids of the package's classes.</summary>
+    public const string TemplateIdsAttribute = AttributesNamespace + ".TemplateIdsAttribute";
+
     /// <summary>Assembly attribute that declares the assembly a module.</summary>
     public const string ModuleAttribute = AttributesNamespace + ".ModuleAttribute";
 

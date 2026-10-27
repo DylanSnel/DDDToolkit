@@ -1,5 +1,6 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -115,7 +116,7 @@ public sealed class PooledContextTests
         var asking = scope.ServiceProvider.TenancyContext();
 
         services.Commands.Reset();
-        var tenants = await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(asking, "widgets", Cancellation);
+        var tenants = await scope.ServiceProvider.Access().TenantsToSweepAsync("widgets", Cancellation);
 
         tenants.Should().BeEquivalentTo([harbor.Tenant, orchard.Tenant]);
         var read = services.Commands.Sent.Should().ContainSingle("the read is one query").Which;
@@ -137,11 +138,11 @@ public sealed class PooledContextTests
             harbor = await usual.ProvisionAsync("harbor");
         }
 
-        // A context made with new: its options name no services of the application, so the read has none to make its
-        // own context from.
+        // A context made with new: its options name no services of the application, so a read across tenants has none to
+        // make its own context from. The start-up check's read says so.
         await using (var made = new TestTenancyContext(database.Options<TestTenancyContext>().Options))
         {
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(made, "widgets", Cancellation))
+            await FluentActions.Awaiting(() => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(made, TenancyCatalogue.Build(HostCatalogue.Application, []), Cancellation))
                 .Should().ThrowAsync<InvalidOperationException>()
                 .WithMessage("'TestTenancyContext' was not made by the application's services*AddDbContext<TestTenancyContext>*AddScopedFromPool<TestTenancyContext>()*");
         }
@@ -163,9 +164,9 @@ public sealed class PooledContextTests
         }
 
         await using (var provider = WithAPoolMadeByHand().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }))
-        await using (var taken = await provider.GetRequiredService<IDbContextFactory<TestTenancyContext>>().CreateDbContextAsync(Cancellation))
+        await using (var scope = provider.CreateAsyncScope())
         {
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(taken, "widgets", Cancellation))
+            await FluentActions.Awaiting(() => scope.ServiceProvider.Access().TenantsToSweepAsync("widgets", Cancellation))
                 .Should().ThrowAsync<InvalidOperationException>()
                 .WithMessage("No 'TestTenancyContext' is registered under its own type*AddDbContext<TestTenancyContext>*AddScopedFromPool<TestTenancyContext>()*");
         }
@@ -174,9 +175,9 @@ public sealed class PooledContextTests
         var registered = WithAPoolMadeByHand();
         registered.AddScopedFromPool<TestTenancyContext>();
         await using (var provider = registered.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }))
-        await using (var taken = await provider.GetRequiredService<IDbContextFactory<TestTenancyContext>>().CreateDbContextAsync(Cancellation))
+        await using (var scope = provider.CreateAsyncScope())
         {
-            (await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(taken, "widgets", Cancellation)).Should().Equal(harbor.Tenant);
+            (await scope.ServiceProvider.Access().TenantsToSweepAsync("widgets", Cancellation)).Should().Equal(harbor.Tenant);
         }
     }
 }

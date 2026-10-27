@@ -30,21 +30,19 @@ public sealed class SeatRequirement : IAuthorizationRequirement
     /// <remarks>
     /// One function, so whatever else guards an entrance of the host asks the same question. It reads what kind of
     /// caller it is and why nobody is nobody, which a caller says without its ids, so it takes one as
-    /// <see cref="ITenancyCaller"/>: the guards pass <c>TenancyUseCases.CurrentCaller()</c>.
+    /// <see cref="ITenancyCaller"/>: the guards pass <see cref="TenancyCallers.Ambient"/>, which is nobody outside any.
     /// </remarks>
-    /// <param name="caller">The request's Tenancy caller.</param>
-    public static RefusalException? RefusalFor(ITenancyCaller caller)
+    /// <param name="caller">The request's Tenancy caller; <see langword="null"/> for nobody, not seated.</param>
+    public static RefusalException? RefusalFor(ITenancyCaller? caller)
     {
-        ArgumentNullException.ThrowIfNull(caller);
-
-        if (caller.Kind is TenancyCallerKind.Seat)
+        if (caller?.Kind is TenancyCallerKind.Seat)
         {
             return null;
         }
 
         // A request is never system work: tenant selection replaces any caller it finds. So anything but a seat is
         // nobody here, and nobody says why.
-        var refusal = TenancyRefusals.Refuse(caller.Refusal ?? TenancyRefusals.NotSeated);
+        var refusal = TenancyRefusals.Refuse(caller?.Refusal ?? TenancyRefusals.NotSeated);
         return refusal.Code == TenancyRefusals.TenantRequired
             ? refusal
             : new RefusalException(refusal.Code, RefusalKind.NotPermitted, refusal.Message, refusal.Arguments);

@@ -10,6 +10,11 @@ using DDDToolkit.Supporting.Tenancy.UseCases;
 // application whose two modules both declare the classes names one of them with [assembly: TemplateFacadeName].
 [assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>))]
 
+// And it gets the access manager closed over its four ids, TenancyAccessManager, a class the container makes: who acts,
+// in which tenant, and the work that is not the caller's own. A project of another module that sees only the ids says
+// which they are with [assembly: TenancyIds<...>], and gets the class in its root namespace.
+[assembly: TemplateFacade(typeof(TenancyAccessManager<,,,>))]
+
 // A request that requires a permission and marks no member of where it is held, [RequiresPermission(permission)] on its own, requires it
 // for the whole tenant: Tenancy's case, so Tenancy says it. A permission at a unit is marked [AtUnit], and one on a resource
 // with members [OnResource], which Membership ships. A permission held for the whole tenant is held by a seat in it or by system

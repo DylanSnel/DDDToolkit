@@ -19,11 +19,3 @@ global using Examples.Tenancy.Tenants.Application.StoredTenancy;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 global using DDDToolkit.Supporting.Tenancy;
 
-// Tenancy, asked about the current caller, closed over the application's ids: the handlers that ask who is
-// calling, and AtTenantPermission, name it once. An alias is global only in the project that declares it, and reads its
-// target as if no other using existed, hence the full names.
-global using SampleTenancy = DDDToolkit.Supporting.Tenancy.Access.ITenancy<
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;

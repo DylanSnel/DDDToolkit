@@ -33,8 +33,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// so <c>TenancyUseCases.SeatOverview</c> is the package's own <c>TenancyUseCases&lt;...&gt;.SeatOverview</c>: what the
 /// container registered, what reflection sees and what the compiler reports, with the package's documentation.
 /// The class itself is never made, and nothing derives from it. C# finds a static member the same way, so what is
-/// generic over the classes and is called rather than named goes on the same class: Tenancy's system work is
-/// <c>TenancyUseCases.BeginSystem()</c>, a call the compiler binds even in the project the class is written into.
+/// generic over the classes and is called rather than named can go on the same class: a call the compiler binds even
+/// in the project the class is written into.
 /// </para>
 /// <para>
 /// <b>Why a class, and not a global alias.</b> An alias holds in the project that declares it and no further, so it
@@ -63,11 +63,35 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// qualifies that type, or the application names the class otherwise. A class of the name the generator wrote for
 /// another module is no such thing: the two would meet in the projects that see both, so it is DDD00075.
 /// </para>
+/// <para>
+/// <b>A class the container makes.</b> A package's class that is not abstract, as Tenancy's
+/// <c>TenancyAccessManager&lt;TTenantId, TSeatId, TUnitId, TRoleId&gt;</c> is, is a service: the application's class
+/// is sealed rather than abstract, and has each public constructor of the package's class, so the container makes it.
+/// <code>
+/// public sealed class TenancyAccessManager : global::Acme.Tenancy.TenancyAccessManager&lt;global::Shop.Contracts.TenantId, ...&gt;
+/// {
+///     public TenancyAccessManager(global::Acme.Tenancy.TenancyCatalogue catalogue) : base(catalogue) { }
+/// }
+/// </code>
+/// The package's registration registers it: a type parameter of a <see cref="TemplateRegistrationAttribute"/> method
+/// that carries this attribute, <c>[TemplateFacade(typeof(TenancyAccessManager&lt;,,,&gt;))] TAccessManager</c>, is filled with
+/// the class the project gets for that type, or sees in a project of its module below it, closed over the same
+/// classes and ids as the method. Where there is none, it is filled with the package's class itself, closed over them.
+/// </para>
+/// <para>
+/// <b>For a module that sees only the ids.</b> A class whose type parameters all take ids is written as well into a
+/// project that says which of its ids are the package's with a line marked <see cref="TemplateIdsAttribute"/>,
+/// <c>[assembly: TenancyIds&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;]</c>. It is written into that project's root
+/// namespace rather than the global one: it is the module's own name for the package's class, and in the global
+/// namespace it would meet the class of the module that declares the classes in every project that sees both, the host
+/// first. The module's code under that namespace names it without a using.
+/// </para>
 /// </summary>
 /// <param name="type">
 /// The open generic class, <c>typeof(TenancyUseCases&lt;,,,,,,,,&gt;)</c>, not nested in a generic type. Every one
 /// of its type parameters carries <see cref="TemplateTypeAttribute"/>, since the class the application gets leaves
-/// none open, and it is abstract rather than static, with a protected constructor, so that class can derive from it.
+/// none open. It is abstract rather than static, with a protected constructor, so that class can derive from it; or it
+/// is neither abstract nor sealed, with public constructors, for a class the container makes.
 /// </param>
 /// <remarks>
 /// A type this attribute names that the generator cannot use is passed over without a word: that is the package's
@@ -75,7 +99,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// the type the assembly that declares it declares: one an application's project declares for a type of a package
 /// asks nothing.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true, Inherited = false)]
+[AttributeUsage(AttributeTargets.Assembly | AttributeTargets.GenericParameter, AllowMultiple = true, Inherited = false)]
 public sealed class TemplateFacadeAttribute(Type type) : Attribute
 {
     /// <summary>The open generic class the application's class derives from, closed over its classes.</summary>

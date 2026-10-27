@@ -483,7 +483,7 @@ public sealed class UseCaseTests : IDisposable
     private Task BySystem(Func<IServiceProvider, Task> act) => _services.BySystemIn(_harbor.Tenant, act);
 
     private Task<bool> GraceHoldsAtAsync(string permission, OrganizationUnitId unit)
-        => AsGrace(services => services.Tenancy().In(services.TenancyContext()).HoldsAtAsync(permission, unit, TestContext.Current.CancellationToken));
+        => AsGrace(services => services.TenancyContext().Tenancy().HoldsAtAsync(permission, unit, TestContext.Current.CancellationToken));
 
     private async Task<List<(OrganizationUnitId Unit, string Key)>> KeysAsync(SeatId seat)
         => [.. (await _services.StoredRightsAsync(seat)).Select(right => (right.UnitId, right.Permission))];

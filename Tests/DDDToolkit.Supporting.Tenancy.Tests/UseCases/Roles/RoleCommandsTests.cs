@@ -191,7 +191,7 @@ public class RoleCommandsTests
         }
 
         var reached = await harness.As(north, h =>
-            Task.FromResult(new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock)
+            Task.FromResult(new TenancyAccessManager(h.Catalogue, h.Clock, NoServices.Instance)
                 .In(h.Store, h.Store).UnitsWhereIHold(TenancyPermissions.UnitsManage).ToArray()));
         reached.Should().BeEquivalentTo([harness.Harbor.North, harness.Harbor.NorthCoast]);
     }

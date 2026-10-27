@@ -57,7 +57,7 @@ public static class InspectionsInfrastructure
         // package's check for Tenancy's cases, added for this module's request interface and its context.
         // Inspections declares none of Tenancy's classes, so the application's four ids are written out. No request
         // of the module asks a permission of the tenant's, which is the one case the check would read this context for.
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IInspectionsRequest, InspectionsContext>();
+        services.AddTenancyAccess<IInspectionsRequest, InspectionsContext>();
 
         // Inspections' domain events are stored with the inspection, and delivered wherever the host sends what
         // modules publish. Generated when the module compiles: every domain event of the domain project, under the

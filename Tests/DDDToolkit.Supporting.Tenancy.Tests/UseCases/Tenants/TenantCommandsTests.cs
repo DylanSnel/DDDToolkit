@@ -64,7 +64,7 @@ public class TenantCommandsTests
         var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var tenantWide = await harness.Run(caller, async h =>
         {
-            var queries = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).In(h.Store, h.Store);
+            var queries = new TenancyAccessManager(h.Catalogue, h.Clock, NoServices.Instance).In(h.Store, h.Store);
             return await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => queries.HoldsAtTenantAsync(permission, default)));
         });
 
@@ -131,7 +131,7 @@ public class TenantCommandsTests
             var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
             var held = await harness.Run(caller, async h =>
             {
-                var queries = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).In(h.Store, h.Store);
+                var queries = new TenancyAccessManager(h.Catalogue, h.Clock, NoServices.Instance).In(h.Store, h.Store);
                 return await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => queries.HoldsAtTenantAsync(permission, default)));
             });
             held.Should().OnlyContain(holds => holds, "the default administrators' role holds every live permission, granted at the root");
@@ -178,7 +178,7 @@ public class TenantCommandsTests
         var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var held = await harness.Run(caller, async h =>
         {
-            var queries = new CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).In(h.Store, h.Store);
+            var queries = new TenancyAccessManager(h.Catalogue, h.Clock, NoServices.Instance).In(h.Store, h.Store);
             var answers = await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => queries.HoldsAtTenantAsync(permission, default)));
             return h.Catalogue.LivePermissions.Where((_, index) => answers[index]).ToArray();
         });
@@ -243,7 +243,7 @@ public class TenantCommandsTests
         // The toolkit's code for "only the application itself", which a handler that only system work may run refuses with too.
         await Refused.WithCodeAsync(ToolkitRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)));
         await FluentActions.Awaiting(() => harness.BySystemWork(h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Begin TenancyUseCases.BeginSystem() for it, or TenancyWork.BeginSystem<TenantId, SeatId>() in a project that sees only the ids*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Begin access.BeginSystem() for it, on the TenancyAccessManager your code takes.");
         await Refused.WithCodeAsync(TenancyRefusals.TenantRequired,
             () => harness.Run(HostCaller.Nobody(TenancyRefusals.TenantRequired), h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)));
 
@@ -267,7 +267,7 @@ public class TenantCommandsTests
                  })
         {
             await FluentActions.Awaiting(() => harness.Run(HostCaller.System, act))
-                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Begin TenancyUseCases.BeginSystemIn(tenant) for it, or TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant)*");
+                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Begin access.BeginSystemIn(tenant) for it, on the TenancyAccessManager your code takes.");
         }
 
         harness.Store.Tenant(harness.Tenant).Status.Should().Be(TenantStatus.Active);

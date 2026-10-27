@@ -33,7 +33,7 @@ namespace DDDToolkit.Access;
 /// <para>
 /// A requirement says who may send a request, never what the work runs with: the application's own work is
 /// no requirement but a scope, begun on purpose by trusted code around the work, <c>Callers.Begin(Caller.System)</c>
-/// or a supporting domain's own way such as Tenancy's <c>TenancyUseCases.BeginSystem()</c>, after which the caller
+/// or a supporting domain's own way such as Tenancy's <c>access.BeginSystem()</c>, after which the caller
 /// before it is current again. And it says what is asked, never who may: it carries a permission and the ids the request
 /// names, and the check reads the rest where it is kept. What a requirement cannot say is decided where it can
 /// be: in the handler, in plain sight; in the use case of the package the handler calls; and in the database's

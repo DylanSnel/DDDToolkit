@@ -194,7 +194,7 @@ public static class TenancyModelBuilderExtensions
 
     /// <summary>
     /// Maps Tenancy's read model into a context that is not Tenancy's own, so its queries can ask Tenancy
-    /// inside them: <c>tenancy.In(thisContext).UnitsWhereIHold(permission)</c> becomes a subquery of the module's
+    /// inside them: <c>db.Tenancy().UnitsWhereIHold(permission)</c> becomes a subquery of the module's
     /// own query, one statement and one round trip. The six rows the access questions read are keyless views
     /// over Tenancy's tables, their columns mapped exactly as <see cref="AddTenancy"/> maps them. Entity Framework
     /// creates no views, so this context's migrations never touch Tenancy's tables.
@@ -257,7 +257,7 @@ public static class TenancyModelBuilderExtensions
     /// the access questions read, each from the function of its name (<see cref="TenancyFunctionNames"/>) in
     /// <paramref name="schema"/>, under the column names that function answers. The module's model then names no
     /// table of Tenancy's, only functions, which are what Tenancy offers other modules; and
-    /// <c>tenancy.In(thisContext)</c> works exactly as over the views of
+    /// <c>db.Tenancy()</c> works exactly as over the views of
     /// <see cref="AddTenancyReadModel{TTenantId, TSeatId, TUnitId, TRoleId}"/>: a question is a subquery of the
     /// module's own query, one statement and one round trip.
     /// <code>

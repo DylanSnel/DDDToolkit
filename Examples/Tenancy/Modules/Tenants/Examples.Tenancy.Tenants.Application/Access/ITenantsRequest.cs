@@ -18,7 +18,7 @@ namespace Examples.Tenancy.Tenants.Application.Access;
 /// before every handler of the module.
 /// <para>
 /// A requirement says who may send a request, not what the work runs with. System work is no requirement but a
-/// scope trusted code begins around the work, <c>TenancyUseCases.BeginSystemIn(tenant)</c> as the seeding does, and
+/// scope trusted code begins around the work, <c>access.BeginSystemIn(tenant)</c> as the seeding does, and
 /// what only system work may do the handler or the package's use case refuses everyone else, with
 /// <c>access.system-only</c>, as <c>MarkTenantAsDemo</c>'s does.
 /// </para>

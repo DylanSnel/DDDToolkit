@@ -198,7 +198,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
 
         using (TenancyCallers.Begin(caller))
         {
-            var queries = scope.ServiceProvider.Tenancy().In(scope.ServiceProvider.TenancyContext());
+            var queries = scope.ServiceProvider.TenancyContext().Tenancy();
             var answers = new Answers(
                 caller.Seat?.Value,
                 caller.Kind == TenancyCallerKind.Seat ? caller.Tenant?.Value : null,

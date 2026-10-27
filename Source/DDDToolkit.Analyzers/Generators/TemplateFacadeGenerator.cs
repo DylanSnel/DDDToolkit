@@ -24,6 +24,12 @@ namespace DDDToolkit.Analyzers;
 /// When the class cannot be written, it says why there, DDD00065, as information: the projects above would otherwise
 /// only hear that the name does not exist. Two classes of one name where a project sees both are DDD00075, and a line
 /// that names nothing is DDD00076. See <c>TemplateFacades</c>.
+/// <para>
+/// A package's class that is not abstract, Tenancy's <c>TenancyAccessManager&lt;...&gt;</c>, gets a sealed class the
+/// container makes, with its public constructors, which the package's registration registers. A project that says which
+/// of its ids are a package's with <c>[assembly: TenancyIds&lt;...&gt;]</c> gets a class closed over them, in its root
+/// namespace.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class TemplateFacadeGenerator : IIncrementalGenerator
@@ -41,18 +47,53 @@ public sealed class TemplateFacadeGenerator : IIncrementalGenerator
         }
 
         var writer = new CodeWriter().Header();
+        if (file.Namespace.Length > 0)
+        {
+            writer.Line("namespace " + file.Namespace + ";");
+            writer.Line();
+        }
+
         writer.Line("/// <summary>");
         writer.Line("/// " + file.Summary);
-        writer.Line("/// Every type nested in it, and every static member, is named through this class and is the package's own: the type");
-        writer.Line("/// its registration added, the method it declares.");
-        writer.Line("/// The class is only that name. Nothing makes one, and nothing derives from it.");
-        writer.Line("/// " + file.Naming);
-        writer.Line("/// </summary>");
-        using (writer.Block((file.IsPublic ? "public" : "internal") + " abstract class " + file.Name + " : " + file.BaseType))
+        if (file.IsService)
         {
-            writer.Line("private " + file.Name + "()");
-            writer.Line("{");
-            writer.Line("}");
+            // A class the container makes: the package's registration registers this one, and code takes it.
+            writer.Line("/// The container makes it, and the package's registration registers it: your code takes it, and every member is the");
+            writer.Line("/// package's own.");
+            writer.Line("/// " + file.Naming);
+            writer.Line("/// </summary>");
+            using (writer.Block((file.IsPublic ? "public" : "internal") + " sealed class " + file.Name + " : " + file.BaseType))
+            {
+                var first = true;
+                foreach (var constructor in file.Constructors)
+                {
+                    if (!first)
+                    {
+                        writer.Line();
+                    }
+
+                    first = false;
+                    writer.Line("/// <summary>Made by the container, with what the package's class asks for.</summary>");
+                    writer.Line("public " + file.Name + "(" + constructor.Parameters + ")");
+                    writer.Line("    : base(" + constructor.Arguments + ")");
+                    writer.Line("{");
+                    writer.Line("}");
+                }
+            }
+        }
+        else
+        {
+            writer.Line("/// Every type nested in it, and every static member, is named through this class and is the package's own: the type");
+            writer.Line("/// its registration added, the method it declares.");
+            writer.Line("/// The class is only that name. Nothing makes one, and nothing derives from it.");
+            writer.Line("/// " + file.Naming);
+            writer.Line("/// </summary>");
+            using (writer.Block((file.IsPublic ? "public" : "internal") + " abstract class " + file.Name + " : " + file.BaseType))
+            {
+                writer.Line("private " + file.Name + "()");
+                writer.Line("{");
+                writer.Line("}");
+            }
         }
 
         context.AddSource(file.HintName, SourceText.From(writer.ToString(), Encoding.UTF8));

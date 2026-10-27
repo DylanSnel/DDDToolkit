@@ -1015,14 +1015,14 @@ public interface ITenantPlans
 
 // The check: Decides is a type test; RequireAsync asks who is calling before it reads, then returns or refuses
 // with the module's code
-public sealed class PlanCheck(ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy, ITenantPlans plans) : IAccessCheck
+public sealed class PlanCheck(TenancyAccessManager access, ITenantPlans plans) : IAccessCheck
 {
     public bool Decides(AccessRequirement requirement) => requirement is PlanAtLeast;
 
     public async ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
     {
         var required = (PlanAtLeast)requirement;
-        var tenant = tenancy.RequireTenant().Tenant;             // nobody in the tenant: refused with its own reason
+        var tenant = access.CurrentTenant.Require().Id;          // nobody in the tenant: refused with its own reason
         if (await plans.CurrentAsync(tenant, cancellationToken) < required.Plan)
         {
             throw new RefusalException("boards.plan-too-low", RefusalKind.NotPermitted, "That takes a higher plan.");
@@ -1062,9 +1062,9 @@ The generator writes the two attributes as `All` of their calls, in the order th
 checked first.
 
 - **Who is calling comes first.** Like the packages' checks, `PlanCheck` looks at the caller before it reads anything.
-  It takes `ITenancy`, closed over the application's ids, as the sample's checks do. `RequireTenant()` reads nothing,
-  because the seat was found when the request came in. For a caller who is nobody in the tenant, it throws that caller's
-  reason, `tenancy.not-seated`. So the new sign-in, an operator and an anonymous caller never learn a tenant's plan.
+  It takes `TenancyAccessManager`, closed over the application's ids, as the sample's checks do.
+  `CurrentTenant.Require()` reads nothing, because the seat was found when the request came in. For a caller who is
+  nobody in the tenant, it throws that caller's reason, `tenancy.not-seated`. So the new sign-in, an operator and an anonymous caller never learn a tenant's plan.
 - **Then the plan, then the permission.** A seat of a tenant on the Free plan is refused with `boards.plan-too-low`, and
   the permission is not checked. On the Pro plan the permission is checked next, and a refusal there is Tenancy's.
 - **Each case goes to its own check.** The set gives `PlanAtLeast` to `PlanCheck`, because `PlanCheck`'s type test

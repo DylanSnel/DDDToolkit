@@ -137,7 +137,7 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
         }
 
         // The projects' own system work in the tenant holds every permission on every project of it, and asks Tenancy nothing.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var access = scope.ServiceProvider.GetRequiredService<ProjectAccess>();

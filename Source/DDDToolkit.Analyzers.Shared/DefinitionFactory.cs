@@ -980,6 +980,21 @@ internal static class DefinitionFactory
         /// </summary>
         public IReadOnlyList<int>? WrittenArguments { get; init; }
 
+        /// <summary>
+        /// The id itself, for an id a project's line marked <c>[TemplateIds]</c> names rather than a class's: there is no
+        /// class to read it from. Null for a class.
+        /// </summary>
+        public ITypeSymbol? IdSymbol { get; init; }
+
+        /// <summary>The assembly whose line named the id, for an id a line marked <c>[TemplateIds]</c> names; null for a class.</summary>
+        public IAssemblySymbol? LineIn { get; init; }
+
+        /// <summary>Where the line is, when it is in the project being compiled; null otherwise.</summary>
+        public LocationInfo? LineLocation { get; init; }
+
+        /// <summary>Whether this is an id a line names rather than a class: it has no class, and fills nothing but an id.</summary>
+        public bool IsLine => LineIn is not null;
+
         public INamedTypeSymbol? SymbolIn(Compilation compilation)
             => Symbol ??= MetadataName is null ? null : compilation.GetTypeByMetadataName(MetadataName);
     }

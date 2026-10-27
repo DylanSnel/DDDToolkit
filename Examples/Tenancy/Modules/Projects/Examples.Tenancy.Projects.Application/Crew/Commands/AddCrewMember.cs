@@ -40,7 +40,7 @@ public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, 
 public sealed class AddCrewMemberHandler(
     IProjectStore store,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    SampleTenancy tenancy,
+    TenancyAccessManager tenancy,
     TimeProvider clock)
     : ICommandHandler<AddCrewMember>
 {
@@ -64,7 +64,7 @@ public sealed class AddCrewMemberHandler(
 
         var now = clock.GetUtcNow();
         var period = CrewPeriod.Between(now, command.Until);
-        var by = tenancy.RequireTenant().Seat;
+        var by = tenancy.CurrentTenant.Require().Seat;
         if (command.Role is { } given)
         {
             project.AddToCrew(command.Seat, given, period, now, by);

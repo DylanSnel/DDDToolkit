@@ -39,7 +39,14 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// them (<see cref="TemplateRegistrationAttribute"/>), or into a project of the same <c>[assembly: Module]</c>
     /// that declares none, such as the module's infrastructure project next to its domain project. It calls this
     /// method with the classes and ids filled in; the context is still the caller's to name. This method can be
-    /// called as well, with all ten.
+    /// called as well, with all eleven.
+    /// </para>
+    /// <para>
+    /// It registers the access manager per scope: <typeparamref name="TAccessManager"/>, the application's
+    /// <c>TenancyAccessManager</c>, which the generator writes into the project that declares the classes and fills in
+    /// here, or the package's class itself where a call names it; and the package's <see cref="TenancyAccessManager{TTenantId, TSeatId, TUnitId, TRoleId}"/> it derives from.
+    /// It registers the read of the tenants a round of system work visits over the context as well, which the access
+    /// manager asks.
     /// </para>
     /// <para>
     /// It brings the start-up checks of <see cref="TenancyChecks"/>, which a host runs with
@@ -67,6 +74,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
         [TemplateType(typeof(RoleAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TRole,
         [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId,
+        [TemplateFacade(typeof(TenancyAccessManager<,,,>))] TAccessManager,
         TContext>(
         this IServiceCollection services,
         Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>? configure = null)
@@ -79,11 +87,16 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
         where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
         where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+        where TAccessManager : TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>(configure);
+
+        // The access manager the application's code takes, one per scope, and the read of the tenants to visit it asks.
+        services.TryAddScoped<TAccessManager>();
+        services.TryAddScoped<ITenantsToSweep<TTenantId>, EfTenantsToSweep<TTenant, TTenantId, TContext>>();
 
         // What the store leaves to the database: nothing, unless a package for one database says otherwise.
         services.AddOptions<TenancyStoreOptions>();
@@ -206,15 +219,23 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// <c>AddTenancyAccess&lt;IBillingRequest, BillingContext&gt;</c> is generated into the project that declares
     /// Tenancy's classes, closed over their four ids (<see cref="TemplateRegistrationAttribute"/>), or into a
     /// project of the same <c>[assembly: Module]</c> that declares none. A module that only asks Tenancy
-    /// declares none of the classes and calls this method itself, with the application's four ids written out,
-    /// as it maps the read model. Tenancy itself is registered by <c>AddTenancy</c>, in the same container;
-    /// adding the check for an interface more than once is harmless.
+    /// declares none of the classes, and says which of its ids are Tenancy's once, with
+    /// <c>[assembly: TenancyIds&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;]</c> in its application project: the
+    /// project of the module that holds its context then gets it too. Tenancy itself is registered by
+    /// <c>AddTenancy</c>, in the same container; adding the check for an interface more than once is harmless.
+    /// </para>
+    /// <para>
+    /// It registers the module's access manager per scope as well: <typeparamref name="TAccessManager"/>, the
+    /// <c>TenancyAccessManager</c> the generator writes for the module and fills in here.
     /// </para>
     /// </summary>
     /// <typeparam name="TTenantId">The application's tenant id.</typeparam>
     /// <typeparam name="TSeatId">The application's seat id.</typeparam>
     /// <typeparam name="TUnitId">The application's unit id.</typeparam>
     /// <typeparam name="TRoleId">The application's role id.</typeparam>
+    /// <typeparam name="TAccessManager">
+    /// The access manager the module's code takes: the module's <c>TenancyAccessManager</c>, or the package's class itself.
+    /// </typeparam>
     /// <typeparam name="TRequests">The module's request interface, which every command and query of the module implements.</typeparam>
     /// <typeparam name="TContext">The module's context, which a permission for the whole tenant is asked over.</typeparam>
     /// <param name="services">The service collection.</param>
@@ -225,6 +246,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
         [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
         [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId,
+        [TemplateFacade(typeof(TenancyAccessManager<,,,>))] TAccessManager,
         TRequests,
         TContext>(
         this IServiceCollection services)
@@ -232,11 +254,15 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        where TAccessManager : TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>
         where TRequests : class, IRequireAccess
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // The module's access manager, one per scope, and the package's it derives from, which the check asks.
+        services.TryAddScoped<TAccessManager>();
+        services.TryAddScoped<TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>>();
         return services.AddAccessCheck<TRequests, TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, TContext>>();
     }
 }

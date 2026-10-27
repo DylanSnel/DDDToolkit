@@ -226,7 +226,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         // A host without the demonstration: one tenant, provisioned here, which nobody has marked.
         await using var host = await sample.StartAsync(settings: new Dictionary<string, string> { [DemoSeeder.Setting] = "false" }, seeded: false);
 
-        using (TenancyUseCases.BeginSystem())
+        using (SampleAccess.Manager.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
@@ -272,7 +272,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             await using var scope = host.Services.CreateAsyncScope();
             var handler = new MarkTenantAsDemoHandler(
                 scope.ServiceProvider.GetRequiredService<TenancyUseCases.IStore>(),
-                scope.ServiceProvider.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>());
+                scope.ServiceProvider.GetRequiredService<TenancyAccessManager>());
 
             var handle = async () => await handler.Handle(new MarkTenantAsDemo(), Cancellation);
             (await handle.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.SystemOnly);
@@ -280,7 +280,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         (await IsDemoAsync(host)).Should().BeFalse("a refused command changes nothing");
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(new MarkTenantAsDemo(), Cancellation);
@@ -736,7 +736,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         }
 
         // System work that acts for no seat is a mistake in the calling code, found before the project is asked about.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RecordInspection(outOfSight, Blank), Cancellation);
@@ -1319,7 +1319,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (await send.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*Only system work chooses a project's id*");
         }
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
         {
             await using (var before = host.Services.CreateAsyncScope())
             {
@@ -1389,7 +1389,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     /// <summary>Whether harbor is marked as a demonstration, read as system work there.</summary>
     private static async Task<bool> IsDemoAsync(SampleFactory host)
     {
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<TenantsContext>().Tenants
@@ -1409,7 +1409,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     /// <summary>Whether harbor's project role <paramref name="role"/> is in use, read as system work there.</summary>
     private static async Task<CustomRoleStatus> StatusOfAsync(SampleFactory host, ProjectRoleId role)
     {
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ProjectsContext>().ProjectRoles

@@ -98,7 +98,7 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
         // offers it. This module sees Tenancy's ids, from the Tenants module's contracts, and none of its classes,
         // so nothing it sees says which of its ids are Tenancy's: it names them, where the Tenants module, which
         // declares the classes, is given its calls closed over them.
-        modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>(TenancyTablesSchema);
+        modelBuilder.AddTenancyReadFunctions(TenancyTablesSchema);
 
         modelBuilder.Entity<Project>(project =>
         {

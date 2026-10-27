@@ -78,6 +78,12 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
     /// </summary>
     internal abstract string? ProblemWithWhoActed { get; }
 
+    /// <summary>
+    /// The application's services the interceptor was made from: where <c>db.Tenancy()</c> finds Tenancy's catalogue and
+    /// clock for a context <c>UseDDDToolkit</c> wired, whoever made the context.
+    /// </summary>
+    internal abstract IServiceProvider Services { get; }
+
     /// <inheritdoc />
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -330,6 +336,9 @@ internal sealed class TenancySaveInterceptor<TTenant, TTenantId, TOrganization, 
 
     /// <inheritdoc />
     internal override string? ProblemWithWhoActed => _actedByProblem.Value;
+
+    /// <inheritdoc />
+    internal override IServiceProvider Services => services;
 
     /// <summary>
     /// The accessor is the last one registered, so one the application registers after <c>AddTenancy</c> takes

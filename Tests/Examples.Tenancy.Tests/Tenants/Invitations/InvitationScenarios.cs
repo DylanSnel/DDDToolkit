@@ -425,7 +425,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
     {
         foreach (var tenant in DemoData.Tenants)
         {
-            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
+            using (SampleAccess.Manager.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await using var scope = host.Services.CreateAsyncScope();
                 var store = scope.ServiceProvider.GetRequiredService<TenancyUseCases.IInvitationStore<Invitation, InvitationId>>();

@@ -65,15 +65,19 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
             return;
         }
 
-        // System work, closed over the Tenants module's ids like its use cases, so the host names neither of them.
-        using (TenancyUseCases.BeginSystem())
+        // Who acts, and the work that is not a caller's own: the access manager, closed over the Tenants module's ids
+        // like its use cases, so the host names neither of them. It keeps nothing, so one serves the whole seeding.
+        await using var seeding = scopes.CreateAsyncScope();
+        var access = seeding.ServiceProvider.GetRequiredService<TenancyAccessManager>();
+
+        using (access.BeginSystem())
         {
             foreach (var tenant in DemoData.Tenants)
             {
                 if (!await ProvisionAsync(tenant, cancellationToken))
                 {
                     logger.LogInformation("The demonstration is seeded already: the slug {Slug} is taken.", tenant.Slug);
-                    await WarnWhenIncompleteAsync(cancellationToken);
+                    await WarnWhenIncompleteAsync(access, cancellationToken);
                     return;
                 }
             }
@@ -84,12 +88,12 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
             // The organization is Tenancy's, so it is seeded as Tenancy's system work in the tenant; the projects are
             // Projects', so they are seeded as that module's, in its own scope, the one the projects' rules let
             // through. Tenancy's scope holds nothing on a project.
-            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
+            using (access.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await SeedOrganizationAsync(tenant, cancellationToken);
             }
 
-            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id, ProjectMembership.Scope))
+            using (access.BeginSystemIn(tenant.Id, tenant.Administrator.Id, ProjectMembership.Scope))
             {
                 await SeedProjectsAsync(tenant, cancellationToken);
             }
@@ -139,7 +143,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
     /// there: the seeding that provisioned the tenants stopped before the end, or an earlier version of the sample
     /// seeded the file, and the demonstration's people and refusals would not all be the ones it promises.
     /// </summary>
-    private async Task WarnWhenIncompleteAsync(CancellationToken cancellationToken)
+    private async Task WarnWhenIncompleteAsync(TenancyAccessManager access, CancellationToken cancellationToken)
     {
         var missing = new List<string>();
         foreach (var tenant in DemoData.Tenants)
@@ -149,7 +153,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
             IReadOnlyList<string> lacking;
             IReadOnlyList<SeatListing> seats;
             IReadOnlyList<RoleListing> roles;
-            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
+            using (access.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();
@@ -157,7 +161,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
                 roles = await sender.Send(new TenantRoles(), cancellationToken);
             }
 
-            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id, ProjectMembership.Scope))
+            using (access.BeginSystemIn(tenant.Id, tenant.Administrator.Id, ProjectMembership.Scope))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();

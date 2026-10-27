@@ -29,7 +29,7 @@ public static class TenancyQueryFilter
     /// <summary>
     /// The tenant the current Tenancy caller acts in, or <see langword="null"/> when it acts in none, which
     /// the filter matches with nothing. The filter calls this; code that wants the tenant asks
-    /// <c>ITenancy.RequireTenant()</c>.
+    /// <c>access.CurrentTenant.Require()</c>.
     /// <para>
     /// The parameter is what makes the filter follow the caller. Entity Framework caches a query with the
     /// filter's expression in it, and it would evaluate a call that takes nothing once, when the query is

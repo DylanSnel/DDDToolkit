@@ -428,7 +428,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
             var caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(identity), slug, Cancellation);
             using (TenancyCallers.Begin(caller))
             {
-                var queries = scope.ServiceProvider.Tenancy().In(scope.ServiceProvider.TenancyContext());
+                var queries = scope.ServiceProvider.TenancyContext().Tenancy();
                 foreach (var permission in permissions)
                 {
                     foreach (var unit in Units)
@@ -485,7 +485,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         await using var services = new TenancyServices(database, contexts: options => options.AddInterceptors(recorder));
         async Task<List<SeatId>> ActiveHoldersAsync(IServiceProvider scoped, DbContext context)
         {
-            var holders = scoped.Tenancy().In(context).SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, NorthPier);
+            var holders = context.Tenancy().SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, NorthPier);
             return await context.Set<SeatRow<TenantId, SeatId>>().Where(seat => holders.Contains(seat.Id) && seat.Status == SeatStatus.Active).Select(seat => seat.Id).ToListAsync(Cancellation);
         }
 
