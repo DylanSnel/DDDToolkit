@@ -997,7 +997,7 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
   because the application's class leaves none open. The generator skips a class that does not meet these rules,
   without a diagnostic. So prove it in the package's own tests, with a project that names the class.
 
-[Tenancy](tenancy/your-module.md#calling-a-use-case) is written this way. Its use cases are `TenancyUseCases<...>`, and
+[Tenancy](tenancy/your-module.md#the-managers-and-the-access-manager) is written this way. Its use cases are `TenancyUseCases<...>`, and
 an application, including the sample, names them `TenancyUseCases.SeatCommands`. The use cases of
 [Membership](membership/overview.md) are small classes generic over the ids only, such as
 `MemberAdmission<TResourceId, TMemberId, TRoleId>`. Their type arguments are short to write where the application uses

@@ -1,0 +1,525 @@
+{
+  "$comment": "The situations of the chooser on docs/tenancy/keeping-tenants-apart.md, under Which call for which situation. Each one's title, use, holds, recordedAs and postgres are the cells of the page's table row, in the page's order. Tests/DDDToolkit.Analyzers.Tests/Docs/WhoActsDocsTests.cs holds them to the page, every call and attribute to the code, every recorded kind to TenancyActorKinds, every refusal code to the code, and every link to a page and heading of docs/.",
+  "situations": [
+    {
+      "id": "sign-up",
+      "label": "Sign-up",
+      "title": "A user signs up and creates an organization",
+      "use": "`access.BeginSystem()`",
+      "story": "Tove signs in for the first time and creates Meadow Gardens. She has no seat in any tenant yet.",
+      "why": [
+        "No tenant exists yet, so there is no tenant to begin in.",
+        "Tove has no seat, so no rights of hers can create a tenant.",
+        "`ProvisionAsync` accepts only system work outside any tenant. A handler that forgets the `using` is refused on its first request."
+      ],
+      "actsIn": "No tenant. `ProvisionAsync` then works inside the new tenant to save it.",
+      "holds": "Nothing in any tenant. Only `ProvisionAsync` accepts it.",
+      "recordedAs": "`system`",
+      "recordedDetail": "Each event of the new tenant has `By`: the system, in the scope `tenancy`. The access history keeps these events.",
+      "postgres": "`ddd_system_in`, scope `tenancy`, no tenant",
+      "postgresDetail": "The setting `tenancy.caller_tenant` is empty, so the policies show the role no row. `ProvisionAsync` then starts system work inside the new tenant, so its save runs with that tenant set.",
+      "kind": "system",
+      "notes": [
+        "Read `access.CurrentUser.Id` before the `using`. Inside it, `CurrentUser.IsSystem` is true and `Id` is null.",
+        "Put only the `ProvisionAsync` call inside the `using`.",
+        "Tove becomes the administrator. Her new seat is placed at the root and holds the administrators' role there.",
+        "A seat that calls `ProvisionAsync` gets `access.system-only`. A caller without a seat gets the refusal that tenant selection gave it."
+      ],
+      "calls": [
+        "BeginSystem"
+      ],
+      "attributes": [],
+      "refusals": [
+        "access.system-only"
+      ],
+      "roles": [
+        "ddd_system_in"
+      ],
+      "code": [
+        "[SignedIn]",
+        "public sealed record SignUpOrganization(string Slug, string Name)",
+        "    : ICommand<Tenant>, ITenancyRequest;",
+        "",
+        "public sealed class SignUpOrganizationHandler(TenantManager tenants, TenancyAccessManager access)",
+        "    : ICommandHandler<SignUpOrganization, Tenant>",
+        "{",
+        "    public async ValueTask<Tenant> Handle(SignUpOrganization command, CancellationToken cancellationToken)",
+        "    {",
+        "        // Read the user before the using. Inside it, the current user is the system.",
+        "        var admin = access.CurrentUser.Id",
+        "            ?? throw new InvalidOperationException(\"[SignedIn] lets only a signed-in user through.\");",
+        "",
+        "        using (access.BeginSystem())",
+        "        {",
+        "            return await tenants.ProvisionAsync(new TenantToProvision(",
+        "                Slug: command.Slug,",
+        "                Name: command.Name,",
+        "                Shape: TenantShape.Hierarchical,",
+        "                RootName: command.Name,",
+        "                AdminIdentity: admin), cancellationToken);",
+        "        }",
+        "    }",
+        "}"
+      ],
+      "links": [
+        {
+          "text": "Requests that provision a tenant",
+          "to": "/docs/tenancy/who-may-do-what#requests-that-provision-a-tenant"
+        },
+        {
+          "text": "System work outside any tenant",
+          "to": "/docs/tenancy/keeping-tenants-apart#system-work-outside-any-tenant"
+        }
+      ]
+    },
+    {
+      "id": "staff-create",
+      "label": "Staff create a tenant",
+      "title": "Your staff create a tenant for a customer",
+      "use": "`[Operator]` on the command",
+      "story": "A colleague in support signs in with an operator token. A customer calls in, and the colleague sets up South Docks for that customer, with the customer as its administrator.",
+      "why": [
+        "An operator holds no seat, so every change an operator makes is operator work.",
+        "`[Operator]` says so on the request. The access check lets only operators through, and runs the handler as operator work.",
+        "The command has no `[ForTenant]` member, so the work acts in no tenant. Provisioning needs that."
+      ],
+      "actsIn": "No tenant. `ProvisionAsync` then works inside the new tenant to save it.",
+      "holds": "As `BeginSystem()`, for the whole handler",
+      "recordedAs": "`operator`, with the operator's id",
+      "recordedDetail": "Each event of the new tenant has `By`: the operator, with the operator's id. That id is the current user's. A table of yours that calls `RecordsWhoChanged` gets `operator` in `CreatedByKind` and the id in `CreatedByIdentity`.",
+      "postgres": "`ddd_system_in`, scope `tenancy`, no tenant",
+      "postgresDetail": "The command does not run as the operator's own database role. It runs as the scoped system role, as a sign-up does.",
+      "kind": "operator",
+      "notes": [
+        "A caller whose token carries no operator token role gets `tenancy.operators-only` from the access check. The handler does not run.",
+        "The handler calls no `Begin…` method. The operator work lasts for the whole handler.",
+        "The command names no tenant, so a `Tenant` header on the request is ignored.",
+        "The customer gets the administrator seat. The operator gets no seat."
+      ],
+      "calls": [],
+      "attributes": [
+        "Operator"
+      ],
+      "refusals": [
+        "tenancy.operators-only"
+      ],
+      "roles": [
+        "ddd_system_in"
+      ],
+      "code": [
+        "[Operator]   // only operators; the handler runs as operator work in no tenant",
+        "public sealed record CreateCustomerTenant(string Slug, string Name, Guid Customer)",
+        "    : ICommand<Tenant>, ITenancyRequest;",
+        "",
+        "public sealed class CreateCustomerTenantHandler(TenantManager tenants)",
+        "    : ICommandHandler<CreateCustomerTenant, Tenant>",
+        "{",
+        "    public async ValueTask<Tenant> Handle(CreateCustomerTenant command, CancellationToken cancellationToken)",
+        "        => await tenants.ProvisionAsync(new TenantToProvision(",
+        "            Slug: command.Slug,",
+        "            Name: command.Name,",
+        "            Shape: TenantShape.Hierarchical,",
+        "            RootName: command.Name,",
+        "            AdminIdentity: command.Customer), cancellationToken);",
+        "}"
+      ],
+      "links": [
+        {
+          "text": "Operators",
+          "to": "/docs/tenancy/operators-and-history#operators"
+        },
+        {
+          "text": "Who changed a row",
+          "to": "/docs/tenancy/operators-and-history#who-changed-a-row"
+        }
+      ]
+    },
+    {
+      "id": "staff-change",
+      "label": "Staff change a tenant",
+      "title": "Your staff change a tenant",
+      "use": "`[Operator]` and a `[ForTenant]` member",
+      "story": "The owner of Harbor Works asks support to suspend the tenant while they sort out a payment.",
+      "why": [
+        "An operator has no seat in Harbor Works, so the change is operator work in that tenant.",
+        "The `[ForTenant]` member names the tenant on the command. The access check runs the handler as operator work there.",
+        "`SuspendAsync` accepts only system work in the tenant. Operator work is system work."
+      ],
+      "actsIn": "Harbor Works, the tenant the command names",
+      "holds": "Every permission in that tenant, for the whole handler",
+      "recordedAs": "`operator`, with the operator's id",
+      "recordedDetail": "The event `tenancy.tenant-suspended` has `By`: the operator, with the operator's id. The access history keeps it. A table of yours that calls `RecordsWhoChanged` gets `operator` in `ChangedByKind` and the id in `ChangedByIdentity`.",
+      "postgres": "`ddd_system_in`, scope `tenancy`, that tenant",
+      "postgresDetail": "`tenancy.caller_tenant` holds Harbor Works. A query marked `[Operator]` starts no work, and reads every tenant through the database role that the operator's token role maps to.",
+      "kind": "operator",
+      "notes": [
+        "The whole handler holds every permission in Harbor Works and none in another tenant. Keep an operator's handler to the operator's act.",
+        "A request whose `Tenant` header names another tenant than the `[ForTenant]` member gets `tenancy.tenant-mismatch`.",
+        "`[Operator(Tenant = OperatorTenant.FromRequest)]` takes the tenant from the request's `Tenant` header instead. The command then has no `[ForTenant]` member.",
+        "A caller without an operator token role gets `tenancy.operators-only` before the handler runs."
+      ],
+      "calls": [],
+      "attributes": [
+        "Operator",
+        "ForTenant"
+      ],
+      "operatorTenant": "FromRequest",
+      "refusals": [
+        "tenancy.operators-only",
+        "tenancy.tenant-mismatch"
+      ],
+      "roles": [
+        "ddd_system_in"
+      ],
+      "code": [
+        "[Operator]   // only operators; the handler runs as operator work in the tenant below",
+        "public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason)",
+        "    : ICommand<Tenant>, ITenancyRequest;",
+        "",
+        "public sealed class SuspendTenantHandler(TenantManager tenants)",
+        "    : ICommandHandler<SuspendTenant, Tenant>",
+        "{",
+        "    public async ValueTask<Tenant> Handle(SuspendTenant command, CancellationToken cancellationToken)",
+        "        => await tenants.SuspendAsync(command.Reason, cancellationToken);",
+        "}",
+        "",
+        "// A query starts no work. The operator reads every tenant through its own database role.",
+        "[Operator]",
+        "public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;"
+      ],
+      "links": [
+        {
+          "text": "Operators",
+          "to": "/docs/tenancy/operators-and-history#operators"
+        },
+        {
+          "text": "Who changed a row",
+          "to": "/docs/tenancy/operators-and-history#who-changed-a-row"
+        }
+      ]
+    },
+    {
+      "id": "seeding",
+      "label": "Seeding",
+      "title": "Demo data is seeded at start-up",
+      "use": "`access.BeginSystemIn(tenant, actingSeat: admin)`",
+      "story": "On its first start in development, the host fills Harbor Works with units, seats and grants. Ada is the administrator of Harbor Works.",
+      "why": [
+        "At start-up there is no request and no caller.",
+        "The work belongs inside one known tenant, Harbor Works.",
+        "`actingSeat` names Ada as the seat the work is for. The history then reads as system work for Ada."
+      ],
+      "actsIn": "Harbor Works",
+      "holds": "Every permission in that tenant",
+      "recordedAs": "`system`; the events name the acting seat",
+      "recordedDetail": "Rhea's placement and grant name Ada as the seat that placed and granted them. The events' `By` is the system, for Ada. A table of yours that calls `RecordsWhoChanged` gets `system`, with no seat.",
+      "postgres": "`ddd_system_in`, scope `tenancy`, that tenant",
+      "postgresDetail": "`tenancy.caller_tenant` holds Harbor Works. The role cannot bypass row level security, so the policies keep the work in that tenant.",
+      "kind": "system",
+      "notes": [
+        "The work holds every permission in Harbor Works and none in Meadow Gardens.",
+        "The last-administrator rule still applies. The seeding cannot take the administrators' role from Ada by mistake.",
+        "`actingSeat` adds no rights. It names the person the work is for, such as the administrator who starts an import.",
+        "A seeder runs in a service scope of its own. It resolves the managers and the access manager as a handler does."
+      ],
+      "calls": [
+        "BeginSystemIn"
+      ],
+      "attributes": [],
+      "refusals": [],
+      "roles": [
+        "ddd_system_in"
+      ],
+      "code": [
+        "public sealed class DemoSeeder(IServiceScopeFactory scopes) : IHostedService",
+        "{",
+        "    public async Task StartAsync(CancellationToken cancellationToken)",
+        "    {",
+        "        await using var scope = scopes.CreateAsyncScope();",
+        "        var access = scope.ServiceProvider.GetRequiredService<TenancyAccessManager>();",
+        "        var organization = scope.ServiceProvider.GetRequiredService<OrganizationManager>();",
+        "        var seats = scope.ServiceProvider.GetRequiredService<SeatManager>();",
+        "",
+        "        using (access.BeginSystemIn(Demo.Harbor, actingSeat: Demo.AdaSeat))",
+        "        {",
+        "            var north = await organization.AddUnitAsync(Demo.HarborRoot, \"North\", cancellationToken);",
+        "            var rhea = await seats.AddAsync(Demo.RheaIdentity, cancellationToken);",
+        "            await seats.PlaceAsync(rhea.Id, north.Id, primary: true, cancellationToken);",
+        "            await seats.GrantAsync(rhea.Id, Demo.AreaManager, north.Id,",
+        "                until: null, reason: \"Demo data\", cancellationToken);",
+        "        }",
+        "    }",
+        "",
+        "    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;",
+        "}"
+      ],
+      "links": [
+        {
+          "text": "System work",
+          "to": "/docs/tenancy/keeping-tenants-apart#system-work"
+        },
+        {
+          "text": "Who changed a row",
+          "to": "/docs/tenancy/operators-and-history#who-changed-a-row"
+        }
+      ]
+    },
+    {
+      "id": "nightly-job",
+      "label": "Nightly job",
+      "title": "A nightly job visits every tenant",
+      "use": "`access.TenantsToSweepAsync(scope)`, then `access.BeginSystemIn(tenant, scope: \"inspections\")`",
+      "story": "Every night, the Inspections module closes the inspections that ran past their end date, in every tenant.",
+      "why": [
+        "The job is the module's own work, so it runs in the module's scope, `inspections`.",
+        "The job first reads which tenants to visit. It then starts system work in each tenant in turn.",
+        "Each tenant gets its own `using`, so a mistake in one tenant cannot touch another."
+      ],
+      "actsIn": "Each tenant, one at a time",
+      "holds": "Every permission on the module's rows in each tenant. It reads Tenancy's tables and writes none.",
+      "recordedAs": "`system`, in the module's scope",
+      "recordedDetail": "A table of the module that calls `RecordsWhoChanged` gets `system` in its `…ByKind` columns. An event log names the system in the scope `inspections`.",
+      "postgres": "`ddd_system_in`, the module's scope, each tenant in turn",
+      "postgresDetail": "The role's claims carry the scope `inspections`. Work in a module's scope reads Tenancy's tables and cannot write them, so the job cannot change a seat or a grant.",
+      "kind": "system",
+      "notes": [
+        "`TenantsToSweepAsync` returns the active and the suspended tenants. It reads them on a context of its own, so its read across tenants does not reach the job's work.",
+        "Call `TenantsToSweepAsync` before you start a transaction. It opens a connection of its own.",
+        "The Inspections module sees only Tenancy's ids. It gets `TenancyAccessManager` from one line, `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`.",
+        "On a resource with members, Membership lets the work through where the resource's rules list the scope. By default the rules list the module's own scope."
+      ],
+      "calls": [
+        "TenantsToSweepAsync",
+        "BeginSystemIn"
+      ],
+      "attributes": [],
+      "refusals": [],
+      "roles": [
+        "ddd_system_in"
+      ],
+      "code": [
+        "public sealed class CloseOverdueInspectionsJob(IServiceScopeFactory scopes)",
+        "{",
+        "    public async Task RunAsync(CancellationToken cancellationToken)",
+        "    {",
+        "        await using var scope = scopes.CreateAsyncScope();",
+        "        var access = scope.ServiceProvider.GetRequiredService<TenancyAccessManager>();",
+        "        var inspections = scope.ServiceProvider.GetRequiredService<IInspectionStore>();",
+        "",
+        "        foreach (var tenant in await access.TenantsToSweepAsync(\"inspections\", cancellationToken))",
+        "        {",
+        "            using (access.BeginSystemIn(tenant, scope: \"inspections\"))",
+        "            {",
+        "                await inspections.CloseOverdueAsync(cancellationToken);",
+        "            }",
+        "        }",
+        "    }",
+        "}"
+      ],
+      "links": [
+        {
+          "text": "Reads before any tenant is known",
+          "to": "/docs/tenancy/keeping-tenants-apart#reads-before-any-tenant-is-known"
+        },
+        {
+          "text": "The scoped system caller",
+          "to": "/docs/tenancy/keeping-tenants-apart#the-scoped-system-caller"
+        }
+      ]
+    },
+    {
+      "id": "grant-after-condition",
+      "label": "Grant after a condition",
+      "title": "Your code grants a role after a condition",
+      "use": "`access.BeginSystemIn(tenant)`, with no acting seat",
+      "story": "Leo passes the safety quiz. Harbor then gives him the role Safety officer at North, his unit. Nobody clicks a grant button.",
+      "why": [
+        "Leo holds no `tenancy.grants.manage`, so his own seat cannot give the role.",
+        "Your handler checks the quiz as Leo. It then gives the role as system work.",
+        "Containment does not apply to system work, so the grant passes with containment on.",
+        "No person asked for the grant, so the work names no acting seat. The grant's reason says why the role was given."
+      ],
+      "actsIn": "Leo's tenant, Harbor Works",
+      "holds": "Every permission in that tenant",
+      "recordedAs": "`system`, with the grant's reason",
+      "recordedDetail": "The grant names no seat that granted it, and it stores the reason Passed Safety quiz. The event's `GrantedBy` is empty, and its `By` is the system in the scope `tenancy`.",
+      "postgres": "`ddd_system_in`, scope `tenancy`, that tenant",
+      "postgresDetail": "Only work in the scope `tenancy` writes Tenancy's tables, so the grant uses Tenancy's scope.",
+      "kind": "system",
+      "notes": [
+        "Leave out `actingSeat` here. It names the person who asked for the work. With Leo as acting seat, the history would read as system work for Leo, which looks as if Leo gave himself the role.",
+        "Take the tenant and the seat from `access.CurrentTenant`. Take the role and the unit from your own records. A role taken from the request would let anyone who passes name the administrators' role.",
+        "Only the `GrantAsync` call runs as system work. The quiz check runs as Leo.",
+        "The handler takes `SeatManager`, so it lives in a project that sees Tenancy's classes."
+      ],
+      "calls": [
+        "BeginSystemIn"
+      ],
+      "attributes": [],
+      "refusals": [],
+      "roles": [
+        "ddd_system_in"
+      ],
+      "code": [
+        "[InTenant]",
+        "public sealed record SubmitSafetyQuiz(QuizId Quiz, IReadOnlyList<string> Answers)",
+        "    : ICommand<bool>, ITenancyRequest;",
+        "",
+        "public sealed class SubmitSafetyQuizHandler(",
+        "    IQuizRepository quizzes, SeatManager seats, TenancyAccessManager access)",
+        "    : ICommandHandler<SubmitSafetyQuiz, bool>",
+        "{",
+        "    public async ValueTask<bool> Handle(SubmitSafetyQuiz command, CancellationToken cancellationToken)",
+        "    {",
+        "        var current = access.CurrentTenant.Require();",
+        "        var seat = current.Seat ?? throw new InvalidOperationException(\"Only a seat takes a quiz.\");",
+        "",
+        "        var quiz = await quizzes.GetAsync(command.Quiz, cancellationToken);",
+        "        if (!quiz.Passes(command.Answers))",
+        "        {",
+        "            return false;",
+        "        }",
+        "",
+        "        // No person asked for this grant, so the work names no acting seat.",
+        "        // The role and the unit come from the quiz. The request names neither.",
+        "        using (access.BeginSystemIn(current.Id))",
+        "        {",
+        "            await seats.GrantAsync(seat, quiz.GrantsRole, quiz.GrantsAtUnit,",
+        "                until: null, reason: $\"Passed {quiz.Name}\", cancellationToken);",
+        "        }",
+        "",
+        "        return true;",
+        "    }",
+        "}"
+      ],
+      "links": [
+        {
+          "text": "Containment and system work",
+          "to": "/docs/tenancy/roles-and-permissions#containment-and-system-work"
+        }
+      ]
+    },
+    {
+      "id": "token-link",
+      "label": "Link with a token",
+      "title": "A link carries a token instead of a sign-in",
+      "use": "`access.BeginTokenIn(tenant, seat, scope)`",
+      "story": "Rhea adds a calendar feed of her inspections to her phone. The calendar app fetches `/feeds/{token}.ics` without a sign-in. The token is the only proof.",
+      "why": [
+        "Nobody signs in, so the request cannot run as Rhea.",
+        "Your code checks the token and finds the seat it belongs to.",
+        "Token work for that seat makes the history name the link and Rhea's seat."
+      ],
+      "actsIn": "Rhea's tenant, Harbor Works",
+      "holds": "Every row of the module in that tenant. Your code reads only the seat's rows.",
+      "recordedAs": "`token`, with the seat the token stands for",
+      "recordedDetail": "A table of the module that calls `RecordsWhoChanged` gets `token`, with no seat in the columns. An event log names the seat the token stands for.",
+      "postgres": "`ddd_system_in`, the module's scope, that tenant",
+      "postgresDetail": "The scope is required and is the module's, `inspections`. So the work cannot write Tenancy's tables.",
+      "kind": "token",
+      "notes": [
+        "Token work is system work. It could read every inspection in the tenant, so your code reads only Rhea's.",
+        "Start it only after your code has checked the token and found that the seat is still in use.",
+        "The request is `[AllowAnonymous]`. The handler's check of the token is what lets the work through."
+      ],
+      "calls": [
+        "BeginTokenIn"
+      ],
+      "attributes": [],
+      "refusals": [],
+      "roles": [
+        "ddd_system_in"
+      ],
+      "code": [
+        "[AllowAnonymous]   // the link has no sign-in; the handler checks the token",
+        "public sealed record InspectionFeed(string Token) : IQuery<string>, IInspectionsRequest;",
+        "",
+        "public sealed class InspectionFeedHandler(",
+        "    IFeedTokens tokens, IInspectionStore inspections, TenancyAccessManager access)",
+        "    : IQueryHandler<InspectionFeed, string>",
+        "{",
+        "    public async ValueTask<string> Handle(InspectionFeed query, CancellationToken cancellationToken)",
+        "    {",
+        "        var owner = await tokens.FindInUseAsync(query.Token, cancellationToken)",
+        "            ?? throw InspectionRefusals.FeedNotFound();",
+        "",
+        "        using (access.BeginTokenIn(owner.Tenant, owner.Seat, scope: \"inspections\"))",
+        "        {",
+        "            var mine = await inspections.ForInspectorAsync(owner.Seat, cancellationToken);",
+        "            return Calendar.Render(mine);",
+        "        }",
+        "    }",
+        "}"
+      ],
+      "links": [
+        {
+          "text": "System work",
+          "to": "/docs/tenancy/keeping-tenants-apart#system-work"
+        },
+        {
+          "text": "The scoped system caller",
+          "to": "/docs/tenancy/keeping-tenants-apart#the-scoped-system-caller"
+        }
+      ]
+    },
+    {
+      "id": "no-begin",
+      "label": "No Begin",
+      "title": "An administrator imports seats",
+      "use": "Nothing. The handler runs as the caller.",
+      "story": "Ada uploads a list of 40 people to give them seats at North.",
+      "why": [
+        "Ada's seat holds `tenancy.seats.manage`, so the handler can do the work as Ada.",
+        "System work would skip Ada's checks for no reason.",
+        "With system work, the history would name the system instead of Ada."
+      ],
+      "actsIn": "Ada's tenant, Harbor Works",
+      "holds": "What the caller's seat holds",
+      "recordedAs": "`seat`, with the caller's seat",
+      "recordedDetail": "The events' `By` is Ada's seat, and the access history keeps them. A table of yours that calls `RecordsWhoChanged` gets `seat`, and `…BySeat` holds Ada's seat.",
+      "postgres": "`authenticated`, the caller's own role",
+      "postgresDetail": "`tenancy.caller_tenant` holds Harbor Works, and the policies find Ada's seat again from her token.",
+      "kind": "seat",
+      "notes": [
+        "The managers check every new seat against Ada's rights, as for one seat added by hand.",
+        "A caller without `tenancy.seats.manage` gets `tenancy.not-permitted` from the access check.",
+        "Start system work only when the caller's own rights cannot do the work."
+      ],
+      "calls": [],
+      "attributes": [],
+      "refusals": [
+        "tenancy.not-permitted"
+      ],
+      "roles": [
+        "authenticated"
+      ],
+      "code": [
+        "[RequiresPermission(TenancyPermissions.SeatsManage)]",
+        "public sealed record ImportSeats(OrganizationUnitId Unit, IReadOnlyList<Guid> Identities)",
+        "    : ICommand<IReadOnlyList<Seat>>, ITenancyRequest;",
+        "",
+        "public sealed class ImportSeatsHandler(SeatManager seats)",
+        "    : ICommandHandler<ImportSeats, IReadOnlyList<Seat>>",
+        "{",
+        "    public async ValueTask<IReadOnlyList<Seat>> Handle(ImportSeats command, CancellationToken cancellationToken)",
+        "    {",
+        "        var added = new List<Seat>();",
+        "        foreach (var identity in command.Identities)",
+        "        {",
+        "            var seat = await seats.AddAsync(identity, cancellationToken);",
+        "            added.Add(await seats.PlaceAsync(seat.Id, command.Unit, primary: true, cancellationToken));",
+        "        }",
+        "",
+        "        return added;",
+        "    }",
+        "}"
+      ],
+      "links": [
+        {
+          "text": "Tutorial, step 8: a unit and a seat",
+          "to": "/docs/tenancy/tutorial#step-8-a-unit-and-a-seat"
+        }
+      ]
+    }
+  ]
+}

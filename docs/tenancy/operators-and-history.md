@@ -5,38 +5,68 @@ sidebar_label: Operators and history
 
 # Tenancy: operators and history
 
-This page covers operators (your staff who look across tenants), the record of who wrote and changed each row, and
-the history of who changed access. Read it when support needs to see every tenant, or when a tenant asks who
+This page covers operators (your staff who work across tenants), the record of who wrote and changed each row, and
+the history of who changed access. Read it when support needs to see or change a tenant, or when a tenant asks who
 changed what. The words are defined in the [overview](overview.md).
 
 ## Operators
 
-An operator is a member of your staff who looks across tenants, for example in support. An operator **holds no
-seat** and **changes nothing directly**. So an operator is not an administrator of every tenant.
+An operator is a member of your staff who works across tenants, for example in support. An operator **holds no
+seat**. So an operator is not an administrator of every tenant.
 
 - **Who is an operator.** A signed-in user is an operator when the user's token carries a role listed in
-  [`TenancyOptions.OperatorTokenRoles`](reference/use-cases.md#operatortokenroles). The list is empty by default.
-  Registration refuses a token role that is also a seated token role. Tenant selection returns nobody for an
-  operator, whatever tenant the request names.
-- **What an operator reads.**
-  [`TenantDirectory.ListAsync(after, size)`](reference/use-cases.md#listasyncstring-int-cancellationtoken) returns
-  every tenant by slug, 1 to 200 per page, with its name, status and number of active seats. The read runs as the
-  operator. Every other caller gets `tenancy.operators-only` before anything is read, as with
-  [`[RequiresOperator]`](who-may-do-what.md#what-a-request-requires-of-its-caller) on a request of yours.
-- **An operator writes nothing.** Your module records what the operator asks for. System work that names the
-  operator then does the work. Use `TenancyUseCases.BeginOperator(identity)` to provision a tenant, and
-  `BeginOperatorIn(tenant, identity)` for work inside a tenant. The work holds what system work holds. The operator
-  is only [recorded](#who-changed-a-row) as the person the work was for.
-- The identity is the verified `sub` of the request that asked. Never take it from what a caller sends.
+  `TenancyOptions.OperatorTokenRoles` ([Registration](reference/use-cases.md#registration)). The list is empty by
+  default. Registration refuses a token role that is also a seated token role.
+- **Tenant selection.** Tenant selection gives an operator no seat in any tenant. It looks up the tenant the request
+  names by its slug, and keeps it for a command that acts in that tenant (below). A request that names no tenant gets
+  `tenancy.tenant-required`, and one that names a tenant nobody has gets `tenancy.not-seated`.
+- **A request for operators.** `[Operator]` on a request lets an operator through. The access check refuses every
+  other caller with `tenancy.operators-only` before the handler runs, seats and system work included.
+- **What an operator reads.** A query marked `[Operator]` starts no work. The operator reads as the signed-in user,
+  through the database role of its token, across tenants. `TenantManager.ListAsync(after, size)` returns every
+  tenant by slug, 1 to 200 per page, each as a `TenantManager.TenantListing` with its name and its number of active
+  seats. The manager refuses every other caller with `tenancy.operators-only` too.
+- **What an operator changes.** A command marked `[Operator]` runs its handler as operator work. Operator work is
+  system work, recorded as the operator. The operator's identity is the current user's id, never an id the request
+  sends. No method of your code starts operator work, so no code can record work as an operator who did not send the
+  command.
+
+| The command | The operator work acts in |
+|---|---|
+| `[Operator]`, with no `[ForTenant]` member | No tenant. Provisioning a tenant for a customer needs this. A tenant the request names is ignored. |
+| `[Operator]`, with a `[ForTenant] TenantId Tenant` member | The tenant the member names. A request that names another tenant beside the command is refused with `tenancy.tenant-mismatch`. |
+| `[Operator(Tenant = OperatorTenant.FromRequest)]` | The tenant the request names beside the command, the `Tenant` header in the sample. |
+
+- `Scope` names the scope of the work. Tenancy's own scope, `tenancy`, is the default, and only it writes Tenancy's
+  tables on Postgres. A module's own command names its module: `[Operator(Scope = "projects")]`.
+- The whole handler holds every permission in that tenant. Keep an operator's handler to the operator's act.
+- The analyzer reports three mistakes. [DDD00103](../diagnostics.md#ddd00103) is `FromRequest` beside a `[ForTenant]`
+  member. [DDD00104](../diagnostics.md#ddd00104) is `[Operator]` beside `[InTenant]` or `[RequiresPermission]`, which
+  no operator meets. [DDD00105](../diagnostics.md#ddd00105), a warning, is `Tenant` or `Scope` on a query's
+  `[Operator]`.
 
 ```csharp
-using (TenancyUseCases.BeginOperatorIn(tenant, operatorIdentity))
+// Support suspends a tenant for its owner. The command names the tenant.
+[Operator]
+public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenantsRequest;
+
+public sealed class SuspendTenantHandler(TenantManager tenants) : ICommandHandler<SuspendTenant, Tenant>
 {
-    await tenantCommands.SuspendAsync("Asked for by the owner", cancellationToken);
+    // Runs as operator work in that tenant, recorded as the operator who sent the command.
+    public async ValueTask<Tenant> Handle(SuspendTenant command, CancellationToken cancellationToken)
+        => await tenants.SuspendAsync(command.Reason, cancellationToken);
 }
+
+// The operators' list of tenants. A query starts no work.
+[Operator]
+public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenantsRequest;
 ```
 
-**On Postgres** an operator reads through a database role of its own. Map the token role to a database role, with
+[Which call for which situation](keeping-tenants-apart.md#which-call-for-which-situation) compares operator work
+with the other kinds of system work.
+
+**On Postgres** an operator's command runs as the scoped system role, `ddd_system_in`, because operator work is
+system work. An operator's query runs as a database role of its own. Map the token role to that role, with
 `PostgresRowLevelSecurityOptions.TokenRoles` or with `token:operator=<role>` in `SupabaseRowAccessRoles`. Mark the
 token roles you give Tenancy with `[TenancyOperators]`, so the export writes policies for the same roles:
 
@@ -68,9 +98,9 @@ options.OperatorTokenRoles.UnionWith(ShopOperators.TokenRoles);
 An entity kept to a tenant can record who wrote each row first and who changed it last:
 
 ```csharp
+// Project marks its TenantId [OfTenant], so the context keeps it to its tenant with no line of its own.
 modelBuilder.Entity<Project>(project =>
 {
-    project.ScopeToTenant(row => row.TenantId);
     project.RecordsWhoChanged<Project, SeatId>();   // in the module that declares your seat class: project.RecordsWhoChanged()
 });
 ```
@@ -82,9 +112,9 @@ columns.
 | Who acted | `…ByKind` | `…BySeat` | `…ByIdentity` |
 |---|---|---|---|
 | A seat | `seat` | the seat | |
-| An operator's system work (`BeginOperator`, `BeginOperatorIn`) | `operator` | | the operator's verified identity |
-| System work (`BeginSystemIn`), also when it acts for a seat | `system` | | |
-| A link's token (`BeginTokenIn`) | `token` | | |
+| An operator's command (`[Operator]`) | `operator` | | the operator's verified identity |
+| System work (`access.BeginSystemIn`), also when it acts for a seat | `system` | | |
+| A link's token (`access.BeginTokenIn`) | `token` | | |
 
 - The columns hold ids and never a [name](names-and-languages.md#names). Read one with
   `EF.Property<SeatId?>(row, TenancyAttribution.ChangedBySeat)`. The three `CreatedBy…` columns are fixed once the
@@ -92,8 +122,8 @@ columns.
 - When only a row of one of the entity's parts changes, in another table, the entity's row keeps its `ChangedBy…`
   values. An aggregate with a version changes its row with every change to its parts.
 - Adding the columns to an existing table needs a migration of yours. In a hierarchy stored in one table, call
-  `RecordsWhoChanged` on the root type. The first save refuses the call on a derived type alone, and refuses it
-  without `ScopeToTenant`.
+  `RecordsWhoChanged` on the root type. The first save refuses the call on a derived type alone, and on an entity
+  that is not kept to a tenant (with `[OfTenant]` or `ScopeToTenant`).
 - `AddTenancy` wraps the toolkit's `IActedByAccessor`, so an [event log](../entity-framework.md#an-event-log)
   records these kinds too. Register your own accessor before `AddTenancy`, as a singleton. An accessor registered
   after `AddTenancy` replaces Tenancy's accessor. `TenancyChecks.EnsureWired` then refuses a context that keeps the
@@ -154,8 +184,8 @@ options.UseOutbox<ShopTenancyContext>(outbox => outbox
   included.
 - The save that raised an event writes the event's row, so a rollback leaves no row. The row names the event's
   tenant (or the save's tenant) and who acted.
-- The payload holds ids, permissions, dates, who acted and a few facts, such as a slug, a pack or the reason for a
-  suspension. It never holds what anything is called, or why a role was given.
+- The payload holds ids, permissions, dates, who acted and a few facts, such as a slug, a starter role or the reason
+  for a suspension. It never holds what anything is called, or why a role was given.
 
 **Who reads the history**
 

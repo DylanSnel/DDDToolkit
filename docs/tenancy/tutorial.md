@@ -371,8 +371,11 @@ public sealed partial class Seat
 - The switch writes `Tenant`, `Organization`, `OrganizationUnit` and `Role`. It does not write `Seat`, because you
   declared it.
 - The switch uses the ids from the contracts project, so it writes no id types.
-- The switch also writes Tenancy's managers for your classes, one per aggregate: `TenantManager`,
-  `OrganizationManager`, `SeatManager` and `RoleManager`. Every later request uses one of them.
+- The generator also writes Tenancy's managers for your classes, one per aggregate: `TenantManager`,
+  `OrganizationManager`, `SeatManager` and `RoleManager`. A manager holds the commands and the reads of its
+  aggregate. Every later request uses one of them.
+- It also writes `TenancyAccessManager`, closed over your ids. It says who acts and in which tenant, and it starts
+  system work (step 6).
 
 Build again. The generated files are in the domain project, under **Dependencies → Analyzers**.
 
@@ -630,7 +633,8 @@ public static class TenancyModule
 - `UseDDDToolkit(provider)` adds every part the host registered to this context. Here there are two. One sets the
   caller's database role on each connection, for RLS. The other is Tenancy's save check, which refuses a write into
   another tenant.
-- `AddTenancy<TenancyContext>()` registers the use cases for your classes. They save their data in this context.
+- `AddTenancy<TenancyContext>()` registers the managers and `TenancyAccessManager` for your classes, one of each per
+  scope. The managers save their data in this context.
 - `AddTenancyPostgres()` sets the request's tenant on every connection, so the RLS policies can read it.
 - `AddTenancyAccess<ITenancyRequest, TenancyContext>()` registers the checks that the behavior runs. The checks read
   this context.
@@ -649,7 +653,7 @@ the database before it starts.
 - **Caller**: who sends the request. In a real application the sign-in says who calls. This tutorial does not set up
   sign-in, so a development header says who calls: `X-Dev-User: <user id>`.
 - **Tenant**: the request names the tenant. In Harbor it uses the header `Tenant: harbor`.
-- **Seat**: Tenancy looks up the caller's seat in that tenant. For the rest of the request, the checks, the use cases
+- **Seat**: Tenancy looks up the caller's seat in that tenant. For the rest of the request, the checks, the managers
   and the database role (RLS) all use that seat.
 - **Refusal**: when a rule refuses a request, it throws a `RefusalException` with a code, such as
   `tenancy.not-permitted`. The host turns the exception into a status code: 404, 403, 409 or 400.
@@ -832,11 +836,17 @@ administrators' starter role at the root.
 
 - **Who may send it**: an attribute on the request says this. `[SignedIn]` lets any signed-in caller send it, with or
   without a seat.
+- **The access manager**: `TenancyAccessManager`, which the generator wrote in step 2, says who acts and in which
+  tenant. A handler takes it in its constructor, as `access`. `access.CurrentUser.Id` is the user id of the signed-in
+  caller, such as Ada's.
 - **System work**: a seat cannot create a tenant, because the tenant has no seats yet. Creating a tenant is **system
   work**. The handler starts system work with `using (access.BeginSystem())`. It lasts until the `using`
-  ends.
+  ends. Inside it, the system is the caller, and `access.CurrentUser.Id` is `null`.
 - `ProvisionAsync` refuses every caller except system work. A handler that forgets `BeginSystem()` gets a refusal on
   its first request.
+- **What provisioning returns**: `ProvisionAsync` returns the new tenant, your `Tenant` class. The root unit and the
+  first seat belong to the tenant. A request that names the tenant reads them through the other managers, as step 7
+  does for Ada's seat.
 - **The tenant's shape** is chosen when the tenant is created:
 
   | Shape | The organization | Use it when |
@@ -856,44 +866,35 @@ administrators' starter role at the root.
 
 **`Harbor.Tenancy.Application/Tenants/ProvisionTenant/ProvisionTenant.cs`**
 
-```csharp {5,10,12,18,21-22,24,26-37}
+```csharp {6,8,10,16,18,20-28}
 using DDDToolkit.Supporting.Tenancy;
+using Harbor.Tenancy.Domain;
 
 namespace Harbor.Tenancy.Application.Tenants.ProvisionTenant;
 
 [SignedIn]
 public sealed record ProvisionTenant(string Slug, string Name)
-    : ICommand<ProvisionedTenant>, ITenancyRequest;
-
-// What the route answers: the ids of the new tenant, its root unit and the administrator's seat.
-public sealed record ProvisionedTenant(TenantId Tenant, OrganizationUnitId RootUnit, SeatId AdminSeat);
+    : ICommand<Tenant>, ITenancyRequest;
 
 public sealed class ProvisionTenantHandler(TenantManager tenants, TenancyAccessManager access)
-    : ICommandHandler<ProvisionTenant, ProvisionedTenant>
+    : ICommandHandler<ProvisionTenant, Tenant>
 {
-    public async ValueTask<ProvisionedTenant> Handle(ProvisionTenant command, CancellationToken cancellationToken)
+    public async ValueTask<Tenant> Handle(ProvisionTenant command, CancellationToken cancellationToken)
     {
-        // The caller becomes the administrator. Read it before BeginSystem(), which makes the system the caller.
-        var admin = access.CurrentUser.Id ?? throw new InvalidOperationException("The caller has no user id.");
-
-        // The ids of the root unit and the administrator's seat, made before the save, so the answer can name them.
-        var root = OrganizationUnitId.Create();
-        var adminSeat = SeatId.Create();
+        // The caller becomes the administrator. Read the id before BeginSystem(): inside it, the system is the caller.
+        var admin = access.CurrentUser.Id ?? throw new InvalidOperationException("[SignedIn] lets only a signed-in user through.");
 
         using (access.BeginSystem())
         {
-            var tenant = await tenants.ProvisionAsync(
+            return await tenants.ProvisionAsync(
                 new TenantToProvision(
                     Slug: command.Slug,
                     Name: command.Name,
                     Shape: TenantShape.Hierarchical,
                     RootName: command.Name,
                     AdminIdentity: admin,
-                    RootId: root,
-                    AdminSeatId: adminSeat,
                     ConfigureFirstSeat: seat => seat.ChangeJobTitle("Harbor master")),
                 cancellationToken);
-            return new ProvisionedTenant(tenant.Id, root, adminSeat);
         }
     }
 }
@@ -916,8 +917,8 @@ internal static class DevelopmentEndpoints
     {
         routes.MapPost("/dev/tenants", async (NewTenant body, ISender sender, CancellationToken cancellationToken) =>
         {
-            var made = await sender.Send(new ProvisionTenant(body.Slug, body.Name), cancellationToken);
-            return Results.Ok(new { tenant = made.Tenant, root = made.RootUnit, adminSeat = made.AdminSeat });
+            var tenant = await sender.Send(new ProvisionTenant(body.Slug, body.Name), cancellationToken);
+            return Results.Ok(new { tenant = tenant.Id, slug = tenant.Slug.Value });
         });
 
         return routes;
@@ -993,10 +994,12 @@ app.Run();
 - `ICommand<T>` and `ICommandHandler<TCommand, T>`: Mediator's interfaces for a command that returns a `T`, and for
   its handler. A query uses `IQuery<T>` and `IQueryHandler<TQuery, T>` instead (step 7).
 - `TenantManager`: Tenancy's manager of tenants, generated for your classes in step 2.
-- `callers.Current.UserId`: the user id of the signed-in caller. The handler reads it before `BeginSystem()`, because
-  inside system work the caller is the system.
-- `BeginSystem()`: the code inside the `using` runs as system work. After the `using`, the caller is the same as
-  before.
+- `TenancyAccessManager`: who acts and in which tenant. `access.CurrentUser.Id` is the user id of the signed-in
+  caller. The handler reads it before `BeginSystem()`, because inside system work the caller is the system and the id
+  is `null`.
+- `using Harbor.Tenancy.Domain;`: your classes, `Tenant` among them, are in the domain project's root namespace.
+- `access.BeginSystem()`: the code inside the `using` runs as system work. After the `using`, the caller is the same
+  as before.
 - `ProvisionAsync` writes all of this in one save: the tenant, its organization with the root unit "Harbor Works",
   every starter role, and the caller's seat at the root with the administrators' role.
 - `Slug`: the tenant's short name, such as `harbor`. A request names its tenant by the slug, in the `Tenant` header.
@@ -1006,9 +1009,10 @@ app.Run();
   "Harbor Works".
 - `ConfigureFirstSeat` sets your own fields on the first seat, here the job title. They are written in the same save.
 - `ISender.Send` hands the request to the mediator. The mediator runs the access behavior and then the handler.
-- `ProvisionAsync` returns the new `Tenant`. `ProvisionedTenant` is this request's own answer: the ids of the new
-  tenant, its root unit and the administrator's seat. The handler makes the last two before the save and hands them
-  over as `RootId` and `AdminSeatId`.
+- `ProvisionAsync` returns the new `Tenant`, and the command returns it to the route. The route answers the tenant's
+  id and its slug.
+- `TenantToProvision` also takes fixed ids, for imports and seed data: `TenantId`, `RootId`, `AdminSeatId` and
+  `RoleIds`. Without them, `ProvisionAsync` makes new ids.
 
 ### Try it
 
@@ -1020,7 +1024,7 @@ Content-Type: application/json
 { "slug": "harbor", "name": "Harbor Works" }
 ```
 
-The response is `200`, with the ids of the tenant, its root unit and Ada's seat. Keep the root's id for step 8.
+The response is `200`, with the tenant's id and its slug, `harbor`. Step 7 reads Ada's seat and the root unit.
 
 Then create the second tenant, Meadow Gardens, with Tove as its administrator:
 
@@ -1044,8 +1048,9 @@ and each permission it holds with the units where that permission counts.
 
 ### The idea: the overview, and your own fields
 
-- `WhoAmIAsync()` returns the calling seat's **overview**: your `Seat` object with all its fields, the names of its
-  units and roles, and each permission with the units it reaches.
+- `WhoAmIAsync()` returns the calling seat's **overview**: your `Seat` object with all its fields, the id and path
+  of each unit where it is placed, your `Role` objects of its grants, and each permission with the units it
+  reaches.
 - The API returns a record type of your own, built from the overview. You decide which fields leave the API.
 - `[InTenant]`: any seat in the tenant may send the request. A caller without a seat in that tenant gets `403`.
 
@@ -1053,7 +1058,7 @@ and each permission it holds with the units where that permission counts.
 
 **`Harbor.Tenancy.Application/Seats/WhoAmI/WhoAmI.cs`**
 
-```csharp {3,10,21}
+```csharp {3,10,17,22}
 namespace Harbor.Tenancy.Application.Seats.WhoAmI;
 
 [InTenant]
@@ -1070,6 +1075,7 @@ public sealed class WhoAmIHandler(SeatManager seats) : IQueryHandler<WhoAmI, MyO
             overview.Seat.JobTitle,
             [
                 .. overview.Seat.Placements.Select(placement => new MyPlacement(
+                    placement.UnitId,
                     overview.UnitOf(placement.UnitId).Path,
                     placement.IsPrimary,
                     [.. placement.Grants.Select(grant => new MyGrant(overview.RoleOf(grant.RoleId)?.Name ?? "", grant.AppliesAt(overview.AsOf)))])),
@@ -1080,7 +1086,7 @@ public sealed class WhoAmIHandler(SeatManager seats) : IQueryHandler<WhoAmI, MyO
 
 public sealed record MyOverview(string Tenant, SeatId Seat, string? JobTitle, IReadOnlyList<MyPlacement> Placements, IReadOnlyList<MyPermission> Permissions);
 
-public sealed record MyPlacement(string Unit, bool Primary, IReadOnlyList<MyGrant> Grants);
+public sealed record MyPlacement(OrganizationUnitId UnitId, string Unit, bool Primary, IReadOnlyList<MyGrant> Grants);
 
 public sealed record MyGrant(string Role, bool AppliesNow);
 
@@ -1149,6 +1155,7 @@ public static class TenancyModule
   `Harbor Works / North`.
 - `Placements`: the units where the seat is placed. A seat can be placed at several units, at most once per unit. A
   placement gives no permission by itself. The roles granted at it do.
+- `placement.UnitId`: the id of the unit. Ada's seat is placed at the root, so her answer holds the root's id.
 - `IsPrimary`: at most one placement of a seat is its primary one, for example the person's home unit. The first
   seat's placement at the root is primary.
 - `grant.AppliesAt(overview.AsOf)` tells whether a grant applies at `AsOf`, the moment the overview describes.
@@ -1163,7 +1170,7 @@ Tenant: harbor
 ```
 
 The response shows Ada's seat. It is placed at `Harbor Works` with the role Administrator. Every permission has
-`atTenant: true` and reaches `Harbor Works`.
+`atTenant: true` and reaches `Harbor Works`. The placement's `unitId` is the root's id. Keep it for step 8.
 
 The request needs a seat in the tenant it names. The tenant selection from step 5 refuses it in two cases:
 
@@ -1185,8 +1192,8 @@ that lists the units a seat can read.
 - `[RequiresPermission(...)]`: the caller must hold that permission.
 - **Where**: without a marker, the caller must hold it for the whole tenant. With `[AtUnit]` on a parameter, the
   caller must hold it at that unit or above it.
-- Tenancy's use case checks the permission again where it acts, and adds its own rules. So the check before the
-  handler is the first check, and the use case runs a second one.
+- Tenancy's manager checks the permission again where it acts, and adds its own rules. So the check before the
+  handler is the first check, and the manager runs a second one.
 - Harbor has a rule of its own: "no two units with the same name below one parent". Harbor's handler checks this rule
   and throws Harbor's own refusal.
 
@@ -1587,16 +1594,40 @@ units where the caller may add one. Your code gets the list from Tenancy with a 
 **What we want.** `GET /units/manageable`: the units where the caller holds `tenancy.units.manage`. Ada gets all four
 units of Harbor Works. Rhea gets North and North Coast.
 
-### The idea: Tenancy's queries, inside your own query
+### The idea: who acts, and Tenancy's queries inside your own query
 
-- Your code reads the current caller through `ITenancy`. `tenancy.Caller` returns the caller.
-  `tenancy.RequireTenant()` returns the caller's tenant and seat.
-- `tenancy.In(db)` returns Tenancy's queries over a context. `UnitsWhereIHold(permission)` returns an `IQueryable`.
-  Entity Framework puts it into your own query as a subquery, so the database runs one statement.
+- **Who acts.** `TenancyAccessManager` (step 6) answers two questions in any handler:
+  - `access.CurrentUser`: who acts. `Id` is the signed-in user's id, and `null` for system work and for a caller
+    without a sign-in.
+  - `access.CurrentTenant`: the tenant the request names, and the caller's seat there. `Require()` returns both. For
+    a caller without a seat, it throws the refusal the tenant selection gave, such as `tenancy.not-seated`.
+- **Tenancy's queries.** `db.Tenancy()` returns Tenancy's queries for the current caller over a context. The
+  generator writes this extension for your ids into the project that holds the context.
+  `UnitsWhereIHold(permission)` returns an `IQueryable`. Entity Framework puts it into your own query as a subquery,
+  so the database runs one statement.
 - The query needs the context, so it lives in the infrastructure layer. The application layer declares an interface
   for it, `IUnitReads`, the same way as for a repository.
 - Another module can run the same query over its own context, once that context maps Tenancy's read model
   ([Who may do what](who-may-do-what.md)).
+
+**What this looks like in a handler.** This request is not part of Harbor; you do not write it. It shows the access
+manager in a handler. `[InTenant]` lets only a seat of the tenant through, so `Require()` finds the tenant and the
+seat:
+
+```csharp
+[InTenant]
+public sealed record WhereAmI : IQuery<string>, ITenancyRequest;
+
+public sealed class WhereAmIHandler(TenancyAccessManager access) : IQueryHandler<WhereAmI, string>
+{
+    public ValueTask<string> Handle(WhereAmI query, CancellationToken cancellationToken)
+    {
+        var current = access.CurrentTenant.Require();   // the tenant the Tenant header names, and the caller's seat
+        var user = access.CurrentUser.Id;                // the X-Dev-User id
+        return ValueTask.FromResult($"User {user}, seat {current.Seat}, tenant {current.Id}");
+    }
+}
+```
 
 ### What you write
 
@@ -1729,9 +1760,8 @@ internal static class UnitsEndpoints
 
 ### What it does
 
-- `ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>`: the four type arguments are your id types, so the
-  queries return your ids.
-- `tenancy.In(db)` returns Tenancy's queries for the current caller over `TenancyContext`, at the moment of the call.
+- `db.Tenancy()` returns Tenancy's queries for the current caller over `TenancyContext`, at the moment of the call.
+  The generator wrote it for your ids, so the queries return your ids and the call names no type.
 - `UnitsWhereIHold(TenancyPermissions.UnitsManage)` returns the units where a grant gives the caller the permission,
   and every unit below them. A grant that has ended gives nothing.
 - `held.Contains(unit.Id)`: Entity Framework writes this as a subquery. The database runs one statement.

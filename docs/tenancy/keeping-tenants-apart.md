@@ -117,38 +117,70 @@ tenant filter, or that does not go through Entity Framework, still reads only th
 ## System work
 
 A person reaches Tenancy through a seat. Code runs as system work only when you start system work explicitly. Start
-it for work that no request asked for, such as seeding, an import or an operator's command. Also start it for work
-in a handler that no caller of the request could do, such as
-[provisioning a tenant](who-may-do-what.md#requests-that-provision-a-tenant):
+it for work that no request asked for, such as seeding, an import or a nightly job. Also start it for work in a
+handler that no caller of the request could do, such as
+[provisioning a tenant](who-may-do-what.md#requests-that-provision-a-tenant). Your code takes `TenancyAccessManager`
+and starts the work with one of its `Begin…` methods:
 
 ```csharp
-using (TenancyUseCases.BeginSystemIn(tenant, actingSeat))
+// An import that an administrator started. It runs in a job, so no request carries the tenant.
+public sealed class UnitImport(OrganizationManager organization, TenancyAccessManager access)
 {
-    await seats.PlaceAsync(seat, unit, primary: true, cancellationToken);
+    public async Task RunAsync(ImportJob job, CancellationToken cancellationToken)
+    {
+        using (access.BeginSystemIn(job.Tenant, actingSeat: job.StartedBy))
+        {
+            foreach (var name in job.UnitNames)
+            {
+                await organization.AddUnitAsync(job.Parent, name, cancellationToken);
+            }
+        }
+    }
 }
 ```
 
-Each `Begin…` call starts two callers, Tenancy's caller and the toolkit's caller. Disposing the result ends both.
-The calls on `TenancyUseCases` are closed over your ids ([Your ids, named once](your-module.md#calls-closed-over-your-ids)),
-so you write no id type.
+Each `Begin…` call starts two callers, Tenancy's caller and the toolkit's caller. Disposing the result ends both, and
+the caller from before is current again. The generator writes `TenancyAccessManager` closed over your ids
+([Calls closed over your ids](your-module.md#calls-closed-over-your-ids)), so you write no id type. `AddTenancy`
+registers it per scope.
 
-| `TenancyUseCases.` | Tenancy's caller | The toolkit's caller, `Caller.` |
+| Call | Tenancy's caller | The toolkit's caller, `Caller.` |
 |---|---|---|
-| `BeginSystem()` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `SystemIn("tenancy")` |
-| `BeginSystemIn(tenant, actingSeat, scope)` | Works inside the tenant. It holds every permission there and none elsewhere. | `SystemIn(scope)`, `"tenancy"` by default |
-| `BeginOperator(identity)` | Works like `BeginSystem`. The work is recorded as the operator the tenant is provisioned for. | `SystemIn("tenancy")` |
-| `BeginOperatorIn(tenant, identity, scope)` | Works like `BeginSystemIn`. The work is recorded as the operator it is for. | `SystemIn(scope)` |
-| `BeginTokenIn(tenant, seat, scope)` | Works like `BeginSystemIn`. The work is recorded as a link's token and the seat the token stands for. | `SystemIn(scope)`. The scope is required. |
+| `access.BeginSystem()` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `SystemIn("tenancy")` |
+| `access.BeginSystemIn(tenant, actingSeat, scope)` | Works inside the tenant. It holds every permission there and none elsewhere. | `SystemIn(scope)`, `"tenancy"` by default |
+| `access.BeginTokenIn(tenant, seat, scope)` | Works like `BeginSystemIn`. The work is recorded as a link's token and the seat the token stands for. | `SystemIn(scope)`. The scope is required. |
+| `[Operator]` on a command | Your code calls nothing. The access check starts the work around the handler. It works like `BeginSystem`, or like `BeginSystemIn` in the tenant the command names. The work is recorded as the operator who sent the command ([Operators](operators-and-history.md#operators)). | `SystemIn(scope)`, `"tenancy"` by default |
 
-- `actingSeat` is recorded as the seat that placed or granted. It adds no rights.
+- `actingSeat` is recorded as the seat that placed or granted. It adds no rights. Pass the seat of the person who
+  asked for the work, such as the administrator who starts an import. Leave it out when nobody asked.
 - The last-administrator rule applies to system work in a tenant too.
 - A scope is lower case letters, digits, `_` and `-`. Any other scope throws `ArgumentException`, and nothing
   starts.
+- Put the `using` around the one call that needs system work. The rest of the handler then runs as the caller.
+- System work does what it is told. Take its tenant, seat, role and unit from `access.CurrentTenant` or from your own
+  records. A role taken from the request would let the sender choose any role, the administrators' role included.
+- No method starts operator work. Only `[Operator]` on a request does, and the operator is the current user. So no
+  code can record work as an operator who did not send the request.
 
-A module that sees only your ids, and not your classes, calls the same methods on
-[`TenancyWork`](reference/callers.md#tenancywork). With a seat, C# infers both ids:
-`TenancyWork.BeginSystemIn(tenant, seat, "billing")`. Without a seat, write the ids:
-`TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, scope: "billing")`.
+### Which call for which situation
+
+Eight situations follow. For each one, the chooser names the call or the attribute and says why it fits. It also
+shows what the work holds, how Tenancy records it, and which database role it runs as on Postgres.
+
+<div data-interactive="WhoActs">
+
+| Situation | Use | Holds | Recorded as | On Postgres, runs as |
+|---|---|---|---|---|
+| A user signs up and creates an organization | `access.BeginSystem()` | Nothing in any tenant. Only `ProvisionAsync` accepts it. | `system` | `ddd_system_in`, scope `tenancy`, no tenant |
+| Your staff create a tenant for a customer | `[Operator]` on the command | As `BeginSystem()`, for the whole handler | `operator`, with the operator's id | `ddd_system_in`, scope `tenancy`, no tenant |
+| Your staff change a tenant | `[Operator]` and a `[ForTenant]` member | Every permission in that tenant, for the whole handler | `operator`, with the operator's id | `ddd_system_in`, scope `tenancy`, that tenant |
+| Demo data is seeded at start-up | `access.BeginSystemIn(tenant, actingSeat: admin)` | Every permission in that tenant | `system`; the events name the acting seat | `ddd_system_in`, scope `tenancy`, that tenant |
+| A nightly job visits every tenant | `access.TenantsToSweepAsync(scope)`, then `access.BeginSystemIn(tenant, scope: "inspections")` | Every permission on the module's rows in each tenant. It reads Tenancy's tables and writes none. | `system`, in the module's scope | `ddd_system_in`, the module's scope, each tenant in turn |
+| Your code grants a role after a condition | `access.BeginSystemIn(tenant)`, with no acting seat | Every permission in that tenant | `system`, with the grant's reason | `ddd_system_in`, scope `tenancy`, that tenant |
+| A link carries a token instead of a sign-in | `access.BeginTokenIn(tenant, seat, scope)` | Every row of the module in that tenant. Your code reads only the seat's rows. | `token`, with the seat the token stands for | `ddd_system_in`, the module's scope, that tenant |
+| An administrator imports seats | Nothing. The handler runs as the caller. | What the caller's seat holds | `seat`, with the caller's seat | `authenticated`, the caller's own role |
+
+</div>
 
 ### The scoped system caller
 
@@ -157,7 +189,7 @@ A module that sees only your ids, and not your classes, calls the same methods o
   the policies decide which rows it reaches
   ([The scoped system role](../row-level-security.md#the-scoped-system-role)).
 - The scope names whose work the system work is:
-  - `tenancy` is Tenancy's scope, for work that calls Tenancy's use cases. On Postgres only work in this scope
+  - `tenancy` is Tenancy's scope, for work that calls Tenancy's managers. On Postgres only work in this scope
     writes Tenancy's tables.
   - A module's name is the scope for that module's work in a tenant, and for its work on its resources with members
     ([Who holds a permission](../membership/permissions-and-roles.md#who-holds-a-permission)). Work in a module's
@@ -169,37 +201,49 @@ A module that sees only your ids, and not your classes, calls the same methods o
   handler then starts system work itself, in trusted code, when the work needs it. For example, a handler that
   provisions a tenant starts system work whether its request requires `[AllowAnonymous]` (a public registration
   form) or `[SignedIn]`. When the system work ends, the caller from before it is current again.
+- `[Operator]` is the one requirement that also starts work. The access check lets only an operator through, and on a
+  command it runs the handler as operator work. On a query it starts nothing.
 - A request that system work sends inside a tenant declares who may send it with `[InTenant]`. A second check, after
   that requirement, refuses everything that only system work may do:
-  - The handler checks the caller. The handler of the sample's `MarkTenantAsDemo` calls `tenancy.RequireTenant()`
-    and refuses the caller with `access.system-only` unless `BySystem` is true.
-  - Tenancy's system-only use cases (provisioning, suspending, reactivating or closing a tenant) refuse every other
-    caller with `access.system-only`.
+  - The handler checks the caller. The handler of the sample's `MarkTenantAsDemo` calls
+    `access.CurrentTenant.Require()` and refuses the caller with `access.system-only` unless `BySystem` is true.
+  - Tenancy's system-only manager methods refuse every other caller with `access.system-only`. These are
+    `TenantManager.ProvisionAsync`, `SuspendAsync`, `ReactivateAsync` and `CloseAsync`.
 - Code that runs without a started caller is nobody to Tenancy. This holds where the toolkit's caller is
   `Caller.System`, and in a host that does not [require explicit callers](../row-level-security.md#requiring-explicit-callers).
-  Tenancy's use cases refuse a caller that is nobody with `tenancy.not-seated`.
+  Tenancy's managers refuse a caller that is nobody with `tenancy.not-seated`.
 
 ### System work outside any tenant
 
-System work outside any tenant (`BeginSystem`) reads no tenant's rows, because the tenant filter matches no row for
-it. The save check refuses each row of a tenant with `tenancy.other-tenant`. So provisioning first checks that the
-slug is free, and then saves as system work inside the new tenant.
+System work outside any tenant (`access.BeginSystem()`, or `[Operator]` on a command without a tenant) reads no
+tenant's rows, because the tenant filter matches no row for it. The save check refuses each row of a tenant with
+`tenancy.other-tenant`. So `ProvisionAsync` first makes the new tenant's id, and then checks the slug and saves as
+system work inside the new tenant.
 
 ### Reads before any tenant is known
 
 Two reads run before any tenant is known. Each one is a single query that returns ids or permissions only:
 
 - The start-up check reads the permissions stored on the roles of every tenant.
-- [`TenancySystemReads.TenantsToSweepAsync`](reference/entity-framework.md#tenantstosweepasyncdbcontext-string-cancellationtoken)
-  reads the tenants that a round of system work visits, the active and the suspended ones.
+- `access.TenantsToSweepAsync(scope, cancellationToken)` reads the tenants that a round of system work visits, the
+  active and the suspended ones. A job reads them first, and then starts system work in each tenant in turn:
 
 ```csharp
-// tenancy: Tenancy's context, resolved from your services. The read takes the context type from it and does not query it.
-foreach (var tenant in await TenancySystemReads.TenantsToSweepAsync<ShopTenant, TenantId>(tenancy, "ordering", cancellationToken))
+public sealed class EndExpiredOrdersJob(IServiceScopeFactory scopes)
 {
-    using (TenancyUseCases.BeginSystemIn(tenant, scope: "ordering"))
+    public async Task RunAsync(CancellationToken cancellationToken)
     {
-        await orders.EndWhatHasRunOutAsync(cancellationToken);
+        await using var scope = scopes.CreateAsyncScope();
+        var access = scope.ServiceProvider.GetRequiredService<TenancyAccessManager>();
+        var orders = scope.ServiceProvider.GetRequiredService<IOrderStore>();
+
+        foreach (var tenant in await access.TenantsToSweepAsync("ordering", cancellationToken))
+        {
+            using (access.BeginSystemIn(tenant, scope: "ordering"))
+            {
+                await orders.EndWhatHasRunOutAsync(cancellationToken);
+            }
+        }
     }
 }
 ```
@@ -207,15 +251,15 @@ foreach (var tenant in await TenancySystemReads.TenantsToSweepAsync<ShopTenant, 
 - **The caller of the read.** Tenancy starts a caller for the read alone. On a database where only the tenant
   filter keeps tenants apart (SQLite), the read runs as `Caller.System` over the tables. With
   [row level security](postgres.md), the read runs as scoped system work in no tenant and calls a database function
-  ([The scoped system role](postgres.md#reads-across-tenants)).
+  ([Reads across tenants](postgres.md#reads-across-tenants)).
 - **A separate context.** The read runs on a new context from a new service scope, outside any transaction you
   started. So your transaction cannot change who the read runs as, and the read's wider access does not carry over
   into your work.
 - **A separate connection.** The read opens its own connection unless your contexts share one. Call it before you
   start a transaction. Inside a transaction, your code holds one connection while the read waits for another. With
   few connections in the data source, the code can then wait for itself
-  ([With a context pool](../row-level-security.md#with-a-context-pool)). Tenancy's use
-  cases run on one connection.
+  ([With a context pool](../row-level-security.md#with-a-context-pool)). Tenancy's
+  managers run on one connection.
 - **A read that belongs to no tenant.** Wrap a read of yours that belongs to no seat and no tenant in
   `TenancyCallers.BeginNone()` when it runs in the middle of somebody's work. Then the surrounding tenant does not
   apply to that read.

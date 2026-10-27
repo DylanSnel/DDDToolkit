@@ -14,6 +14,7 @@ import MDXComponents from '@theme-original/MDXComponents';
 const Walkthrough = lazy(() => import('@site/src/components/RequestWalkthrough'));
 const Reach = lazy(() => import('@site/src/components/ReachExplorer'));
 const BoardAccess = lazy(() => import('@site/src/components/BoardAccessExplorer'));
+const Chooser = lazy(() => import('@site/src/components/WhoActs'));
 
 /** The walk-through of How a request is checked, loaded with that page alone. */
 function RequestWalkthrough(props) {
@@ -42,9 +43,19 @@ function BoardAccessExplorer(props) {
   );
 }
 
+/** The chooser of Tenancy's Keeping tenants apart, loaded with that page alone. */
+function WhoActs(props) {
+  return (
+    <Suspense fallback={<p>Loading the chooser…</p>}>
+      <Chooser {...props} />
+    </Suspense>
+  );
+}
+
 export default {
   ...MDXComponents,
   RequestWalkthrough,
   ReachExplorer,
   BoardAccessExplorer,
+  WhoActs,
 };

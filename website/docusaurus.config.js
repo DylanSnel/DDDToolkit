@@ -65,7 +65,7 @@ const config = {
           // and before its admonitions plugin, which turns what githubAlerts makes into a banner. A page's
           // interactive part goes in first, in place of what GitHub shows there instead.
           beforeDefaultRemarkPlugins: [
-            [interactive, { components: ['RequestWalkthrough', 'ReachExplorer', 'BoardAccessExplorer'] }],
+            [interactive, { components: ['RequestWalkthrough', 'ReachExplorer', 'BoardAccessExplorer', 'WhoActs'] }],
             [githubLinks, { docsDir, repoRoot }],
             githubAlerts,
           ],

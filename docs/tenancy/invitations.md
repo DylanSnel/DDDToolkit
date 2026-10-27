@@ -34,23 +34,26 @@ You need one class of yours and three calls:
 // In the context, after AddTenancy. Adds two tables: the invitations and the digests of their tokens.
 modelBuilder.AddTenancyInvitations<ShopInvitation, InvitationId>();
 
-// In the registration, after AddTenancy.
-services.AddTenancyInvitations<ShopInvitation, InvitationId, ShopTenancyContext>();
+// In the registration, after AddTenancy. The generator writes this call for your classes.
+services.AddTenancyInvitations<ShopTenancyContext>();
 
 // In the outbox, next to AddTenancyDomainEvents.
 outbox.AddTenancyInvitationEvents<InvitationId>();
 ```
 
-A context that names its tables passes the same `TenancyTableNames` as it passes to `AddTenancy`. A database in use
-needs a migration. On Postgres it also needs a new export of the access files.
+- A context that names its tables passes the same `TenancyTableNames` as it passes to `AddTenancy`.
+- `services.AddTenancyInvitations<TContext>()` registers `InvitationManager`, which the generator writes for your
+  classes beside the other managers. The generator writes both only in a project that declares an invitation class.
+- A database in use needs a migration. On Postgres it also needs a new export of the access files.
 
 ## Issuing and accepting
 
-`IssueAsync` returns the token, once. Your code sends it to the person. Accepting needs no tenant, because the token
-identifies the invitation and so its tenant.
+`InvitationManager.IssueAsync` returns the new invitation and its token. It returns the token this once. Your code
+sends the token to the person. Accepting needs no tenant, because the token identifies the invitation and so its
+tenant.
 
 ```csharp
-public sealed class InviteColleague(TenancyUseCases.InvitationCommands<ShopInvitation, InvitationId> invitations, IShopMail mail)
+public sealed class InviteColleague(InvitationManager invitations, IShopMail mail)
 {
     public async Task HandleAsync(string address, OrganizationUnitId unit, RoleId role, CancellationToken cancellationToken)
     {
@@ -65,18 +68,23 @@ public sealed class InviteColleague(TenancyUseCases.InvitationCommands<ShopInvit
 // The page calls this route after the person signs in.
 app.MapPost("/invitations/accept", async (
     AcceptInvitation request,
-    TenancyUseCases.InvitationCommands<ShopInvitation, InvitationId> invitations,
+    InvitationManager invitations,
     CancellationToken cancellationToken) =>
 {
     var accepted = await invitations.AcceptAsync(request.Token, verifiedAddress: null, cancellationToken,
         configure: seat => seat.Rename(request.DisplayName));
-    return Results.Ok(new { tenant = accepted.Slug });
+    return Results.Ok(new { tenant = accepted.Tenant.Slug.Value });
 });
 ```
 
-`AcceptAsync` returns the tenant, the tenant's slug for the next request, and the new seat. `ListOpenAsync` returns
-the open invitations, the soonest to end first. `CancelAsync` cancels one invitation
-([`InvitationCommands`](reference/use-cases.md#tenancyusecasesinvitationcommandstinvitation-tinvitationid)).
+- `IssueAsync` takes the unit and the role as your objects or as their ids. It returns an `IssuedInvitation` with
+  your `Invitation` and its `Token`.
+- `AcceptAsync` returns an `AcceptedInvitation` with your `Tenant` and the new `Seat`. The next request names the
+  tenant by `Tenant.Slug`.
+- `ListOpenAsync` returns the open invitations as your invitation class, the soonest to end first.
+- `CancelAsync` cancels one invitation and returns it.
+
+The reference lists every member of `InvitationManager` ([Invitations](reference/use-cases.md#invitations)).
 
 ## Who may issue an invitation
 

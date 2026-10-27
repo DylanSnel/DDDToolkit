@@ -2470,7 +2470,7 @@ public static class TenancyUseCases;   // DDD00065, on this type: the class woul
 
 Tenancy's use cases are named through a class that the toolkit's generator writes into the project that declares
 your classes. The class has the name of the package's class: `TenancyUseCases.SeatCommands`
-([Calling a use case](tenancy/your-module.md#calling-a-use-case)). Each of its type parameters is one of your
+([Calling a use case](tenancy/your-module.md#the-managers-and-the-access-manager)). Each of its type parameters is one of your
 classes or ids. So the generator writes it only when every template it takes from has one class, in that project
 or in a project of the same module that the project references.
 

@@ -18,7 +18,7 @@ module name of its folder ([A module named by its folder](../../modules.md#a-mod
 | Project | Contains |
 |---|---|
 | Domain | The classes and their rules, in one folder per aggregate. |
-| Application | The use cases, each a command or query with its handler, in one folder per feature. Also the module's request interface, the access check for the module's own cases, and the ports. |
+| Application | The requests, each a command or query with its handler, in one folder per feature. Also the module's request interface, the access check for the module's own cases, and the ports. |
 | Infrastructure | The context, the migrations, the port adapters and their registration. Only this project references Entity Framework. |
 | API | The routes and the GraphQL fields and types, in the same feature folders, and the module's entry point. Only this project references ASP.NET Core. |
 | Contracts | The types that other modules may use. Inspections publishes nothing, so it has no Contracts project. |
@@ -147,6 +147,7 @@ not reach. It refuses nobody for seeing nothing.
 | `ProjectDetail` | `projects.view` on the project. | What the caller may do, checked with the permission of each command. |
 | `PermissionsHeldAtRoot`, `TenantProjectRoles`, `ProjectRolesById` | In a tenant, the module default. | A role's permissions are returned only to a caller with `tenancy.roles.manage` for the whole tenant. |
 | `TenantProjects` | An operator only. | |
+| `RenameTenantProject` | An operator only, in the tenant its `[ForTenant]` member names. | The project exists and is open. The handler runs as operator work in that tenant. |
 | `OpenProject` | `projects.open` at the unit. A request that names an owner also needs one of these: the owner is the caller's own seat, or the caller holds `projects.owner.change` at the unit (`AccessRequirement.All`, `Any`, `Own`). | The unit is active. The crew rules admit the owner's seat. The number is free in the tenant (`projects.number-taken`). |
 | `ChangeProjectName`, `PlanProject` | `projects.edit` on the project. | |
 | `MoveProjectToUnit` | `projects.edit` on the project and `projects.open` at the new unit (`AccessRequirement.All`). | The new unit is active. |
@@ -172,32 +173,35 @@ the result into a refusal:
 - A closed project returns `projects.closed`, for a request that adds an inspection.
 - A permission the caller does not hold returns `projects.not-permitted`.
 
-Most Tenants requests hand their work to a Tenancy use case. The use case checks again what the request declared, and
-then its own rules. The table links each use case:
+Most Tenants requests hand their work to one of Tenancy's managers. The manager checks again what the request
+declared, and then its own rules. The table names each manager's method. The reference lists them under
+[Tenants](../reference/use-cases.md#tenants), [Organization](../reference/use-cases.md#organization),
+[Seats](../reference/use-cases.md#seats), [Roles](../reference/use-cases.md#roles) and
+[Invitations](../reference/use-cases.md#invitations):
 
 | Tenants request | Declares | Then |
 |---|---|---|
 | `SeatsOfMine` | Signed in. It returns the caller's own seats, before any tenant is chosen, found by the token's verified identity. | |
-| `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById`, `CatalogueContents`, `UnitsWhereIHold`, `OpenInvitations` | In a tenant. | Most go to [the directory](../reference/use-cases.md#tenancyusecasestenancydirectory). Open invitations ([`ListOpenAsync`](../reference/use-cases.md#listopenasynccancellationtoken)) are returned only for units where the caller holds `tenancy.seats.manage`. |
-| `AddOrganizationUnit`, `MoveOrganizationUnit`, `ArchiveOrganizationUnit` | `AddOrganizationUnit` declares `tenancy.units.manage` at the parent. A move or an archive declares only "in a tenant". | [`AddUnitAsync`](../reference/use-cases.md#addunitasynctunitid-string-cancellationtoken-tunitid-actiontunit), [`MoveUnitAsync`](../reference/use-cases.md#moveunitasynctunitid-tunitid-cancellationtoken), [`ArchiveUnitAsync`](../reference/use-cases.md#archiveunitasynctunitid-cancellationtoken). The sample sets its `kind` field in the callback. |
-| `ChangeTenantShape` | `tenancy.settings.manage` for the whole tenant. | [`ChangeShapeAsync`](../reference/use-cases.md#changeshapeasynctenantshape-ireadonlydictionarystring-troleid-cultureinfo-cancellationtoken) |
-| `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit. | [`PlaceAsync`](../reference/use-cases.md#placeasynctseatid-tunitid-bool-cancellationtoken), [`WithdrawAsync`](../reference/use-cases.md#withdrawasynctseatid-tunitid-cancellationtoken) |
-| `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit. | [`GrantAsync`](../reference/use-cases.md#grantasynctseatid-tunitid-troleid-datetimeoffset-string-cancellationtoken-datetimeoffset), [`RevokeAsync`](../reference/use-cases.md#revokeasynctseatid-tunitid-troleid-cancellationtoken) |
-| `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant. | [`SuspendAsync`](../reference/use-cases.md#suspendasynctseatid-cancellationtoken), [`ReactivateAsync`](../reference/use-cases.md#reactivateasynctseatid-cancellationtoken), [`DeactivateAsync`](../reference/use-cases.md#deactivateasynctseatid-cancellationtoken) |
-| `SeatGrants` | `tenancy.seats.manage` for the whole tenant, or at the unit asked about (`?unit=`). | [`SeatOverviewAsync`](../reference/use-cases.md#seatoverviewasynctseatid-cancellationtoken) |
-| `CreateTenantRole`, `SetRolePermissions`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant. | [`CreateAsync`](../reference/use-cases.md#createasyncstring-string-ireadonlycollectionstring-cancellationtoken-troleid), [`SetPermissionsAsync`](../reference/use-cases.md#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken), [`ArchiveAsync`](../reference/use-cases.md#archiveasynctroleid-cancellationtoken) |
-| `InvitePerson`, `CancelInvitation` | `InvitePerson` declares `tenancy.seats.manage` for the whole tenant. A cancel declares only "in a tenant". | [`IssueAsync`](../reference/use-cases.md#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid), [`CancelAsync`](../reference/use-cases.md#cancelasynctinvitationid-cancellationtoken) |
-| `AcceptInvitation` | Signed in, with no seat yet. | [`AcceptAsync`](../reference/use-cases.md#acceptasyncstring-string-cancellationtoken-tseatid-actiontseat) |
-| `RenameSeat` | The caller's own seat, or `tenancy.seats.manage` for the whole tenant (`[OrOwn]`). | No use case. The rule is the sample's own ([How a seat is shown](../names-and-languages.md#how-a-seat-is-shown)). A column rule enforces it in the database. |
-| `MarkTenantAsDemo` | In a tenant. No route sends it. | No use case. The handler accepts only system work in the tenant it marks. Anyone else gets `access.system-only`. |
+| `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById`, `CatalogueContents`, `UnitsWhereIHold`, `OpenInvitations` | In a tenant. | Most go to a manager's reads: `SeatManager.WhoAmIAsync`, `ListAsync` and `ByIdAsync`, `OrganizationManager.ListUnitsAsync` and `UnitsByIdAsync`, `RoleManager.ListAsync` and `ByIdAsync`. `InvitationManager.ListOpenAsync` returns open invitations only for units where the caller holds `tenancy.seats.manage`. |
+| `AddOrganizationUnit`, `MoveOrganizationUnit`, `ArchiveOrganizationUnit` | `AddOrganizationUnit` declares `tenancy.units.manage` at the parent. A move or an archive declares only "in a tenant". | `OrganizationManager.AddUnitAsync`, `MoveUnitAsync`, `ArchiveUnitAsync`. The sample sets its `kind` field in the callback. |
+| `ChangeTenantShape` | `tenancy.settings.manage` for the whole tenant. | `TenantManager.ChangeShapeAsync` |
+| `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit. | `SeatManager.PlaceAsync`, `WithdrawAsync` |
+| `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit. | `SeatManager.GrantAsync`, `RevokeAsync` |
+| `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant. | `SeatManager.SuspendAsync`, `ReactivateAsync`, `DeactivateAsync` |
+| `SeatGrants` | `tenancy.seats.manage` for the whole tenant, or at the unit asked about (`?unit=`). | `SeatManager.OverviewAsync` |
+| `CreateTenantRole`, `SetRolePermissions`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant. | `RoleManager.CreateAsync`, `SetPermissionsAsync`, `ArchiveAsync` |
+| `InvitePerson`, `CancelInvitation` | `InvitePerson` declares `tenancy.seats.manage` for the whole tenant. A cancel declares only "in a tenant". | `InvitationManager.IssueAsync`, `CancelAsync` |
+| `AcceptInvitation` | Signed in, with no seat yet. | `InvitationManager.AcceptAsync` |
+| `RenameSeat` | The caller's own seat, or `tenancy.seats.manage` for the whole tenant (`[OrOwn]`). | No manager. The rule is the sample's own ([How a seat is shown](../names-and-languages.md#how-a-seat-is-shown)). A column rule enforces it in the database. |
+| `MarkTenantAsDemo` | In a tenant. No route sends it. | No manager. The handler accepts only system work in the tenant it marks. Anyone else gets `access.system-only`. |
 | `AccessHistory` | `tenancy.history.view` for the whole tenant. | |
-| `AllTenants`, `TenantAccessHistory` | An operator only. | `AllTenants` uses [the tenant directory](../reference/use-cases.md#tenancyusecasestenantdirectory). |
+| `AllTenants`, `TenantAccessHistory` | An operator only. | `AllTenants` uses `TenantManager.ListAsync`. |
 
-A Tenants request declares the first thing that its use case checks. So the access behavior refuses with the same
-code and permission as the use case. Two test classes hold the tables above:
+A Tenants request declares the first thing that its manager checks. So the access behavior refuses with the same
+code and permission as the manager. Two test classes hold the tables above:
 
 - `AccessDeclarationTests` fails for a request that declares nothing, and checks every request against these tables.
-- `RequestPipelineTests` checks that the access behavior and the use case refuse in the same way.
+- `RequestPipelineTests` checks that the access behavior and the manager refuse in the same way.
 
 ## How a seat reaches a project
 
@@ -248,13 +252,13 @@ still sees Pier 7, because he is on its crew.
 
 ## The organization's roles
 
-The catalogue declares seven starter roles. Each tenant's roles start as copies of the packs
-that are seeded for the tenant's shape.
+The catalogue declares seven starter roles. Each tenant's roles start as copies of the starter roles that are seeded
+for the tenant's shape.
 
-| Pack | Permissions | Manages access | Seeded for |
+| Starter role | Permissions | Manages access | Seeded for |
 |---|---|---|---|
-| Tenant admin | None listed, which means all. It is the administrators' pack of a flat tenant. | yes | flat |
-| Access admin | Tenancy's six, `projects.owner.change`, `projects.crew.manage` and `projects.view`. It is the administrators' pack of a hierarchical tenant. | yes | hierarchical |
+| Tenant admin | None listed, which means all. It is the administrators' starter role of a flat tenant. | yes | flat |
+| Access admin | Tenancy's six, `projects.owner.change`, `projects.crew.manage` and `projects.view`. It is the administrators' starter role of a hierarchical tenant. | yes | hierarchical |
 | Area manager | `projects.view`, `projects.open`, `projects.edit`, `projects.close`, `projects.crew.manage`, `projects.owner.change`, `inspections.record`, `tenancy.units.manage`, `tenancy.seats.manage` and `tenancy.grants.manage` | yes | hierarchical |
 | Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage` and `inspections.record`. Granted at a unit, it leads every crew there. | yes | every shape |
 | Surveyor | `projects.view` and `inspections.record` | no | every shape |
@@ -265,7 +269,7 @@ that are seeded for the tenant's shape.
 - In a **hierarchical** tenant, Access admin runs access and does none of the work. A seat with only Access admin
   cannot rename, close or record anything. It needs another role for that. For example, Maud may join Pier 7's crew
   as Crew lead.
-- An administrators' pack that lists its permissions must hold every access-managing permission. Otherwise the host
+- An administrators' starter role that lists its permissions must hold every access-managing permission. Otherwise the host
   does not start.
 
 **Which permissions manage access.** All of Tenancy's permissions except `tenancy.history.view`, and two of
@@ -453,14 +457,14 @@ Three directory routes return the names for a list of ids:
 |---|---|
 | `POST /tenancy/directory/seats` | `[ { id, displayName, status } ]`, sorted by name |
 | `POST /tenancy/directory/units` | `[ { id, parentId, name, kind, status, path, depth } ]`, sorted by path. `kind` is the sample's field, and `null` when unset. |
-| `POST /tenancy/directory/roles` | `[ { id, name, fromPack, status, permissions, managesAccess } ]`, active roles first, then by name |
+| `POST /tenancy/directory/roles` | `[ { id, name, fromStarterRole, status, permissions, managesAccess } ]`, active roles first, then by name |
 
 The body is `{ "ids": [ ... ] }`. Any caller with a seat gets 200, with another tenant's ids left out. A body without
 the list returns 400 `invalid-request`. More than 200 ids return 400 `tenancy.too-many-ids`.
 
 ## Operators, who changed a row, and the access history
 
-### Operators who only read
+### Operators
 
 An [operator](../operators-and-history.md#operators) works for the application and has no seat. In the sample the
 operator is Orla. Her token carries the role `tenancy_operator`. With Supabase Auth, that role is a claim set for
@@ -472,17 +476,22 @@ staff. With the dev login, the role goes to the people that `DevLogin:Operators`
 | `GET /operations/tenants/{tenant}/history` | Tenants | That tenant's access history |
 | `GET /operations/tenants/{tenant}/projects` | Projects | Its projects, by number |
 | `GET /operations/tenants/{tenant}/projects/{project}/inspections` | Inspections | That project's inspections, newest first |
+| `PUT /operations/tenants/{tenant}/projects/{project}/name` | Projects | Nothing. It renames the project. |
 
 - Each module owns its operator routes and [GraphQL fields](graphql.md), in an `Operators` feature. The host maps them
-  outside the seated group, behind `SamplePolicies.OperatorRequired`. The query reads past the tenant filter
-  (`IgnoreQueryFilters([TenancyQueryFilter.Name])`) for the tenant in the path.
-- The policy is an early check only. Each query also declares `[RequiresOperator]`. The Tenancy package refuses anyone
-  else with `tenancy.operators-only`, seats and system work included.
-- Orla changes nothing:
-  - Every route inside a tenant requires a seat (`tenancy.not-seated`).
-  - Her database role holds only `SELECT`. It reads a table only where a row rule of the table's module allows it.
+  outside the seated group, behind `SamplePolicies.OperatorRequired`.
+- The policy is an early check only. Each request also declares `[Operator]`. The access check refuses anyone else
+  with `tenancy.operators-only`, seats and system work included.
+- **The reads.** A query with `[Operator]` starts no work. It runs as Orla, through her database role, and reads past
+  the tenant filter (`IgnoreQueryFilters([TenancyQueryFilter.Name])`) for the tenant in the path. Her database role
+  holds only `SELECT`. It reads a table only where a row rule of the table's module allows it.
+- **The one change.** `RenameTenantProject` declares `[Operator(Scope = ProjectMembership.Scope)]` and names its tenant
+  with a `[ForTenant] TenantId Tenant` member. The access check runs its handler as operator work in that tenant, in the
+  Projects module's scope. The work is recorded as `operator`, with Orla's identity. A `Tenant` header that names
+  another tenant gets `tenancy.tenant-mismatch`. The GraphQL field is `tenantProjectRename`.
+- Every other route inside a tenant requires a seat, so Orla gets `tenancy.not-seated` there.
 
-Projects' rule is below. Inspections has the same rule for its table.
+Projects' read rule for the operators' role is below. Inspections has the same rule for its table.
 
 **`Projects.Infrastructure/Access/OperatorsSeeEveryProject.cs`**
 
@@ -501,8 +510,8 @@ Projects and inspections return `changedBy`, from the columns that `RecordsWhoCh
 
 - the seat;
 - `system`, for the seeding;
-- `operator`, for work started with `TenancyWork.BeginOperatorIn`. The operator's identity is left out, because a
-  tenant may not read it.
+- `operator`, for an operator's command, such as `RenameTenantProject`. The operator's identity is left out, because
+  a tenant may not read it.
 
 `changedBy` records who made the last change. It does not record when. `ChangedBy` is one value object in Tenants'
 contracts, and both modules use it.
