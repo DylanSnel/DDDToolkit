@@ -14,10 +14,10 @@ global using Examples.Tenancy.Projects.Contracts.ValueObjects;
 global using Examples.Tenancy.Shared.Domain.ValueObjects;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 
-// Tenancy's answers, closed over the application's ids: the tenant the caller works in, and its seat. An alias is
+// Tenancy, closed over the application's ids: the tenant the caller works in, and its seat. An alias is
 // global only in the project that declares it, and reads its target as if no other using existed, hence the full
 // names.
-global using SampleAnswers = DDDToolkit.Supporting.Tenancy.Access.ITenancyAnswers<
+global using SampleTenancy = DDDToolkit.Supporting.Tenancy.Access.ITenancy<
     Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,

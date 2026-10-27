@@ -6,11 +6,11 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// The door a module goes through to ask Tenancy about the current caller: who it is, which tenant it acts
 /// in, and, over a read source the module supplies, what it may do.
 /// <code>
-/// var tenancy = answers.Over(source, executor);
-/// var mine = projects.Where(project => tenancy.UnitsWhereIHold("projects.edit").Contains(project.UnitId));
+/// var queries = tenancy.In(source, executor);
+/// var mine = projects.Where(project => queries.UnitsWhereIHold("projects.edit").Contains(project.UnitId));
 /// </code>
 /// </summary>
-public interface ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>
+public interface ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -24,10 +24,10 @@ public interface ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
     TenantInScope<TTenantId, TSeatId> RequireTenant();
 
-    /// <summary>The access questions for the current caller, over <paramref name="source"/>, at this moment.</summary>
+    /// <summary>The access queries for the current caller, over <paramref name="source"/>, at this moment.</summary>
     /// <param name="source">The rows to ask over, usually in the module's own context.</param>
-    /// <param name="executor">Runs the questions that answer yes or no.</param>
-    ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId> Over(
+    /// <param name="executor">Runs the queries that answer yes or no.</param>
+    ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In(
         ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
         IQueryExecutor executor);
 }

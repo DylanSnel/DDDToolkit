@@ -53,7 +53,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
     /// <summary>
     /// What the sample declares elsewhere and the page's requests name: the ids, a listing and a kind of unit, the
     /// projects' permissions, and the module interfaces in the sample's namespaces. And what a test adds to run the
-    /// requirement of the module's own: a plan it answers, stand-ins for Tenancy's answers about the caller and for
+    /// requirement of the module's own: a plan it answers, stand-ins for Tenancy, asked about the caller, and for
     /// its check of the permission, and counts of how often each is asked.
     /// </summary>
     private const string TestOnly =
@@ -115,8 +115,8 @@ public partial class HowARequestIsCheckedDocsExampleTests
                 }
             }
 
-            /// <summary>Tenancy's answers about the caller: a seat of the tenant, or nobody there, refused as Tenancy refuses one.</summary>
-            public sealed class AnswersOfTheTest : ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>
+            /// <summary>Tenancy, asked about the caller: a seat of the tenant, or nobody there, refused as Tenancy refuses one.</summary>
+            public sealed class TenancyOfTheTest : ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>
             {
                 public bool Seated { get; set; } = true;
 
@@ -129,7 +129,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
                         ? new TenantInScope<TenantId, SeatId>(Tenant, SeatId.Create(), BySystem: false)
                         : throw DDDToolkit.Supporting.Tenancy.TenancyRefusals.Refuse(DDDToolkit.Supporting.Tenancy.TenancyRefusals.NotSeated);
 
-                public ITenancyQuestions<TenantId, SeatId, OrganizationUnitId, RoleId> Over(
+                public ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId> In(
                     ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId> source,
                     IQueryExecutor executor)
                     => throw new NotSupportedException("The page's check asks RequireTenant alone.");
@@ -302,8 +302,8 @@ public partial class HowARequestIsCheckedDocsExampleTests
         var emitted = Run().Emit();
         var plan = emitted.New("Examples.Tenancy.PlanOfTheTest")!;
         var permission = emitted.New("Examples.Tenancy.PermissionOfTheTest")!;
-        var answers = emitted.New("Examples.Tenancy.AnswersOfTheTest")!;
-        using var provider = Services(emitted, plan, permission, answers, withPlanCheck: true);
+        var tenancy = emitted.New("Examples.Tenancy.TenancyOfTheTest")!;
+        using var provider = Services(emitted, plan, permission, tenancy, withPlanCheck: true);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
         Required(export).Should().Be(
@@ -315,7 +315,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
         Set(emitted, permission, "Held", true);
         Refusal(provider, emitted, export).Code.Should().Be("boards.plan-too-low");
         emitted.Property(permission, "Asked").Should().Be(0, "the first case refused, so the second is not asked");
-        emitted.Property(plan, "AskedFor").Should().Be(emitted.Property(answers, "Tenant"), "the plan read is the one of the tenant the caller works in");
+        emitted.Property(plan, "AskedFor").Should().Be(emitted.Property(tenancy, "Tenant"), "the plan read is the one of the tenant the caller works in");
 
         // On the Pro plan the permission is asked next, and its refusal is its own.
         Set(emitted, plan, "Plan", PlanOf(emitted, "Pro"));
@@ -333,12 +333,12 @@ public partial class HowARequestIsCheckedDocsExampleTests
         var emitted = Run().Emit();
         var plan = emitted.New("Examples.Tenancy.PlanOfTheTest")!;
         var permission = emitted.New("Examples.Tenancy.PermissionOfTheTest")!;
-        var answers = emitted.New("Examples.Tenancy.AnswersOfTheTest")!;
-        using var provider = Services(emitted, plan, permission, answers, withPlanCheck: true);
+        var tenancy = emitted.New("Examples.Tenancy.TenancyOfTheTest")!;
+        using var provider = Services(emitted, plan, permission, tenancy, withPlanCheck: true);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
         // The new sign-in, an operator or an anonymous caller: nobody in the tenant, so no tenant's plan to learn.
-        Set(emitted, answers, "Seated", false);
+        Set(emitted, tenancy, "Seated", false);
         Set(emitted, plan, "Plan", PlanOf(emitted, "Free"));
         Refusal(provider, emitted, export).Code.Should().Be("tenancy.not-seated", "the caller's own reason comes before anything is read");
         emitted.Property(plan, "Asked").Should().Be(0, "a caller who is nobody in the tenant learns nothing of its plan");
@@ -349,7 +349,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
     public void A_module_that_forgets_its_check_has_the_request_stopped_with_the_registration_named()
     {
         var emitted = Run().Emit();
-        using var provider = Services(emitted, emitted.New("Examples.Tenancy.PlanOfTheTest")!, emitted.New("Examples.Tenancy.PermissionOfTheTest")!, emitted.New("Examples.Tenancy.AnswersOfTheTest")!, withPlanCheck: false);
+        using var provider = Services(emitted, emitted.New("Examples.Tenancy.PlanOfTheTest")!, emitted.New("Examples.Tenancy.PermissionOfTheTest")!, emitted.New("Examples.Tenancy.TenancyOfTheTest")!, withPlanCheck: false);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
         FluentActions.Invoking(() => Require(provider, emitted, export))
@@ -529,8 +529,8 @@ public partial class HowARequestIsCheckedDocsExampleTests
         return host.WithAssemblyName("Examples.Tenancy").WithTenancy().WithMembershipAlone().WithMediator().RunCore();
     }
 
-    /// <summary>The module of the boards with its check, or without it, beside the test's stand-ins for Tenancy's answers and check.</summary>
-    private static ServiceProvider Services(EmittedAssembly emitted, object plan, object permission, object answers, bool withPlanCheck)
+    /// <summary>The module of the boards with its check, or without it, beside the test's stand-ins for Tenancy and its check.</summary>
+    private static ServiceProvider Services(EmittedAssembly emitted, object plan, object permission, object tenancy, bool withPlanCheck)
     {
         var services = new ServiceCollection();
         if (withPlanCheck)
@@ -540,7 +540,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
         services.AddSingleton(emitted.Type("Examples.Tenancy.ITenantPlans"), plan);
         services.AddSingleton(emitted.Type("Examples.Tenancy.PermissionOfTheTest"), permission);
-        services.AddSingleton(answers.GetType().GetInterfaces().Single(each => each.Name.StartsWith("ITenancyAnswers", StringComparison.Ordinal)), answers);
+        services.AddSingleton(tenancy.GetType().GetInterfaces().Single(each => each.Name.StartsWith("ITenancy", StringComparison.Ordinal)), tenancy);
         typeof(AccessCheckServiceCollectionExtensions).GetMethod(nameof(AccessCheckServiceCollectionExtensions.AddAccessCheck))!
             .MakeGenericMethod(emitted.Type("Examples.Tenancy.IBoardsRequest"), emitted.Type("Examples.Tenancy.PermissionCheckOfTheTest"))
             .Invoke(null, [services]);

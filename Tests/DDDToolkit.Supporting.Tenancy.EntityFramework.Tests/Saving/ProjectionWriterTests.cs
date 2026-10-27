@@ -90,7 +90,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         // An invariant fails in the same save as a grant: nothing is written, the rights included.
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            var context = services.Tenancy();
+            var context = services.TenancyContext();
             var seat = await context.Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
             var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken);
 
@@ -105,7 +105,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         // The save fails after the rights were worked out: another save changed the seat in the meantime.
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            var context = services.Tenancy();
+            var context = services.TenancyContext();
             var seat = await context.Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
             var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken);
             seat.Grant(north, role.Id, role.Facts, GrantPeriod.Open(_clock.Now), grantedBy: null, reason: null);
@@ -113,9 +113,9 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
             await _services.BySystemIn(harbor.Tenant, async other =>
             {
                 // The host's own use case, renaming the seat by the name it keeps: a save of the seat like any other.
-                var renamed = await other.Tenancy().Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
+                var renamed = await other.TenancyContext().Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
                 renamed.Rename("Grace Hopper");
-                await other.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken);
+                await other.TenancyContext().SaveChangesAsync(TestContext.Current.CancellationToken);
             });
 
             await FluentActions.Awaiting(() => context.SaveChangesAsync(TestContext.Current.CancellationToken)).Should().ThrowAsync<ConcurrencyConflictException>();
@@ -196,7 +196,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         (await PermissionsAsync(lin)).Should().BeEmpty("an archived role grants nothing, though it stays granted");
 
         await _services.BySystemIn(harbor.Tenant, async services =>
-            (await services.Tenancy().Set<HostSeat>().SingleAsync(seat => seat.Id == lin, TestContext.Current.CancellationToken)).Placements.Single().Grants.Should().ContainSingle());
+            (await services.TenancyContext().Set<HostSeat>().SingleAsync(seat => seat.Id == lin, TestContext.Current.CancellationToken)).Placements.Single().Grants.Should().ContainSingle());
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
 
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            var context = services.Tenancy();
+            var context = services.TenancyContext();
             var seat = await context.Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
             var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken);
             var organization = await context.Set<HostOrganization>().SingleAsync(TestContext.Current.CancellationToken);
@@ -287,7 +287,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         // Lin's seat is hidden from the application's reads, and the role both hold loses a permission.
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            var context = services.Tenancy();
+            var context = services.TenancyContext();
             (await context.Set<HostSeat>().SingleAsync(seat => seat.Id == lin, TestContext.Current.CancellationToken)).ChangeJobTitle(HostFilteredTenancyContext.Hidden);
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
@@ -304,9 +304,9 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         // The role is hidden next, and Grace is granted another one, which writes her rights again in full.
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            var role = await services.Tenancy().Set<HostRole>().SingleAsync(row => row.Id == operatorRole, TestContext.Current.CancellationToken);
+            var role = await services.TenancyContext().Set<HostRole>().SingleAsync(row => row.Id == operatorRole, TestContext.Current.CancellationToken);
             role.Rename<SeatId>(role.Name, HostFilteredTenancyContext.Hidden);
-            await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken);
+            await services.TenancyContext().SaveChangesAsync(TestContext.Current.CancellationToken);
         });
 
         await FilteredAsync(harbor.Tenant, async (context, _) =>
@@ -365,8 +365,8 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
             .Should().BeEquivalentTo([(harbor.RootUnit, harbor.RootUnit, 0), (north, north, 0), (harbor.RootUnit, north, 1)]);
         await keeping.BySystemIn(harbor.Tenant, async services =>
         {
-            (await services.Tenancy().Set<PlacementRow<SeatId, OrganizationUnitId>>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(2, "each placement has its tenant, which its row is filtered on");
-            (await services.Tenancy().Set<HostRole>().Select(role => EF.Property<string>(role, "NormalizedName")).ToListAsync(TestContext.Current.CancellationToken))
+            (await services.TenancyContext().Set<PlacementRow<SeatId, OrganizationUnitId>>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(2, "each placement has its tenant, which its row is filtered on");
+            (await services.TenancyContext().Set<HostRole>().Select(role => EF.Property<string>(role, "NormalizedName")).ToListAsync(TestContext.Current.CancellationToken))
                 .Should().OnlyContain(name => name == name.ToUpperInvariant() && name.Length > 0);
         });
 
@@ -384,7 +384,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
     private Task<List<(OrganizationUnitId Ancestor, OrganizationUnitId Descendant, int Distance)>> ClosureOfSavedOrganizationAsync(TenantId tenant)
         => _services.BySystemIn(tenant, async services =>
         {
-            var organization = await services.Tenancy().Set<HostOrganization>().SingleAsync(TestContext.Current.CancellationToken);
+            var organization = await services.TenancyContext().Set<HostOrganization>().SingleAsync(TestContext.Current.CancellationToken);
             return TenancyProjection.ClosureOf(organization).Select(path => (path.AncestorId, path.DescendantId, path.Distance)).ToList();
         });
 }

@@ -23,24 +23,24 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// </remarks>
 /// <param name="members">The Membership package's questions about projects, for the current caller.</param>
 /// <param name="reads">Where projects, and Tenancy's rows next to them, are read: a context per reading.</param>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
 /// <param name="catalogue">The permissions the application knows.</param>
-public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectReads reads, SampleAnswers answers, TenancyCatalogue catalogue) : IProjectGate
+public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectReads reads, SampleTenancy tenancy, TenancyCatalogue catalogue) : IProjectGate
 {
     /// <summary>
-    /// Tenancy's questions about the current caller, over a reading's rows. Everything in this project that asks
+    /// Tenancy's queries about the current caller, in a reading's rows. Everything in this project that asks
     /// Tenancy asks through here, so where this module reads Tenancy from is decided in one place.
     /// </summary>
     /// <remarks>
-    /// The questions bind the caller, and the moment, when they are asked for, so they are asked for per use and
+    /// The queries bind the caller, and the moment, when they are asked for, so they are asked for per use and
     /// never kept. Internal: the use cases of this project ask through here, and nothing outside it asks Tenancy
     /// through Projects.
     /// </remarks>
     /// <param name="reading">The reading whose rows are asked over, and whose statement the answers go into.</param>
-    internal SampleQuestions Questions(IProjectReading reading)
+    internal SampleTenancyQueries TenancyIn(IProjectReading reading)
     {
         ArgumentNullException.ThrowIfNull(reading);
-        return answers.Over(reading.Tenancy, reading.Queries);
+        return tenancy.In(reading.Tenancy, reading.Queries);
     }
 
     /// <summary>
@@ -99,9 +99,9 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
 
         // A permission reaches the root only when it is held there: nothing is above it. System work in the tenant holds
         // every permission at every unit, so the same statement answers all of them for it.
-        var questions = Questions(reading);
-        var roots = questions.Units().Where(unit => !unit.ParentId.HasValue).Select(unit => unit.Id);
-        var held = questions.WhereIHold(permissions).Where(pair => roots.Contains(pair.Unit)).Select(pair => pair.Permission).Distinct();
+        var queries = TenancyIn(reading);
+        var roots = queries.Units().Where(unit => !unit.ParentId.HasValue).Select(unit => unit.Id);
+        var held = queries.WhereIHold(permissions).Where(pair => roots.Contains(pair.Unit)).Select(pair => pair.Permission).Distinct();
 
         return [.. (await reading.Queries.ListAsync(held, cancellationToken)).Order(StringComparer.Ordinal)];
     }
@@ -122,10 +122,10 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
     public async Task RequireAtAsync(OrganizationUnitId unit, string permission, CancellationToken cancellationToken)
     {
         // The caller before anything is opened: nobody is refused as nobody, without a reading made for it.
-        answers.RequireTenant();
+        tenancy.RequireTenant();
 
         await using var reading = reads.Open();
-        if (!await Questions(reading).HoldsAtAsync(permission, unit, cancellationToken))
+        if (!await TenancyIn(reading).HoldsAtAsync(permission, unit, cancellationToken))
         {
             throw ProjectRefusals.Refuse(ProjectRefusals.NotPermitted, ("Permission", permission), ("Unit", unit));
         }

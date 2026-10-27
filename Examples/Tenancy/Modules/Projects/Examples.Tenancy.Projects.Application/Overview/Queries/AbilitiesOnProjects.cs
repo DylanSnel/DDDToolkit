@@ -48,7 +48,7 @@ public sealed class AbilitiesOnProjectsHandler(IProjectReads reads, ProjectAcces
         var standing = await reading.StandingOnAsync(
             projects,
             access.PermissionsReachFor(ProjectAbilities.Permissions),
-            access.Questions(reading).UnitsWhereIHold(MoveProjectToUnit.DestinationPermission),
+            access.TenancyIn(reading).UnitsWhereIHold(MoveProjectToUnit.DestinationPermission),
             cancellationToken);
 
         return standing.ToDictionary(

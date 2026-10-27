@@ -50,7 +50,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
 
         // Through Entity Framework, with the tenant filter skipped, it is the same three.
         await using var services = new TenancyServices(database);
-        var read = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
+        var read = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.TenancyContext().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
             .IgnoreQueryFilters()
             .Select(right => right.SeatId)
             .ToListAsync(Cancellation));
@@ -214,8 +214,8 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         // Nor through Entity Framework with the filters skipped, or with SQL of the application's own.
         await using var services = new TenancyServices(database);
         var (filtered, raw) = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped => (
-            await scoped.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().IgnoreQueryFilters().Select(right => right.SeatId).Distinct().ToListAsync(Cancellation),
-            await scoped.Tenancy().Database.SqlQueryRaw<long>(names.Sql("SELECT count(*) AS \"Value\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" <> {0}"), Ada.Seat.Value).SingleAsync(Cancellation)));
+            await scoped.TenancyContext().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().IgnoreQueryFilters().Select(right => right.SeatId).Distinct().ToListAsync(Cancellation),
+            await scoped.TenancyContext().Database.SqlQueryRaw<long>(names.Sql("SELECT count(*) AS \"Value\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" <> {0}"), Ada.Seat.Value).SingleAsync(Cancellation)));
         filtered.Should().Equal(Ada.Seat);
         raw.Should().Be(0);
     }

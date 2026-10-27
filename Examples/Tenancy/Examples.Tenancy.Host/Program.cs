@@ -82,7 +82,7 @@ builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetim
 builder.Services.AddRequestTracing();
 
 // The modules, each through the one entry its API project has. Tenancy brings the application's catalogue with
-// it, and the other modules ask Tenancy's answers, so Tenancy comes first. Projects is given the starter project
+// it, and the other modules ask Tenancy, so Tenancy comes first. Projects is given the starter project
 // roles the application declares for its tenants' crews, which its rules are made with. Inspections asks
 // Projects' gate, so it follows Projects.
 builder.Services.AddTenantsModule(host, SampleCatalogue.Application);

@@ -4,8 +4,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
 /// What the current caller may do, asked over one read source. Made by
-/// <see cref="ITenancyAnswers{TTenantId, TSeatId, TUnitId, TRoleId}.Over"/>, which fixes the caller and the
-/// moment "now" once, so every answer of one set of questions agrees with the others.
+/// <see cref="ITenancy{TTenantId, TSeatId, TUnitId, TRoleId}.In"/>, which fixes the caller and the
+/// moment "now" once, so every answer of one set of queries agrees with the others.
 /// <para>
 /// The queries are not run here: a module composes them into its own query, where they become subqueries,
 /// or runs them itself. A permission granted at the root holds for the whole tenant; one granted lower down covers
@@ -18,7 +18,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// and asking is a programming error.
 /// </para>
 /// </summary>
-public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
+public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -35,7 +35,7 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// units it is held at and every unit below them. It is <see cref="UnitsWhereIHold"/> for several permissions in one
     /// query, so a list that shows what the caller may do with each row asks once, not once per permission:
     /// <code>
-    /// var held = tenancy.WhereIHold(["projects.edit", "projects.close"]);
+    /// var held = queries.WhereIHold(["projects.edit", "projects.close"]);
     /// var abilities = from project in projects
     ///                 join pair in held on project.UnitId equals pair.Unit
     ///                 select new { project.Id, pair.Key };
@@ -117,7 +117,7 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// What a seat is shown by is the application's, selected from its own seat, which the directory answers whole,
     /// by id.
     /// <para>
-    /// A read of the seats, unlike the questions about rights: by default every seat of the tenant, and on Postgres
+    /// A read of the seats, unlike the queries about rights: by default every seat of the tenant, and on Postgres
     /// the seats a read rule of the application's on its seat class lets the caller read, where it writes one
     /// (<c>tenant_seats()</c> runs as its caller). A module that admits a seat by asking here, as Membership's
     /// admission does, then admits only seats the caller reads.

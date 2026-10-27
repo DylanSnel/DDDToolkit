@@ -52,7 +52,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database, rowLevelSecurity: false, databaseKeepsRights: false);
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(TenancySeed.Harbor))
         {
-            var stored = await services.InScopeAsync(scoped => scoped.Tenancy().Set<HostRole>().ToDictionaryAsync(role => role.FromPack!, role => role.Permissions, Cancellation));
+            var stored = await services.InScopeAsync(scoped => scoped.TenancyContext().Set<HostRole>().ToDictionaryAsync(role => role.FromPack!, role => role.Permissions, Cancellation));
             stored.Should().BeEquivalentTo(catalogue.PacksFor(TenantShape.Hierarchical).ToDictionary(pack => pack.Key, pack => pack.Permissions), options => options.WithStrictOrdering());
         }
     }
@@ -112,7 +112,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         // Entity Framework reads them back as the same instants, at offset zero.
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(TenancySeed.Harbor))
         {
-            var seat = await services.InScopeAsync(scoped => scoped.Tenancy().Set<HostSeat>().SingleAsync(row => row.Id == TenancySeed.Oli.Seat, Cancellation));
+            var seat = await services.InScopeAsync(scoped => scoped.TenancyContext().Set<HostSeat>().SingleAsync(row => row.Id == TenancySeed.Oli.Seat, Cancellation));
             var grant = seat.Placements.Single().Grants.Single(each => each.RoleId == TenancySeed.HarborRoles.Watcher);
             grant.StartsAt.Should().Be(from);
             grant.StartsAt.Offset.Should().Be(TimeSpan.Zero);

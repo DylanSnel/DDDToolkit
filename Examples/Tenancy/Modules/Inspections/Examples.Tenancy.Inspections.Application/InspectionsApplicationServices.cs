@@ -31,7 +31,7 @@ public static class InspectionsApplicationServices
     /// The handlers themselves are not registered here. The host's mediator finds them in this assembly when the
     /// host compiles and registers them itself, so a request without a handler is a build error there, not a
     /// missing line here. The ports they read and save through are the infrastructure project's to register;
-    /// Tenancy's answers and catalogue come from Tenancy's own registration, and the gate the check asks from
+    /// <c>ITenancy</c> and the catalogue come from Tenancy's own registration, and the gate the check asks from
     /// Projects', both of which come first.
     /// </para>
     /// <para>

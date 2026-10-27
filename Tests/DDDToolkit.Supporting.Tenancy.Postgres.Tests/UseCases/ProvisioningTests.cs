@@ -310,10 +310,10 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         {
             (await scoped.Directory().ListRolesAsync(Cancellation)).Select(role => (role.Name, role.FromPack)).Should().Equal(
                 ("Bediener", HostCatalogue.OperatorPack), ("Hoofdgebruiker", HostCatalogue.AdministratorPack), ("Toeschouwer", HostCatalogue.WatcherPack));
-            (await scoped.Tenancy().Set<HostTenant>().AsNoTracking().SingleAsync(Cancellation)).IsDemo.Should().BeTrue();
-            (await scoped.Tenancy().Set<HostSeat>().AsNoTracking().SingleAsync(seat => seat.Id == provisioned.AdminSeat, Cancellation))
+            (await scoped.TenancyContext().Set<HostTenant>().AsNoTracking().SingleAsync(Cancellation)).IsDemo.Should().BeTrue();
+            (await scoped.TenancyContext().Set<HostSeat>().AsNoTracking().SingleAsync(seat => seat.Id == provisioned.AdminSeat, Cancellation))
                 .JobTitle.Should().Be("Harbor master");
-            (await scoped.Tenancy().Set<HostOrganization>().AsNoTracking().SingleAsync(Cancellation)).Root.CostCentre.Should().Be("ES-001");
+            (await scoped.TenancyContext().Set<HostOrganization>().AsNoTracking().SingleAsync(Cancellation)).Root.CostCentre.Should().Be("ES-001");
         });
 
         // A seat that manages the settings and no roles: the policy lets it add a role only as a copy of a pack, by the
@@ -337,7 +337,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         var quay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Organization().AddUnitAsync(
             provisioned.RootUnit, "Quay", Cancellation, configure: unit => unit.SetCostCentre("QY-001")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, async scoped =>
-            (await scoped.Tenancy().Set<HostOrganization>().AsNoTracking().SingleAsync(Cancellation)).FindUnit(quay)!.CostCentre.Should().Be("QY-001"));
+            (await scoped.TenancyContext().Set<HostOrganization>().AsNoTracking().SingleAsync(Cancellation)).FindUnit(quay)!.CostCentre.Should().Be("QY-001"));
     }
 
     /// <summary>The TestHost's packs in Dutch, as an application would read them from its own resources.</summary>

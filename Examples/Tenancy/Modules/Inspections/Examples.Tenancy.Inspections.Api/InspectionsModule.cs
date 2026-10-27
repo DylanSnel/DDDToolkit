@@ -39,7 +39,7 @@ public static class InspectionsModule
     /// Registers Inspections: how it is stored and its use cases. Its permission is not registered here: the host adds it
     /// with every module's, from the <c>[Permissions]</c> class the module declares. The host says where
     /// its tables live and where what it publishes goes (see <see cref="ModuleHost"/>). Register it after Tenancy
-    /// and Projects: Inspections asks Tenancy's answers and Projects' gate. Its context keeps rows to a tenant, so it
+    /// and Projects: Inspections asks Tenancy and Projects' gate. Its context keeps rows to a tenant, so it
     /// cannot do without Tenancy's save check, which <c>AddTenancy</c> brings and <c>UseDDDToolkit</c> puts on it, in
     /// whichever order the modules are registered; in a host without Tenancy its first save is refused.
     /// </summary>

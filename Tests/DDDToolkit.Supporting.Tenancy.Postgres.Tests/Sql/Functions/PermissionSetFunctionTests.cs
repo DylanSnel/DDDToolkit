@@ -31,11 +31,11 @@ public abstract class PermissionSetFunctionTests(TenancyPostgres postgres, Tenan
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, async scoped =>
         {
             var widgets = scoped.Widgets();
-            var tenancy = scoped.Answers().Over(widgets);
+            var queries = scoped.Tenancy().In(widgets);
 
             // Every pair of a unit and a permission, from the seat's own rights: one statement.
             recorder.Clear();
-            var held = await tenancy.WhereIHold(Keys).ToListAsync(Cancellation);
+            var held = await queries.WhereIHold(Keys).ToListAsync(Cancellation);
             recorder.Sent.Should().ContainSingle();
             held.Should().BeEquivalentTo(
                 new UnitPermission<OrganizationUnitId>[]
@@ -49,7 +49,7 @@ public abstract class PermissionSetFunctionTests(TenancyPostgres postgres, Tenan
             recorder.Clear();
             var abilities = await (
                 from widget in widgets.Widgets
-                join pair in tenancy.WhereIHold(Keys) on widget.UnitId equals pair.Unit
+                join pair in queries.WhereIHold(Keys) on widget.UnitId equals pair.Unit
                 orderby widget.Name, pair.Permission
                 select new { widget.Name, pair.Permission }).ToListAsync(Cancellation);
             recorder.Sent.Should().ContainSingle("the question is a part of the module's statement");
@@ -60,7 +60,7 @@ public abstract class PermissionSetFunctionTests(TenancyPostgres postgres, Tenan
 
             // The roles that grant the permissions, and the part of the tree under a unit, one statement each.
             recorder.Clear();
-            var roles = await tenancy.RolePermissions([HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage]).ToListAsync(Cancellation);
+            var roles = await queries.RolePermissions([HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage]).ToListAsync(Cancellation);
             recorder.Sent.Should().ContainSingle();
             roles.Should().BeEquivalentTo(
                 new RoleWithPermission<RoleId>[]
@@ -71,8 +71,8 @@ public abstract class PermissionSetFunctionTests(TenancyPostgres postgres, Tenan
                 "Harbor's roles, and no other tenant's");
 
             recorder.Clear();
-            (await tenancy.UnitsUnder(North).ToListAsync(Cancellation)).Should().BeEquivalentTo([North, NorthPier]);
-            (await tenancy.UnitsUnder(OrchardRoot).ToListAsync(Cancellation)).Should().BeEmpty("a unit of another tenant answers nothing");
+            (await queries.UnitsUnder(North).ToListAsync(Cancellation)).Should().BeEquivalentTo([North, NorthPier]);
+            (await queries.UnitsUnder(OrchardRoot).ToListAsync(Cancellation)).Should().BeEmpty("a unit of another tenant answers nothing");
             recorder.Sent.Should().HaveCount(2);
         });
 
@@ -83,14 +83,14 @@ public abstract class PermissionSetFunctionTests(TenancyPostgres postgres, Tenan
         // System work of the module in the tenant holds every permission at every unit there.
         var bySystem = await services.BySystemIn(
             Harbor,
-            async scoped => (await scoped.Answers().Over(scoped.Widgets()).WhereIHold(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Unit, pair.Permission)).ToList(),
+            async scoped => (await scoped.Tenancy().In(scoped.Widgets()).WhereIHold(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Unit, pair.Permission)).ToList(),
             scope: "widgets");
         bySystem.Should().BeEquivalentTo(new[] { HarborRoot, North, South, NorthPier }.SelectMany(unit => Keys.Select(permission => (unit, permission))));
     }
 
     private static Task<List<(OrganizationUnitId Unit, string Key)>> AnsweredToAsync(TenancyServices services, Person person)
         => services.BySeat(person.Identity, Harbor, person.Seat, async scoped =>
-            (await scoped.Answers().Over(scoped.Widgets()).WhereIHold(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Unit, pair.Permission)).ToList());
+            (await scoped.Tenancy().In(scoped.Widgets()).WhereIHold(Keys).ToListAsync(Cancellation)).Select(pair => (pair.Unit, pair.Permission)).ToList());
 }
 
 /// <summary>The questions for several permissions, through the read functions, under the names Entity Framework gives the tables and columns.</summary>

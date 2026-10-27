@@ -18,8 +18,8 @@ public sealed record RemoveCrewMember([OnResource] ProjectId Project, SeatId Sea
 
 /// <summary>Handles <see cref="RemoveCrewMember"/>: loads the project its command names, takes the seat off its crew and saves.</summary>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="answers">Tenancy's answers about the current caller: whether the seat is the caller's own.</param>
-public sealed class RemoveCrewMemberHandler(IProjectStore store, SampleAnswers answers) : ICommandHandler<RemoveCrewMember>
+/// <param name="tenancy">Tenancy, asked about the current caller: whether the seat is the caller's own.</param>
+public sealed class RemoveCrewMemberHandler(IProjectStore store, SampleTenancy tenancy) : ICommandHandler<RemoveCrewMember>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
@@ -36,7 +36,7 @@ public sealed class RemoveCrewMemberHandler(IProjectStore store, SampleAnswers a
         // The caller's own place may be what this very change was allowed by, once this command's check let it
         // through: see OwnPlaceOnTheCrew. Either way it writes this project and nothing an earlier command may
         // have left in the unit of work.
-        using (OwnPlaceOnTheCrew.BeginSave(command, command.Seat, answers.RequireTenant()))
+        using (OwnPlaceOnTheCrew.BeginSave(command, command.Seat, tenancy.RequireTenant()))
         {
             await store.SaveOnlyAsync(project, cancellationToken);
         }

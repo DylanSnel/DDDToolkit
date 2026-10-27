@@ -81,7 +81,7 @@ const sidebars = {
                 'tenancy/reference/use-cases',
                 'tenancy/reference/catalogue',
                 'tenancy/reference/callers',
-                'tenancy/reference/questions',
+                'tenancy/reference/queries',
                 'tenancy/reference/refusals',
                 'tenancy/reference/entity-framework',
                 'tenancy/reference/postgres',

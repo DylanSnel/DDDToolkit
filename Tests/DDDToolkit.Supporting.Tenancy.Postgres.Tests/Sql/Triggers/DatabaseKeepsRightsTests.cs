@@ -45,9 +45,9 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         {
             var (stored, expected) = await services.BySystemIn(tenant, async scoped =>
             {
-                var seats = await scoped.Tenancy().Set<HostSeat>().AsNoTracking().ToListAsync(Cancellation);
-                var roles = await scoped.Tenancy().Set<HostRole>().AsNoTracking().ToDictionaryAsync(role => role.Id, Cancellation);
-                var rights = await scoped.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().AsNoTracking().ToListAsync(Cancellation);
+                var seats = await scoped.TenancyContext().Set<HostSeat>().AsNoTracking().ToListAsync(Cancellation);
+                var roles = await scoped.TenancyContext().Set<HostRole>().AsNoTracking().ToDictionaryAsync(role => role.Id, Cancellation);
+                var rights = await scoped.TenancyContext().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().AsNoTracking().ToListAsync(Cancellation);
 
                 var projected = seats.SelectMany(seat => TenancyProjection.RightsOf(
                     seat.TenantId,

@@ -45,8 +45,8 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// </para>
 /// </remarks>
 /// <param name="projects">Projects' answer to "may the caller do this to that project".</param>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
-public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers answers) : IAccessCheck
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
+public sealed class InspectionsAccessCheck(IProjectGate projects, SampleTenancy tenancy) : IAccessCheck
 {
     /// <inheritdoc />
     public bool Decides(AccessRequirement requirement) => requirement is InspectionsRequirement;
@@ -66,7 +66,7 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
         {
             case InspectionsRequirement.OnProject required:
             {
-                answers.RequireTenant();
+                tenancy.RequireTenant();
 
                 var answer = await projects.AskAsync(required.Project, required.Permission, cancellationToken);
                 Require(answer, required.Permission, open: false);
@@ -77,7 +77,7 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
             {
                 // The caller first, then whom it acts for, and only then the project: work that acts for no seat
                 // is a mistake whatever the project is.
-                var scope = answers.RequireTenant();
+                var scope = tenancy.RequireTenant();
                 if (required.BySeat)
                 {
                     _ = ActingSeat.From(scope);
@@ -91,7 +91,7 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
             case InspectionsRequirement.OnProjectsInReach:
                 // Nothing is refused for a project: the handler asks the gate about all of them at once, and acts on
                 // those it answers for. The others are not there for this caller.
-                answers.RequireTenant();
+                tenancy.RequireTenant();
                 break;
 
             default:

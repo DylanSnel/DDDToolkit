@@ -384,7 +384,7 @@ The rows of `context`.
 public IQueryable<TSeatId>? SeatsHoldingPermissionAt(string permission, TUnitId unit)
 ```
 
-The seats that hold `permission` at `unit` now, as the storage itself answers the calling seat, or `null` when it has no answer of its own and the question is worked out over the rows above. A storage that shows a seat only its own [`ITenancyReadSource.SeatRights`](questions.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid) has one: over those rows the question would find nobody but the seat itself, whoever asks. Its answer keeps to what [`ITenancyQuestions.SeatsHoldingPermissionAt`](questions.md#seatsholdingpermissionatstring-tunitid) says a seat learns, and is a query of the same context, so it still composes into one statement.
+The seats that hold `permission` at `unit` now, as the storage itself answers the calling seat, or `null` when it has no answer of its own and the question is worked out over the rows above. A storage that shows a seat only its own [`ITenancyReadSource.SeatRights`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid) has one: over those rows the question would find nobody but the seat itself, whoever asks. Its answer keeps to what [`ITenancyQueries.SeatsHoldingPermissionAt`](queries.md#seatsholdingpermissionatstring-tunitid) says a seat learns, and is a query of the same context, so it still composes into one statement.
 
 **Parameters**
 
@@ -395,23 +395,23 @@ The seats that hold `permission` at `unit` now, as the storage itself answers th
 
 Answered by the database's function where it keeps the rights and the context's model maps the function's row, as `AddTenancy`, `AddTenancyReadModel` and `AddTenancyReadFunctions` do; `null` anywhere else.
 
-### `TenancyAnswersEntityFrameworkExtensions`
+### `TenancyEntityFrameworkExtensions`
 
 ```csharp
-public static class TenancyAnswersEntityFrameworkExtensions
+public static class TenancyEntityFrameworkExtensions
 ```
 
 Asks Tenancy inside a module's own queries.
 
 | Member | Summary |
 |---|---|
-| [`Over(ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>, DbContext)`](#overitenancyanswersttenantid-tseatid-tunitid-troleid-dbcontext) | The access questions for the current caller over `context`: Tenancy's own, or a module's that maps the read model with `AddTenancyReadModel` or, where the database keeps the rights, with `AddTenancyReadFunctions`. |
+| [`In(ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>, DbContext)`](#initenancyttenantid-tseatid-tunitid-troleid-dbcontext) | The access queries for the current caller over `context`: Tenancy's own, or a module's that maps the read model with `AddTenancyReadModel` or, where the database keeps the rights, with `AddTenancyReadFunctions`. |
 
-#### `Over(ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>, DbContext)`
+#### `In(ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>, DbContext)`
 
 ```csharp
-public static ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId> Over<TTenantId, TSeatId, TUnitId, TRoleId>(
-    this ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId> answers,
+public static ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In<TTenantId, TSeatId, TUnitId, TRoleId>(
+    this ITenancy<TTenantId, TSeatId, TUnitId, TRoleId> tenancy,
     DbContext context)
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
@@ -419,23 +419,23 @@ public static ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId> Over<TTena
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-The access questions for the current caller over `context`: Tenancy's own, or a module's that maps the read model with `AddTenancyReadModel` or, where the database keeps the rights, with `AddTenancyReadFunctions`. What they return are queries of that context, so composed into the module's own query they become subqueries of one statement:
+The access queries for the current caller over `context`: Tenancy's own, or a module's that maps the read model with `AddTenancyReadModel` or, where the database keeps the rights, with `AddTenancyReadFunctions`. What they return are queries of that context, so composed into the module's own query they become subqueries of one statement:
 
 ```csharp
-var tenancy = answers.Over(db);
-var mine = db.Projects.Where(project => tenancy.UnitsWhereIHold("projects.edit").Contains(project.UnitId));
+var queries = tenancy.In(db);
+var mine = db.Projects.Where(project => queries.UnitsWhereIHold("projects.edit").Contains(project.UnitId));
 ```
 
-The questions keep nothing of the context but the reference: ask over the context that runs the query they are composed into, a request's own or one taken from a factory for one query, and they run on that one.
+The queries keep nothing of the context but the reference: ask over the context that runs the query they are composed into, a request's own or one taken from a factory for one query, and they run on that one.
 
 **Parameters**
 
-- `answers`: Tenancy's answers.
+- `tenancy`: Tenancy, asked about the current caller.
 - `context`: The context to ask over.
 
 **Exceptions**
 
-- `ArgumentNullException`: `answers` or `context` is null.
+- `ArgumentNullException`: `tenancy` or `context` is null.
 - `InvalidOperationException`: The database keeps the rights ([`TenancyStoreOptions.DatabaseKeepsRights`](#tenancystoreoptions)), and `context` is a module's that maps the read model as views over Tenancy's tables: there a module reads no table of Tenancy's, and asks its functions, mapped with `AddTenancyReadFunctions`.
 
 ## Read functions
@@ -456,12 +456,12 @@ The next three answer a seat what it may learn of other seats' rights, the one a
 
 | Member | Summary |
 |---|---|
-| `CallerPermissions = "caller_permissions"` | The rights the caller may read, as rows of [`SeatRight<TTenantId, TSeatId, TUnitId, TRoleId>`](questions.md#seatrightttenantid-tseatid-tunitid-troleid): `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"` and `"EndsAt"`. |
-| `TenantUnitPaths = "tenant_unit_paths"` | The closure of the organization's tree, as rows of [`OrganizationUnitPath<TTenantId, TUnitId>`](questions.md#organizationunitpathttenantid-tunitid): `"TenantId"`, `"AncestorId"`, `"DescendantId"` and `"Distance"`. |
-| `TenantUnits = "tenant_units"` | The units, as rows of [`OrganizationUnitRow<TTenantId, TUnitId>`](questions.md#organizationunitrowttenantid-tunitid): `"Id"`, `"TenantId"`, `"ParentId"` and `"Status"`; never the name, nor a column the application added. |
-| `TenantRoles = "tenant_roles_with_permissions"` | The roles, as rows of [`RoleRow<TTenantId, TRoleId>`](questions.md#rolerowttenantid-troleid): `"Id"`, `"TenantId"`, `"FromPack"`, `"Status"` and `"Permissions"`, an array of text however the roles' table stores them; never the name. |
-| `TenantPlacements = "tenant_placements"` | Where seats are placed, as rows of [`PlacementRow<TSeatId, TUnitId>`](questions.md#placementrowtseatid-tunitid): `"SeatId"`, `"UnitId"` and `"IsPrimary"`, with the seat's `"TenantId"`, which the row is kept to its tenant by. |
-| `TenantSeats = "tenant_seats"` | The seats, as rows of [`SeatRow<TTenantId, TSeatId>`](questions.md#seatrowttenantid-tseatid): `"Id"`, `"TenantId"` and `"Status"`; never the identity, nor a field the application adds to its seat class. |
+| `CallerPermissions = "caller_permissions"` | The rights the caller may read, as rows of [`SeatRight<TTenantId, TSeatId, TUnitId, TRoleId>`](queries.md#seatrightttenantid-tseatid-tunitid-troleid): `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"` and `"EndsAt"`. |
+| `TenantUnitPaths = "tenant_unit_paths"` | The closure of the organization's tree, as rows of [`OrganizationUnitPath<TTenantId, TUnitId>`](queries.md#organizationunitpathttenantid-tunitid): `"TenantId"`, `"AncestorId"`, `"DescendantId"` and `"Distance"`. |
+| `TenantUnits = "tenant_units"` | The units, as rows of [`OrganizationUnitRow<TTenantId, TUnitId>`](queries.md#organizationunitrowttenantid-tunitid): `"Id"`, `"TenantId"`, `"ParentId"` and `"Status"`; never the name, nor a column the application added. |
+| `TenantRoles = "tenant_roles_with_permissions"` | The roles, as rows of [`RoleRow<TTenantId, TRoleId>`](queries.md#rolerowttenantid-troleid): `"Id"`, `"TenantId"`, `"FromPack"`, `"Status"` and `"Permissions"`, an array of text however the roles' table stores them; never the name. |
+| `TenantPlacements = "tenant_placements"` | Where seats are placed, as rows of [`PlacementRow<TSeatId, TUnitId>`](queries.md#placementrowtseatid-tunitid): `"SeatId"`, `"UnitId"` and `"IsPrimary"`, with the seat's `"TenantId"`, which the row is kept to its tenant by. |
+| `TenantSeats = "tenant_seats"` | The seats, as rows of [`SeatRow<TTenantId, TSeatId>`](queries.md#seatrowttenantid-tseatid): `"Id"`, `"TenantId"` and `"Status"`; never the identity, nor a field the application adds to its seat class. |
 | `TenantAdministrators = "tenant_administrators"` | The tenant's administrators, as rows of `"SeatId"` and `"RoleId"`: no parameters. Answered to a seat that may read the grants at the root: one that manages grants, seats or units there, or roles for the whole tenant. |
 | `PermissionsAMoveChanges = "permissions_a_move_changes"` | The rights a move of a unit changes, as rows of `"UnitId"`, `"Permission"`, `"EndsAt"`, `"Parent"` and `"OfCaller"`: its parameters are the unit's parent and the parent it would get. Answered to a seat that manages units at both: its own rights, and another seat's only where it reaches one parent and not the other, which is where the move changes it. |
 | `SeatsHoldingPermissionAt = "seats_holding_permission_at"` | The seats that hold a permission at a unit, as rows of `"SeatId"`: its parameters are the permission and the unit. A seat is answered each holder whose grant there it may read: itself, and any other seat at a unit where it manages grants, seats or units, or anywhere when it manages roles for the whole tenant. |

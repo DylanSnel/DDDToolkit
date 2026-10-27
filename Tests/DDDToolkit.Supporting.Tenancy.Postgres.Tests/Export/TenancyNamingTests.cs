@@ -113,7 +113,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
 
         // The application reads and writes through the same converters: Sue is suspended, as the use cases left her.
         await using var services = new TenancyServices(database);
-        (await services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<HostSeat>().Where(seat => seat.Status == SeatStatus.Suspended).Select(seat => seat.Id).ToListAsync(Cancellation)))
+        (await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostSeat>().Where(seat => seat.Status == SeatStatus.Suspended).Select(seat => seat.Id).ToListAsync(Cancellation)))
             .Should().Equal(Sue.Seat);
     }
 
@@ -203,7 +203,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         await using var first = await factory.CreateDbContextAsync(Cancellation);
         await using var second = await factory.CreateDbContextAsync(Cancellation);
         await using var scope = requests.Scope();
-        var ofRequest = scope.ServiceProvider.Tenancy();
+        var ofRequest = scope.ServiceProvider.TenancyContext();
 
         second.Should().NotBeSameAs(first);
         second.Model.Should().BeSameAs(first.Model, "one model for every context of the pool");

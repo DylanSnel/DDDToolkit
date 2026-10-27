@@ -15,14 +15,14 @@ internal static class AtTenantPermission
     /// True when <paramref name="permission"/> is held by the caller at the tenant's root now. One statement, on a
     /// reading of this question's own. System work in the tenant holds every permission there, and nobody holds none.
     /// </summary>
-    /// <param name="answers">Tenancy's answers about the current caller.</param>
+    /// <param name="tenancy">Tenancy, asked about the current caller.</param>
     /// <param name="reads">Where the permission is asked about: Tenancy's rows, on a context of the question's own.</param>
     /// <param name="permission">The permission asked about.</param>
     /// <param name="cancellationToken">Cancels the question.</param>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    public static async Task<bool> IsHeldAsync(SampleAnswers answers, ITenancyReads reads, string permission, CancellationToken cancellationToken)
+    public static async Task<bool> IsHeldAsync(SampleTenancy tenancy, ITenancyReads reads, string permission, CancellationToken cancellationToken)
     {
         await using var reading = reads.Open();
-        return await answers.Over(reading.Rows, reading.Queries).HoldsAtTenantAsync(permission, cancellationToken);
+        return await tenancy.In(reading.Rows, reading.Queries).HoldsAtTenantAsync(permission, cancellationToken);
     }
 }

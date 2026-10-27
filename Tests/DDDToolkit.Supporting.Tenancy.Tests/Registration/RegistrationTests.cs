@@ -157,8 +157,8 @@ public class RegistrationTests
         scope.ServiceProvider.GetRequiredService<ITenantSelection>().Should().BeSameAs(
             scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>(),
             "the selection without its ids is the scope's own selection, asked by another name");
-        provider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>()
-            .Should().BeOfType<TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>();
+        provider.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>()
+            .Should().BeOfType<CurrentTenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>();
         provider.GetRequiredService<TimeProvider>().Should().BeSameAs(clock, "a clock registered before stays");
     }
 

@@ -4,20 +4,20 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// The access questions over one read source, for one caller at one moment.
+/// The access queries over one read source, for one caller at one moment.
 /// <para>
 /// Every query is plain LINQ over the source's sets, so a storage can translate it: ids are compared with
 /// <c>Equals</c>, an empty answer is the source's own set filtered to nothing, and every set that has a
 /// tenant is kept to the caller's tenant here too, next to whatever filter the storage applies.
 /// </para>
 /// </summary>
-internal sealed class TenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>(
+internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
     IQueryExecutor executor,
     TenancyCatalogue catalogue,
     TenancyCaller<TTenantId, TSeatId> caller,
     DateTimeOffset now)
-    : ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
+    : ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>

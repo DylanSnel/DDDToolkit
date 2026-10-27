@@ -41,9 +41,9 @@ public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId
 /// </remarks>
 /// <param name="store">Where project roles are read, added and saved.</param>
 /// <param name="membership">The projects' rules and starter roles.</param>
-/// <param name="answers">Tenancy's answers about the current caller: the tenant being set up.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller: the tenant being set up.</param>
 /// <param name="checks">The module's access checks, which hold a request to what it declared.</param>
-public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembership membership, SampleAnswers answers, AccessChecks<IProjectsRequest> checks) : ICommandHandler<SetUpProjectRoles>
+public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembership membership, SampleTenancy tenancy, AccessChecks<IProjectsRequest> checks) : ICommandHandler<SetUpProjectRoles>
 {
     /// <inheritdoc />
     /// <exception cref="RefusalException"><c>access.system-only</c>: anybody but system work in the tenant.</exception>
@@ -51,7 +51,7 @@ public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembers
     {
         await checks.RequireAsync(command, cancellationToken);
 
-        var scope = answers.RequireTenant();
+        var scope = tenancy.RequireTenant();
         if (!scope.BySystem)
         {
             throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);

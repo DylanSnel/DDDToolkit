@@ -26,7 +26,7 @@ public sealed class SaveFailureTests
         await using (var scope = services.Scope())
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => throw commit);
+            services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => throw commit);
 
             var refusal = await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => scope.ServiceProvider.Tenants().ProvisionAsync(Harbor(), Cancellation));
             refusal.InnerException.Should().BeSameAs(commit, "the refusal keeps the failure it stands for, so a log of it names the rule");
@@ -40,7 +40,7 @@ public sealed class SaveFailureTests
         await using (var scope = services.Scope())
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => throw failure);
+            services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => throw failure);
 
             var thrown = await FluentActions.Awaiting(() => scope.ServiceProvider.Tenants().ProvisionAsync(Harbor("orchard"), Cancellation))
                 .Should().ThrowAsync<InvalidOperationException>();
@@ -63,7 +63,7 @@ public sealed class SaveFailureTests
         await using (var scope = services.Scope())
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => services.ProvisionAsync("harbor"));
+            services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => services.ProvisionAsync("harbor"));
 
             var refusal = await Refused.WithCodeAsync(TenancyRefusals.SlugTaken, () => scope.ServiceProvider.Tenants().ProvisionAsync(Harbor(), Cancellation));
             refusal.Arguments.Should().Contain("Slug", "harbor");
@@ -86,7 +86,7 @@ public sealed class SaveFailureTests
         await using var scope = services.Scope();
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => throw failure);
+            services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => throw failure);
 
             var thrown = await FluentActions.Awaiting(() => scope.ServiceProvider.Tenants().ProvisionAsync(Harbor("orchard"), Cancellation))
                 .Should().ThrowAsync<AggregateException>("a translator that throws is not one that knows nothing of the failure");

@@ -91,8 +91,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 
             // And nothing it read is tracked: an application that changes a seat it was handed changes nothing a save writes.
             all[0].Rename("changed by the application");
-            services.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty();
-            (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+            services.TenancyContext().ChangeTracker.Entries<HostSeat>().Should().BeEmpty();
+            (await services.TenancyContext().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0);
         });
     }
 
@@ -107,8 +107,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             me.Seat.Rename("changed by the application");
 
             (me.Seat.Id, me.Seat.DisplayName).Should().Be((harbor.AdminSeat, "changed by the application"));
-            services.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("the caller's own seat is read as the lists read theirs, not loaded as a command loads one");
-            (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0, "a later save in the same scope writes nothing done to it");
+            services.TenancyContext().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("the caller's own seat is read as the lists read theirs, not loaded as a command loads one");
+            (await services.TenancyContext().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0, "a later save in the same scope writes nothing done to it");
         });
 
         var again = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
@@ -132,12 +132,12 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 
             // Nothing it read is tracked: an application that changes a unit it was handed changes nothing a save writes.
             organization.Units.Single(unit => unit.Id == north).SetCostCentre("XX-999");
-            services.Tenancy().ChangeTracker.Entries().Should().BeEmpty();
-            (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+            services.TenancyContext().ChangeTracker.Entries().Should().BeEmpty();
+            (await services.TenancyContext().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0);
 
             // And the directory's units are those.
             (await services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)).Single(unit => unit.Unit.Id == north).Unit.CostCentre.Should().Be("NL-002");
-            services.Tenancy().ChangeTracker.Entries().Should().BeEmpty("the directory reads, and tracks nothing it hands out");
+            services.TenancyContext().ChangeTracker.Entries().Should().BeEmpty("the directory reads, and tracks nothing it hands out");
         });
     }
 
@@ -217,7 +217,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorPack);
 
         await using var scope = _services.Scope();
-        var names = await scope.ServiceProvider.Tenancy().Set<OutboxMessage>().Select(message => message.EventName).ToListAsync(TestContext.Current.CancellationToken);
+        var names = await scope.ServiceProvider.TenancyContext().Set<OutboxMessage>().Select(message => message.EventName).ToListAsync(TestContext.Current.CancellationToken);
 
         names.Should().Contain(
         [
@@ -236,7 +236,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             services.Seats().AddSeatAsync(Guid.NewGuid(), TestContext.Current.CancellationToken, configure: added => added.Welcome()));
 
         await using var scope = _services.Scope();
-        var welcomed = await scope.ServiceProvider.Tenancy().Set<OutboxMessage>().AsNoTracking()
+        var welcomed = await scope.ServiceProvider.TenancyContext().Set<OutboxMessage>().AsNoTracking()
             .Where(message => message.EventName == "host.seat-welcomed")
             .ToListAsync(TestContext.Current.CancellationToken);
         welcomed.Should().ContainSingle("the application's own event is in the outbox, under the name it gives it")
@@ -338,7 +338,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         // refusal the check gives.
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            var context = services.Tenancy();
+            var context = services.TenancyContext();
             context.Add(TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(
                 RoleId.CreateSequential(), harbor.Tenant, new RoleDraft("élan", string.Empty, [HostCatalogue.WidgetRead]), services.GetRequiredService<TenancyCatalogue>()));
 
@@ -367,7 +367,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         await using (var scope = after.Scope())
         {
             var unknown = await TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(
-                scope.ServiceProvider.Tenancy(), scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(), TestContext.Current.CancellationToken);
+                scope.ServiceProvider.TenancyContext(), scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(), TestContext.Current.CancellationToken);
             unknown.Should().Equal(PolishPermission);
         }
 
@@ -382,7 +382,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         (await after.StoredRightsAsync(grace)).Select(right => right.Permission).Should().Equal(HostCatalogue.WidgetRead);
 
         await after.BySystemIn(harbor.Tenant, async services =>
-            (await services.Tenancy().Set<HostRole>().SingleAsync(role => role.Id == polisher, TestContext.Current.CancellationToken)).Permissions.Should().Contain(PolishPermission));
+            (await services.TenancyContext().Set<HostRole>().SingleAsync(role => role.Id == polisher, TestContext.Current.CancellationToken)).Permissions.Should().Contain(PolishPermission));
     }
 
     [Fact]

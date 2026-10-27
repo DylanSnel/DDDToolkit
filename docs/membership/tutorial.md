@@ -1142,7 +1142,7 @@ public sealed record OpenBoard([AtUnit] OrganizationUnitId Unit, string Name) : 
 
 public sealed class OpenBoardHandler(
     IBoardRepository boards,
-    ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy,
+    ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy,
     TimeProvider clock) : ICommandHandler<OpenBoard, BoardId>
 {
     public async ValueTask<BoardId> Handle(OpenBoard command, CancellationToken cancellationToken)
@@ -1472,7 +1472,7 @@ public sealed record SetUpBoardRoles : ICommand<int>, IBoardsRequest;
 
 public sealed class SetUpBoardRolesHandler(
     IBoardRoleRepository roles,
-    ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy) : ICommandHandler<SetUpBoardRoles, int>
+    ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy) : ICommandHandler<SetUpBoardRoles, int>
 {
     public async ValueTask<int> Handle(SetUpBoardRoles command, CancellationToken cancellationToken)
     {
@@ -1526,7 +1526,7 @@ public sealed record AddMember([OnResource] BoardId Board, SeatId Seat, BoardRol
 public sealed class AddMemberHandler(
     IBoardRepository boards,
     MemberAdmission<BoardId, SeatId, BoardRoleId> admission,
-    ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy,
+    ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy,
     TimeProvider clock) : ICommandHandler<AddMember>
 {
     public async ValueTask<Unit> Handle(AddMember command, CancellationToken cancellationToken)

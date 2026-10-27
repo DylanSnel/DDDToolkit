@@ -23,12 +23,12 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <c>AddTenancyAccess</c>, never the check.
 /// </para>
 /// </remarks>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
 /// <param name="options">Which token roles are operators'.</param>
 /// <param name="callers">Who is calling, as the toolkit says: what says whether the caller is an operator.</param>
 /// <param name="services">The services of the scope the check runs in, for the context a permission is asked over.</param>
 internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, TContext>(
-    ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId> answers,
+    ITenancy<TTenantId, TSeatId, TUnitId, TRoleId> tenancy,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
     ICallerAccessor callers,
     IServiceProvider services) : IAccessCheck
@@ -55,12 +55,12 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
         switch (requirement)
         {
             case TenancyRequirement.InTenant:
-                answers.RequireTenant();
+                tenancy.RequireTenant();
                 break;
 
             case TenancyRequirement.AtTenant required:
                 // The caller before anything is opened: nobody is refused as nobody, without a context made for it.
-                answers.RequireTenant();
+                tenancy.RequireTenant();
                 if (!await HoldsAtTenantAsync(required.Permission, cancellationToken).ConfigureAwait(false))
                 {
                     throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission));
@@ -70,7 +70,7 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
 
             case TenancyRequirement.AtUnit<TUnitId> required:
                 // As for the whole tenant: the caller first, then one statement.
-                answers.RequireTenant();
+                tenancy.RequireTenant();
                 if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken).ConfigureAwait(false))
                 {
                     throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission), ("Unit", required.Unit));
@@ -97,24 +97,24 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
 
     /// <summary>One statement, on a context of its own where the application registered a factory for <typeparamref name="TContext"/>.</summary>
     private Task<bool> HoldsAtTenantAsync(string permission, CancellationToken cancellationToken)
-        => AskAsync(questions => questions.HoldsAtTenantAsync(permission, cancellationToken), cancellationToken);
+        => AskAsync(queries => queries.HoldsAtTenantAsync(permission, cancellationToken), cancellationToken);
 
     /// <summary>One statement, on a context of its own where the application registered a factory for <typeparamref name="TContext"/>.</summary>
     private Task<bool> HoldsAtAsync(string permission, TUnitId unit, CancellationToken cancellationToken)
-        => AskAsync(questions => questions.HoldsAtAsync(permission, unit, cancellationToken), cancellationToken);
+        => AskAsync(queries => queries.HoldsAtAsync(permission, unit, cancellationToken), cancellationToken);
 
-    /// <summary>Asks Tenancy's questions over <typeparamref name="TContext"/>: a context of its own where the application registered a factory for it, and the scope's otherwise.</summary>
-    private async Task<bool> AskAsync(Func<ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>, Task<bool>> ask, CancellationToken cancellationToken)
+    /// <summary>Asks Tenancy's queries in <typeparamref name="TContext"/>: a context of its own where the application registered a factory for it, and the scope's otherwise.</summary>
+    private async Task<bool> AskAsync(Func<ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>, Task<bool>> ask, CancellationToken cancellationToken)
     {
         if (services.GetService<IDbContextFactory<TContext>>() is not { } contexts)
         {
-            return await ask(answers.Over(services.GetRequiredService<TContext>())).ConfigureAwait(false);
+            return await ask(tenancy.In(services.GetRequiredService<TContext>())).ConfigureAwait(false);
         }
 
         var context = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (context.ConfigureAwait(false))
         {
-            return await ask(answers.Over(context)).ConfigureAwait(false);
+            return await ask(tenancy.In(context)).ConfigureAwait(false);
         }
     }
 }

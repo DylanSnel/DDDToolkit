@@ -3655,6 +3655,28 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `<name>_fellow_members()`. No table changes; the next migration you add names Tenancy's new rows, `NamedUnit` and
     the tenant names the picker reads, in its snapshot.
 
+- **For the 3.2.0 previews: a module asks `ITenancy`, and `In` gives it the queries.** The names said little:
+  `ITenancyAnswers` handed out questions, and `Over` read as a direction. The entry point a module takes is
+  `ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>`, and `tenancy.In(db)` gives the queries for the current caller in
+  that context. Only the names change, not what the types do. Nobody uses the packages yet, so the old names are
+  gone with no alias.
+  - From 3.2.0-preview.5, was, now:
+    - `ITenancyAnswers<…>`: `ITenancy<…>`, and its implementation `TenancyAnswers<…>`: `CurrentTenancy<…>`, since a
+      class named `Tenancy` would collide with the namespace `DDDToolkit.Supporting.Tenancy`.
+    - `ITenancyQuestions<…>`: `ITenancyQueries<…>`.
+    - `Over(source, executor)`, and the Entity Framework extension `Over(context)`: `In(source, executor)` and
+      `In(context)`; the class that holds the extension, `TenancyAnswersEntityFrameworkExtensions`:
+      `TenancyEntityFrameworkExtensions`.
+  - A handler that took `ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> answers` and wrote
+    `var tenancy = answers.Over(db);` takes `ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy` and
+    writes `var queries = tenancy.In(db);`, then
+    `db.Boards.Where(board => queries.UnitsWhereIHold("boards.read").Contains(board.UnitId))` as before, or
+    `tenancy.In(db).UnitsWhereIHold("boards.read")` inline.
+  - The Tenancy sample follows: its aliases `SampleAnswers` and `SampleQuestions` are `SampleTenancy` and
+    `SampleTenancyQueries`, the handlers name the parameter `tenancy`, and Projects asks
+    `access.TenancyIn(reading)` where it asked `access.Questions(reading)`. Tenancy's API reference has the types on
+    [ITenancy, its queries and row access](docs/tenancy/reference/queries.md), which was `questions.md`.
+
 ### Fixed
 
 - **Tenancy's messages about system work name a call that compiles.** System work asked about outside any tenant,

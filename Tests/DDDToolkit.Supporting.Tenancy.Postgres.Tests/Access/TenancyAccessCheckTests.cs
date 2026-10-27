@@ -126,7 +126,7 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped =>
         {
             // The scope's own context, the unit of work of its commands, rented before the checks run.
-            var ofTheScope = scoped.Tenancy();
+            var ofTheScope = scoped.TenancyContext();
             recorder.Clear();
 
             await Task.WhenAll(RequireAsync<IHostRequest>(scoped, request), RequireAsync<IHostRequest>(scoped, request));

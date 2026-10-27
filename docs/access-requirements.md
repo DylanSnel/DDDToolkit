@@ -946,8 +946,8 @@ it is current again.
   in its handler. Where nothing but trusted code ever sends it, calling the work inside the scope needs no request.
 - **What only system work may do is refused past the door.** The handler, or the use case of the package it calls,
   asks who it runs as and refuses everyone else with `access.system-only` (`ToolkitRefusals.SystemOnly`).
-  `Callers.RequireSystemWork(callers)` does it in any host; in a tenant, Tenancy's own answer says it with the
-  tenant, `answers.RequireTenant().BySystem`, as the sample's `MarkTenantAsDemo` does, and Tenancy's provisioning
+  `Callers.RequireSystemWork(callers)` does it in any host; in a tenant, `ITenancy` says it with the
+  tenant, `tenancy.RequireTenant().BySystem`, as the sample's `MarkTenantAsDemo` does, and Tenancy's provisioning
   refuses everyone else itself. A caller who sent the request gets nothing more by it, since the handler alone says
   what the system work does.
 - **Begun means begun.** Ask `Callers.RequireSystemWork`, not `callers.Current.Kind`. In a host that does not
@@ -982,11 +982,11 @@ using (TenancyUseCases.BeginSystemIn(tenant.Id))
 [InTenant]
 public sealed record MarkTenantAsDemo : ICommand, ITenantsRequest;
 
-public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, SampleAnswers answers) : ICommandHandler<MarkTenantAsDemo>
+public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, SampleTenancy tenancy) : ICommandHandler<MarkTenantAsDemo>
 {
     public async ValueTask<Unit> Handle(MarkTenantAsDemo command, CancellationToken cancellationToken)
     {
-        var scope = answers.RequireTenant();
+        var scope = tenancy.RequireTenant();
         if (!scope.BySystem)
         {
             throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);           // what only system work may do

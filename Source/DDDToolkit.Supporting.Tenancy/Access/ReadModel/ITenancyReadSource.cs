@@ -40,7 +40,7 @@ public interface ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>
     /// the calling seat, or <see langword="null"/> when it has no answer of its own and the question is worked
     /// out over the rows above. A storage that shows a seat only its own <see cref="SeatRights"/> has one: over
     /// those rows the question would find nobody but the seat itself, whoever asks. Its answer keeps to what
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.SeatsHoldingPermissionAt"/> says a seat learns,
+    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.SeatsHoldingPermissionAt"/> says a seat learns,
     /// and is a query of the same context, so it still composes into one statement.
     /// </summary>
     /// <param name="permission">A live permission of the catalogue.</param>

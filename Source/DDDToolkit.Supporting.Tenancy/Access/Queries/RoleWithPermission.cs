@@ -4,7 +4,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
 /// One of the tenant's active roles and a permission it grants: one answer of
-/// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.RolePermissions"/>.
+/// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.RolePermissions"/>.
 /// </summary>
 /// <param name="Role">The role.</param>
 /// <param name="Permission">The permission it grants.</param>

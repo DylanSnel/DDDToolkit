@@ -67,7 +67,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
         // no seat of the tenant he works in, and is left out like any other tenant's.
         await services.BySeat(Oli.Identity, Harbor, Oli.Seat, async scoped =>
         {
-            (await scoped.Tenancy().Set<HostSeat>().IgnoreQueryFilters().Select(seat => seat.Id).ToListAsync(Cancellation))
+            (await scoped.TenancyContext().Set<HostSeat>().IgnoreQueryFilters().Select(seat => seat.Id).ToListAsync(Cancellation))
                 .Should().Contain(OliInOrchard, "with the tenant filter skipped, the policies show a person every seat of their own");
 
             var directory = scoped.Directory();
@@ -131,7 +131,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
         var (oli, hiro, ada, othersRights) = await services.BySeat(Seth.Identity, Harbor, Seth.Seat, async scoped =>
         {
             var directory = scoped.Directory();
-            var others = await scoped.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
+            var others = await scoped.TenancyContext().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
                 .CountAsync(right => right.SeatId != Seth.Seat, Cancellation);
             return (await directory.SeatOverviewAsync(Oli.Seat, Cancellation),
                 await directory.SeatOverviewAsync(Hiro.Seat, Cancellation),

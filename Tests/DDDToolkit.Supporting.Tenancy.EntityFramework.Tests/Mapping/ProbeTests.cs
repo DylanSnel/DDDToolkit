@@ -108,8 +108,9 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
 
         using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
         {
-            var answers = scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>();
-            var held = answers.Over(widgets).UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = scope.ServiceProvider.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>()
+                .In(widgets)
+                .UnitsWhereIHold(HostCatalogue.WidgetRead);
             var readable = widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).OrderBy(widget => widget.Name);
 
             var sql = readable.ToQueryString();
@@ -291,8 +292,8 @@ public sealed class ProbeTestsOnPostgres(PostgresDatabases postgres) : ProbeTest
 
         using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
         {
-            var held = scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>()
-                .Over(widgets)
+            var held = scope.ServiceProvider.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>()
+                .In(widgets)
                 .UnitsWhereIHold(HostCatalogue.WidgetRead);
 
             // The seat is a parameter of the column's own type: no cast of the column, which would keep Postgres from

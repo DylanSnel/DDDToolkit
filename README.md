@@ -88,7 +88,7 @@ public partial class Order { }
 | [Tenancy API: use cases](docs/tenancy/reference/use-cases.md) | Generated from the code: `TenancyUseCases` and every command, directory and record nested in it, and the registration a host calls |
 | [Tenancy API: catalogue and role packs](docs/tenancy/reference/catalogue.md) | Generated from the code: permissions, the catalogue, role packs and their sync |
 | [Tenancy API: callers and requirements](docs/tenancy/reference/callers.md) | Generated from the code: the Tenancy caller, actors, tenant selection and the requirement attributes |
-| [Tenancy API: questions and row access](docs/tenancy/reference/questions.md) | Generated from the code: the access questions, the read model, the projection and the row access rules |
+| [Tenancy API: ITenancy, its queries and row access](docs/tenancy/reference/queries.md) | Generated from the code: `ITenancy` and its queries, the read model, the projection and the row access rules |
 | [Tenancy API: refusals](docs/tenancy/reference/refusals.md) | Generated from the code: every refusal code and what it means |
 | [Tenancy API: Entity Framework](docs/tenancy/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
 | [Tenancy API: Postgres](docs/tenancy/reference/postgres.md) | Generated from the code: the public API of the Postgres package |

@@ -1,22 +1,22 @@
 ---
-title: "Tenancy API: Questions and row access"
-sidebar_label: Questions and row access
+title: "Tenancy API: ITenancy, its queries and row access"
+sidebar_label: ITenancy, its queries and row access
 ---
 
 <!-- Generated from the packages' code and XML documentation by build/ApiReference; do not edit by hand. Regenerate with build/generate-api-reference.sh. -->
 
-# Tenancy API: Questions and row access
+# Tenancy API: ITenancy, its queries and row access
 
-What a module asks about the caller's rights, the read model the answers are read from, the projection that keeps it, and the row access rules a database enforces.
+`ITenancy`, through which a module asks about the caller, and the queries it gives in a context; the read model they read, the projection that keeps it, and the row access rules a database enforces.
 
-## Questions
+## Queries
 
 Namespace `DDDToolkit.Supporting.Tenancy.Access`.
 
-### `ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>`
+### `ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>`
 
 ```csharp
-public interface ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>
+public interface ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -26,15 +26,15 @@ public interface ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>
 The door a module goes through to ask Tenancy about the current caller: who it is, which tenant it acts in, and, over a read source the module supplies, what it may do.
 
 ```csharp
-var tenancy = answers.Over(source, executor);
-var mine = projects.Where(project => tenancy.UnitsWhereIHold("projects.edit").Contains(project.UnitId));
+var queries = tenancy.In(source, executor);
+var mine = projects.Where(project => queries.UnitsWhereIHold("projects.edit").Contains(project.UnitId));
 ```
 
 | Member | Summary |
 |---|---|
 | `TenancyCaller<TTenantId, TSeatId> Caller { get; }` | The current Tenancy caller. |
 | [`RequireTenant()`](#requiretenant) | The tenant the current caller acts in, for work that only makes sense inside one. |
-| [`Over(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`](#overitenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor) | The access questions for the current caller, over `source`, at this moment. |
+| [`In(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor) | The access queries for the current caller, over `source`, at this moment. |
 
 #### `RequireTenant()`
 
@@ -49,32 +49,32 @@ The tenant the current caller acts in, for work that only makes sense inside one
 - `RefusalException`: The caller is nobody; the refusal is the one it was given.
 - `InvalidOperationException`: The caller is system work outside any tenant.
 
-#### `Over(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`
+#### `In(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`
 
 ```csharp
-ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId> Over(
+ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In(
     ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
     IQueryExecutor executor)
 ```
 
-The access questions for the current caller, over `source`, at this moment.
+The access queries for the current caller, over `source`, at this moment.
 
 **Parameters**
 
 - `source`: The rows to ask over, usually in the module's own context.
-- `executor`: Runs the questions that answer yes or no.
+- `executor`: Runs the queries that answer yes or no.
 
-### `ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>`
+### `ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>`
 
 ```csharp
-public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
+public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-What the current caller may do, asked over one read source. Made by [`ITenancyAnswers.Over`](#overitenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor), which fixes the caller and the moment "now" once, so every answer of one set of questions agrees with the others.
+What the current caller may do, asked over one read source. Made by [`ITenancy.In`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor), which fixes the caller and the moment "now" once, so every answer of one set of queries agrees with the others.
 
 The queries are not run here: a module composes them into its own query, where they become subqueries, or runs them itself. A permission granted at the root holds for the whole tenant; one granted lower down covers its unit and every unit below it. A grant counts from its start until its end, and a permission the catalogue has retired holds nowhere.
 
@@ -122,7 +122,7 @@ IQueryable<UnitPermission<TUnitId>> WhereIHold(IReadOnlyCollection<string> permi
 Every pair of a unit and a permission of `permissions` the caller holds there now: for each permission, the units it is held at and every unit below them. It is [`UnitsWhereIHold`](#unitswhereiholdstring) for several permissions in one query, so a list that shows what the caller may do with each row asks once, not once per permission:
 
 ```csharp
-var held = tenancy.WhereIHold(["projects.edit", "projects.close"]);
+var held = queries.WhereIHold(["projects.edit", "projects.close"]);
 var abilities = from project in projects
                 join pair in held on project.UnitId equals pair.Unit
                 select new { project.Id, pair.Key };
@@ -265,7 +265,7 @@ IQueryable<SeatRow<TTenantId, TSeatId>> Seats()
 
 The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. What a seat is shown by is the application's, selected from its own seat, which the directory answers whole, by id.
 
-A read of the seats, unlike the questions about rights: by default every seat of the tenant, and on Postgres the seats a read rule of the application's on its seat class lets the caller read, where it writes one (`tenant_seats()` runs as its caller). A module that admits a seat by asking here, as Membership's admission does, then admits only seats the caller reads.
+A read of the seats, unlike the queries about rights: by default every seat of the tenant, and on Postgres the seats a read rule of the application's on its seat class lets the caller read, where it writes one (`tenant_seats()` runs as its caller). A module that admits a seat by asking here, as Membership's admission does, then admits only seats the caller reads.
 
 **Exceptions**
 
@@ -308,10 +308,10 @@ Whether the caller holds `permission` now at `unit`, held there or above it.
 - `ArgumentException`: The catalogue does not know `permission`.
 - `InvalidOperationException`: The caller is system work outside any tenant.
 
-### `TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>`
+### `CurrentTenancy<TTenantId, TSeatId, TUnitId, TRoleId>`
 
 ```csharp
-public sealed class TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId> : ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>
+public sealed class CurrentTenancy<TTenantId, TSeatId, TUnitId, TRoleId> : ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -322,15 +322,15 @@ Answers what the current caller may do, over any read source. Registered once fo
 
 | Member | Summary |
 |---|---|
-| [`TenancyAnswers(TenancyCatalogue, TimeProvider)`](#tenancyanswerstenancycatalogue-timeprovider) | The primary constructor: the type's summary says what it makes. |
+| [`CurrentTenancy(TenancyCatalogue, TimeProvider)`](#currenttenancytenancycatalogue-timeprovider) | The primary constructor: the type's summary says what it makes. |
 | `TenancyCaller<TTenantId, TSeatId> Caller { get; }` | The current Tenancy caller. |
 | [`RequireTenant()`](#requiretenant-1) | The tenant the current caller acts in, for work that only makes sense inside one. |
-| [`Over(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`](#overitenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor-1) | The access questions for the current caller, over `source`, at this moment. |
+| [`In(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor-1) | The access queries for the current caller, over `source`, at this moment. |
 
-#### `TenancyAnswers(TenancyCatalogue, TimeProvider)`
+#### `CurrentTenancy(TenancyCatalogue, TimeProvider)`
 
 ```csharp
-public TenancyAnswers(TenancyCatalogue catalogue, TimeProvider clock)
+public CurrentTenancy(TenancyCatalogue catalogue, TimeProvider clock)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -353,20 +353,20 @@ The tenant the current caller acts in, for work that only makes sense inside one
 - `RefusalException`: The caller is nobody; the refusal is the one it was given.
 - `InvalidOperationException`: The caller is system work outside any tenant.
 
-#### `Over(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`
+#### `In(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`
 
 ```csharp
-public ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId> Over(
+public ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In(
     ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
     IQueryExecutor executor)
 ```
 
-The access questions for the current caller, over `source`, at this moment.
+The access queries for the current caller, over `source`, at this moment.
 
 **Parameters**
 
 - `source`: The rows to ask over, usually in the module's own context.
-- `executor`: Runs the questions that answer yes or no.
+- `executor`: Runs the queries that answer yes or no.
 
 ### `MoveReach<TUnitId>`
 
@@ -446,7 +446,7 @@ public readonly record struct RoleWithPermission<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-One of the tenant's active roles and a permission it grants: one answer of [`ITenancyQuestions.RolePermissions`](#rolepermissionsireadonlycollectionstring).
+One of the tenant's active roles and a permission it grants: one answer of [`ITenancyQueries.RolePermissions`](#rolepermissionsireadonlycollectionstring).
 
 | Member | Summary |
 |---|---|
@@ -505,7 +505,7 @@ public readonly record struct UnitPermission<TUnitId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
 
-A unit and a permission the caller holds there now: one answer of [`ITenancyQuestions.WhereIHold`](#whereiholdireadonlycollectionstring), which answers such a pair for every unit a permission reaches, the units it is held at and every unit below them.
+A unit and a permission the caller holds there now: one answer of [`ITenancyQueries.WhereIHold`](#whereiholdireadonlycollectionstring), which answers such a pair for every unit a permission reaches, the units it is held at and every unit below them.
 
 | Member | Summary |
 |---|---|
@@ -598,7 +598,7 @@ A source may already keep every set to the current tenant; the questions keep to
 IQueryable<TSeatId>? SeatsHoldingPermissionAt(string permission, TUnitId unit)
 ```
 
-The seats that hold `permission` at `unit` now, as the storage itself answers the calling seat, or `null` when it has no answer of its own and the question is worked out over the rows above. A storage that shows a seat only its own [`SeatRights`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid) has one: over those rows the question would find nobody but the seat itself, whoever asks. Its answer keeps to what [`ITenancyQuestions.SeatsHoldingPermissionAt`](#seatsholdingpermissionatstring-tunitid) says a seat learns, and is a query of the same context, so it still composes into one statement.
+The seats that hold `permission` at `unit` now, as the storage itself answers the calling seat, or `null` when it has no answer of its own and the question is worked out over the rows above. A storage that shows a seat only its own [`SeatRights`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid) has one: over those rows the question would find nobody but the seat itself, whoever asks. Its answer keeps to what [`ITenancyQueries.SeatsHoldingPermissionAt`](#seatsholdingpermissionatstring-tunitid) says a seat learns, and is a query of the same context, so it still composes into one statement.
 
 **Parameters**
 
@@ -865,7 +865,7 @@ public static partial class ReportsAreReadWhereThePermissionIsHeld
 }
 ```
 
-Only the database answers them: the SQL functions of the same names, which `DDDToolkit.Supporting.Tenancy.Postgres` writes into the schema of the context that maps Tenancy's tables, for the caller whose identity and tenant the connection carries. Called in C#, each throws. In C#, ask [`ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>`](#itenancyquestionsttenantid-tseatid-tunitid-troleid), which gives the same answers to a seat.
+Only the database answers them: the SQL functions of the same names, which `DDDToolkit.Supporting.Tenancy.Postgres` writes into the schema of the context that maps Tenancy's tables, for the caller whose identity and tenant the connection carries. Called in C#, each throws. In C#, ask [`ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>`](#itenancyqueriesttenantid-tseatid-tunitid-troleid), which gives the same answers to a seat.
 
 The functions answer for a seat: a signed-in user's, found from the verified identity and the tenant. A suspended or deactivated seat holds nothing, and neither does any seat of a suspended or closed tenant; a question about the caller answers `NULL` for someone without an active seat there, which no comparison passes. A rule for anonymous callers that asks one is refused when the policies are written. System work in a tenant has no seat, so every question answers nothing for it, where the C# questions answer the whole tenant: the policies Tenancy writes keep system work to its tenant themselves, so a rule for it asks none of these.
 

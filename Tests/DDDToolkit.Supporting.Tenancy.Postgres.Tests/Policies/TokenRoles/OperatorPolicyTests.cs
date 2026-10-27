@@ -128,7 +128,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
             using (TenancyCallers.Begin(selected))
             {
                 var (role, first) = await services.InScopeAsync(async scoped => (
-                    await scoped.Tenancy().Database.SqlQueryRaw<string>("SELECT current_user::text AS \"Value\"").SingleAsync(Cancellation),
+                    await scoped.TenancyContext().Database.SqlQueryRaw<string>("SELECT current_user::text AS \"Value\"").SingleAsync(Cancellation),
                     await scoped.TenantDirectory().ListAsync(after: null, size: 2, Cancellation)));
 
                 role.Should().Be(TallyRules.OperatorRole);
@@ -146,7 +146,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         var refused = await FluentActions.Awaiting(() => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.TenantDirectory().ListAsync(null, 10, Cancellation)))
             .Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
         refused.Which.Code.Should().Be(TenancyRefusals.OperatorsOnly);
-        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Tenancy().Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM tenancy.\"Seats\"").SingleAsync(Cancellation)))
+        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.TenancyContext().Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM tenancy.\"Seats\"").SingleAsync(Cancellation)))
             .Should().Be(6, "Harbor's seats, the suspended one included, and no other tenant's");
 
         // And the start-up check finds the operators' policy where the options say there are operators.

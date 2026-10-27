@@ -19,7 +19,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// Only the database answers them: the SQL functions of the same names, which
 /// <c>DDDToolkit.Supporting.Tenancy.Postgres</c> writes into the schema of the context that maps Tenancy's
 /// tables, for the caller whose identity and tenant the connection carries. Called in C#, each throws. In C#,
-/// ask <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}"/>, which gives the same answers to a
+/// ask <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}"/>, which gives the same answers to a
 /// seat.
 /// </para>
 /// <para>
@@ -58,7 +58,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// Every unit where the calling seat holds <paramref name="permission"/> now: the units it is held at, and every unit
-    /// below them. As <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.UnitsWhereIHold"/>.
+    /// below them. As <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.UnitsWhereIHold"/>.
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     [AccessSet("units_where_i_hold_permission")]
@@ -67,7 +67,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// The units the calling seat belongs to: each unit it is placed in, and every unit below it. As
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.ReadableUnits"/>.
+    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.ReadableUnits"/>.
     /// </summary>
     [AccessSet("readable_units")]
     public static partial AccessSet<TUnitId> ReadableUnits<TUnitId>()
@@ -93,7 +93,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// The active roles of the caller's tenant that grant <paramref name="permission"/>. As
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.RolesWithPermission"/>.
+    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.RolesWithPermission"/>.
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     [AccessSet("roles_with_permission")]
@@ -143,7 +143,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// Whether the calling seat holds <paramref name="permission"/> now for the whole tenant: at its root. As
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.HoldsAtTenantAsync"/>.
+    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.HoldsAtTenantAsync"/>.
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     [AccessScalar("holds_at_tenant")]

@@ -35,12 +35,12 @@ public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, 
 /// </summary>
 /// <param name="store">Where projects are loaded and saved.</param>
 /// <param name="admission">Whether the seat may go on a crew, and the role on a member: the projects' rules.</param>
-/// <param name="answers">Tenancy's answers about the current caller, for who added the member.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller, for who added the member.</param>
 /// <param name="clock">What "now" is: when the membership starts.</param>
 public sealed class AddCrewMemberHandler(
     IProjectStore store,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    SampleAnswers answers,
+    SampleTenancy tenancy,
     TimeProvider clock)
     : ICommandHandler<AddCrewMember>
 {
@@ -64,7 +64,7 @@ public sealed class AddCrewMemberHandler(
 
         var now = clock.GetUtcNow();
         var period = CrewPeriod.Between(now, command.Until);
-        var by = answers.RequireTenant().Seat;
+        var by = tenancy.RequireTenant().Seat;
         if (command.Role is { } given)
         {
             project.AddToCrew(command.Seat, given, period, now, by);

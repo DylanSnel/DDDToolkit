@@ -274,13 +274,13 @@ public class MembershipWithTenancyGeneratorTests
         // Tenancy's four ids are taken from the classes the application declares with Tenancy's templates.
         result.ShouldContain(
             File,
-            "ITenancyAnswers<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _tenancy;");
+            "ITenancy<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _tenancy;");
 
         // Every question is forwarded: who the caller is, who can be made a member, and where a permission is held.
         result.ShouldContain(File, "return current.Kind == global::DDDToolkit.Supporting.Tenancy.Access.TenancyCallerKind.Seat ? current.Seat : null;");
         result.ShouldContain(File, "=> _tenancy.RequireTenant();");
         result.ShouldContain(File, "seat => seat.Id.Equals(member) && seat.Status == global::DDDToolkit.Supporting.Tenancy.SeatStatus.Active,");
-        result.ShouldContain(File, "? tenancy.UnitsWhereIHold(permission)");
+        result.ShouldContain(File, "? queries.UnitsWhereIHold(permission)");
 
         RegistrationsOf(result).Should().BeEquivalentTo(["AddCourseMembershipWithTenancy<TContext>"]);
         PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().BeEquivalentTo(
@@ -302,7 +302,7 @@ public class MembershipWithTenancyGeneratorTests
             "ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IRolesWithPermission`2", "IMemberRoles`2");
 
         // Which roles give a permission, and which roles there are: the tenant's, asked of Tenancy. None is the owner's.
-        result.ShouldContain(File, "? tenancy.RolesWithPermission(permission)");
+        result.ShouldContain(File, "? queries.RolesWithPermission(permission)");
         result.ShouldContain(File, "row => row.Id.Equals(role) && row.Status == global::DDDToolkit.Supporting.Tenancy.RoleStatus.Active,");
         result.ShouldNotContain(File, "_ownerRole", "the owner holds no role");
     }
@@ -352,8 +352,8 @@ public class MembershipWithTenancyGeneratorTests
         alone.ReportedDiagnostics.Should().BeEmpty();
         alone.HintNames.Should().NotContain(Written);
 
-        // And in one that references Tenancy without its Entity Framework package: its questions could not be asked
-        // over a context there, so there is nothing to write the class with.
+        // And in one that references Tenancy without its Entity Framework package: its queries could not be asked
+        // in a context there, so there is nothing to write the class with.
         var withoutItsStorage = Run(GeneratorTestHost.Create(TenancyIds, "Ids.cs")
             .WithSource(Courses, "Courses.cs")
             .WithSource(Startup("services.AddCourseMembership<CampusContext>(rules);"), "Startup.cs")
@@ -506,7 +506,7 @@ public class MembershipWithTenancyGeneratorTests
 
         const string Course = "GeneratedMembershipWithTenancyExtensions.AddCourseMembershipWithTenancy";
         result.ShouldContain(Course, "where TTenantId : struct, global::DDDToolkit.Abstractions.Interfaces.IEntityId, global::System.IEquatable<TTenantId>");
-        result.ShouldContain(Course, "ITenancyAnswers<TTenantId, global::Campus.Tenants.SeatId, TUnitId, TRoleId> _tenancy;", "the seat is the member, whatever the others are");
+        result.ShouldContain(Course, "ITenancy<TTenantId, global::Campus.Tenants.SeatId, TUnitId, TRoleId> _tenancy;", "the seat is the member, whatever the others are");
         result.ShouldContain(Course, "IPlacesReached<global::Campus.Courses.CourseId, TUnitId>");
         result.ShouldContain(
             Course,
@@ -515,7 +515,7 @@ public class MembershipWithTenancyGeneratorTests
         PortsOf(result, "GeneratedCourseMembershipWithTenancy`4").Should().HaveCount(3, "a course's roles are kept for it: its role class says so");
 
         const string Lab = "GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy";
-        result.ShouldContain(Lab, "ITenancyAnswers<TTenantId, global::Campus.Tenants.SeatId, TUnitId, global::Campus.Tenants.RoleId> _tenancy;");
+        result.ShouldContain(Lab, "ITenancy<TTenantId, global::Campus.Tenants.SeatId, TUnitId, global::Campus.Tenants.RoleId> _tenancy;");
         PortsOf(result, "GeneratedLabMembershipWithTenancy`3").Should().HaveCount(5);
     }
 
@@ -587,11 +587,11 @@ public class MembershipWithTenancyGeneratorTests
         RegistrationsOf(result).Should().BeEquivalentTo(
             "AddCourseMembershipWithTenancy<TContext, TTenantId, TUnitId, TRoleId>", "AddBulletinMembershipWithTenancy<TContext, TTenantId, TUnitId, TRoleId>");
 
-        // Called for a resource whose members are no seats, it would ask for answers of Tenancy's about a seat known by
+        // Called for a resource whose members are no seats, it would ask for an ITenancy whose seat is known by
         // a user's id, which no application registers: a mistake that is found when the first question is asked.
         result.ShouldContain(
             "AddBulletinMembershipWithTenancy",
-            "ITenancyAnswers<TTenantId, global::Campus.Bulletins.UserId, TUnitId, TRoleId> _tenancy;");
+            "ITenancy<TTenantId, global::Campus.Bulletins.UserId, TUnitId, TRoleId> _tenancy;");
     }
 
     [Fact]
@@ -677,7 +677,7 @@ public class MembershipWithTenancyGeneratorTests
         RegistrationsOf(infrastructure).Should().BeEquivalentTo(["AddCourseMembershipWithTenancy<TContext>"]);
         infrastructure.ShouldContain(
             "AddCourseMembershipWithTenancy",
-            "ITenancyAnswers<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _tenancy;",
+            "ITenancy<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _tenancy;",
             "the organization's ids are taken from the classes the domain project declares");
     }
 

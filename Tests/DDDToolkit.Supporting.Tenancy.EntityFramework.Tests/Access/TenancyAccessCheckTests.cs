@@ -489,7 +489,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, async scoped =>
         {
             await RequireAsync(scoped, seats);
-            _services.Commands.Sent.Should().ContainSingle().Which.Context.Should().BeSameAs(scoped.Tenancy());
+            _services.Commands.Sent.Should().ContainSingle().Which.Context.Should().BeSameAs(scoped.TenancyContext());
         });
     }
 
@@ -503,7 +503,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         await pooled.BySeat(harbor.Tenant, harbor.AdminSeat, async scoped =>
         {
             // The scope's own context, the unit of work of its commands, rented before the check runs.
-            var ofTheScope = scoped.Tenancy();
+            var ofTheScope = scoped.TenancyContext();
             pooled.Commands.Reset();
 
             // Two requests of one scope, checked side by side: each on a context of its own, taken from the pool.

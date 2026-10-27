@@ -117,7 +117,7 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
             var (role, widgets, seats) = await services.InScopeAsync(async scoped => (
                 await scoped.Widgets().Database.SqlQueryRaw<string>("SELECT current_user::text AS \"Value\"").SingleAsync(Cancellation),
                 await scoped.Widgets().Widgets.IgnoreQueryFilters().CountAsync(Cancellation),
-                await scoped.Tenancy().Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM tenancy.\"Seats\"").SingleAsync(Cancellation)));
+                await scoped.TenancyContext().Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM tenancy.\"Seats\"").SingleAsync(Cancellation)));
 
             role.Should().Be(AnalystRole);
             widgets.Should().Be(0);

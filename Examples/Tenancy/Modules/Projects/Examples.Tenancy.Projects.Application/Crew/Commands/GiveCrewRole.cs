@@ -35,12 +35,12 @@ public sealed record GiveCrewRole([OnResource] ProjectId Project, SeatId Seat, P
 /// </summary>
 /// <param name="store">Where projects are loaded and saved.</param>
 /// <param name="admission">Whether the role may go on a member: one of the tenant's project roles in use.</param>
-/// <param name="answers">Tenancy's answers about the current caller, for who gave the role.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller, for who gave the role.</param>
 /// <param name="clock">What "now" is: when the role starts.</param>
 public sealed class GiveCrewRoleHandler(
     IProjectStore store,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    SampleAnswers answers,
+    SampleTenancy tenancy,
     TimeProvider clock)
     : ICommandHandler<GiveCrewRole>
 {
@@ -59,7 +59,7 @@ public sealed class GiveCrewRoleHandler(
         await admission.RequireRoleAsync(command.Role, cancellationToken);
 
         var now = clock.GetUtcNow();
-        project.GiveCrewRole(command.Seat, command.Role, CrewPeriod.Between(now, command.Until), now, answers.RequireTenant().Seat);
+        project.GiveCrewRole(command.Seat, command.Role, CrewPeriod.Between(now, command.Until), now, tenancy.RequireTenant().Seat);
         await store.SaveAsync(cancellationToken);
         return Unit.Value;
     }

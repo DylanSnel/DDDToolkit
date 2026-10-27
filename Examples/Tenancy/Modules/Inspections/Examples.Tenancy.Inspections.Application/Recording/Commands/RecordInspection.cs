@@ -32,7 +32,7 @@ public sealed record RecordInspection(ProjectId Project, string Title, DateRange
 /// </summary>
 /// <remarks>
 /// Recording is constructing: there is nothing to load. The project is the one the command names, which the access
-/// check asked Projects' gate about; the tenant and the recording seat come from Tenancy's answers about the
+/// check asked Projects' gate about; the tenant and the recording seat come from Tenancy, asked about the
 /// caller, never from the request, and the save check keeps the write to that tenant.
 /// <para>
 /// The days are held to the project's planned range, which is Projects' to know. The handler asks the gate for it,
@@ -56,9 +56,9 @@ public sealed record RecordInspection(ProjectId Project, string Title, DateRange
 /// </remarks>
 /// <param name="store">Where inspections are added and saved.</param>
 /// <param name="projects">Projects' answer about the project: the days it is planned for.</param>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
 /// <param name="clock">What "now" is.</param>
-public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate projects, SampleAnswers answers, TimeProvider clock)
+public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate projects, SampleTenancy tenancy, TimeProvider clock)
     : ICommandHandler<RecordInspection, InspectionId>
 {
     /// <inheritdoc />
@@ -70,7 +70,7 @@ public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate
     /// </exception>
     public async ValueTask<InspectionId> Handle(RecordInspection command, CancellationToken cancellationToken)
     {
-        var scope = answers.RequireTenant();
+        var scope = tenancy.RequireTenant();
         var project = await projects.AskAsync(command.Project, RecordInspection.RequiredPermission, cancellationToken);
         InspectionsAccessCheck.Require(project, RecordInspection.RequiredPermission, open: true);
 

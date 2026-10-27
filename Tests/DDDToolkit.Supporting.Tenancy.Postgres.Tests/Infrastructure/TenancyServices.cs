@@ -214,7 +214,7 @@ public static class ScopedServices
 
     public static HostTenancy.RoleCommands Roles(this IServiceProvider services) => services.GetRequiredService<HostTenancy.RoleCommands>();
 
-    public static TestTenancyContext Tenancy(this IServiceProvider services) => services.GetRequiredService<TestTenancyContext>();
+    public static TestTenancyContext TenancyContext(this IServiceProvider services) => services.GetRequiredService<TestTenancyContext>();
 
     public static WidgetContext Widgets(this IServiceProvider services) => services.GetRequiredService<WidgetContext>();
 
@@ -227,8 +227,8 @@ public static class ScopedServices
 
     public static TallyContext Tallies(this IServiceProvider services) => services.GetRequiredService<TallyContext>();
 
-    public static ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> Answers(this IServiceProvider services)
-        => services.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>();
+    public static ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> Tenancy(this IServiceProvider services)
+        => services.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>();
 
     /// <summary>
     /// The host's own use case that renames a seat by the name the host keeps on it: Tenancy has none. It loads the

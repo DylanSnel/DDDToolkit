@@ -272,7 +272,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             await using var scope = host.Services.CreateAsyncScope();
             var handler = new MarkTenantAsDemoHandler(
                 scope.ServiceProvider.GetRequiredService<TenancyUseCases.IStore>(),
-                scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>());
+                scope.ServiceProvider.GetRequiredService<ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>>());
 
             var handle = async () => await handler.Handle(new MarkTenantAsDemo(), Cancellation);
             (await handle.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.SystemOnly);
