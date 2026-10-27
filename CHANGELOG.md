@@ -2887,8 +2887,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **The Tenancy sample keeps a unit's kind itself.** Its `OrganizationUnit` has a `UnitKind` enum (company, region,
   area, site), stored by its key in lower case (`UnitKindKeyConverter`), as the rows from before hold it and as REST
   spells it; `AddOrganizationUnit` sets it in the package's callback, and the seeder sets the root's when it provisions.
-  Its queries return a `UnitListing`, selected from the units `OrganizationManager` returns whole, so `GET
-  /tenancy/units`, `/tenancy/directory/units` and GraphQL's `OrganizationUnit` still carry `kind`, with no read more; in
+  Its queries return the unit class as `OrganizationManager` returns it, so `GET /tenancy/units`,
+  `/tenancy/directory/units` and GraphQL's `OrganizationUnit` still carry `kind`, with no read more; in
   GraphQL it is now the enum `UnitKind`, and `organizationUnitAdd` takes it as one, optional. A kind the enum does not
   have is a 400 `invalid-request` where it was `tenancy.unknown-unit-kind`, and the catalogue's answer has no
   `unitKinds`. The migration `UnitKindAsEnum` makes the column the enum's, nullable, and leaves the stored keys as they
@@ -2899,8 +2899,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   The demo seeder names each seat in the package's callbacks, and `POST /invitations/accept` and the mutation
   `invitationAccept` take the name the person gives (`displayName: String!` in GraphQL, as in `seatRename`); an
   invitation suggests none any more, so `POST /tenancy/invitations`, `personInvite` and the open invitations have no
-  `displayName`, nor the UI's invite form. Its queries return a `SeatListing`, selected from the seats `SeatManager` and
-  the tenant picker's lookup return whole, so `GET /me`, `GET /me/seats`, `GET /tenancy/seats`,
+  `displayName`, nor the UI's invite form. Its queries return the seat class as `SeatManager` and the tenant picker's
+  lookup return it, so `GET /me`, `GET /me/seats`, `GET /tenancy/seats`,
   `/tenancy/directory/seats`, GraphQL's `Seat` and `seatsOfMine` (in the administration schema too), the access
   history's `bySeat` and the UI carry `displayName` as before, with no read more. Renaming is the module's own command,
   `RenameSeat`, at `PUT /tenancy/seats/{seatId}/name` and as `seatRename`: a seat renames itself, another seat takes
@@ -2960,6 +2960,29 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   stores its ports implement. `SourceTreeTests` holds every file of the sample and of its tests to closing the
   managers nowhere. Tenancy's own test host names its role manager `HostRoleManager` with one
   `[assembly: TemplateFacadeName]`.
+- **The Tenancy sample answers Tenancy's classes as the managers return them.** The Tenants module's queries answer
+  the seat, role, unit, tenant and invitation classes, and the managers' records that hold them beside what they lack: `SeatManager.SeatOverview`, `OrganizationManager.UnitInTree`,
+  `TenantManager.TenantPage` with its `TenantListing`, `NamedUnit`, `SeatInTenant<Seat>` and
+  `InvitationManager.IssuedInvitation`. The sample's records that only re-shaped them are gone: `SeatListing`,
+  `UnitListing`, `UnitName`, `SeatOfMine`, `TenantOfSeat`, `TenantOfMine`, `RoleOfMine`, `SeatOverviewListing`,
+  `PlacementListing`, `GrantListing`, `ListedTenant`, `ListedTenants`, `OpenInvitationListing` and
+  `IssuedInvitationListing`. `RoleListing` stays, and holds the `Role`, whether it manages access and whether the
+  caller reads its permissions.
+  - In GraphQL a type class over each class lists the fields it shows with `BindFieldsExplicitly()`, so a seat's
+    identity and an invitation's account never reach the schema. A field the class lacks is a resolver on the type
+    class, loaded through a data loader that asks the manager: a unit's `path` and `depth`, a role's `managesAccess`,
+    an invitation's `unit`, `role` and `issuedBy`. `Tenant`, `Placement`, `RoleGrant` and `TenantPage` are new types.
+  - REST writes each object with the fields of its GraphQL type, under the class's names. `GET /me` is the overview,
+    and its roles carry no permissions and no `managesAccess`. `GET /me/seats` is each seat beside its tenant's slug,
+    name and status. `GET /operations/tenants` is each tenant beside its name and active seats. `POST
+    /tenancy/invitations` is the invitation and its token. An open invitation's end is `grantUntil`.
+  - The UI's wire records, the `.http` file, the schema snapshots and the tests follow. See [The sample's
+    GraphQL](docs/tenancy/sample/graphql.md).
+- **Docs: Tenancy's API reference follows the managers.** [Tenancy API: managers](docs/tenancy/reference/managers.md)
+  is the page that was `use-cases.md`, with `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager`,
+  `InvitationManager`, the stores and the registration. [Tenancy API: access manager and
+  callers](docs/tenancy/reference/callers.md) opens with `TenancyAccessManager`, and [Tenancy API: queries and row
+  access](docs/tenancy/reference/queries.md) with `db.Tenancy()`. Membership's reference names its access manager.
 - **The Tenancy sample's classes mark their tenant in the domain.** `Project`, `ProjectRole` and `Inspection` mark their
   `TenantId` `[OfTenant]`, and `ProjectsContext` and `InspectionsContext` drop their `ScopeToTenant` calls: the
   toolkit's conventions keep them to the caller's tenant. The Projects and Inspections domain projects reference
@@ -3292,15 +3315,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   read only. The access rules are the ones before: each question's requirement in C#, and on Postgres the policies,
   which answer another seat's grants only where the caller may read them; elsewhere a listed seat comes with all its
   grants, so the request that shows another seat's grants says who may see them, as the sample's `SeatGrants` does with
-  a permission. A seat carries its identity, so what leaves is what the application selects. The Tenancy sample's
-  queries select its `SeatListing`, `UnitListing`, `SeatOfMine` with `TenantOfSeat` (now a record of the application
-  layer, so the Tenants schema has no record of its own) and `SeatOverviewListing`, and its routes and both GraphQL
-  schemas answer as before. See [Names](docs/tenancy/names-and-languages.md#names) and [How a seat is
-  shown](docs/tenancy/names-and-languages.md#how-a-seat-is-shown). From 3.2.0-preview.1 or 3.2.0-preview.2:
+  a permission. A seat carries its identity, so what leaves is what the application lists. The Tenancy sample's
+  queries answer these classes and records as they are, and its GraphQL types list the fields they show (see The
+  Tenancy sample answers Tenancy's classes, above). See [Names](docs/tenancy/names-and-languages.md#names) and [How a
+  seat is shown](docs/tenancy/names-and-languages.md#how-a-seat-is-shown). From 3.2.0-preview.1 or 3.2.0-preview.2:
   - `SeatSummary`, `UnitSummary`, `PlacementSummary` and `GrantSummary` are gone. Read the seat's own fields
     where you read a seat summary's, and a unit's own fields where you read a unit summary's `Name`, `ParentId`
     or `Status`, with `Path` and `Depth` beside it as before:
-    `(await seats.ListAsync(ct)).Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status))`.
+    `(await seats.ListAsync(ct)).Select(seat => new { seat.Id, seat.DisplayName, seat.Status })`.
   - `SeatOverview.Placements` is gone: read `overview.Seat.Placements`, a unit's path with
     `overview.UnitOf(placement.UnitId).Path`, a role's name with `overview.RoleOf(grant.RoleId)?.Name` (`null` for a
     role a filter of your own on the role class hides, whose name a grant summary gave as empty), and whether a
@@ -3309,8 +3331,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `SeatsOfAsync<Seat>(caller, ct)`, and answer `SeatInTenant<Seat>`. `SeatOfCaller` stays what `FindAsync`
     answers, for selecting the caller's seat. A seat directory of your own implements `AllOfAsync<TSeat>`, and a
     store of your own `ITenancyStore.ReadOrganizationAsync`.
-  - Never answer the seat class itself from a route or a GraphQL field: it carries the identity. Select what you
-    show, as the sample's queries do.
+  - Never let a route or a GraphQL type write every field of the seat class: it carries the identity. List the
+    fields you show, as the sample's GraphQL types do with `BindFieldsExplicitly()`, and its routes with the same
+    fields.
 - **For the 3.2.0 previews: `UseTenancy` names its parameters `optionsBuilder` and `serviceProvider`**, as
   `UseDDDToolkit` and the row level security calls it is chained with do; a call that named them by the old names
   changes with it. `UseMemberHolds` names them the same.
@@ -4027,7 +4050,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     - `MembershipFunctions` takes a fifth name, `FellowMembers`; Membership's SQL is written in form 8.
     - A row access contribution's function that answers a resource access set is refused, naming the set, with
       "permission" where the message said "key".
-  - The Tenancy sample follows: `OrganizationUnitsById` answers `UnitName` (`Id`, `Name`, `Path`, `Depth`), and so
+  - The Tenancy sample follows: `OrganizationUnitsById` answers `NamedUnit` (`Id`, `Name`, `Path`, `Depth`), and so
     do the routes and fields that name a unit by id: `POST /tenancy/directory/units` answers `{ id, name, path, depth }`,
     the GraphQL lookup is `organizationUnitName(id)`, and a project's and an invitation's `unit` is an
     `OrganizationUnitName`. `OrganizationUnit`, with its kind and status, is what `organizationUnits` and the

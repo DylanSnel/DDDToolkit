@@ -602,8 +602,8 @@ flowchart TB
 - Your class's rules check the field in that save. When the callback throws, a later save in the same scope does not
   add the unit either. Set the root's kind through `ConfigureRoot`.
 - **Showing the kind.** [`ListUnitsAsync`](reference/managers.md#listunitsasynccancellationtoken) returns the units
-  the caller reads. Each unit is your unit class with all its fields, in a `UnitInTree` with its path and depth. A
-  plain `Select` shows your field.
+  the caller reads. Each unit is your unit class with all its fields, in a `UnitInTree` with its path and depth. Your
+  field is on each unit.
 - **By id.** [`UnitsByIdAsync`](reference/managers.md#unitsbyidasyncireadonlycollectiontunitid-cancellationtoken)
   returns a `NamedUnit` with the name, path and depth. A seat that may not read the rest of a unit still gets the
   unit's name this way. Use it when another module shows units by id.
@@ -623,12 +623,12 @@ public sealed partial class OrganizationUnit
 }
 
 // The command's handler. The manager adds the unit, the callback sets the kind, and one save writes both.
-public async ValueTask<OrganizationUnitId> Handle(AddOrganizationUnit command, CancellationToken cancellationToken)
+// AddUnitAsync returns the new unit with its kind.
+public async ValueTask<OrganizationUnit> Handle(AddOrganizationUnit command, CancellationToken cancellationToken)
     => await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken, configure: unit => unit.SetKind(command.Kind));
 
-// The query's handler. ListUnitsAsync returns the units the caller reads, and a plain Select shows the kind.
-var units = await organization.ListUnitsAsync(cancellationToken);
-return [.. units.Select(found => new UnitListing(found.Unit.Id, found.Unit.Name, found.Unit.Kind, found.Path, found.Depth))];
+// The query's handler. ListUnitsAsync returns the units the caller reads. Each UnitInTree holds your unit with its kind.
+IReadOnlyList<OrganizationManager.UnitInTree> units = await organization.ListUnitsAsync(cancellationToken);
 
 // Store the kind by its name, with one line in the context's ConfigureConventions
 configurationBuilder.Properties<UnitKind>().HaveConversion<string>().HaveMaxLength(16);

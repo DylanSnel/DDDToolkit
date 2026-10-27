@@ -121,8 +121,8 @@ new TenantToProvision(slug, name, shape, name, identity, ConfigureFirstSeat: sea
 await seats.AddAsync(identity, cancellationToken, configure: seat => seat.Rename("Leo"));
 await invitations.AcceptAsync(command.Token, verifiedAddress, cancellationToken, configure: seat => seat.Rename(command.DisplayName));
 
-// Show the name with a plain Select over the seats that SeatManager returns.
-var listed = (await seats.ListAsync(cancellationToken)).Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status));
+// SeatManager returns your seat class, so the name is on every seat it returns.
+IReadOnlyList<Seat> listed = await seats.ListAsync(cancellationToken);
 ```
 
 - Each callback runs before anything is saved. When your rule refuses the name, nothing is saved, and an invitation
@@ -131,9 +131,10 @@ var listed = (await seats.ListAsync(cancellationToken)).Select(seat => new SeatL
   with `tenancy.seats.manage` for the whole tenant renames any seat.
 - Tenancy returns objects of your seat class with every field. `SeatManager` does this, and so does
   `TenantSelection.SeatsOfAsync<TSeat>(caller)`, which returns the person's seats in every tenant for a tenant
-  picker. Each screen needs one `Select` and no extra query.
-- The identity is personal data, like an e-mail address. Only the fields you select leave your API. The sample's
-  responses never include the identity.
+  picker. A screen shows the name with no extra query.
+- The identity is personal data, like an e-mail address. Only the fields your API lists leave it. Each of the
+  sample's GraphQL types lists its fields one by one (`BindFieldsExplicitly`), and REST writes the same fields. No
+  response of the sample includes the identity.
 
 The next diagram shows what each seat method checks before it reads, so you know when a screen gets a refusal and
 when it gets an empty list. Purple: the methods. Green: the seats are read. Red: a refusal. Grey: an empty list.
