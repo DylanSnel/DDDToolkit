@@ -1258,7 +1258,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   which of its ids are Tenancy's, writes them where they are no arguments. The types generic over the ids, the
   answers, the questions, the records, `TenantSelection<,>` for a person's own seats and `EfTenancyReadSource<,,,>`,
   keep their type arguments, as does `TenancySystemReads.TenantsToSweepAsync<TTenant, TTenantId>`. See
-  [Your ids, named once](docs/tenancy/your-module.md#your-ids-named-once).
+  [Your ids, named once](docs/tenancy/your-module.md#calls-closed-over-your-ids).
 - **Tenancy makes a new id with the id's own `Create()`, and the id options are gone.** `NewTenantId`, `NewSeatId`,
   `NewUnitId` and `NewRoleId` of `TenancyOptions`, and `NewInvitationId` of `TenancyInvitationOptions`, are removed:
   a use case makes the id of a new tenant, unit, seat, role or invitation with `TTenantId.Create()` and the rest, in
@@ -1277,13 +1277,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   over the `SeatId` the switch writes. `[assembly: GenerateTenancyIds]` writes the ids alone, for a module's
   contracts project that references the package; one that does not declares the ids, and the domain project's
   switch takes them. The invitation is never written: declaring it is what turns invitations on. See
-  [The shortest start: the switch](docs/tenancy/your-module.md#the-shortest-start-the-switch).
+  [The shortest start: the switch](docs/tenancy/your-module.md#quick-start).
 - **Tenancy's checks are start-up checks.** `AddTenancy` brings `tenancy.catalogue-builds`, `tenancy.contexts-wired`
   and `tenancy.unknown-stored-keys`, which logs a key a role holds that the catalogue has lost; `AddTenancyPostgres`
   brings `tenancy.explicit-callers`, `tenancy.seated-token-roles`, `tenancy.system-in-role-confined`,
   `tenancy.system-reads-across-tenants` and `tenancy.policies-in-place`, the last three before the read of the stored
   keys whatever order the two were registered in. A host runs them with `RunStartupChecks()`; the methods of
-  `TenancyChecks` and `TenancyPostgresChecks` stay. See [Setting it up](docs/tenancy/postgres.md#setting-it-up).
+  `TenancyChecks` and `TenancyPostgresChecks` stay. See [The start-up checks](docs/tenancy/postgres.md#the-start-up-checks).
 - **The supporting domains are published**: Tenancy as `Temp.DDDToolkit.Supporting.Tenancy`, `.EntityFramework` and
   `.Postgres`, Membership as `Temp.DDDToolkit.Supporting.Membership`, `.EntityFramework` and `.Postgres`, at the
   toolkit's version. Membership's two generators ship inside its packages, not as packages of their own.
@@ -1490,7 +1490,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   contribution of yours. Where the export writes privileges, the id and the tenant are no column a caller may
   update, as before, and Postgres refuses them before the trigger is asked. The next build writes the access file
   that changes the trigger. See
-  [What the database guards on a seat](docs/tenancy/postgres.md#what-the-database-guards-on-a-seat).
+  [What the database guards on a seat](docs/tenancy/postgres.md#who-may-change-a-seats-columns).
 - **Tenancy: containment is a setting, on unless you turn it off.** That a seat hands on a key that manages access
   only where it holds it itself is a rule of the access model, not one that keeps the data sound, so the
   application decides it: `ApplicationCatalogue.ContainAccessManagingKeys`, `true` by default, which
@@ -1545,7 +1545,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   sample keeps both defaults: its people work across units and see each other, which is the default. Its
   `TenancyChoicesExportTests` run the exporter's build step with a read rule on its seat, and with containment
   off, and find the default's policy, and `key_is_contained`, the one change to the access file. See
-  [Who reads the seats](docs/tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace).
+  [Who reads the seats](docs/tenancy/postgres.md#default-read-policies-for-seats-and-invitations).
 - **Tenancy: a module states its keys once.** A module declares its permissions as the public constants of a
   static class marked `[Permissions]`, each with its level, the attribute that says where it is asked: `[AtTenant]`
   for the whole tenant, `[AtUnit]` at a unit, or Membership's `[On<TResource>]` on a resource with members. It states
@@ -1570,7 +1570,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   keys added by hand. The start-up check on Postgres that compares the database's functions with the catalogue
   the host runs with stays as well: the host and the export are two programs, and build the same catalogue only
   while they reference the same modules. See
-  [A module states its keys once](docs/tenancy/roles-and-permissions.md#a-module-states-its-permissions-once). From 3.2.0-preview.1 or
+  [A module states its keys once](docs/tenancy/roles-and-permissions.md#declaring-a-modules-permissions). From 3.2.0-preview.1 or
   3.2.0-preview.2:
   - Declare each module's keys as the constants of a `[Permissions]` class, each with its level (see Changed), and
     take `services.AddTenancyPermissions(thatList)` out of the module's registration.
@@ -1616,7 +1616,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a key the caller holds there, `RoleKeys(keys)` every pair of an active role and a key it grants, and
   `UnitsUnder(unit)` the unit and every unit below it. Each is one query, composes into a module's own, checks
   its keys against the catalogue, and answers nothing to nobody and the whole tenant to system work in it. See
-  [Key sets for navigation, abilities for actions](docs/tenancy/who-may-do-what.md#permission-sets-for-navigation-abilities-for-actions).
+  [Key sets for navigation, abilities for actions](docs/tenancy/who-may-do-what.md#showing-what-a-caller-may-do-in-a-list).
 - **Tenancy: the read model carries access facts only.** The rows a module maps of Tenancy's, the views of
   `AddTenancy` and `AddTenancyReadModel` and the read functions of `AddTenancyReadFunctions`, carry ids, keys,
   periods, statuses, a unit's parent and a role's pack and keys, and no text that is shown to people. So a
@@ -1788,7 +1788,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     the value as it is stored, while the functions keep their own names and the columns they answer under, so
     a module's model is the same under every naming.
 
-  Tenancy's tests on Postgres run under both namings. See [Your own naming](docs/tenancy/postgres.md#your-own-naming).
+  Tenancy's tests on Postgres run under both namings. See [Your own naming](docs/tenancy/postgres.md#naming-tables-and-columns).
 - Tenancy works with contexts from a pool: its tenant filter, its save check and its rights writer read the
   caller at each use, which its tests hold for saves through a pooled context, on SQLite and on Postgres, and on
   a data source of one connection. Its messages for a read across tenants that finds no context to make, and for
@@ -1808,7 +1808,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   administrator its trigger keeps into Tenancy's refusal and requires explicit callers, and
   `TenancyPostgresChecks` checks at start-up that the host and the database are set up as the policies rely on.
   Modules ask Tenancy's questions in their rules through `TenancyRowAccess`. See
-  [On Postgres: the second lock](docs/tenancy/postgres.md).
+  [Row level security on Postgres](docs/tenancy/postgres.md).
 - `TenancyStoreOptions`, with `DatabaseKeepsRights`: the database writes the rights and answers the questions
   about other seats' rights, so the save writes none and Tenancy's store asks the database's functions, which
   `TenancyFunctionNames` names. `AddTenancyPostgres()` turns it on; on SQLite, and on a Postgres without the
@@ -1861,7 +1861,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `TenancyModel.ReadsThroughFunctions` says whether a model does, and `EnsurePoliciesAreInPlaceAsync` checks
   that the six functions are in the database as the contribution writes them and that each answers exactly the
   columns of its row of the read model, in order, naming the function that differs. See
-  [Modules read through functions](docs/tenancy/postgres.md#modules-read-through-functions).
+  [Modules read through functions](docs/tenancy/postgres.md#read-functions-for-modules).
 - **Tenancy's questions that take the tenant as an argument**, for a policy that runs where the connection names
   no tenant, such as one on the path of a stored file or on a channel: `seat_in_tenant`, `seated_in_tenant`,
   `holds_key_in_tenant`, `units_where_i_hold_in_tenant` and `roles_with_key_in_tenant` on Postgres, and
@@ -1870,7 +1870,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   signed-in users alone, and answer for the seat the caller's verified identity has in that tenant, only while
   that seat and the tenant are active: a suspended seat, a suspended or closed tenant, a tenant the caller has
   no seat in and someone without a seat learn nothing, the tenant's roles included. See
-  [Where the connection names no tenant](docs/tenancy/postgres.md#where-the-connection-names-no-tenant).
+  [Where the connection names no tenant](docs/tenancy/postgres.md#functions-that-take-the-tenant-as-an-argument).
 - **Tenancy on Postgres: the reads across tenants run without a bypass.** The few reads Tenancy makes before any
   tenant is known do not run as the application itself, `Caller.System`, past the policies. Where the database
   keeps the rights, each runs as Tenancy's scoped system work, `Caller.SystemIn`, in no tenant, where the
@@ -1897,7 +1897,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **`AddMembershipPostgres()`.** It registers the package's start-up check, `membership.functions-in-place`, which
   a host runs with its other checks (`RunStartupChecks()`): the functions and the lock of every registered
   resource's membership are written from its rules. `MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync` stays
-  for a host that calls it by hand. See [On Postgres: the second lock](docs/membership/postgres.md#on-postgres-the-second-lock).
+  for a host that calls it by hand. See [The five functions](docs/membership/postgres.md#the-five-functions).
 - **Membership**, the toolkit's second supporting domain. `DDDToolkit.Supporting.Membership` is access to one
   resource through its members: a document shared with people, a folder with staff on it. An application
   declares a member class with `[Member<TId, TMemberId, TRoleId, TResource>]`, naming the resource it is a
@@ -2035,7 +2035,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   works. The names follow from the resource's name alone, `documents_i_see` and so on: nothing of the
   application's names them. A rule that asks a resource whose
   contribution the export is not written with is refused, naming the rule and the resource. See
-  [On Postgres: the second lock](docs/membership/postgres.md#on-postgres-the-second-lock).
+  [The five functions](docs/membership/postgres.md#the-five-functions).
 - **Membership beside an organization.** A resource's rules say three things apart from each other, each with
   the default a resource of plain users has, and any of the one goes with any of the others. Who a member is:
   what follows from the member id, a claim, or an id the application resolves for the caller,
@@ -2052,7 +2052,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   membership ends where it sees it as a member alone (`MemberHold.Until`). So the people of an organization
   can be the members of a resource with roles of its own, or with the organization's roles, with reach from
   above or without, and the package references no package that keeps an organization. See
-  [Beside an organization](docs/membership/beside-an-organization.md#beside-an-organization).
+  [Beside an organization](docs/membership/beside-an-organization.md#three-settings-of-the-rules).
 - **Roles a customer makes.** A third place a resource's roles can come from, next to the rules and to roles
   kept elsewhere: rows kept for the resource, `Roles.Custom(starters: [...])`. An application declares a role
   class with `[CustomRole<TRoleId, TResource>]`, an aggregate of its own named for the resource it is a role of, so
@@ -2111,7 +2111,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   it hangs, a unit of an organization or a bay of a depot, never nullable (DDD00097 otherwise). Rules that reach a
   resource from above, `reachFromAbove: true` beside a package that keeps the places or
   `reachFromAbove: DepotFunctions.BaysWhereIHold` beside a place of the application's own, read it, and rules that
-  reach a class that marks none are DDD00098. See [Beside an organization](docs/membership/beside-an-organization.md#beside-an-organization).
+  reach a class that marks none are DDD00098. See [Beside an organization](docs/membership/beside-an-organization.md#reach-from-above).
 - **`[OrOwn]` on a resource whose owner holds the key says nothing: DDD00096.** A warning at `[OrOwn]` on the id of a
   resource with members beside `[OnResource]`, where the required permission is one its owner holds by owning: the
   owner passes the key already.
@@ -2514,7 +2514,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   toolkit's hint, the module's trigger through `RowAccessModel.Refusal`, so a save one of them refuses is
   `access.refused`, a 403 from a route and a `RefusalError` from a mutation, where an owner named by a seat that
   lost the key after the check ended as a failure of the server;
-  [What stays in C#](docs/tenancy/postgres.md#what-stays-in-c) lists what the policy still lets a statement do that goes
+  [What stays in C#](docs/tenancy/postgres.md#rules-checked-only-in-c) lists what the policy still lets a statement do that goes
   round the application. A statement that runs for a signed-in user has a timeout of ten seconds
   (`StatementTimeouts[CallerKind.User]`). At start-up the host checks that
   every migration is applied, that the login role owns nothing and that Tenancy's second lock is in place.
@@ -2687,7 +2687,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
   Holding it with a test, Tenancy's requirements, How a request is checked and the diagnostics say it where they meet it.
-- **Docs: your ids, named once.** [Your ids, named once](docs/tenancy/your-module.md#your-ids-named-once) has which call of
+- **Docs: your ids, named once.** [Your ids, named once](docs/tenancy/your-module.md#calls-closed-over-your-ids) has which call of
   Tenancy's is closed over your ids where, with a diagram, and why another module writes them; the System work,
   Operators, Access history and tenant selection sections show the closed calls, and
   [Use cases closed over your classes](docs/writing-a-supporting-domain.md#use-cases-closed-over-your-classes) says a
@@ -2776,7 +2776,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     names every tenant, to an employee and to a seat the rule keeps out alike, before a tenant is chosen, where a rule
     that asks the caller's seat has no seat to ask about, while the organizations themselves stay closed to that seat.
     On a provider without policies the names are read from the organizations, as before. See
-    [Rules that narrow the organization](docs/tenancy/postgres.md#rules-that-narrow-the-organization).
+    [Rules that narrow the organization](docs/tenancy/postgres.md#restrictive-rules).
 - **The people the caller works with: `ResourceAccessSet.FellowMembers`.** New in 3.2.0-preview.5. A
   `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]` declares `static partial AccessSet<SeatId> Ids();`
   and answers the members now of every resource the caller is a member of now, the caller among them, which

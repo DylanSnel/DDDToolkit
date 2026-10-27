@@ -248,7 +248,7 @@ stands for, and what a request that computes its requirement writes:
 | a permission for the whole tenant | `[RequiresPermission(permission)]` | `TenancyAccess.AtTenant(permission)` | whoever holds the permission at the tenant's root now | `tenancy.not-permitted`, naming the permission |
 | a permission at a unit | `[RequiresPermission(permission)]`, `[AtUnit]` on the unit | `TenancyAccess.AtUnit(permission, unit)` | whoever holds the permission at that unit now, there or above it | `tenancy.not-permitted`, with the permission and the unit |
 | a permission on a resource | `[RequiresPermission(permission)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read, of [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(permission, resource, expectedVersion)` | whoever holds the permission on it, through its members or from above | the resource's `not-found` or `not-permitted` |
-| a query that shows the resources a permission is held on | `[SeenWith<TResourceId>(permission)]`, of [Membership](membership/checks-and-saves.md#inside-your-own-statements) | `MemberAccess.SeenWith<TResourceId>(permission)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the permission on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the permission, for a caller who did not sign in |
+| a query that shows the resources a permission is held on | `[SeenWith<TResourceId>(permission)]`, of [Membership](membership/checks-and-saves.md#access-in-your-own-queries) | `MemberAccess.SeenWith<TResourceId>(permission)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the permission on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the permission, for a caller who did not sign in |
 | one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy/operators-and-history.md#operators) | `tenancy.operators-only` |
 | the caller's own, or a permission | `[RequiresPermission(permission)]`, `[OrOwn]` on the member that names it | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the permission | one `access.refused`, with `access.not-own` and the permission's reason |
 | the caller's own alone | `[OwnOnly]`, `[Own]` on the member that names it | `AccessRequirement.Own(seat)` | the caller the member names | `access.not-own` |
@@ -268,7 +268,7 @@ caller, and one of `[AllowAnonymous]` included.
 - **`[SignedIn]`** asks whether the caller's token names a user. An anonymous sign-in, such as Supabase Auth
   makes for a visitor without an account, names one too, marked with the `is_anonymous` claim. A handler that
   should take only an account with a verified identity refuses that claim itself, as the registration that
-  [provisions a tenant](tenancy/who-may-do-what.md#who-may-ask-and-what-the-work-runs-as) does, and as Tenancy's acceptance of
+  [provisions a tenant](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) does, and as Tenancy's acceptance of
   an invitation does. The application's own work is nobody's sign-in, and is refused.
 - **There is no requirement for the application's own work.** System work is a scope, not a door:
   [System work is a scope](#system-work-is-a-scope) says how a request sent by it, or a handler that needs it,
@@ -936,7 +936,7 @@ it is current again.
   calls the use case inside it, sending no request at all, as the sample's seeding provisions its tenants, or sends
   a request inside it, as the same seeding sends `MarkTenantAsDemo` in each tenant. A handler begins it itself for
   the one thing its caller could not do, as the registration that
-  [provisions a tenant](tenancy/who-may-do-what.md#who-may-ask-and-what-the-work-runs-as) does.
+  [provisions a tenant](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) does.
 - **The request says who may send it, as any other does.** A request system work sends in a tenant is sent by a
   caller in that tenant, `[InTenant]`, which lets the system work there through; a development route that
   provisions is `[AllowAnonymous]`, a registration a signed-in person sends `[SignedIn]`. System work is

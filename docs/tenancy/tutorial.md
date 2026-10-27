@@ -1356,7 +1356,7 @@ may then add units below North. She may not add units below the root or below So
   requires `tenancy.roles.manage` for the whole tenant.
 - **Granting** gives a role to a seat at a unit. It requires `tenancy.grants.manage` at that unit. The seat must be
   placed at that unit, so Rhea's placement at North (step 8) comes first.
-- **Reach**: a grant at North counts at North and at every unit below North ([overview](overview.md#reach-a-permission-counts-below-where-it-is-given)).
+- **Reach**: a grant at North counts at North and at every unit below North ([overview](overview.md#reach-a-grant-covers-the-units-below-it)).
 - **Permissions that manage access** give power over other people's access. All five of Tenancy's own permissions
   are marked so: `tenancy.settings.manage`, `tenancy.units.manage`, `tenancy.seats.manage`, `tenancy.grants.manage`
   and `tenancy.roles.manage`.

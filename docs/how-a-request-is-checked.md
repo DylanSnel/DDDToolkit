@@ -83,7 +83,7 @@ seat there before anything else ([TenantHeader](../Examples/Tenancy/Examples.Ten
 | `AddCrewMember` | puts a seat on a project's crew | `[RequiresPermission(RequiredPermission)]`, `[OnResource]` on the project, `[ExpectedVersion]` on the version read | the sample's Projects module |
 | `RenameSeat` | gives a seat another name | `[RequiresPermission(RequiredPermission)]` with `[OrOwn]` on the seat: your own seat, or any with the permission | the sample's Tenants module |
 | `TenantAuditLog` | reads a tenant's audit log | the property: an operator, or the permission that manages seats for the whole tenant | the audit log of [Access requirements](access-requirements.md#the-door-and-the-rows) |
-| `RegisterOrganization` | makes a new tenant with the caller as its administrator | `[SignedIn]`, and system work the handler begins | the registration of [Tenancy](tenancy/who-may-do-what.md#who-may-ask-and-what-the-work-runs-as) |
+| `RegisterOrganization` | makes a new tenant with the caller as its administrator | `[SignedIn]`, and system work the handler begins | the registration of [Tenancy](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) |
 
 Pick a request and a caller below, and follow each layer: what it does for that pair, the code it runs, and the
 statement it sends.
@@ -135,7 +135,7 @@ public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, 
 ```
 
 The other two are the examples of [Access requirements](access-requirements.md#the-door-and-the-rows) and
-[Tenancy](tenancy/who-may-do-what.md#who-may-ask-and-what-the-work-runs-as), not the sample's. The audit log lets one caller or
+[Tenancy](tenancy/who-may-do-what.md#requests-that-provision-a-tenant), not the sample's. The audit log lets one caller or
 another through, so it answers the property; the registration lets any signed-in person through, and its handler
 begins the system work that makes the tenant ([System work: a scope, and back](#system-work-a-scope-and-back)):
 
@@ -545,7 +545,7 @@ SELECT p."Version" FROM "projects"."Projects" AS p WHERE p."Id" = @project LIMIT
 The periods are left out of the crew's part: a crew member and a role count from their start to their end,
 compared with now, as a grant does. The Projects module reads Tenancy through functions,
 `"tenancy".caller_permissions()` and the others, rather than its tables ([Modules read through
-functions](tenancy/postgres.md#modules-read-through-functions)); `caller_permissions()` runs as the caller, so a seat reads its
+functions](tenancy/postgres.md#read-functions-for-modules)); `caller_permissions()` runs as the caller, so a seat reads its
 own rights and nobody else's.
 
 </details>
@@ -676,7 +676,7 @@ anywhere in the tenant change any, because every save of a seat writes its versi
 Every member of a tenant reads all its units through Tenancy's policy, while the sample's directory lists only the
 units a seat is placed in and below: the tree is the organization's, and Tenancy's questions read it as their caller,
 so it has no narrower default to replace, as the seats have
-([Who reads the seats: a default you may replace](tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace)).
+([Who reads the seats: a default you may replace](tenancy/postgres.md#default-read-policies-for-seats-and-invitations)).
 
 The policies below are the sample's, as its export wrote them, with the schemas quoted, as everywhere the toolkit
 writes SQL. A unit is added below a parent where the caller holds the permission that manages units, the same permission at the
@@ -796,7 +796,7 @@ CREATE POLICY "Operators only read (insert) for tenancy_operator" ON "audit"."Au
 The crew's permissive policy for a signed-in caller, `"ProjectCrewMembers (insert) for authenticated"`, lets
 whoever may change the project add a row; Membership's restrictive lock, `"Members change with the permission"`, narrows
 that to the permission that changes the members, `projects.crew.manage`, or the one that names the owner. That lock is
-[the second lock](membership/postgres.md#on-postgres-the-second-lock), and it is why a request the door let through for its
+[the lock on the member rows](membership/postgres.md#who-writes-the-member-rows), and it is why a request the door let through for its
 own seat may still be saved as the application's work ([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)).
 
 ### Going round the door

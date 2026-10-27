@@ -77,7 +77,7 @@ public partial class Order { }
 | [Tenancy: names and languages](docs/tenancy/names-and-languages.md) | Turning the ids a module answers into names, how a seat is shown, and refusals and role names in the reader's language |
 | [Tenancy: invitations](docs/tenancy/invitations.md) | Inviting a person without an account yet into a tenant, with a unit and a role waiting |
 | [Tenancy: operators and history](docs/tenancy/operators-and-history.md) | The application's operators across tenants, who wrote and changed each row, and the access history |
-| [Tenancy on Postgres](docs/tenancy/postgres.md) | The second lock: Tenancy's rules as row level security policies and functions in Postgres, how to set them up, and what they stop |
+| [Tenancy on Postgres](docs/tenancy/postgres.md) | Tenancy's rules as row level security policies and functions in Postgres, how to set them up, and what they stop |
 | [Tenancy: the sample](docs/tenancy/the-sample.md) | The Tenancy sample: what is in it, the people and units of its seed, and its parts |
 | [Tenancy sample: who may do what](docs/tenancy/sample/who-may-do-what.md) | The sample's modules in layers, a request from route to save, what each request declares, roles and crews, paging, operators and invitations |
 | [Tenancy sample: GraphQL](docs/tenancy/sample/graphql.md) | One schema over the sample's three modules, what a query costs, the rules each module's schema keeps, and the administration's gateway |
@@ -97,7 +97,7 @@ public partial class Order { }
 | [Membership: resources and members](docs/membership/resources-and-members.md) | The packages, a whole resource with members and no Tenancy, the member list written for you, names, what the member list keeps, and several kinds of resource |
 | [Membership: permissions and roles](docs/membership/permissions-and-roles.md) | The settings of a permission, who holds one, who may give a role, and roles a customer makes: starter roles, changing a role, whose a role is |
 | [Membership: from the check to the save](docs/membership/checks-and-saves.md) | Requirements that combine, what holds a change from the check to the save, the questions inside your own statements, system work, and the expert hold |
-| [Membership on Postgres](docs/membership/postgres.md) | The second lock: the functions your row access rules ask, who may ask them, the start-up check, and the lock on the member rows and the owner |
+| [Membership on Postgres](docs/membership/postgres.md) | The functions your row access rules ask, who may ask them, the start-up check, and the lock on the member rows and the owner |
 | [Membership: beside an organization](docs/membership/beside-an-organization.md) | Who a member is, where the roles come from and reach from above, with Tenancy or an organization of your own |
 | [Membership: design and limits](docs/membership/design.md) | Why each piece of a resource with members is yours to write, and what the package does not do |
 | [Membership API: resource and members](docs/membership/reference/resource-and-members.md) | Generated from the code: the member template and its member list, periods and roles held, what the resource's class says, and the custom role template |

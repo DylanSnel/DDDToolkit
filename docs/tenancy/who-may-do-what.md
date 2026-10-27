@@ -89,7 +89,7 @@ modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId);
   file. When the databases are separate, query Tenancy's context first and pass the result into the module's query
   as a list.
 - On Postgres with `DDDToolkit.Supporting.Tenancy.Postgres`, map the functions
-  ([modules read through functions](postgres.md#modules-read-through-functions)). On that database, `tenancy.In(db)`
+  ([modules read through functions](postgres.md#read-functions-for-modules)). On that database, `tenancy.In(db)`
   throws for a module context that maps the views.
 - In a project that sees your classes, a generated overload of each call takes no ids.
 - A module whose resources have their own members queries [Membership](../membership/overview.md) instead. The

@@ -278,8 +278,8 @@ To take away what Tenancy allows, write a restrictive rule, `[RowAccess<Organiza
 AND-ed with Tenancy's policies, it narrows and never grants (`CallerSeat<Seat>().Kind == SeatKind.Employee` keeps an
 external seat out of the organization, its units and its tree). It goes on the organization, seat or role class;
 a tenant or invitation is DDD00100. Tenancy's own work and its owner-run functions keep working.
-See `tenancy/postgres.md` ("On Postgres: the second lock"): "Who reads the seats", "Rules that narrow the
-organization", "Who reads which grants" and "What the database guards on a seat".
+See `tenancy/postgres.md` ("Row level security on Postgres"): "Default read policies for seats and invitations",
+"Restrictive rules", "Who reads which grants" and "Who may change a seat's columns".
 
 ## A module on Tenancy, as the sample lays it out
 

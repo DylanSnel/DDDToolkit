@@ -174,8 +174,8 @@ Most choices have a default. The smallest application decides only where the rol
 
 | Choice | Default | What you can do instead |
 |---|---|---|
-| Where the roles come from | No default: the rules must say it. | `Roles.Fixed([...])`: roles in code, the same for every tenant. `Roles.Custom(starters: [...])`: rows the tenant keeps and changes, as in the tutorial. `Roles.External(...)`: roles stored elsewhere, such as Tenancy's ([Beside an organization](beside-an-organization.md#beside-an-organization)). |
-| Who may add a member, give a role or name an owner | You decide per command. The package has no permission for it. | Require a permission on the board, such as the tutorial's `boards.members.manage`, and write further rules in the handler ([Who may give a role](permissions-and-roles.md#who-may-give-a-role-is-yours-to-decide)). |
+| Where the roles come from | No default: the rules must say it. | `Roles.Fixed([...])`: roles in code, the same for every tenant. `Roles.Custom(starters: [...])`: rows the tenant keeps and changes, as in the tutorial. `Roles.External(...)`: roles stored elsewhere, such as Tenancy's ([Beside an organization](beside-an-organization.md#three-settings-of-the-rules)). |
+| Who may add a member, give a role or name an owner | You decide per command. The package has no permission for it. | Require a permission on the board, such as the tutorial's `boards.members.manage`, and write further rules in the handler ([Who may give a role](permissions-and-roles.md#who-may-give-a-role)). |
 | What the owner holds | Every permission on the board. | Mark a permission `Owner = false` to keep it from the owner. |
 | What every member holds | Nothing. | Mark one permission `EveryMember = true`, usually the one that shows the board. Reach from above needs it. |
 | What a role may give | Every permission on the board. | `InRoles = false` keeps a permission out of every role. `otherPermissions` lets permissions of other modules in. |

@@ -66,4 +66,4 @@ Up to 3.2.0-preview.4, a permission was called a **key**, in the code and in the
 
 3. **On Postgres, export the new access file** after that migration. The file renames the functions (`holds_key`
    becomes `holds_permission`) and drops the old ones. Until you apply the file, the start-up checks refuse the
-   database ([Setting it up](postgres.md#setting-it-up)).
+   database ([The start-up checks](postgres.md#the-start-up-checks)).

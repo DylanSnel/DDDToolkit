@@ -1,7 +1,7 @@
 namespace DDDToolkit.Analyzers.Tests.Docs;
 
 /// <summary>
-/// The shortest start of docs/tenancy/your-module.md is one line, read from the page and compiled as it stands in a
+/// The quick start of docs/tenancy/your-module.md is one line, read from the page and compiled as it stands in a
 /// project of its own, with Tenancy: it has to be all there is to write, and what the page shows the switch writing
 /// has to be what it writes.
 /// </summary>
@@ -9,13 +9,13 @@ public class TenancySwitchDocsExampleTests
 {
     private const string Page = "tenancy/your-module.md";
 
-    private const string Heading = "The shortest start: the switch";
+    private const string Heading = "Quick start";
 
     /// <summary>What the page leaves out: the using of the package, in a project whose root namespace the page's names are in.</summary>
     private static GeneratorRunOutcome Run()
     {
         var examples = DocsExamples.Of(Page, Heading);
-        examples.Should().ContainSingle("the shortest start is the one line");
+        examples.Should().ContainSingle("the quick start is the one line");
 
         return GeneratorTestHost.Create("using DDDToolkit.Supporting.Tenancy;\n" + examples[0])
             .WithAssemblyName("Shop.Tenants")

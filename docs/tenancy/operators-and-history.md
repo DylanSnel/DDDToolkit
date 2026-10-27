@@ -181,4 +181,4 @@ options.UseOutbox<ShopTenancyContext>(outbox => outbox
 - A seat that suspends or deactivates itself is still recorded, because its seat counts in the transaction that
   wrote the row.
 
-The sample shows [the history as a list](sample/who-may-do-what.md#an-operator-who-changed-a-row-and-the-history-as-a-list).
+The sample shows [the history as a list](sample/who-may-do-what.md#operators-who-changed-a-row-and-the-access-history).

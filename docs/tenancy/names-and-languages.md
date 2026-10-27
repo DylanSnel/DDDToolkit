@@ -31,13 +31,13 @@ A path runs from the root down, joined with ` / `, for example `Harbor Works / N
   work in the tenant. The directory checks no permission. A caller that is nobody is refused with the code that
   says why, such as `tenancy.not-seated`. System work outside any tenant gets an `InvalidOperationException`.
 - **Which seats.** The seat methods return the seats the caller can read. By default that is every seat of the
-  tenant. On Postgres a [read rule of yours](postgres.md#who-reads-the-seats-a-default-you-may-replace) can narrow
+  tenant. On Postgres a [read rule of yours](postgres.md#default-read-policies-for-seats-and-invitations) can narrow
   this.
 - **The by-id methods return more units than `ListUnitsAsync`.** They return any role or unit of the caller's tenant.
   `ListUnitsAsync` returns only the units the caller is placed under. In the sample, Vic is placed at North Inland
   and is on the crew of Pier 7 at North Coast. `ListUnitsAsync` leaves North Coast out for Vic, and
   `UnitsByIdAsync` still returns its name and path. A seat that a
-  [restrictive rule](postgres.md#rules-that-narrow-the-organization) keeps out of the organization also reads unit
+  [restrictive rule](postgres.md#restrictive-rules) keeps out of the organization also reads unit
   names this way.
 - **Unknown ids.** The by-id methods leave out an id of another tenant and an id that belongs to nothing. The result
   does not say which of the two an id was.
@@ -183,7 +183,7 @@ flowchart LR
   that row too. Put a field that fewer members may see in a table of yours, under a read rule of yours.
 - A seat may change its own row. A seat that manages seats or grants anywhere in the tenant may change any seat's
   row. The database guards Tenancy's columns on a seat. Your columns need a column rule of yours, for example for
-  who may change a name ([What the database guards on a seat](postgres.md#what-the-database-guards-on-a-seat)).
+  who may change a name ([What the database guards on a seat](postgres.md#who-may-change-a-seats-columns)).
   The sample's rule is `NameChangesByTheSeatOrWithTheSeatsPermission`.
 
 ### Another seat's overview

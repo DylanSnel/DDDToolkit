@@ -87,7 +87,7 @@ tenant filter, or that does not go through Entity Framework, still reads only th
 A person reaches Tenancy through a seat. Code runs as system work only when you start system work explicitly. Start
 it for work that no request asked for, such as seeding, an import or an operator's command. Also start it for work
 in a handler that no caller of the request could do, such as
-[provisioning a tenant](who-may-do-what.md#who-may-ask-and-what-the-work-runs-as):
+[provisioning a tenant](who-may-do-what.md#requests-that-provision-a-tenant):
 
 ```csharp
 using (TenancyUseCases.BeginSystemIn(tenant, actingSeat))
@@ -97,7 +97,7 @@ using (TenancyUseCases.BeginSystemIn(tenant, actingSeat))
 ```
 
 Each `Begin…` call starts two callers, Tenancy's caller and the toolkit's caller. Disposing the result ends both.
-The calls on `TenancyUseCases` are closed over your ids ([Your ids, named once](your-module.md#your-ids-named-once)),
+The calls on `TenancyUseCases` are closed over your ids ([Your ids, named once](your-module.md#calls-closed-over-your-ids)),
 so you write no id type.
 
 | `TenancyUseCases.` | Tenancy's caller | The toolkit's caller, `Caller.` |
@@ -175,7 +175,7 @@ foreach (var tenant in await TenancySystemReads.TenantsToSweepAsync<ShopTenant, 
 - **The caller of the read.** Tenancy starts a caller for the read alone. On a database where only the tenant
   filter keeps tenants apart (SQLite), the read runs as `Caller.System` over the tables. With
   [row level security](postgres.md), the read runs as scoped system work in no tenant and calls a database function
-  ([The scoped system role](postgres.md#the-scoped-system-role-grants-and-reads-across-tenants)).
+  ([The scoped system role](postgres.md#reads-across-tenants)).
 - **A separate context.** The read runs on a new context from a new service scope, outside any transaction you
   started. So your transaction cannot change who the read runs as, and the read's wider access does not carry over
   into your work.

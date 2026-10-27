@@ -30,7 +30,7 @@ The **catalogue** is every permission the application knows. It combines Tenancy
 
 - To use no catalogue, leave `options.Catalogue` unset. Tenancy then builds `new ApplicationCatalogue()`.
 - The Postgres export builds the catalogue without starting the host. It uses the part you mark `[TenancyCatalogue]`,
-  or `new ApplicationCatalogue()` when you mark none ([Setting it up](postgres.md#setting-it-up)).
+  or `new ApplicationCatalogue()` when you mark none ([The row access contribution](postgres.md#the-row-access-contribution)).
 - A unit's kind plays no part in access. Keep the kind [on your unit class](your-module.md#the-kind-of-a-unit).
 - [`ApplicationCatalogue`](reference/catalogue.md#applicationcatalogue) lists every member.
 
@@ -124,7 +124,7 @@ builder.Services.AddTenancyPermissionsOfModules();
 |---|---|
 | A module's list is also added with `AddTenancyPermissions`, which exists for permissions you add by hand | Building the catalogue fails at start-up. The message names the permissions and the call to remove. |
 | The host does not call `AddTenancyPermissionsOfModules()` | When a starter role names a module's permission, building the catalogue fails at start-up. Otherwise the first query about a module's permission throws. Both messages name the fix. |
-| The export references other modules than the host, or either program adds permissions by hand | The start-up check on Postgres refuses to start the host ([Setting it up](postgres.md#setting-it-up)). The export can be the host itself. |
+| The export references other modules than the host, or either program adds permissions by hand | The start-up check on Postgres refuses to start the host ([The start-up checks](postgres.md#the-start-up-checks)). The export can be the host itself. |
 
 ## Starter roles
 
@@ -511,7 +511,7 @@ In both settings:
 - Each command checks its permission at the unit where it acts. Rhea gives no role outside North and the units below
   North.
 - The last administrator stays, in C# and in the database. A seat keeps its identity and its tenant
-  ([What the database guards on a seat](postgres.md#what-the-database-guards-on-a-seat)).
+  ([What the database guards on a seat](postgres.md#who-may-change-a-seats-columns)).
 - The catalogue's `AccessManagingPermissions` and `ManagesAccess` return the same results.
 
 ### When to keep containment on
@@ -526,7 +526,7 @@ Keep containment on when clients can reach the database directly, for example th
   - breaks either of these rules through an invitation;
   - changes the status of a seat whose access-managing grants it could not take away or give back.
 - Only the C# use cases check durations, changes to a role's permissions, and moves
-  ([What stays in C#](postgres.md#what-stays-in-c)).
+  ([What stays in C#](postgres.md#rules-checked-only-in-c)).
 - With containment off, a grants manager at a unit can give every role there, also through the Data API.
 
 ### Containment and system work
@@ -542,7 +542,7 @@ Keep containment on when clients can reach the database directly, for example th
 ### The setting in the host and the export
 
 - The host reads the setting from `TenancyOptions.Catalogue`. The export reads the setting from the same catalogue
-  part, marked `[TenancyCatalogue]` ([Setting it up](postgres.md#setting-it-up)). So the two cannot disagree.
+  part, marked `[TenancyCatalogue]` ([The row access contribution](postgres.md#the-row-access-contribution)). So the two cannot disagree.
 - On Postgres, the policies on grants and invitations, and the trigger on a seat's status, call
   `permission_is_contained`. The start-up check `tenancy.policies-in-place` refuses a database exported with the
   other setting. After changing the setting, export the access files and apply them before the host starts.

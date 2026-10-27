@@ -161,7 +161,7 @@ Every choice has a default. An application that changes none of them works.
 | A starter role you change later | Existing tenants keep their copy as it was. | Call `services.SyncRolePacks()`. Existing copies then get your change, and changes a tenant made itself are kept ([Starter roles after provisioning](roles-and-permissions.md#packs-after-provisioning)). |
 | Giving a permission that manages access | A seat can only give such a permission where it holds that permission itself. Rhea manages grants at North, so she cannot give herself the right to manage roles for the whole tenant. | Turn this off with `ContainAccessManagingPermissions: false` on your catalogue ([Containment](roles-and-permissions.md#containment-on-or-off)). |
 | The shape of a tenant | Chosen when the tenant is created: flat (only the root) or hierarchical (a tree of units). | A flat tenant can become hierarchical later. A hierarchical tenant cannot become flat again, because its units would have to be deleted. |
-| Who may read which seats | Tenancy's default read rule. | Your own read rule on your `Seat` class ([Who reads the seats](postgres.md#who-reads-the-seats-a-default-you-may-replace)). |
+| Who may read which seats | Tenancy's default read rule. | Your own read rule on your `Seat` class ([Who reads the seats](postgres.md#default-read-policies-for-seats-and-invitations)). |
 | Invitations | Off. | Declare an invitation class ([Invitations](invitations.md)). |
 | The database | Any database Entity Framework supports. Every check runs in C#. | On Postgres, the database also checks the same rules, with row level security ([Postgres](postgres.md)). |
 

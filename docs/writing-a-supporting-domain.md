@@ -374,7 +374,7 @@ What other modules read of the package's data, it gives them as functions too, a
 answers rows under column names of its own, and the package ships the mapping that reads them into a module's
 context. A module's model then names what the package offers and nothing of how it is stored, so the
 application names the package's tables and columns as it likes, and the policies on those tables still decide
-what each caller is answered ([Tenancy's read functions](tenancy/postgres.md#modules-read-through-functions)).
+what each caller is answered ([Tenancy's read functions](tenancy/postgres.md#read-functions-for-modules)).
 
 Keep what a module can read that way to what a rule needs. A read model of ids, permissions, periods and statuses
 lets a module ask "is this subscription active" inside its own query, and gives it nothing to show: no plan's
@@ -391,7 +391,7 @@ to itself in `ExclusiveTables`, so no rule of the application's adds one next to
 the application's class is the application's choice, who reads the subscriptions say, the package marks its read a
 [default](row-level-security.md#policies-a-package-ships), with what its own work reads kept beside a rule of the
 application's and what that rule is held to, and the application replaces it with a read rule on its class, as
-[Tenancy's seats](tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace) do. Restrictive policies on
+[Tenancy's seats](tenancy/postgres.md#default-read-policies-for-seats-and-invitations) do. Restrictive policies on
 the application's tables that depend on it, a table kept to a subscription say, since a restrictive policy is
 never merged with the rules' and no rule can widen it. As statements, the triggers that keep what no policy can
 see, such as a rule about rows other than the one written, checked at commit. A contribution the application
@@ -992,7 +992,7 @@ the package's docs has to have explained. These can be the package's to write:
   through. A second
   attribute with `IdsOnly = true` writes the ids alone, for a module's contracts project. Leave out a class whose
   declaration switches something on, as Tenancy leaves out the invitation
-  ([The shortest start: the switch](tenancy/your-module.md#the-shortest-start-the-switch)); what a switch cannot write is
+  ([The shortest start: the switch](tenancy/your-module.md#quick-start)); what a switch cannot write is
   said on it, [DDD00066](diagnostics.md#ddd00066).
 
 - **A registration for each thing, beside the main one.** A registration can take only the later type
@@ -1087,7 +1087,7 @@ the package's docs has to have explained. These can be the package's to write:
   list of permissions from the `[Permissions]` classes the module declares, and reads every module's list in the
   assemblies a project references, and writes them into each project that declares no module, with `DDD_Module`
   or `[assembly: Module]`, the host among them, with the call that registers them
-  ([A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)). So a module says a thing once that
+  ([A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)). So a module says a thing once that
   two programs need, and no project lists the modules. A list a module writes by hand would say its permissions twice,
   and is an error where it is declared: [DDD00095](diagnostics.md#ddd00095).
 

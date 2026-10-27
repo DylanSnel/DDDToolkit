@@ -17,8 +17,7 @@ On Postgres, Tenancy checks access in two places:
 
 1. **In C#**, with the check before a handler, the query filter and the save check
    ([Keeping tenants apart](keeping-tenants-apart.md)).
-2. **In Postgres**, with the same rules as [RLS](../row-level-security.md) policies. Other pages call this the
-   *second lock*.
+2. **In Postgres**, with the same rules as [RLS](../row-level-security.md) policies.
 
 For the Postgres side, `DDDToolkit.Supporting.Tenancy.Postgres` writes three kinds of SQL into your access files:
 
@@ -94,7 +93,7 @@ enough for the export to write the SQL.
   - The static property or field of type `ApplicationCatalogue` that you mark `[TenancyCatalogue]`. If you mark
     none, the export uses `new ApplicationCatalogue()`, the same as when `TenancyOptions.Catalogue` is unset.
   - Every module's permissions, from its `[Permissions]` classes
-    ([A module states its permissions once](roles-and-permissions.md#a-module-states-its-permissions-once)).
+    ([A module states its permissions once](roles-and-permissions.md#declaring-a-modules-permissions)).
 - **The next build writes the access file again** when you mark a permission, change a pack, change containment,
   or add a permission while the administrators' pack lists none (that pack then holds every permission). The new
   access file is the migration.

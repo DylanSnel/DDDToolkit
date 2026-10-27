@@ -134,7 +134,7 @@ request that says nothing, reads as if it said one thing with its attributes and
 [DDD00087](#ddd00087) and [DDD00088](#ddd00088) are about [the owner an aggregate marks](access-requirements.md#the-owner-of-an-aggregate),
 where it is a request about the owner's own that no row could ever let through.
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
-[member list of a resource](membership/resources-and-members.md#the-member-list-is-written-for-you), and say what the generator of
+[member list of a resource](membership/resources-and-members.md#the-generated-member-list), and say what the generator of
 the Membership package could not tell, and which member class names the wrong resource.
 [DDD00092](#ddd00092) to [DDD00095](#ddd00095) are about [permissions declared once](membership/permissions-and-roles.md#the-settings-of-a-permission),
 where it is a permission read as something it is not, said twice, or that never reaches the rules or the catalogue;
@@ -144,7 +144,7 @@ it is a code clients read or a function that changes with a class's name; and [D
 nothing, or rules that read a place nobody said.
 [DDD00074](#ddd00074) is about [the migration history](entity-framework.md#the-migration-history), where it is a
 `dotnet ef database update` or an exported file that records the migrations in a table the application never reads.
-[DDD00075](#ddd00075) is about [two modules with Tenancy's classes](tenancy/your-module.md#two-modules-with-the-classes), where it is a name that
+[DDD00075](#ddd00075) is about [two modules with Tenancy's classes](tenancy/your-module.md#two-modules-with-tenancys-classes), where it is a name that
 compiles in each module and is two classes in the host, and [DDD00076](#ddd00076) about the same class, where it is a
 naming line that reads as if it named it and changes nothing.
 
@@ -2331,7 +2331,7 @@ public sealed class Role;
 ```
 
 A package's switch, such as Tenancy's `[assembly: GenerateTenancyClasses]`
-([The shortest start: the switch](tenancy/your-module.md#the-shortest-start-the-switch)), has the generator write the
+([The shortest start: the switch](tenancy/your-module.md#quick-start)), has the generator write the
 package's classes your project leaves out, as the package ships them, and their ids: `Tenant`, `TenantId` and
 the rest, public, in the project's root namespace. It writes nothing that would take the place of something you
 have, and where it cannot write a class or an id it says so on the switch:
@@ -2653,7 +2653,7 @@ Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName
 
 Tenancy's use cases are named through a class the toolkit's generator writes into the project that declares your
 Tenancy classes, `TenancyUseCases`, after the package's own class
-([Two modules with the classes](tenancy/your-module.md#two-modules-with-the-classes)). An application with two modules that
+([Two modules with the classes](tenancy/your-module.md#two-modules-with-tenancys-classes)). An application with two modules that
 each declare Tenancy's classes gets two classes of that name, one in each module's domain project. While neither
 module references the other, neither sees the other's, so neither is told; they meet in every project that
 references both, the host and your tests first, where the first line that names `TenancyUseCases` would be the
@@ -3191,7 +3191,7 @@ A module declares its permissions in a static class marked `[Permissions]`: ever
 permission, which a request names in `[RequiresPermission]` and a role gives, and each carries its **level**, the
 attribute that says where it is asked: Tenancy's `[AtTenant]` or `[AtUnit]`, or Membership's `[On<TResource>]`
 ([The settings of a permission](membership/permissions-and-roles.md#the-settings-of-a-permission),
-[A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)). The packages' generators read the class
+[A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)). The packages' generators read the class
 and nothing else, so each of these would be read as something it is not, or not at all:
 
 | Reported | Because |
@@ -3257,7 +3257,7 @@ A module declares its permissions once, as the constants of a static class marke
 level and, in its `Description` or its summary, what it lets somebody do. Tenancy's generator writes the module's
 list for the catalogue from that class, under the module `DDD_Module` or `[assembly: Module]` names, marks it
 `[TenancyPermissions]`, and the project that composes the modules collects every such list
-([A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)). A list a module marks with it by hand
+([A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)). A list a module marks with it by hand
 says the same permissions a second time, apart from the constants a request requires, and is refused. Declare each permission as
 a constant instead:
 
@@ -3310,7 +3310,7 @@ public sealed partial class Column
 `[At]` marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs
 to, the bay a crate stands in. A fact of the domain, which the rules of a resource with members read where they let
 it be reached from above: a permission held at that place, or above it, reaches the aggregate
-([Beside an organization](membership/beside-an-organization.md#beside-an-organization)). So it goes on one instance property of an
+([Beside an organization](membership/beside-an-organization.md#reach-from-above)). So it goes on one instance property of an
 aggregate root, the root itself and never an entity inside it, and that property is never empty: an aggregate that
 hangs nowhere could not be reached from above, which is what `[At]` says. A static property, one on a type that is
 no aggregate root, a second one and a nullable one are each refused, where the property is declared.
@@ -3355,7 +3355,7 @@ well; where no level says one, the constant's `<summary>` is the description, re
 the project writes a documentation file or not. A permission with neither would show as a bare name, so it is a
 warning, on the constant. A description of white space alone is none, and a retired permission, which no screen
 offers, needs none. A translation under the permission's name, in a resx your failure localizer reads, is read on
-top of whichever said it ([A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)).
+top of whichever said it ([A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)).
 
 ## DDD00100
 
@@ -3374,7 +3374,7 @@ narrows what they allow. On Tenancy's tables it reaches the organization with it
 tree, the seats with their placements and grants, and the roles: what an application narrows to keep a seat that is
 not an employee out of the organization. A tenant and an invitation are read by Tenancy's own work and by a person
 accepting an invitation, who has no seat yet, so a rule there is refused. Put it on one of the others, or leave
-`Restrictive` out ([Rules that narrow the organization](tenancy/postgres.md#rules-that-narrow-the-organization)).
+`Restrictive` out ([Rules that narrow the organization](tenancy/postgres.md#restrictive-rules)).
 
 ## DDD00101
 

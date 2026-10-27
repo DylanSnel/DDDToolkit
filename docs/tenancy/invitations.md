@@ -105,7 +105,7 @@ issuer's rights again, against the role as it is then.
 ## Who accepts
 
 - The person must be signed in, with a verified identity and a token role that
-  [holds seats](postgres.md#how-the-tenant-reaches-a-policy). An anonymous sign-in does not count. Otherwise the
+  [holds seats](postgres.md#passing-the-tenant-to-postgres). An anonymous sign-in does not count. Otherwise the
   call fails with `tenancy.identity-required`.
 - An identity that already has a seat in the tenant gets `tenancy.identity-has-seat`. So nobody can invite
   themself into a role.

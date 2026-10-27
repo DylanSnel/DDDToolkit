@@ -58,13 +58,13 @@ What a module needs, in order:
 | Your classes and ids | [Step 2](tutorial.md#step-2-your-classes) | [Quick start](#quick-start), [your own classes](#your-own-classes), [new ids](#how-a-new-id-is-made) |
 | The module's context, and your migration | [Step 3](tutorial.md#step-3-where-it-is-stored) | [The context and the registration](#the-context-and-the-registration) |
 | The registration, and a catalogue when you need one | [Step 4](tutorial.md#step-4-the-modules-registration) | [The registration](#the-context-and-the-registration), [the catalogue](roles-and-permissions.md#declaring-a-modules-permissions) |
-| The caller of each request, through `ITenantSelection` | [Step 5](tutorial.md#step-5-the-host) | [How the tenant reaches a policy](postgres.md#how-the-tenant-reaches-a-policy) |
+| The caller of each request, through `ITenantSelection` | [Step 5](tutorial.md#step-5-the-host) | [How the tenant reaches a policy](postgres.md#passing-the-tenant-to-postgres) |
 | Provisioning a tenant as system work | [Step 6](tutorial.md#step-6-provisioning-a-tenant) | [System work](keeping-tenants-apart.md#system-work) |
 | Your tables scoped to a tenant, with `ScopeToTenant` | | [Keeping tenants apart](keeping-tenants-apart.md) |
 | Queries in your modules | [Steps 7-8](tutorial.md#step-7-who-am-i) | [Who may do what](who-may-do-what.md), [names](names-and-languages.md#names) |
 | Requests through which people manage access | [Step 9](tutorial.md#step-9-a-role-at-a-unit) | [Who may give a role](roles-and-permissions.md#who-may-give-a-role) |
 | Other features | | [Invitations](invitations.md), [languages](names-and-languages.md#languages), [operators](operators-and-history.md#operators), [who changed a row](operators-and-history.md#who-changed-a-row), [access history](operators-and-history.md#access-history), [packs you change later](roles-and-permissions.md#packs-after-provisioning) |
-| Row level security on Postgres | Steps 1-5 | [Setting it up](postgres.md#setting-it-up) |
+| Row level security on Postgres | Steps 1-5 | [Setup steps](postgres.md#setup-steps) |
 
 The [sample](the-sample.md#who-may-do-what-in-the-sample) is an application built this way.
 
@@ -270,7 +270,7 @@ The context is a plain `DbContext` of your module that calls `modelBuilder.AddTe
   index ([The index on a tenant's root](postgres.md#the-index-on-a-tenants-root)).
 - **Names.** The tables are `Tenants`, `Seats`, `SeatRoleGrants` and so on. The two indexes are named after their
   tables. Pass a `TenancyTableNames` to change these names. Every other name follows your context's naming
-  ([Your own naming](postgres.md#your-own-naming) keeps a database in snake_case).
+  ([Your own naming](postgres.md#naming-tables-and-columns) keeps a database in snake_case).
 
 **The registration**
 

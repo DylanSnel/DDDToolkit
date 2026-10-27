@@ -330,7 +330,7 @@ dotnet build Harbor.slnx
 The generated `Board.Members.g.cs` is in the domain project, under **Dependencies → Analyzers**. It holds one line:
 the member list.
 
-> **Going further.** What is written, and when it is not: [The member list is written for you](resources-and-members.md#the-member-list-is-written-for-you).
+> **Going further.** What is written, and when it is not: [The member list is written for you](resources-and-members.md#the-generated-member-list).
 
 ## Step 2: the permissions and the rules
 
@@ -1078,10 +1078,11 @@ dotnet sln Harbor.slnx add --solution-folder src/Modules/Boards src/Modules/Boar
    log shows:
 
    ```text
-   The role packs are synced in 1 tenants: 1 roles followed their packs, ...
+   The role packs are synced in 2 tenants: 2 roles followed their packs, ...
    ```
 
-   Ada's Administrator role now holds the board permissions.
+   The Administrator role of both tenants now holds the board permissions: Ada's in Harbor Works and Tove's in
+   Meadow Gardens.
 
 ## Step 6: open a board, see it, list them
 
@@ -1807,7 +1808,7 @@ The lock's trigger refuses the second statement with the hint `ddd:access.refuse
 its owner. If he inserts a member row by hand, the lock's policy on `BoardPeople` refuses that row too.
 
 > **Going further.** A role the tenant makes itself, renames or archives: [Roles a customer makes](permissions-and-roles.md#roles-a-customer-makes).
-> A rule of your own, such as "never for longer than you hold it yourself": [Who may give a role](permissions-and-roles.md#who-may-give-a-role-is-yours-to-decide).
+> A rule of your own, such as "never for longer than you hold it yourself": [Who may give a role](permissions-and-roles.md#who-may-give-a-role).
 
 ## Step 8: reach from above
 
