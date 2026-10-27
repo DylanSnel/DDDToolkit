@@ -874,7 +874,7 @@ them, and this page does not say it again:
   and a seat for every field but `seatsOfMine` and `invitationAccept`, which need none, and the operators'
   four, which ask for an operator.
 - [Inviting a person by address](../docs/tenancy/sample/who-may-do-what.md#inviting-a-person-by-address) and
-  [An operator, who changed a row, and the history as a list](../docs/tenancy/sample/who-may-do-what.md#an-operator-who-changed-a-row-and-the-history-as-a-list).
+  [An operator, who changed a row, and the history as a list](../docs/tenancy/sample/who-may-do-what.md#operators-who-changed-a-row-and-the-access-history).
 - [Design choices and where to see them](../docs/tenancy/the-sample.md#design-choices-and-where-to-see-them): every choice
   the sample makes, with its code, something to try and its test.
 - [Folders inside the layers](../docs/modules.md#folders-inside-the-layers): the tree of one module and the
