@@ -181,7 +181,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         await begin.Should().ThrowAsync<NoCurrentUserException>();
         _sent.Sent.Should().BeEmpty("nothing connects for nobody");
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             await using var connection = await connections.OpenAsync(Cancellation);
             (await ScalarAsync(connection, Who)).Should().StartWith($"authenticated|{Bob}|north|");
@@ -245,7 +245,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new CurrentUser(required), scope, [_tenant], required, configure: Timed);
         var connections = new CurrentUserConnections(dataSource, Strict());
 
-        using var alice = TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
+        using var alice = TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
         await using var transaction = await connections.BeginTransactionAsync(Cancellation);
         await using var connection = transaction.Connection!;
         _sent.Count(SetsTheRole).Should().Be(1);
@@ -255,7 +255,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         (await context.Notes.Select(note => note.Text).ToListAsync(Cancellation)).Should().Equal("Alice's");
         _sent.Count(SetsTheRole).Should().Be(1, "the transaction carries the caller already, in either scope, and the context asked the server instead of setting it again");
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             var asBob = () => context.Notes.Select(note => note.Text).ToListAsync(Cancellation);
             (await asBob.Should().ThrowAsync<InvalidOperationException>()).WithMessage($"The current user changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*");

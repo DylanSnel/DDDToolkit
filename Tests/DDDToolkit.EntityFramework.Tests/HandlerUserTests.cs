@@ -62,7 +62,7 @@ public sealed class HandlerUserTests(ExplicitCurrentUserPostgres postgres)
         }
 
         // A scoped system caller is not the system: it runs as the role the policies hold.
-        await using (var scoped = await DeliverOnceAsync(static (_, _, _) => TestUser.BeginSystem(ToolkitWork.ReceivingScope)))
+        await using (var scoped = await DeliverOnceAsync(static (_, _, _) => TestAccess.BeginSystem(ToolkitWork.ReceivingScope)))
         {
             scoped.Seen.Callers.Should().ContainSingle().Which.Should().NotBe(CurrentUserSnapshot.System).And.Match<CurrentUserSnapshot>(caller => caller.Kind == CurrentUserKind.SystemIn);
             (await scoped.InboxAsync()).Should().ContainSingle().Which.By.Should().Be(ExplicitCurrentUserPostgres.SystemInRole);
@@ -136,7 +136,7 @@ public sealed class HandlerUserTests(ExplicitCurrentUserPostgres postgres)
             sendToModules: false,
             configure: options => options.DispatchInProcess(async (services, events, cancellationToken) =>
             {
-                using (TestUser.BeginSystem())
+                using (TestAccess.BeginSystem())
                 {
                     await Stage(services, "saved by the handler");
                     await services.GetRequiredService<UserOutboxContext>().SaveChangesAsync(cancellationToken);

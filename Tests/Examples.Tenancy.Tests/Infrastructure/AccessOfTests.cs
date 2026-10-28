@@ -1,4 +1,4 @@
-global using static Examples.Tenancy.Tests.Infrastructure.CurrentUserOfTests;
+global using static Examples.Tenancy.Tests.Infrastructure.AccessOfTests;
 
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
@@ -6,13 +6,16 @@ using DDDToolkit.Access;
 namespace Examples.Tenancy.Tests.Infrastructure;
 
 /// <summary>
-/// The current user these tests begin work as, outside any service provider: <c>TestUser.BeginAs(id)</c>,
-/// <c>TestUser.BeginSystem()</c>. What it begins follows the flow of work, so every <see cref="ICurrentUser"/> sees it.
+/// The access manager these tests begin work with, outside any service provider: <c>TestAccess.BeginAs(id)</c>,
+/// <c>TestAccess.BeginSystem()</c>. What it begins follows the flow of work, so every <see cref="ICurrentUser"/> sees it.
 /// </summary>
-internal static class CurrentUserOfTests
+internal static class AccessOfTests
 {
-    /// <summary>The toolkit's current user, with no options and no source.</summary>
-    public static ICurrentUser TestUser { get; } = new CurrentUser();
+    /// <summary>The core's access manager, over the toolkit's current user with no options and no source.</summary>
+    public static AccessManager TestAccess { get; } = new(new CurrentUser());
+
+    /// <summary>The toolkit's current user, with no options and no source: what <see cref="TestAccess"/> answers.</summary>
+    public static ICurrentUser TestUser => TestAccess.CurrentUser;
 
     /// <summary>The user begun for the flow of work, or <see langword="null"/> where nothing is begun.</summary>
     public static CurrentUserSnapshot? BegunUser => TestUser.IsBegun ? TestUser.Snapshot : null;

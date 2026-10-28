@@ -1,4 +1,3 @@
-using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,7 +12,7 @@ namespace DDDToolkit.EntityFramework;
 internal static class ToolkitWork
 {
     /// <summary>Begins for the flow of work. What it begins does not depend on the instance.</summary>
-    private static readonly ICurrentUser Users = new CurrentUser();
+    private static readonly AccessManager Access = new(new CurrentUser());
 
     /// <summary>Whether the host requires every flow of work to say who it runs as.</summary>
     public static bool Required(IServiceProvider services)
@@ -25,8 +24,8 @@ internal static class ToolkitWork
     /// conversions, the upcasters and the transport sinks run inside it too, a host's own included: they are part of
     /// publishing a row, not handlers of it.
     /// </summary>
-    public static IDisposable? BeginBookkeeping(bool required) => required ? Users.BeginSystem() : null;
+    public static IDisposable? BeginBookkeeping(bool required) => required ? Access.BeginSystem() : null;
 
     /// <summary>Nobody begun around a handler the toolkit calls, when the host requires a begun user; otherwise nothing.</summary>
-    public static IDisposable? BeginHandler(bool required) => required ? Users.BeginNone() : null;
+    public static IDisposable? BeginHandler(bool required) => required ? Access.BeginNone() : null;
 }

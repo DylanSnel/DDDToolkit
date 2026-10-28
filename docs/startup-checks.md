@@ -261,7 +261,7 @@ public sealed class PostgresStartupCheck(IServiceProvider services) : IHostedSer
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        using var system = services.GetRequiredService<ICurrentUser>().BeginSystem();
+        using var system = services.GetRequiredService<AccessManager>().BeginSystem();
 
         await using (var scope = services.CreateAsyncScope())
         {

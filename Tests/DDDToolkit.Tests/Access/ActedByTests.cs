@@ -43,10 +43,10 @@ public class ActedByTests
         var accessor = new CurrentUserActedByAccessor();
 
         accessor.Current.Should().Be(new ActedBy(ActedByKinds.System, null), "outside any caller the application itself acts");
-        using (TestUser.BeginAs(Ada))
+        using (TestAccess.BeginAs(Ada))
         {
             accessor.Current.Should().Be(new ActedBy(ActedByKinds.User, Ada.ToString()));
-            using (TestUser.BeginSystem("projects"))
+            using (TestAccess.BeginSystem("projects"))
             {
                 accessor.Current.Should().Be(new ActedBy(ActedByKinds.System, "projects"));
             }
@@ -70,7 +70,7 @@ public class ActedByTests
         withHost.GetRequiredService<IActedByAccessor>().Current.Should().Be(new ActedBy(ActedByKinds.Anonymous, null), "where nothing is begun, the host's answer is who acts");
         without.GetRequiredService<IActedByAccessor>().Current.Should().Be(new ActedBy(ActedByKinds.System, null), "without a host, work that began nothing is system work");
 
-        using (TestUser.BeginAs(Ada))
+        using (TestAccess.BeginAs(Ada))
         {
             withHost.GetRequiredService<IActedByAccessor>().Current.Should().Be(new ActedBy(ActedByKinds.User, Ada.ToString()), "a user begun for the flow wins over the host's answer");
             without.GetRequiredService<IActedByAccessor>().Current.Should().Be(new ActedBy(ActedByKinds.User, Ada.ToString()));

@@ -764,16 +764,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   with the Supabase scheme, and `GetSupabaseUser()` of `DDDToolkit.Auth.Supabase.AzureFunctions` outside an HTTP
   trigger. The toolkit's own bookkeeping begins system work for itself: the outbox processor, retention and the
   receiver that pgmq, Wolverine and MassTransit deliver through. The handlers it calls run with nobody begun, inside
-  the new `user.BeginNone()`, until something begins a user for them. The outbox poller, `OutboxBackgroundService`,
+  the new `access.BeginNone()`, until something begins a user for them. The outbox poller, `OutboxBackgroundService`,
   begins system work before it resolves its processor, and with it its context. So whatever makes that context, such
   as a factory that chooses a data source by who is calling, sees the poller's rental as system work. An in-process
   handler that leaves changes unsaved on the outbox processor's context fails the message instead of having them
   saved with the mark as system work. The interceptor refuses system work without a scope unless code began it with
-  `user.BeginSystem()`, whichever source answered it. `PostgresRowLevelSecurityInterceptor.RequireExplicitCurrentUser`
+  `access.BeginSystem()`, whichever source answered it. `PostgresRowLevelSecurityInterceptor.RequireExplicitCurrentUser`
   says whether the interceptor the contexts use was built with the option, for a start-up check. Without the option
   nothing changes. See
   [Requiring an explicit current user](docs/row-level-security.md#requiring-an-explicit-current-user).
-- **Scoped system work.** `user.BeginSystem(scope)` begins system work inside a scope a module chose, such as its
+- **Scoped system work.** `access.BeginSystem(scope)` begins system work inside a scope a module chose, such as its
   name. It runs as `PostgresRowLevelSecurityOptions.SystemInRole`, `ddd_system_in`, with the claims
   `{"role":"ddd_system_in","scope":"…"}`, so a policy can ask whose work it is. Its kind is
   `CurrentUserKind.SystemIn`. `CurrentUserKind.System` is system work without a scope, which runs past the policies.
@@ -1375,7 +1375,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `access.CurrentTenant` says which tenant the work acts in, and the seat in it: `Id`, `Seat` and `IsAvailable`.
     `Require()` returns the tenant, the seat and whether the work is system work (`BySystem`). It refuses a caller who
     is nobody with the refusal that caller was given, such as `tenancy.not-seated`.
-  - `access.BeginSystem()` begins system work outside any tenant, for provisioning. `access.BeginSystemIn(tenant,
+  - `access.BeginSystem()` begins system work outside any tenant, for provisioning. It overrides the core's
+    `AccessManager.BeginSystem(scope)`, from which the access manager derives, and is always scoped. Where no scope is
+    given it begins Tenancy's own, `tenancy`. `access.BeginSystemIn(tenant,
     actingSeat, scope)` begins system work in one tenant. `access.BeginTokenIn(tenant, seat, scope)` begins system work
     that answers a link carrying a token a seat made. Each lasts until its `using` ends.
   - `access.TenantsToSweepAsync(scope, cancellationToken)` reads the ids of the active and the suspended tenants, for a
@@ -1902,9 +1904,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     work outside any tenant there.
   - Tenancy's own commands that only system work may call, provisioning a tenant and suspending, reactivating or
     closing one, refuse everyone else with `access.system-only`.
-  - Every name for system work in the C# API follows the core's `user.BeginSystem()`: `user.BeginSystem(scope)`,
-    `access.BeginSystem()`, `access.BeginSystemIn(...)`, and `TenancyWork.BeginSystem` and `TenancyWork.BeginSystemIn`
-    for code generic over the ids. The database roles `ddd_system` and `ddd_system_in` keep their names.
+  - Every name for system work in the C# API follows the core's `AccessManager.BeginSystem()`: `BeginSystem(scope)`,
+    Tenancy's `access.BeginSystem()` and `access.BeginSystemIn(...)`, and `TenancyWork.BeginSystem` and
+    `TenancyWork.BeginSystemIn` for code generic over the ids. The database roles `ddd_system` and `ddd_system_in` keep their names.
   - `services.AddTenancyAccess<TRequests, TContext>()`, in `DDDToolkit.Supporting.Tenancy.EntityFramework`, adds the
     checks that decide the cases to the checks of one module's request interface. It is generated closed over the
     application's four ids in the module that declares Tenancy's classes, and in a module with
@@ -2028,7 +2030,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a data source of one connection. Its messages for a read across tenants that finds no context to make, and for
   a start-up check on Postgres that finds no context with Tenancy's tables, name `AddScopedFromPool`.
 - `TenancyUsers.BeginNone()`: no Tenancy user until it is disposed, for a read that is no seat's and no
-  tenant's made in the middle of somebody's work, as `user.BeginNone()` is for the toolkit's current user.
+  tenant's made in the middle of somebody's work, as `access.BeginNone()` is for the toolkit's current user.
 - **Tenancy on Postgres**, in `DDDToolkit.Supporting.Tenancy.Postgres`. Tenancy's rules as row level security, under
   the tenant filter and the save check. `TenancyRowAccessContribution` is written into every application that
   references the package, from the catalogue the application marks `[TenancyCatalogue]`. It writes Tenancy's queries
@@ -2102,7 +2104,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Where the connection names no tenant](docs/tenancy/postgres.md#functions-that-take-the-tenant-as-an-argument).
 - **Tenancy on Postgres: the reads across tenants run without a bypass.** The few reads Tenancy makes before any
   tenant is known do not run as system work without a scope, past the policies. Where the database keeps the rights,
-  each runs as Tenancy's scoped system work, `user.BeginSystem(scope)`, in no tenant, where the policies show it
+  each runs as Tenancy's scoped system work, `BeginSystem(scope)`, in no tenant, where the policies show it
   no row. It asks a function that runs as its owner and returns ids or permissions only:
   - `role_permissions_in_use()`, which `TenancyChecks.UnknownStoredPermissionsAsync` asks, and
     `seats_of_identity(identity)` answer Tenancy's own scope alone;
@@ -2182,8 +2184,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   statement is sent. Which permission adds a member or gives a role is the application's to decide: it marks one of
   its own `ManagesMembers`, and the package has no rule about who gives what beyond it. The access manager says until when its caller holds that permission (`HoldAsync`, `MemberHold.Until`, no
   end for the owner and for system work), for a rule the application writes itself, such as that nobody gives a role
-  for longer than they hold the permission. System work without a scope (`user.BeginSystem()`) holds every permission.
-  System work in a scope (`user.BeginSystem(scope)`) holds every permission on a resource whose rules let that scope
+  for longer than they hold the permission. System work without a scope (`access.BeginSystem()`) holds every permission.
+  System work in a scope (`access.BeginSystem(scope)`) holds every permission on a resource whose rules let that scope
   through, the scope of
   the resource's own module unless `systemScopes` names others, and nothing on any other. Refusals carry the
   resource's own codes, in English and Dutch, and registering a resource offers the texts under them, so
@@ -3134,13 +3136,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 - **The current user is `ICurrentUser`.** Code that needs to know who it runs for takes `ICurrentUser` from dependency
   injection and asks it: `user.Id`, `user.IsAuthenticated`, `user.IsSystem`, `user.SystemScope`, `user.Role`,
-  `user.FindClaim(path)` and `user.Kind`. It reads the current flow of work each time it is asked. Work without a
-  request begins its user with an instance method, `using (user.BeginAs(userId))` for a user and
-  `using (user.BeginSystem(scope))` for system work. There is no static API to begin work. The toolkit registers its
-  `CurrentUser` as the `ICurrentUser`, a singleton, wherever it needs one: the access checks, Entity Framework, row
-  level
-  security, Supabase Auth, Tenancy and Membership. `services.AddCurrentUser()` registers it in any other host. A user
-  that code began wins over the host's answer. A host that knows its requests says who a request runs as with an
+  `user.FindClaim(path)` and `user.Kind`. It reads the current flow of work each time it is asked. It only answers.
+  Work without a request begins its user on the new `AccessManager`, which code takes from dependency injection.
+  `using (access.BeginAs(userId))` begins a user, `using (access.BeginSystem(scope))` system work, and
+  `access.BeginNone()` nobody. `access.CurrentUser` is the `ICurrentUser`. Beginning system work needs no user, and
+  the work does not run as the user who began it. There is no static API to begin work. The toolkit registers its
+  `CurrentUser` as the `ICurrentUser`, and `AccessManager` beside it, both singletons, wherever it needs them: the
+  access checks, Entity Framework, row level security, Supabase Auth, Tenancy and Membership.
+  `services.AddCurrentUser()` registers both in any other host. A user that code began wins over the host's answer. A host that knows its requests says who a request runs as with an
   `ICurrentUserSource`, as `AddSupabaseJwtBearer` does. `CurrentUserSnapshot` is the current user at one moment, for
   code that keeps the answer or passes it on: a host, row level security, a test. See
   [Running queries as the caller](docs/row-level-security.md#running-queries-as-the-caller).
@@ -3159,9 +3162,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       `AddSupabaseRowLevelSecurity<TAccessor>()`: `AddPostgresRowLevelSecurity<TSource>()` and
       `AddSupabaseRowLevelSecurity<TSource>()`, which register the source.
     - `AmbientCallerAccessor`: `CurrentUser`, which asks the host's source where nothing was begun.
-    - `Callers.Begin(Caller.User(id))`: `user.BeginAs(id)`. `Callers.Begin(Caller.System)`: `user.BeginSystem()`.
-      `Callers.Begin(Caller.SystemIn(scope))`: `user.BeginSystem(scope)`. `Callers.Begin(caller)`:
-      `user.BeginAs(snapshot)`. `Callers.BeginNone()`: `user.BeginNone()`.
+    - `Callers.Begin(Caller.User(id))`: `access.BeginAs(id)`, on the `AccessManager` code takes.
+      `Callers.Begin(Caller.System)`: `access.BeginSystem()`. `Callers.Begin(Caller.SystemIn(scope))`:
+      `access.BeginSystem(scope)`. `Callers.Begin(caller)`: `access.BeginAs(snapshot)`. `Callers.BeginNone()`:
+      `access.BeginNone()`. `ICurrentUser` only answers, and has no `Begin` method.
     - `Callers.Ambient`: `user.IsBegun`, and `user.Snapshot` for what was begun. `Callers.FromClaims(claims)`:
       `CurrentUserSnapshot.FromClaims(claims)`. `Callers.RequireSystemWork(callers)`: `user.RequireSystemWork()`.
     - A row access rule takes `ICurrentUser user` where it took `Caller caller`:
@@ -3179,10 +3183,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       `PostgresRowLevelSecurityOptions.StatementTimeouts` is keyed by `CurrentUserKind`.
     - `GetSupabaseCaller()`, of an `HttpContext` and of a `FunctionContext`: `GetSupabaseUser()`.
       `SupabaseTokenValidator.CallerOfAsync`: `UserOfAsync`. `SupabaseTokenValidation.Caller`: `User`.
-      `SupabaseAuthMiddleware` takes the `ICurrentUser` as well, and `UseSupabaseAuth()` registers it.
-    - Tenancy: `TenancyAccessManager.CurrentUser` is the core's `ICurrentUser`, and Tenancy's own `CurrentUser` class
-      is gone. `ITenantSelection.ResolveAsync`, `TenantSelection.SeatsOfAsync` and `TenancyOptions.IsOperator` take a
-      `CurrentUserSnapshot`. `TenantManager` and `InvitationManager` take an `ICurrentUser`. The start-up check
+      `SupabaseAuthMiddleware` takes the `AccessManager`, which begins the request's user, and `UseSupabaseAuth()`
+      registers it.
+    - Tenancy: `TenancyAccessManager` derives from the core's `AccessManager`, so a Tenancy application takes one
+      class. Its `CurrentUser` is the core's `ICurrentUser`, and Tenancy's own `CurrentUser` class is gone. Its
+      `BeginAs` and `BeginNone` are the core's and leave Tenancy's user as it is. Its `BeginSystem()` is
+      `BeginSystem(scope = null)`, which overrides the core's. It begins system work outside every tenant in
+      `scope`, Tenancy's own `tenancy` where none is given, so it never begins system work without a scope as the
+      core's does. `TenancyWork.BeginSystem<TTenantId, TSeatId>()` takes the same optional scope. The core's
+      `AccessManager` resolves in a Tenancy application too, a singleton for code without a scope, such as a host's
+      middleware. `ITenantSelection.ResolveAsync`, `TenantSelection.SeatsOfAsync` and `TenancyOptions.IsOperator`
+      take a `CurrentUserSnapshot`. `TenantManager` and `InvitationManager` take an `ICurrentUser`. The start-up check
       `tenancy.explicit-callers`, `TenancyPostgresChecks.ExplicitCallersCheck` and `EnsureExplicitCallers`:
       `tenancy.explicit-current-user`, `ExplicitCurrentUserCheck` and `EnsureExplicitCurrentUser`.
     - Membership: `ICallerMember.Find` and `Require`, `IPlacesReached.PlacesReached`, `IRolesWithPermission.RolesWith`
@@ -3232,12 +3243,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - **Breaking, for a host with an accessor of its own.** A user that code began always wins over the host's answer.
     An accessor of the host's own used to decide that itself, and one that did not ask `Callers.Ambient` answered the
     request's user inside `Callers.Begin(...)` as well. The toolkit's own accessors already let a begun user win.
-  - The samples follow. The Webshop's `CallersCustomer` is `CurrentCustomer`. Each sample has the access files the
+  - The samples follow. The Tenancy sample's `TenantHeader` and the shared `ModuleDatabase` begin their user on
+    `AccessManager`. The Webshop's `CallersCustomer` is `CurrentCustomer`. Each sample has the access files the
     export writes with the new names, and after them a migration written by hand that drops what the earlier files
     made under the old names: `*_current_user_names.sql` in `Examples/Tenancy/supabase/migrations` and in
     `Examples/ModularMonolith.Supabase/supabase/migrations`.
   - **Upgrading.** Rebuild, and rename as the list says. A handler that took `ICallerAccessor callers` takes
-    `ICurrentUser user` and reads `user.Id` where it read `callers.Current.UserId`. A rule changes its second parameter
+    `ICurrentUser user` and reads `user.Id` where it read `callers.Current.UserId`. Code that began work with
+    `Callers.Begin(...)` takes `AccessManager access` and calls `access.BeginAs(...)` or `access.BeginSystem(...)`. A
+    Tenancy application calls them on the `TenancyAccessManager` it takes. A rule changes its second parameter
     and its members. A host that turned off `tenancy.explicit-callers` by name turns off
     `tenancy.explicit-current-user`, and one that turned off `postgres.login-role-may-switch-to-callers` turns off
     `postgres.login-role-may-switch-to-user-roles`. A project that sets `SupabaseCallerFunctions` sets
@@ -3652,8 +3666,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `NoCurrentUserException` for every request sent through the checks, where a request of `TenancyAccess.InTenant()` or
     a
     permission of Tenancy's was refused with `tenancy.not-seated`, since Tenancy's check asks its own caller, and one of
-    `AccessRequirement.AllowAnonymous()` was let through. Begin the user in that work, `user.BeginAs(...)`,
-    `user.BeginSystem(...)` or a supporting domain's own way, as such a host requires everywhere else. A set of checks
+    `AccessRequirement.AllowAnonymous()` was let through. Begin the user in that work, `access.BeginAs(...)`,
+    `access.BeginSystem(...)` or a supporting domain's own way, as such a host requires everywhere else. A set of checks
     made by hand asks it of the `CurrentUserAccessCheck` it holds; one without it asks nobody.
   - `Checked<T>.KeepFor` called by the check of a case of a combination keeps nothing until the combination let the
     caller through, and `TakeFor` throws where the cases of one kept several of `T`, pointing at the new `TakeAllFor`.

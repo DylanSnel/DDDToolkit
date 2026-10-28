@@ -72,29 +72,31 @@ Some contexts need a different call:
 |---|---|---|
 | A signed-in user | `authenticated`, with the token's claims. When the token carries a role of its own, the role that its [token role](#token-roles) maps to. | the user's id |
 | A request without a user | `anon`, with the claims `{"role":"anon"}` | `null` |
-| System work inside a scope, `user.BeginSystem("projects")` | [`ddd_system_in`](#the-scoped-system-role), with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
+| System work inside a scope, `access.BeginSystem("projects")` | [`ddd_system_in`](#the-scoped-system-role), with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
 | No request, such as a hosted service of yours | `SystemRole`, or else the role the application logged in as. Where the host [requires an explicit current user](#requiring-an-explicit-current-user), there is no user and the work fails. The toolkit's pollers begin system work for their bookkeeping only. | `null` |
-| Code inside `using (user.BeginAs(userId))` | that user, whatever the request says | the user's id |
+| Code inside `using (access.BeginAs(userId))` | that user, whatever the request says | the user's id |
 
 The roles are PostgREST's by default. Change them with `AddPostgresRowLevelSecurity(options => ...)`.
 
-**The current user** is what `ICurrentUser` answers. Your code takes `ICurrentUser` from dependency injection. The
-toolkit's implementation, `CurrentUser`, answers in this order:
+**The current user** is what `ICurrentUser` answers. Your code takes `ICurrentUser` from dependency injection and asks
+it. Code that begins work takes `AccessManager` instead. Its `BeginAs`, `BeginSystem` and `BeginNone` begin a user for
+the flow of work, and its `CurrentUser` is the `ICurrentUser`. Every registration of the toolkit that needs them adds
+both, as singletons. The toolkit's implementation of `ICurrentUser`, `CurrentUser`, answers in this order:
 
-1. A user that code began for the flow of work, with `BeginAs` or `BeginSystem`. A begun user always wins.
-   `DDDToolkit.Auth.Supabase.AzureFunctions` begins the user of each HTTP-triggered invocation this way.
+1. A user that code began for the flow of work, with `BeginAs` or `BeginSystem` on `AccessManager`. A begun user always
+   wins. `DDDToolkit.Auth.Supabase.AzureFunctions` begins the user of each HTTP-triggered invocation this way.
 2. The host's `ICurrentUserSource`, which answers the request's user. `AddSupabaseJwtBearer` from
    `DDDToolkit.Auth.Supabase.AspNetCore` registers one that reads the user from the request. A host with another way
    to know its users registers its own with `AddPostgresRowLevelSecurity<TSource>()`.
 3. Otherwise, system work. A worker service or a test needs this.
 
 What `ICurrentUser` answers at one moment is a `CurrentUserSnapshot`. A snapshot comes from the claims of a validated
-token, with `CurrentUserSnapshot.FromClaims(claims)`. You begin a user in code by id, with `user.BeginAs(id)`. For a
+token, with `CurrentUserSnapshot.FromClaims(claims)`. You begin a user in code by id, with `access.BeginAs(id)`. For a
 user begun by id, the database sees the id and the role `authenticated`, and no other claims.
 
 ```csharp
 // a job queued on a user's behalf, with the claims of the token that queued it
-using (user.BeginAs(CurrentUserSnapshot.FromClaims(job.Claims)))
+using (access.BeginAs(CurrentUserSnapshot.FromClaims(job.Claims)))
 {
     await handler.HandleAsync(job, cancellationToken);
 }
@@ -102,7 +104,7 @@ using (user.BeginAs(CurrentUserSnapshot.FromClaims(job.Claims)))
 
 A begun user flows across `await` and `Task.Run`, as an `AsyncLocal` does. A user begun in code wins over the
 request's user. This also works the other way. A step that a request takes on the application's behalf starts
-`user.BeginSystem()`.
+`access.BeginSystem()`.
 
 **Background work** runs as `SystemRole`. When `SystemRole` is not set, background work runs as the role the
 application logged in as. That role is usually the owner, and the owner sees every row. To keep the application from
@@ -305,7 +307,7 @@ With this line:
   Supabase source for ASP.NET Core knows no user outside a request, and `GetSupabaseUser()` in Azure Functions throws
   outside an HTTP trigger.
 - The interceptor refuses system work without a scope when your own `ICurrentUserSource` returns it. Such work runs
-  only inside `user.BeginSystem()`.
+  only inside `access.BeginSystem()`.
 - A request still has its user: the signed-in user, or `anon`.
 
 The toolkit's own work begins its user. Reading, marking and deleting outbox rows, receiving from a transport,
@@ -335,7 +337,7 @@ scoped system work that the module's policies hold, or, chosen on purpose, syste
 
 ```csharp
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
-    .Around((services, message, contract) => services.GetRequiredService<ICurrentUser>().BeginSystem("shipping"))
+    .Around((services, message, contract) => services.GetRequiredService<AccessManager>().BeginSystem("shipping"))
     .Handle<OrderPlacedV1, BookShipment>());
 
 // or, where the handlers may see every row:
@@ -346,7 +348,7 @@ services.AddModuleIntegrationEvents<ShippingContext>(module => module
 
 Middleware that begins a user and forgets to end it leaks that user into the next request. The leaked user wins over
 the request's user. `context.GetSupabaseUser()` returns the request's own user, whatever was begun. So a host can make
-that user current at the start of every request: `using (user.BeginAs(context.GetSupabaseUser()))`.
+that user current at the start of every request: `using (access.BeginAs(context.GetSupabaseUser()))`.
 
 ### Token roles
 
@@ -1067,7 +1069,7 @@ are not defaults. The rule would look like a restriction and restrict nothing.
 ### The scoped system role
 
 `RowAccessRoles.SystemIn` is the role that system work runs as when the work must stay inside the policies. That
-work is scoped system work, begun with `user.BeginSystem(scope)`. The role is `ddd_system_in` unless you configure another
+work is scoped system work, begun with `access.BeginSystem(scope)`. The role is `ddd_system_in` unless you configure another
 role.
 
 - The role cannot log in, and cannot bypass RLS. So it reads and writes only the rows that its

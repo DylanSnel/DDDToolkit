@@ -327,7 +327,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         accessor.Should().BeOfType<TenancyActedByAccessor>("AddTenancy puts it around the toolkit's own");
         _services.Provider.GetServices<IActedByAccessor>().Should().ContainSingle();
 
-        using (TestUser.BeginAs(identity))
+        using (TestAccess.BeginAs(identity))
         {
             accessor.Current.Should().Be(new ActedBy("user", identity.ToString("D")), "without a Tenancy user the toolkit's own answer stands");
 

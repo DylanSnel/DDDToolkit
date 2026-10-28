@@ -261,7 +261,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
 
         var provider = services.BuildServiceProvider();
         await using (var scope = provider.CreateAsyncScope())
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             await scope.ServiceProvider.GetRequiredService<PgmqContext>().Database.EnsureCreatedAsync(Cancellation);
         }

@@ -8,7 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// Who acts and in which tenant, and the work that is not the caller's own. Your code takes it as
+/// Who acts and in which tenant, and the work that is not the caller's own. It is the core's <see cref="AccessManager"/>
+/// with the tenant's members besides, so a Tenancy application takes this one thing. Your code takes it as
 /// <c>TenancyAccessManager</c>, a class the generator writes, closed over your ids:
 /// <code>
 /// public sealed class AddMemberHandler(IBoardRepository boards, TenancyAccessManager access) : ICommandHandler&lt;AddMember&gt;
@@ -28,14 +29,15 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// classes, and <c>AddTenancyAccess</c> the class of the module it is called for. Both register it per scope.
 /// </para>
 /// <para>
-/// It keeps no state of its own. <see cref="CurrentUser"/> and <see cref="CurrentTenant"/> read the current flow of work
-/// each time they are asked, so they follow every <c>Begin</c> made after the manager was handed out.
+/// It keeps no state of its own. <see cref="AccessManager.CurrentUser"/> and <see cref="CurrentTenant"/> read the current
+/// flow of work each time they are asked, so they follow every <c>Begin</c> made after the manager was handed out.
 /// </para>
 /// <para>
-/// Each <c>Begin</c> method starts work that is not the caller's own, for one <c>using</c>. It begins the tenant the work
-/// acts in and the kind of work together: the kind decides how the work is recorded, and which database role it runs as.
-/// When the result is disposed, the user before it is current again. Begin as narrow as possible: around the one call
-/// that needs it.
+/// <see cref="BeginSystem"/>, <see cref="BeginSystemIn"/> and <see cref="BeginTokenIn"/> each start work that is not the
+/// caller's own, for one <c>using</c>. Each begins the tenant the work acts in, or none, and the kind of work together:
+/// the kind decides how the work is recorded, and which database role it runs as. When the result is disposed, the user before it is current again.
+/// Begin as narrow as possible: around the one call that needs it. <see cref="AccessManager.BeginAs(Guid)"/>, with a
+/// user's id or a snapshot, and <see cref="AccessManager.BeginNone"/> are the core's, and leave the tenant as it is.
 /// </para>
 /// <para>
 /// Tenancy's queries for the current caller come from the context you query: <c>db.Tenancy()</c>, which
@@ -51,7 +53,7 @@ public class TenancyAccessManager<
     [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
     [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
     [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
-    [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId>
+    [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId> : AccessManager
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -65,36 +67,21 @@ public class TenancyAccessManager<
     /// <param name="catalogue">The catalogue every permission asked about is checked against.</param>
     /// <param name="clock">What "now" is, for whether a grant applies.</param>
     /// <param name="services">
-    /// The services of the scope: where <see cref="CurrentUser"/> comes from, the application's
+    /// The services of the scope: where <see cref="AccessManager.CurrentUser"/> comes from, the application's
     /// <see cref="ICurrentUser"/>, and the storage package's read of the tenants to visit.
     /// </param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     public TenancyAccessManager(TenancyCatalogue catalogue, TimeProvider clock, IServiceProvider services)
+        : base(CurrentUserOf(services))
     {
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(clock);
-        ArgumentNullException.ThrowIfNull(services);
 
         _catalogue = catalogue;
         _clock = clock;
         _services = services;
-        CurrentUser = services.GetService<ICurrentUser>()
-            ?? new DDDToolkit.Access.CurrentUser(services.GetService<CurrentUserOptions>(), services.GetService<ICurrentUserSource>());
         CurrentTenant = new CurrentTenant<TTenantId, TSeatId>();
     }
-
-    /// <summary>
-    /// Who acts: a signed-in user, somebody who has not signed in, or system work. It is the toolkit's
-    /// <see cref="ICurrentUser"/>, the one code takes from dependency injection, and it reads the current flow of work
-    /// each time it is asked. So inside <see cref="BeginSystem"/> it answers system work, and after the <c>using</c>
-    /// the user again.
-    /// </summary>
-    /// <example>
-    /// <code>
-    /// var identity = access.CurrentUser.Id;   // null for system work and for somebody who has not signed in
-    /// </code>
-    /// </example>
-    public ICurrentUser CurrentUser { get; }
 
     /// <summary>
     /// The tenant the current work acts in, and the seat in it. It reads the current flow of work each time it is
@@ -108,18 +95,28 @@ public class TenancyAccessManager<
     public CurrentTenant<TTenantId, TSeatId> CurrentTenant { get; }
 
     /// <summary>
-    /// Begins system work outside any tenant, for provisioning a tenant: when no tenant exists yet, so there is no
-    /// tenant to begin in and no seat whose rights could do it. Only provisioning accepts it. The work reads nothing
-    /// inside a tenant, and is recorded as the system. It ends when the result is disposed.
+    /// Begins system work outside any tenant, always in a scope, Tenancy's own <c>tenancy</c> where none is given. It
+    /// is for provisioning a tenant, when no tenant exists yet, so there is no tenant to begin in and no seat whose
+    /// rights could do it. Of Tenancy's managers, only provisioning accepts it. The work reads nothing inside a tenant,
+    /// and is recorded as the system in its scope. It ends when the result is disposed.
     /// </summary>
     /// <remarks>
-    /// It does what <see cref="TenancyWork.BeginSystem{TTenantId, TSeatId}"/> does. On Postgres the work runs as the
-    /// toolkit's scoped system work in the scope <c>tenancy</c>. Under Tenancy's policies that work reads and writes
-    /// nothing until provisioning narrows it to the tenant it makes.
+    /// It is the core's <see cref="AccessManager.BeginSystem"/> with Tenancy's user besides, system work outside every
+    /// tenant. It does what <see cref="TenancyWork.BeginSystem{TTenantId, TSeatId}"/> does. Without a scope the core
+    /// begins system work that row level security lets past every policy. This one begins Tenancy's scope instead, so
+    /// system work begun on it stays under the policies. On Postgres the work runs as the toolkit's scoped system work.
+    /// Under Tenancy's policies, work in the scope <c>tenancy</c> reads and writes nothing until provisioning narrows it
+    /// to the tenant it makes. A module's own work outside every tenant passes the module's name.
     /// </remarks>
+    /// <param name="scope">
+    /// The scope of the work: lower case letters, digits, <c>_</c> and <c>-</c>. <see langword="null"/> for Tenancy's
+    /// own, the one provisioning writes Tenancy's tables in.
+    /// </param>
     /// <returns>The work, which ends when it is disposed. The user before it is current again then.</returns>
+    /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is begun then.</exception>
     /// <example>
-    /// Read the signed-in user's id before the work begins: inside it, <see cref="CurrentUser"/> reports system work and has no id.
+    /// Read the signed-in user's id before the work begins. Inside it, <see cref="AccessManager.CurrentUser"/> reports
+    /// system work and has no id.
     /// <code>
     /// var ada = access.CurrentUser.Id ?? throw new InvalidOperationException("[SignedIn] lets only a signed-in user through.");
     /// using (access.BeginSystem())
@@ -130,7 +127,8 @@ public class TenancyAccessManager<
     /// }
     /// </code>
     /// </example>
-    public IDisposable BeginSystem() => TenancyWork.BeginSystem<TTenantId, TSeatId>();
+    public override IDisposable BeginSystem(string? scope = null)
+        => TenancyWork.BeginSystem<TTenantId, TSeatId>(scope ?? TenancyWork.SystemScope);
 
     /// <summary>
     /// Begins system work inside one tenant: seeding, an import, a job per tenant, or a right your code grants after a
@@ -266,5 +264,14 @@ public class TenancyAccessManager<
             _catalogue,
             TenancyUsers.Current<TTenantId, TSeatId>(),
             _clock.GetUtcNow());
+    }
+
+    /// <summary>The application's current user, or the toolkit's over the host's options and source where none is registered.</summary>
+    private static ICurrentUser CurrentUserOf(IServiceProvider services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services.GetService<ICurrentUser>()
+            ?? new DDDToolkit.Access.CurrentUser(services.GetService<CurrentUserOptions>(), services.GetService<ICurrentUserSource>());
     }
 }

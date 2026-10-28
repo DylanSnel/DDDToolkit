@@ -114,9 +114,9 @@ public class CurrentUserRequirementTests
         var anyone = new Checkout(AccessRequirement.AllowAnonymous());
         var signedIn = new Checkout(AccessRequirement.SignedIn());
 
-        using (TestUser.BeginAs(Signed))
+        using (TestAccess.BeginAs(Signed))
         {
-            using (TestUser.BeginSystem())
+            using (TestAccess.BeginSystem())
             {
                 await Checks(scope).RequireAsync(anyone, TestContext.Current.CancellationToken);
                 (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(signedIn, TestContext.Current.CancellationToken).AsTask())
@@ -211,12 +211,12 @@ public class CurrentUserRequirementTests
         using var scope = provider.CreateScope();
         var signedIn = new Checkout(AccessRequirement.SignedIn());
 
-        using (TestUser.BeginAs(Signed))
+        using (TestAccess.BeginAs(Signed))
         {
             await Checks(scope).RequireAsync(signedIn, TestContext.Current.CancellationToken);
         }
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(signedIn, TestContext.Current.CancellationToken).AsTask())
                 .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.NotSignedIn);
@@ -237,7 +237,7 @@ public class CurrentUserRequirementTests
         await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new Checkout(AccessRequirement.SignedIn()), TestContext.Current.CancellationToken).AsTask())
             .Should().ThrowAsync<NoCurrentUserException>("such work is a mistake to fix, not a caller to refuse or to let through");
 
-        using (TestUser.BeginAs(Signed))
+        using (TestAccess.BeginAs(Signed))
         {
             await Checks(scope).RequireAsync(new Checkout(AccessRequirement.SignedIn()), TestContext.Current.CancellationToken);
         }
@@ -291,7 +291,7 @@ public class CurrentUserRequirementTests
         var user = new CurrentUser();
 
         // The user is begun for the flow of work, as trusted code begins system work, and the current user answers it.
-        using var begun = TestUser.BeginAs(CallerOf(kind));
+        using var begun = TestAccess.BeginAs(CallerOf(kind));
         var require = () => user.RequireSystemWork();
 
         if (system)
@@ -312,20 +312,21 @@ public class CurrentUserRequirementTests
         // A host that requires nothing answers system work for work that began no user: a web request no source knows
         // gets that answer too, so asking the current user alone would let it through.
         var user = new CurrentUser();
+        var access = new AccessManager(user);
         user.Snapshot.Should().Be(CurrentUserSnapshot.System, "that is the 3.x default, which this test is about");
         RefusedAsSystemOnly(() => user.RequireSystemWork(), "nothing began a user for the flow");
 
-        using (user.BeginSystem())
+        using (access.BeginSystem())
         {
             user.RequireSystemWork().Should().BeSameAs(CurrentUserSnapshot.System);
 
-            using (user.BeginNone())
+            using (access.BeginNone())
             {
                 RefusedAsSystemOnly(() => user.RequireSystemWork(), "the toolkit hid the system work from the handler it runs");
             }
         }
 
-        using (user.BeginSystem("billing"))
+        using (access.BeginSystem("billing"))
         {
             user.RequireSystemWork().SystemScope.Should().Be("billing", "it answers the scope the work runs in");
         }
@@ -334,7 +335,7 @@ public class CurrentUserRequirementTests
         RefusedAsSystemOnly(() => new CurrentUser(source: new Answering(CurrentUserSnapshot.System)).RequireSystemWork(), "the host's answer is a default, not work anybody began");
 
         // System work begun beside a host that answers somebody else is system work: a begun user wins over the host's answer.
-        using (user.BeginSystem())
+        using (access.BeginSystem())
         {
             new CurrentUser(source: new Answering(Signed)).RequireSystemWork().Should().BeSameAs(CurrentUserSnapshot.System, "a begun user wins over the host's answer");
         }

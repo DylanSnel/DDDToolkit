@@ -44,11 +44,11 @@ flowchart LR
 [AllowAnonymous]                                                                // who may send it: anyone
 public sealed record RequestQuote(string Email, string Product) : IBillingRequest;
 
-public sealed class RequestQuoteHandler(ICurrentUser user, IQuoteStore quotes) : IHandler<RequestQuote>
+public sealed class RequestQuoteHandler(AccessManager access, IQuoteStore quotes) : IHandler<RequestQuote>
 {
     public async Task HandleAsync(RequestQuote command, CancellationToken cancellationToken)
     {
-        using (user.BeginSystem("billing"))                                       // which caller: system work, started here
+        using (access.BeginSystem("billing"))                                     // which caller: system work, started here
         {
             await quotes.AddAsync(command.Email, command.Product, cancellationToken);   // which rows: billing's policies
         }
@@ -1100,12 +1100,14 @@ alternatives for each row:
 A requirement says who may send a request. It says nothing about the user the work then runs as. System work is not
 a requirement. It is a scope that trusted code starts explicitly around the work, with one of these calls:
 
-- `user.BeginSystem()` on `ICurrentUser`, system work without a scope;
-- `user.BeginSystem(scope)`, system work in a module's scope;
-- a call of a supporting domain, such as `access.BeginSystem()` and `access.BeginSystemIn(tenant)` on Tenancy's
-  `TenancyAccessManager`.
+- `access.BeginSystem()` on the core's `AccessManager`, system work without a scope;
+- `access.BeginSystem(scope)`, system work in a module's scope;
+- a call of a supporting domain's access manager, which derives from `AccessManager`, such as `access.BeginSystem()`
+  and `access.BeginSystemIn(tenant)` on Tenancy's `TenancyAccessManager`.
 
-When the result is disposed, the previous user is current again.
+When the result is disposed, the previous user is current again. `ICurrentUser` only answers who the work runs as. It
+begins nothing. Tenancy's `BeginSystem()` begins system work outside every tenant in Tenancy's scope, never system work
+without a scope.
 
 The pipeline begins one kind of system work itself: the operator work of a command marked `[Operator]`
 ([An operator's request](#an-operators-request)). The operator sends a request, and the access check lets only an
@@ -1184,7 +1186,7 @@ public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessMan
     }
 }
 
-// A module without Tenancy: an import a job sends inside user.BeginSystem()
+// A module without Tenancy: an import a job sends inside access.BeginSystem()
 [AllowAnonymous]                                                              // system work is nobody's sign-in
 public sealed record ImportPrices(string File) : ICommand, IBillingRequest;
 
@@ -1414,7 +1416,7 @@ await handler.HandleAsync(command, cancellationToken);    // and here, down to t
 // RequestInHand.Current.Request is command; Checked<T>.TryFindInHand(out var kept) finds what its check kept
 ```
 
-- **It follows the flow of work, as a user begun with `user.BeginAs` does.** It flows into what the method runs after
+- **It follows the flow of work, as a user begun with `access.BeginAs` does.** It flows into what the method runs after
   the checks, and into tasks started there. It does not flow back out. Once the method that asked returns, its caller
   has nothing in hand. So two requests sent side by side each have their own request in hand. A request sent from
   inside the handling of another request, through its own sender, is in hand for its own handling. The outer request

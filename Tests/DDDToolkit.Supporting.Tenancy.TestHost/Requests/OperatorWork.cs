@@ -79,7 +79,7 @@ public static class OperatorWork
         var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IHostRequest>>();
         var command = new OperatorCommand(requirement);
 
-        using (user.BeginAs(CurrentUserSnapshot.User(identity, TokenRole)))
+        using (new AccessManager(user).BeginAs(CurrentUserSnapshot.User(identity, TokenRole)))
         {
             await checks.RequireAsync(command);
             using (checks.BeginWork(command, isQuery: false))

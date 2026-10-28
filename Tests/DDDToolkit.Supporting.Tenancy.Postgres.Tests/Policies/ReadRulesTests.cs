@@ -116,7 +116,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database);
         foreach (var (slug, seat) in new[] { ("harbor", Oli.Seat), ("orchard", OliInOrchard) })
         {
-            using (TestUser.BeginAs(Oli.Identity))
+            using (TestAccess.BeginAs(Oli.Identity))
             {
                 (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(Oli.Identity), slug, Cancellation)))
                     .Seat.Should().Be(seat);

@@ -52,7 +52,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
 
                 for (var round = 0; round < Rounds; round++)
                 {
-                    using (TestUser.BeginAs(PooledNotesHost.User(id, team)))
+                    using (TestAccess.BeginAs(PooledNotesHost.User(id, team)))
                     {
                         await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
                         instances.TryAdd(context, true);
@@ -81,7 +81,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
 
         async Task<string> AsAsync(CurrentUserSnapshot caller)
         {
-            using (TestUser.BeginAs(caller))
+            using (TestAccess.BeginAs(caller))
             {
                 await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
                 first ??= context;
@@ -106,7 +106,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
 
         NotesContext first;
         NpgsqlConnection connection;
-        using (TestUser.BeginAs(PooledNotesHost.User(Alice, "amber")))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Alice, "amber")))
         {
             first = await host.Factory.CreateDbContextAsync(Cancellation);
             await first.Database.OpenConnectionAsync(Cancellation);
@@ -118,7 +118,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
             await first.DisposeAsync();
         }
 
-        using (TestUser.BeginAs(PooledNotesHost.User(Bob)))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Bob)))
         {
             await using var next = await host.Factory.CreateDbContextAsync(Cancellation);
             next.Should().BeSameAs(first);
@@ -141,7 +141,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
         var id = Guid.CreateVersion7();
 
         NotesContext first;
-        using (TestUser.BeginAs(PooledNotesHost.User(Alice)))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Alice)))
         {
             first = await host.Factory.CreateDbContextAsync(Cancellation);
             await first.Database.BeginTransactionAsync(Cancellation);
@@ -153,7 +153,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
             await first.DisposeAsync();
         }
 
-        using (TestUser.BeginAs(PooledNotesHost.User(Bob)))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Bob)))
         {
             await using var next = await host.Factory.CreateDbContextAsync(Cancellation);
             next.Should().BeSameAs(first);
@@ -179,7 +179,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
 
         string backend;
         NotesContext first;
-        using (TestUser.BeginAs(PooledNotesHost.User(Alice, "amber")))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Alice, "amber")))
         {
             await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
             first = context;
@@ -187,7 +187,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
             backend = await BackendAsync(context);
         }
 
-        using (TestUser.BeginAs(PooledNotesHost.User(Bob)))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Bob)))
         {
             await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
             context.Should().BeSameAs(first);
@@ -195,7 +195,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
             (await BackendAsync(context)).Should().Be(backend, "on the very same server connection");
         }
 
-        using (TestUser.BeginAs(PooledNotesHost.User(Alice, "teal")))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Alice, "teal")))
         {
             await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
             (await PooledNotesHost.WhoAsync(context, cancellationToken: Cancellation)).Should().Be($"{Alice}|authenticated|teal");
@@ -218,7 +218,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
         await using var host = new PooledNotesHost(database.ApplicationConnectionString);
 
         NotesContext first;
-        using (TestUser.BeginAs(PooledNotesHost.User(Alice)))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Alice)))
         {
             await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
             first = context;
@@ -226,7 +226,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
             await context.SaveChangesAsync(Cancellation);
         }
 
-        using (TestUser.BeginAs(PooledNotesHost.User(Bob)))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Bob)))
         {
             await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
             context.Should().BeSameAs(first);
@@ -240,7 +240,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
         (await OwnersAsync()).Should().BeEquivalentTo(new Dictionary<string, Guid?> { ["Alice's"] = Alice, ["Bob's"] = Bob });
 
         // The whole pipeline is there on the pooled context: a row the policy denies is answered with a code.
-        using (TestUser.BeginAs(PooledNotesHost.User(Bob)))
+        using (TestAccess.BeginAs(PooledNotesHost.User(Bob)))
         {
             await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
             context.Notes.Add(new PrivateNote { Id = Guid.CreateVersion7(), Text = "Alice's, says Bob", Owner = Alice });

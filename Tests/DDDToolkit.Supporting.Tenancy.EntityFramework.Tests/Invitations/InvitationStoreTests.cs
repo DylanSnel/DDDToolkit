@@ -146,7 +146,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         DbContext? acceptors = null;
         await using (var scope = _services.Scope())
-        using (TestUser.BeginAs(Wren))
+        using (TestAccess.BeginAs(Wren))
         using (TenancyUsers.BeginNone())
         {
             acceptors = scope.ServiceProvider.TenancyContext();
@@ -214,7 +214,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         // Wren's acceptance has decided, and is about to save, when somebody else's commits.
         await using (var scope = _services.Scope())
-        using (TestUser.BeginAs(Wren))
+        using (TestAccess.BeginAs(Wren))
         using (TenancyUsers.BeginNone())
         {
             _services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => _services.AcceptAsync(other, issued.Token, displayName: "Lark"));

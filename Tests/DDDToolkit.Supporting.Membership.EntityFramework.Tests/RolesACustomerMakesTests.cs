@@ -390,7 +390,7 @@ public sealed class RolesACustomerMakesTests
 
         // What the admission asks about the roles is read on a context of the factory's, under the host's rule
         // all the same: the garden a request is in is not kept in a context.
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         using (GardenOfTheRequest.Begin(data.Meadow))
         {
             await using var scope = provider.CreateAsyncScope();
@@ -402,7 +402,7 @@ public sealed class RolesACustomerMakesTests
         }
 
         // And so is what a gardener holds through a role.
-        using (TestUser.BeginAs(data.Eve.Caller))
+        using (TestAccess.BeginAs(data.Eve.Caller))
         using (GardenOfTheRequest.Begin(data.Meadow))
         {
             await using var scope = provider.CreateAsyncScope();
@@ -438,7 +438,7 @@ public sealed class RolesACustomerMakesTests
             await seeding.SaveChangesAsync(Cancellation);
         }
 
-        using (TestUser.BeginAs(data.Di.Caller))
+        using (TestAccess.BeginAs(data.Di.Caller))
         {
             await using var scope = provider.CreateAsyncScope();
             scope.ServiceProvider.GetRequiredService<GardenContext>().GardenOfThisRequest = data.Meadow;
@@ -457,7 +457,7 @@ public sealed class RolesACustomerMakesTests
         }
 
         // A role of the meadow's gives what it holds, read the same way.
-        using (TestUser.BeginAs(data.Eve.Caller))
+        using (TestAccess.BeginAs(data.Eve.Caller))
         {
             await using var scope = provider.CreateAsyncScope();
             scope.ServiceProvider.GetRequiredService<GardenContext>().GardenOfThisRequest = data.Meadow;
@@ -744,7 +744,7 @@ public sealed class RolesACustomerMakesTests
         services.AddMembership<PlotGardener, PlotGardenerId, UserId, PlotRoleId, GardensWithWardens, Plot, PlotId, Wardens>(rules);
         await using var provider = services.BuildServiceProvider();
 
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             await using var seeding = provider.CreateAsyncScope();
             var context = seeding.ServiceProvider.GetRequiredService<GardensWithWardens>();
@@ -762,7 +762,7 @@ public sealed class RolesACustomerMakesTests
 
         async Task<MemberHold<PlotId>?> HoldAsync(UserId user, PlotId plot, string permission)
         {
-            using (TestUser.BeginAs(TestUsers.User(user)))
+            using (TestAccess.BeginAs(TestUsers.User(user)))
             {
                 await using var scope = provider.CreateAsyncScope();
                 commands.Reset();

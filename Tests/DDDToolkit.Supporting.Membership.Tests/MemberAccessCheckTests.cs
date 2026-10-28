@@ -191,7 +191,7 @@ public sealed class MemberAccessCheckTests
         var query = new ListDocuments();
 
         RefusalException refused;
-        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             refused = await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => DocumentCheck(access, new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation).AsTask());
         }
@@ -200,14 +200,14 @@ public sealed class MemberAccessCheckTests
         access.Asked.Should().Equal(["caller"], "the caller's own refusal comes first, and nothing is read");
 
         // A signed-in caller who reaches nothing is let through: its empty list is an answer.
-        using (TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
         {
             await DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules), new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation);
         }
 
         // And the caller's own refusal, where the questions have one, is what a caller who is nobody hears first.
         var nobody = new RefusalException("host.not-signed-in", RefusalKind.NotPermitted, "Sign in first.");
-        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             (await FluentActions.Awaiting(() => DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { Nobody = nobody }, new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation).AsTask())
                 .Should().ThrowAsync<RefusalException>()).Which.Should().BeSameAs(nobody);

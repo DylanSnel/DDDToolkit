@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Membership.Managers;
 /// scope, for the request in hand whose check read the resource, when the unit of work holds nothing else.
 /// <para>
 /// Optional. Without one the manager begins system work in that scope for the current user,
-/// <c>user.BeginSystem(scope)</c>. The join with an organization's package registers one that begins it in the caller's
+/// <c>access.BeginSystem(scope)</c> on the core's <c>AccessManager</c>. The join with an organization's package registers one that begins it in the caller's
 /// organization, for the caller's seat.
 /// </para>
 /// </summary>

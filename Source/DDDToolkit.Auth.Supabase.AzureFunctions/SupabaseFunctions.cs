@@ -24,7 +24,7 @@ public static class SupabaseFunctions
     /// <summary>
     /// Adds <see cref="SupabaseAuthMiddleware"/> to the worker's pipeline: every HTTP-triggered function
     /// runs as the user its request's Supabase access token names. Needs <c>services.AddSupabaseAuth(projectUrl)</c>.
-    /// It registers <see cref="ICurrentUser"/> as well, unless one is registered already.
+    /// It registers <see cref="ICurrentUser"/> and <see cref="AccessManager"/> as well, unless they are registered already.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is null.</exception>
     public static IFunctionsWorkerApplicationBuilder UseSupabaseAuth(this IFunctionsWorkerApplicationBuilder builder)
@@ -67,7 +67,7 @@ public static class SupabaseFunctions
         return options is { RequireExplicitCurrentUser: true }
             ? throw new NoCurrentUserException(
                 "This invocation is not an HTTP request and began no user, and this host requires one (RequireExplicitCurrentUser). " +
-                "Begin a user in the function with ICurrentUser: BeginSystem() for system work, or BeginAs(userId) for the user a queued message names.")
+                "Begin a user in the function with AccessManager: BeginSystem() for system work, or BeginAs(userId) for the user a queued message names.")
             : CurrentUserSnapshot.System;
     }
 }

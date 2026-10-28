@@ -4,12 +4,13 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace DDDToolkit.Access;
 
-/// <summary>Registration of <see cref="ICurrentUser"/>, and of what the host requires of it.</summary>
+/// <summary>Registration of <see cref="ICurrentUser"/> and <see cref="AccessManager"/>, and of what the host requires of them.</summary>
 public static class CurrentUserServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers <see cref="CurrentUser"/> as the application's <see cref="ICurrentUser"/>, a singleton, unless one is
-    /// registered already. Every registration of the toolkit that needs it calls this, so a host rarely does.
+    /// Registers <see cref="CurrentUser"/> as the application's <see cref="ICurrentUser"/>, and <see cref="AccessManager"/>
+    /// over it, both singletons, unless one is registered already. Every registration of the toolkit that needs them calls
+    /// this, so a host rarely does.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     public static IServiceCollection AddCurrentUser(this IServiceCollection services)
@@ -17,6 +18,7 @@ public static class CurrentUserServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton<ICurrentUser, CurrentUser>();
+        services.TryAddSingleton<AccessManager>();
         return services;
     }
 
@@ -29,7 +31,7 @@ public static class CurrentUserServiceCollectionExtensions
     /// <code>
     /// builder.Services.RequireExplicitCurrentUser();
     /// builder.Services.AddModuleIntegrationEvents&lt;ShippingContext&gt;(module => module
-    ///     .Around((services, message, contract) => services.GetRequiredService&lt;ICurrentUser&gt;().BeginSystem("shipping"))
+    ///     .Around((services, message, contract) => services.GetRequiredService&lt;AccessManager&gt;().BeginSystem("shipping"))
     ///     .Handle&lt;OrderPlacedV1, BookShipment&gt;());
     /// </code>
     /// Calling it more than once is harmless.

@@ -301,7 +301,7 @@ public class TenantSelectionTests
         }
 
         var ada = CurrentUserSnapshot.User(Ada);
-        using (TestUser.BeginAs(ada))
+        using (TestAccess.BeginAs(ada))
         {
             using (TenancyWork.BeginSystemIn(Harbor, (SeatId?)AdaAtHarbor))
             {

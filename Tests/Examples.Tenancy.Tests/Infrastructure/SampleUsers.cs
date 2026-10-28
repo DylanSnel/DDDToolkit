@@ -28,7 +28,7 @@ public static class SampleUsers
         ArgumentNullException.ThrowIfNull(person);
         ArgumentNullException.ThrowIfNull(tenant);
 
-        var user = TestUser.BeginAs(person.Id);
+        var user = TestAccess.BeginAs(person.Id);
         try
         {
             return new Both(user, TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(tenant.Id, tenant.SeatOf(person))));

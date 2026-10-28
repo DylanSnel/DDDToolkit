@@ -134,7 +134,6 @@ internal static class TenancySystemReads
                 "'" + like.GetType().Name + "' was not made by the application's services, and a read across tenants needs them: it runs on a context "
                 + "of its own, never on the caller's. Register the context with AddDbContext<" + like.GetType().Name + ">, or with a context pool and services.AddScopedFromPool<"
                 + like.GetType().Name + ">(), and resolve it from a scope.");
-        var user = services.GetService<ICurrentUser>() ?? new CurrentUser();
 
         // The new context is of the same type, with the same options, as the one given: this one says which
         // database it is.
@@ -148,7 +147,7 @@ internal static class TenancySystemReads
         // next to the scope, and make this the system work of that tenant, which reads and, in Tenancy's own
         // scope, writes it. With none, the tables answer nothing, and only the function does.
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using (user.BeginAs(asksTheDatabase ? scoped : CurrentUserSnapshot.System))
+        using (new AccessManager(new CurrentUser()).BeginAs(asksTheDatabase ? scoped : CurrentUserSnapshot.System))
         using (asksTheDatabase ? TenancyUsers.BeginNone() : null)
         {
             await using var lifetime = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();

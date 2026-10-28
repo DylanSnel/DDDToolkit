@@ -267,13 +267,13 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await WriteAsAsync(Bob, "Bob's");
         await using var context = database.CreateContext(new CurrentUser());
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await context.Database.OpenConnectionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
             var backend = await ScalarAsync(context, "SELECT pg_backend_pid()::text");
 
-            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 (await TextsAsync(context)).Should().Equal(["Bob's"], "the connection stayed open, and the caller that changed was set before the next command");
                 (await ScalarAsync(context, "SELECT pg_backend_pid()::text")).Should().Be(backend);
@@ -292,13 +292,13 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await WriteAsAsync(Bob, "Bob's");
         await using var context = database.CreateContext(Strict());
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await context.Database.OpenConnectionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
         }
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal(["Bob's"], "the caller changed before the transaction began, which is where it belongs");
@@ -314,12 +314,12 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await WriteAsAsync(Bob, "Bob's");
         await using var context = database.CreateContext(Strict());
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
 
-            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 var read = () => TextsAsync(context);
 
@@ -341,12 +341,12 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         var logger = new KeptLogger<PostgresRowLevelSecurityInterceptor>();
         await using var context = database.CreateContext(new PostgresRowLevelSecurityInterceptor(new CurrentUser(), new PostgresRowLevelSecurityOptions(), [], userOptions: null, logger));
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
 
-            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 (await TextsAsync(context)).Should().Equal(["Alice's"], "as before, a transaction goes on as the caller it began with");
                 (await TextsAsync(context)).Should().Equal("Alice's");
@@ -358,7 +358,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         logger.Entries.Where(entry => entry.Level == LogLevel.Warning).Should().ContainSingle("it is logged once per connection")
             .Which.Message.Should().Contain($"from authenticated {Alice} to authenticated {Bob} while a transaction was open");
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             (await TextsAsync(context)).Should().Equal(["Bob's"], "outside the transaction the new caller is set");
         }
@@ -589,7 +589,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         (await read.Should().ThrowAsync<NoCurrentUserException>()).WithMessage($"{nameof(UserOfTheTest)} answered system work that nothing began*RequireExplicitCurrentUser*");
         context.Database.GetDbConnection().State.Should().Be(ConnectionState.Closed, "it failed before connecting");
 
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             (await ScalarAsync(context, "SELECT current_user")).Should().Be(LoginRole, "begun on purpose, the system runs as the login role");
         }

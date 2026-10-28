@@ -116,9 +116,12 @@ public sealed partial class ShopSeat
    module's managers by those names above. CS0246 for a name above: read DDD00065 in that project. Only a module of
    one project with HotChocolate types over the nested records keeps one alias of exactly the class's name there,
    since another generator does not see a generated class.
-   `TenancyAccessManager` says who acts and begins the work that is not the caller's own: `access.CurrentUser`, the
+   `TenancyAccessManager` says who acts and begins the work that is not the caller's own. It derives from the core's
+   `AccessManager`, so a Tenancy application takes this one: `access.CurrentUser`, the
    toolkit's `ICurrentUser` (`Id`, `IsAuthenticated`, `IsSystem`, `Role`), `access.CurrentTenant` (`Id`, `Seat`, `IsAvailable`,
-   `Require()`), `access.BeginSystem()`, `access.BeginSystemIn(tenant, actingSeat, scope)`,
+   `Require()`), `access.BeginAs(...)` and `access.BeginNone()` (the core's, which leave the tenant as it is),
+   `access.BeginSystem(scope?)` (outside every tenant, always scoped, `tenancy` by default),
+   `access.BeginSystemIn(tenant, actingSeat, scope)`,
    `access.BeginTokenIn(tenant, seat, scope)` and `access.TenantsToSweepAsync(scope, ct)`. A module that sees only
    Tenancy's ids says which they are once, in its application project,
    `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`, and gets `TenancyAccessManager` in its
@@ -146,9 +149,9 @@ public sealed partial class ShopSeat
    names. The seat is found from the verified identity, never taken from what a client sends.
 
    ```csharp
-   var user = context.RequestServices.GetRequiredService<ICurrentUser>();
+   var access = context.RequestServices.GetRequiredService<AccessManager>();   // the core's, a singleton
    var requestUser = context.GetSupabaseUser();
-   using (user.BeginAs(requestUser))
+   using (access.BeginAs(requestUser))
    {
        // ITenantSelection: the selection without its ids, so the middleware names none
        var seat = await selection.ResolveAsync(requestUser, context.Request.Headers["Tenant"], context.RequestAborted);

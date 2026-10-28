@@ -115,7 +115,7 @@ public sealed class CampusServices : IDisposable
     public async Task<T> AsAsync<T>(CampusPerson person, string? college, Func<IServiceProvider, Task<T>> ask)
     {
         var caller = person.Caller;
-        using (TestUser.BeginAs(caller))
+        using (TestAccess.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             var seat = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(caller, college, TestContext.Current.CancellationToken);

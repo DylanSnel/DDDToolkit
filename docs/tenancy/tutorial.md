@@ -651,8 +651,8 @@ the database before it starts.
 
 - **Caller**: who sends the request. In a real application the sign-in says who calls. This tutorial does not set up
   sign-in, so a development header says who calls: `X-Dev-User: <user id>`.
-- **Current user**: the toolkit's name for who the work runs as. `ICurrentUser` answers it, and `BeginAs` makes a user
-  current for a piece of work, here the rest of the request.
+- **Current user**: the toolkit's name for who the work runs as. `ICurrentUser` answers it. `BeginAs` on the
+  toolkit's `AccessManager` makes a user current for a piece of work, here the rest of the request.
 - **Tenant**: the request names the tenant. In Harbor it uses the header `Tenant: harbor`.
 - **Seat**: Tenancy looks up the caller's seat in that tenant. For the rest of the request, the checks, the managers
   and the database role (RLS) all use that seat.
@@ -717,8 +717,9 @@ app.Run();
 
 **`src/Harbor.Host/Requests/RequestPipeline.cs`**
 
-```csharp {13-14,16-18}
+```csharp {14-15,17-19}
 using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy.Access;
 
 namespace Harbor.Host.Requests;
@@ -731,7 +732,7 @@ public static class RequestPipeline
         {
             // A stand-in for sign-in, for development: a header says who calls.
             var caller = Guid.TryParse(context.Request.Headers["X-Dev-User"], out var user) ? CurrentUserSnapshot.User(user) : CurrentUserSnapshot.Anonymous;
-            using (context.RequestServices.GetRequiredService<ICurrentUser>().BeginAs(caller))
+            using (context.RequestServices.GetRequiredService<AccessManager>().BeginAs(caller))
             {
                 var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
                     .ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
@@ -793,7 +794,7 @@ public sealed class RefusalsAsProblems : IExceptionHandler
   exception handling. `RefusalsAsProblems` handles a `RefusalException`. Any other exception becomes a `500`.
 - `CurrentUserSnapshot.User(user)` is a signed-in user with that id. `CurrentUserSnapshot.Anonymous` is a caller
   without a user.
-- `BeginAs` on the toolkit's `ICurrentUser` makes the caller the current user for the rest of the request.
+- `BeginAs` on the toolkit's `AccessManager` makes the caller the current user for the rest of the request.
   `TenancyUsers.Begin` does the same for the caller's seat.
 - `ITenantSelection.ResolveAsync` looks up the caller's active seat in the tenant the `Tenant` header names. It throws
   nothing. When there is no seat, it returns "nobody" with the refusal's code, such as `tenancy.not-seated`. A

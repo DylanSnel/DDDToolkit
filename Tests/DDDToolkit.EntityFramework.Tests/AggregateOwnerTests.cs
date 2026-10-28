@@ -305,7 +305,7 @@ public sealed class AggregateOwnerTests : IDisposable
     private static async Task AskAsync(IServiceProvider host, CurrentUserSnapshot caller, ILettersRequest request)
     {
         await using var scope = host.CreateAsyncScope();
-        using var running = TestUser.BeginAs(caller);
+        using var running = TestAccess.BeginAs(caller);
         await scope.ServiceProvider.GetRequiredService<AccessChecks<ILettersRequest>>().RequireAsync(request, Cancellation);
     }
 

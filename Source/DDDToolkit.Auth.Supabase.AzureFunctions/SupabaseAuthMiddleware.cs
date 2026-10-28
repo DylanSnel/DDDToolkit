@@ -9,7 +9,7 @@ namespace DDDToolkit.Auth.Supabase.AzureFunctions;
 /// <summary>
 /// Makes the user of an HTTP-triggered invocation its current user. It validates the Supabase Auth access token in
 /// the request's <c>Authorization</c> header, and runs the function inside
-/// <see cref="ICurrentUser.BeginAs(CurrentUserSnapshot)"/>, so every query it makes runs as that user, or as
+/// <see cref="AccessManager.BeginAs(CurrentUserSnapshot)"/>, so every query it makes runs as that user, or as
 /// <c>anon</c> without a valid token. Other triggers pass through untouched and run as system work, unless the
 /// function begins a user itself, say from claims a queued message carries. Where the host requires every flow of
 /// work to begin its user (<see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>), they run
@@ -21,13 +21,13 @@ namespace DDDToolkit.Auth.Supabase.AzureFunctions;
 /// ASP.NET Core integration alike, and nothing here needs either.
 /// </remarks>
 /// <param name="validator">Validates the request's token.</param>
-/// <param name="user">The application's current user, which begins the request's user. Left out, a <see cref="CurrentUser"/>.</param>
-public sealed class SupabaseAuthMiddleware(SupabaseTokenValidator validator, ICurrentUser? user = null) : IFunctionsWorkerMiddleware
+/// <param name="access">The application's access manager, which begins the request's user. Left out, one over a <see cref="CurrentUser"/>.</param>
+public sealed class SupabaseAuthMiddleware(SupabaseTokenValidator validator, AccessManager? access = null) : IFunctionsWorkerMiddleware
 {
     /// <summary>Where the invocation's user is kept, for <see cref="SupabaseFunctions.GetSupabaseUser"/>.</summary>
     internal const string UserKey = "DDDToolkit.Auth.Supabase.User";
 
-    private readonly ICurrentUser _user = user ?? new CurrentUser();
+    private readonly AccessManager _access = access ?? new AccessManager(new CurrentUser());
 
     /// <inheritdoc />
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
@@ -44,7 +44,7 @@ public sealed class SupabaseAuthMiddleware(SupabaseTokenValidator validator, ICu
         var requestUser = await validator.UserOfAsync(AuthorizationOf(context)).ConfigureAwait(false);
         context.Items[UserKey] = requestUser;
 
-        using (_user.BeginAs(requestUser))
+        using (_access.BeginAs(requestUser))
         {
             await next(context).ConfigureAwait(false);
         }

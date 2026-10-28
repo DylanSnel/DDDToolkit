@@ -327,7 +327,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
 
         public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
         {
-            using (TestUser.BeginAs(caller))
+            using (TestAccess.BeginAs(caller))
             {
                 await using var scope = _provider.CreateAsyncScope();
                 return await ask(scope.ServiceProvider);
@@ -520,7 +520,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
 
         public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
         {
-            using (TestUser.BeginAs(caller))
+            using (TestAccess.BeginAs(caller))
             {
                 await using var scope = _provider.CreateAsyncScope();
                 return await ask(scope.ServiceProvider);

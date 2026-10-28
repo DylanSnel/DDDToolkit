@@ -20,7 +20,9 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// above. Where one is not, as for <see cref="BeginSystem"/> or system work in a tenant for no seat, the ids are written:
 /// <c>TenancyWork.BeginSystemIn&lt;TenantId, SeatId&gt;(tenant)</c>. An application calls the same methods closed over its
 /// ids on the access manager its code takes, <c>access.BeginSystem()</c> and <c>access.BeginSystemIn(tenant)</c>
-/// (<see cref="TenancyAccessManager{TTenantId, TSeatId, TUnitId, TRoleId}"/>), and writes no id.
+/// (<see cref="TenancyAccessManager{TTenantId, TSeatId, TUnitId, TRoleId}"/>), and writes no id. Its
+/// <c>BeginSystem(scope)</c> overrides the core's, so system work a Tenancy application begins always says it is outside
+/// every tenant.
 /// </para>
 /// <para>
 /// Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system
@@ -33,8 +35,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </para>
 /// <para>
 /// Each method begins two things, and ends both when its result is disposed. The Tenancy user says in which
-/// tenant the work acts. The toolkit's scoped system work, <c>ICurrentUser.BeginSystem(scope)</c>, says what kind of
-/// work it is. Keeping them in one scope keeps them from drifting apart. Neither begins system work without a scope,
+/// tenant the work acts. The toolkit's scoped system work, the core's <c>AccessManager.BeginSystem(scope)</c>, says what
+/// kind of work it is. Keeping them in one scope keeps them from drifting apart. Neither begins system work without a scope,
 /// which row level security lets past every policy, while system work in a tenant must stay inside that tenant. On
 /// Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to
 /// it. Tenancy's own policies come with <c>DDDToolkit.Supporting.Tenancy.Postgres</c>.
@@ -58,7 +60,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 public static class TenancyWork
 {
     /// <summary>Begins the toolkit's scoped system work. What it begins does not depend on the instance.</summary>
-    private static readonly ICurrentUser Users = new CurrentUser();
+    private static readonly AccessManager Access = new(new CurrentUser());
 
     /// <summary>
     /// The scope of Tenancy's own system work. Under the policies of
@@ -70,13 +72,20 @@ public static class TenancyWork
     /// <summary>
     /// Begins system work outside any tenant, for provisioning a tenant. It reads nothing inside one: every
     /// tenant filter matches nothing for it. The toolkit's current user is scoped system work in
-    /// <see cref="SystemScope"/>, which under the policies of <c>DDDToolkit.Supporting.Tenancy.Postgres</c>
-    /// reads and writes nothing until provisioning narrows it to the tenant it makes.
+    /// <paramref name="scope"/>, <see cref="SystemScope"/> by default, which under the policies of
+    /// <c>DDDToolkit.Supporting.Tenancy.Postgres</c> reads and writes nothing until provisioning narrows it to the tenant
+    /// it makes. The work is recorded as the system in that scope.
     /// </summary>
-    public static IDisposable BeginSystem<TTenantId, TSeatId>()
+    /// <param name="scope">The scope of the system work: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope; nothing is begun then.</exception>
+    public static IDisposable BeginSystem<TTenantId, TSeatId>(string scope = SystemScope)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        => Both(SystemScope, TenancyUser<TTenantId, TSeatId>.System);
+        => Both(
+            scope,
+            scope == SystemScope
+                ? TenancyUser<TTenantId, TSeatId>.System
+                : TenancyUser<TTenantId, TSeatId>.SystemBy(TenancyActor<TSeatId>.OfSystem(scope)));
 
     /// <summary>
     /// Begins system work inside one tenant, such as an import or seeding: it holds every permission there, and
@@ -188,7 +197,7 @@ public static class TenancyWork
     /// </summary>
     private static IDisposable Both(string scope, ITenancyUser tenancy)
     {
-        var outer = Users.BeginSystem(scope);
+        var outer = Access.BeginSystem(scope);
         return new Scopes(outer, TenancyUsers.Begin(tenancy));
     }
 

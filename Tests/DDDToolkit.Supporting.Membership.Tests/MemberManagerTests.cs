@@ -200,7 +200,7 @@ public sealed class MemberManagerTests
         var store = new StubMemberStore<Shed, ShedId, UserId>().With(shed);
         var manager = new ShedHandManager(access, store, TestUser, new FixedClock(Now));
 
-        using (TestUser.BeginAs(owner.Value))
+        using (TestAccess.BeginAs(owner.Value))
         {
             var refused = await Refused.WithCodeAsync(ShedMembership.Codes, MembershipRefusals.NotPermitted, () => manager.AddAsync(shed.Id, Reader, null, null, Cancellation));
             refused.Message.Should().Contain("ManagesMembers").And.Contain("Only system work");
@@ -208,7 +208,7 @@ public sealed class MemberManagerTests
                 .Message.Should().Contain("NamesOwner");
         }
 
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             await manager.AddAsync(shed.Id, Reader, null, null, Cancellation);
         }
@@ -259,7 +259,7 @@ public sealed class MemberManagerTests
         await using var scope = provider.CreateAsyncScope();
         var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IFilingRequest>>();
 
-        using (TestUser.BeginAs(Reader.Value))
+        using (TestAccess.BeginAs(Reader.Value))
         {
             // Outside the handling of a request, a change to the caller's own place saves as the caller.
             await Manager(access, store).TakeRoleAsync(document.Id, Reader, DocumentMembership.Manager, Cancellation);

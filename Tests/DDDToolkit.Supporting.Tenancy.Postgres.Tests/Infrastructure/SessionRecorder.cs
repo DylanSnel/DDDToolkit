@@ -115,17 +115,5 @@ public sealed class ObservedUsers : ICurrentUser
     public string? FindClaim(string path) => _inner.FindClaim(path);
 
     /// <inheritdoc />
-    public IDisposable BeginAs(Guid userId) => _inner.BeginAs(userId);
-
-    /// <inheritdoc />
-    public IDisposable BeginAs(CurrentUserSnapshot user) => _inner.BeginAs(user);
-
-    /// <inheritdoc />
-    public IDisposable BeginSystem(string? scope = null) => _inner.BeginSystem(scope);
-
-    /// <inheritdoc />
-    public IDisposable BeginNone() => _inner.BeginNone();
-
-    /// <inheritdoc />
     public CurrentUserSnapshot RequireSystemWork() => _inner.RequireSystemWork();
 }

@@ -656,7 +656,7 @@ SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claim
 ```csharp shortened
 // The sample's TenantHeader.UseTenantSelection, shortened: the user and the Tenancy user begun for the request
 var requestUser = context.GetSupabaseUser();                      // from the validated token, or anonymous
-using (currentUser.BeginAs(requestUser))                          // currentUser is the application's ICurrentUser
+using (access.BeginAs(requestUser))                               // access is the application's AccessManager
 {
     var seat = await selection.ResolveAsync(requestUser, context.Request.Headers["Tenant"], context.RequestAborted);
     using (TenancyUsers.Begin(seat))                            // the seat in harbor, or nobody and why

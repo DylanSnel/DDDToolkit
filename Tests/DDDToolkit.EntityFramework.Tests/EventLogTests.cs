@@ -172,7 +172,7 @@ public sealed class EventLogTests : IDisposable
 
         async Task<(string Kind, string? Id)> SettledAsAsync(IServiceProvider services, CurrentUserSnapshot? caller, int number)
         {
-            using var running = caller is null ? null : TestUser.BeginAs(caller);
+            using var running = caller is null ? null : TestAccess.BeginAs(caller);
             var id = HiveId.CreateSequential();
             await InScopeAsync(services, async context =>
             {

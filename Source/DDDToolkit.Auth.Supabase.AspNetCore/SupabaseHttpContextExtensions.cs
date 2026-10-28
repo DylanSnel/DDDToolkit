@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Access;
 using Microsoft.AspNetCore.Http;
 
 namespace DDDToolkit.Auth.Supabase.AspNetCore;
@@ -9,13 +10,13 @@ public static class SupabaseHttpContextExtensions
     /// <summary>
     /// The request's own user: the user of the Supabase access token the bearer scheme validated for it, or
     /// <see cref="CurrentUserSnapshot.Anonymous"/> without one. It is never a user begun with
-    /// <see cref="ICurrentUser.BeginAs(CurrentUserSnapshot)"/>. So a host can make the request's user current at the
+    /// <see cref="AccessManager.BeginAs(CurrentUserSnapshot)"/>. So a host can make the request's user current at the
     /// start of a request, even when another user leaked into it:
     /// <code>
     /// app.Use(async (context, next) =>
     /// {
-    ///     var user = context.RequestServices.GetRequiredService&lt;ICurrentUser&gt;();
-    ///     using (user.BeginAs(context.GetSupabaseUser()))
+    ///     var access = context.RequestServices.GetRequiredService&lt;AccessManager&gt;();
+    ///     using (access.BeginAs(context.GetSupabaseUser()))
     ///     {
     ///         await next(context);
     ///     }

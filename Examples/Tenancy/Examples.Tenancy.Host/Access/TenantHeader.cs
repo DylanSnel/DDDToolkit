@@ -36,7 +36,8 @@ public static class TenantHeader
     /// work begun around a call and never ended, is replaced for the request rather than inherited, and a warning says
     /// so: a request is never system work. The seat is looked up with the leaked Tenancy user already replaced by
     /// nobody, so the lookup does not run in the leaked tenant either. <see cref="ICurrentUser"/> answers a begun user
-    /// first, so the request's queries run as its own user.
+    /// first, so the request's queries run as its own user. The core's <see cref="AccessManager"/> begins it: the
+    /// middleware is made once for the application, and the access manager is a singleton, as the current user is.
     /// </para>
     /// <para>
     /// It names no id. The selection is asked without its id types (<see cref="ITenantSelection"/>), and what it
@@ -48,7 +49,8 @@ public static class TenantHeader
         ArgumentNullException.ThrowIfNull(app);
 
         var logger = app.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(TenantHeader));
-        var currentUser = app.ApplicationServices.GetRequiredService<ICurrentUser>();
+        var access = app.ApplicationServices.GetRequiredService<AccessManager>();
+        var currentUser = access.CurrentUser;
 
         return app.Use(async (context, next) =>
         {
@@ -72,7 +74,7 @@ public static class TenantHeader
             }
 
             var requestUser = context.GetSupabaseUser();
-            using (currentUser.BeginAs(requestUser))
+            using (access.BeginAs(requestUser))
             {
                 ITenancyUser? seat;
                 using (leaked is null ? null : TenancyUsers.BeginNone())

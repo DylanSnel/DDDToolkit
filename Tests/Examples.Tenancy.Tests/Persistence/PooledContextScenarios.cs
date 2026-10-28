@@ -250,7 +250,7 @@ public sealed class PooledContextScenarios(SampleHosts sample) : IClassFixture<S
         // Its round is over, and the instance it used is back in that pool: rented as the system caller, which
         // is who draws on it, the factory hands it out again.
         var factory = host.Services.GetRequiredService<IDbContextFactory<ProjectsContext>>();
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             (await factory.HandsOutAgainAsync(poller.Context, Cancellation)).Should().BeTrue("the poller's scope ended, which gave its context back");
         }

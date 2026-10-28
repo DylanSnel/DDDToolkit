@@ -41,7 +41,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 public static class PostgresRowAccessChecks
 {
     /// <summary>Begins system work around a question. What it begins does not depend on the instance.</summary>
-    private static readonly ICurrentUser Users = new CurrentUser();
+    private static readonly AccessManager Access = new(new CurrentUser());
 
     /// <summary>
     /// The start-up check that every registered context on Postgres runs its commands as the caller, but one
@@ -624,7 +624,7 @@ public static class PostgresRowAccessChecks
     private static async Task<List<string[]>> AskAsync(DbContext context, string sql, CancellationToken cancellationToken)
     {
         using var suppressed = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
-        using var system = Users.BeginSystem();
+        using var system = Access.BeginSystem();
 
         await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         try

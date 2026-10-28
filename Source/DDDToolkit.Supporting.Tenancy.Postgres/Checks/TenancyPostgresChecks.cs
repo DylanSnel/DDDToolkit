@@ -889,7 +889,7 @@ public static class TenancyPostgresChecks
     private static async Task AsSystemAsync(IServiceProvider services, Func<DbConnection, TenancyTables, Task> check, CancellationToken cancellationToken)
     {
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using ((services.GetService<ICurrentUser>() ?? new CurrentUser()).BeginSystem())
+        using (new AccessManager(new CurrentUser()).BeginSystem())
         {
             await using var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var (context, tenancy) = TenancyContextOf(scope.ServiceProvider);
@@ -917,7 +917,7 @@ public static class TenancyPostgresChecks
     {
         // The user first and then the context, as the reads themselves take theirs.
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using ((services.GetService<ICurrentUser>() ?? new CurrentUser()).BeginSystem(scope))
+        using (new AccessManager(new CurrentUser()).BeginSystem(scope))
         using (TenancyUsers.BeginNone())
         {
             await using var lifetime = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();

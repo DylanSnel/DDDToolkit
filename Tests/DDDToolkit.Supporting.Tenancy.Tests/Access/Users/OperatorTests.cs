@@ -28,7 +28,7 @@ public class OperatorTests
     /// <summary>Asks for a page as <paramref name="caller"/>, the way a request does: nobody to Tenancy, whoever it is to the toolkit.</summary>
     private static async Task<TenantManager.TenantPage> Page(Harness harness, CurrentUserSnapshot? caller, string? after = null, int size = 50)
     {
-        using (caller is null ? null : TestUser.BeginAs(caller))
+        using (caller is null ? null : TestAccess.BeginAs(caller))
         using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             harness.Store.BeginUnitOfWork();

@@ -91,12 +91,12 @@ public sealed class DataSourceRowLevelSecurityTests(ExplicitCurrentUserPostgres 
         await using var scope = host.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<ApiaryContext>();
 
-        using (TestUser.BeginAs(ApiaryDatabase.Alice))
+        using (TestAccess.BeginAs(ApiaryDatabase.Alice))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             (await context.Database.SqlQueryRaw<string>(Who).SingleAsync(Cancellation)).Should().StartWith("authenticated|" + ApiaryDatabase.AliceId);
 
-            using (TestUser.BeginAs(ApiaryDatabase.Bob))
+            using (TestAccess.BeginAs(ApiaryDatabase.Bob))
             {
                 var asBob = () => context.Database.SqlQueryRaw<string>(Who).SingleAsync(Cancellation);
                 (await asBob.Should().ThrowAsync<InvalidOperationException>("a transaction runs as one caller"))

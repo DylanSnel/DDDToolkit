@@ -124,7 +124,7 @@ public sealed class Harness
     /// </summary>
     public async Task<InvitationManager.AcceptedInvitation> Accept(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
     {
-        using (TestUser.BeginAs(identity))
+        using (TestAccess.BeginAs(identity))
         {
             Store.BeginUnitOfWork();
             return await Invitations.AcceptAsync(token, verifiedAddress, CancellationToken.None, configure: seat => seat.Rename(displayName));

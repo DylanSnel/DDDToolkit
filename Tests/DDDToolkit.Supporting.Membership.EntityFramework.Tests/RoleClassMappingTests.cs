@@ -179,7 +179,7 @@ public sealed class RoleClassMappingTests
             services.AddMembership<PlotGardener, PlotGardenerId, UserId, PlotRoleId, TContext, Plot, PlotId>(PlotMembership.Rules);
             await using var provider = services.BuildServiceProvider();
             await using var scope = provider.CreateAsyncScope();
-            using (TestUser.BeginAs(TestUsers.User(UserId.CreateSequential())))
+            using (TestAccess.BeginAs(TestUsers.User(UserId.CreateSequential())))
             {
                 var asked = FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Plot>>().Reach(PlotPermissions.Plant))
                     .Should().Throw<InvalidOperationException>().Which;

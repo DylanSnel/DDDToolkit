@@ -283,7 +283,7 @@ public sealed class MemberStatementTests
         FluentActions.Invoking(() => documents.Reached(foreign)).Should().Throw<ArgumentException>();
 
         // A reach is what it was when it was made: for the caller and the moment it was asked at.
-        using (TestUser.BeginAs(TestUsers.User(filing.Scenario.Ada)))
+        using (TestAccess.BeginAs(TestUsers.User(filing.Scenario.Ada)))
         {
             var reach = scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View);
             (reach.Permission, reach.Now, reach.Everything).Should().Be((DocumentPermissions.View, filing.Clock.Now, false));

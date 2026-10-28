@@ -97,14 +97,6 @@ public sealed class AmbientUserRecorder
 
         public string? FindClaim(string path) => inner.FindClaim(path);
 
-        public IDisposable BeginAs(Guid userId) => inner.BeginAs(userId);
-
-        public IDisposable BeginAs(CurrentUserSnapshot user) => inner.BeginAs(user);
-
-        public IDisposable BeginSystem(string? scope = null) => inner.BeginSystem(scope);
-
-        public IDisposable BeginNone() => inner.BeginNone();
-
         public CurrentUserSnapshot RequireSystemWork() => inner.RequireSystemWork();
     }
 

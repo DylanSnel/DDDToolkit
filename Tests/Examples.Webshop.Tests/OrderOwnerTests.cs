@@ -127,7 +127,7 @@ public sealed class OrderOwnerTests : IAsyncLifetime
     private async Task AskAsync(CurrentUserSnapshot caller, OrderId order)
     {
         await using var scope = _host.CreateAsyncScope();
-        using var running = TestUser.BeginAs(caller);
+        using var running = TestAccess.BeginAs(caller);
         await scope.ServiceProvider.GetRequiredService<AccessChecks<IOrderingRequest>>()
             .RequireAsync(new ShipElsewhere(order, "Neude 11", "Utrecht", "3512 AE"), Cancellation);
     }

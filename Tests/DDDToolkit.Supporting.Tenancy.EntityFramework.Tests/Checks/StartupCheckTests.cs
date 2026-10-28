@@ -90,7 +90,7 @@ public sealed class StartupCheckTests
     private static async Task<IReadOnlyList<string>> RunAllAsync(IServiceProvider services)
     {
         var ran = new List<string>();
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             foreach (var check in services.GetRequiredService<StartupChecks>().InOrder())
             {

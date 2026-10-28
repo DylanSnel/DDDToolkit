@@ -51,7 +51,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
 
         // Three questions of one request, asked at once as Ben: three statements, none on the request's own
         // context, each answered as Ben, under the policies.
-        using (TestUser.BeginAs(TestUsers.User(data.Ben)))
+        using (TestAccess.BeginAs(TestUsers.User(data.Ben)))
         {
             await using var scope = filing.Services.Provider.CreateAsyncScope();
             var requests = scope.ServiceProvider.GetRequiredService<FilingContext>();
@@ -77,7 +77,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         }
 
         // The same questions as Hal, who is on no document: a context taken from the pool again does not keep the caller before.
-        using (TestUser.BeginAs(TestUsers.User(data.Hal)))
+        using (TestAccess.BeginAs(TestUsers.User(data.Hal)))
         {
             await using var scope = filing.Services.Provider.CreateAsyncScope();
             var access = scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>();

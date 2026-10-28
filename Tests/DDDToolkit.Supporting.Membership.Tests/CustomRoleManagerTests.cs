@@ -24,7 +24,7 @@ public sealed class CustomRoleManagerTests
         var store = new StubRoleStore<PlotRole, PlotRoleId>();
         var roles = Plots(store);
 
-        using (TestUser.BeginAs(Guid.NewGuid()))
+        using (TestAccess.BeginAs(Guid.NewGuid()))
         {
             var refused = await Refused.WithCodeAsync(
                 PlotMembership.Codes,
@@ -34,7 +34,7 @@ public sealed class CustomRoleManagerTests
             store.Kept.Should().BeEmpty();
         }
 
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             var made = await roles.CreateAsync(new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Pruner", null, [PlotPermissions.Plant])), Cancellation);
             store.Kept.Should().Equal(made);
@@ -49,7 +49,7 @@ public sealed class CustomRoleManagerTests
         var access = new StubAccess<Shed, ShedId>(ShedMembership.Rules);
         var asked = new RoleAccess();
 
-        using (TestUser.BeginAs(Guid.NewGuid()))
+        using (TestAccess.BeginAs(Guid.NewGuid()))
         {
             // Nothing answers whether the caller holds it for the whole of what the roles are kept for.
             (await Refused.WithCodeAsync(ShedMembership.Codes, MembershipRefusals.NotPermitted, () => new ShedRoleManager(store, access, TestUser).CreateStarterRolesAsync(Keeper, Cancellation)))
@@ -71,7 +71,7 @@ public sealed class CustomRoleManagerTests
     {
         var store = new StubRoleStore<PlotRole, PlotRoleId>();
         var roles = Plots(store);
-        using var system = TestUser.BeginSystem();
+        using var system = TestAccess.BeginSystem();
 
         // The starter roles the rules declare, each through the host's constructor, which says whose it is.
         var made = await roles.CreateStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), Meadow, draft), Cancellation, scope: role => role.GardenId == Meadow);
@@ -100,7 +100,7 @@ public sealed class CustomRoleManagerTests
     {
         var store = new StubRoleStore<PlotRole, PlotRoleId>();
         var roles = Plots(store);
-        using var system = TestUser.BeginSystem();
+        using var system = TestAccess.BeginSystem();
         var pruner = await roles.CreateAsync(new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Pruner", null, [PlotPermissions.Plant])), Cancellation);
 
         (await roles.RenameAsync(pruner.Id, " Hedger ", "Trims.", Cancellation)).Should().BeSameAs(pruner);
@@ -132,7 +132,7 @@ public sealed class CustomRoleManagerTests
         store.Add(fencer);
         var roles = Plots(store);
 
-        using (TestUser.BeginAs(Guid.NewGuid()))
+        using (TestAccess.BeginAs(Guid.NewGuid()))
         {
             (await roles.ListAsync(Cancellation)).Should().Equal(fencer, waterer);
             (await roles.ListAsync(Cancellation, scope: role => role.GardenId == Meadow)).Should().Equal(waterer);

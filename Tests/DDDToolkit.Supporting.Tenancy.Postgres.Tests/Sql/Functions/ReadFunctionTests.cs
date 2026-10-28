@@ -219,7 +219,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         await using var services = new TenancyServices(database, configure: collection => collection.AddSingleton<TimeProvider>(new StoppedClock(now)));
         List<string> functions;
         List<string> own;
-        using (TestUser.BeginAs(identity))
+        using (TestAccess.BeginAs(identity))
         using (TenancyUsers.Begin(caller))
         {
             functions = await services.InScopeAsync(scoped => AnswersAsync(scoped, scoped.Widgets(), permissions));

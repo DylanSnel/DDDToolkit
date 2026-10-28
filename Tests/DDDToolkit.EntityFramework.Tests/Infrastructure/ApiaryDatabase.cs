@@ -248,7 +248,7 @@ public sealed class ApiaryDatabase
     public static async Task<T> AsAsync<T>(IServiceProvider host, CurrentUserSnapshot caller, Func<ApiaryContext, Task<T>> work)
     {
         await using var scope = host.CreateAsyncScope();
-        using var running = TestUser.BeginAs(caller);
+        using var running = TestAccess.BeginAs(caller);
         return await work(scope.ServiceProvider.GetRequiredService<ApiaryContext>());
     }
 

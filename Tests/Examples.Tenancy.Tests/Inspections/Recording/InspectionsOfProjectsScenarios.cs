@@ -154,7 +154,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
         // own schema, by the project's id, as the request's caller. Whatever id reaches that schema, what it
         // answers is decided by its own access check.
         JsonElement data;
-        using (TestUser.BeginAs(DemoPeople.Leo.Id))
+        using (TestAccess.BeginAs(DemoPeople.Leo.Id))
         using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Leo))))
         {
             await using var scope = host.Services.CreateAsyncScope();

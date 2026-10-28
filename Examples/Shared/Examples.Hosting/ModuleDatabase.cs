@@ -197,7 +197,7 @@ public abstract record ModuleDatabase
         public async Task StartingAsync(CancellationToken cancellationToken)
         {
             await using var scope = scopes.CreateAsyncScope();
-            using var system = scope.ServiceProvider.GetRequiredService<ICurrentUser>().BeginSystem();
+            using var system = scope.ServiceProvider.GetRequiredService<AccessManager>().BeginSystem();
             var database = scope.ServiceProvider.GetRequiredService<TContext>().Database;
 
             if (migrate)

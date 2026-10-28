@@ -1,5 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Interfaces;
+using DDDToolkit.Access;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Membership.Access;
@@ -68,6 +69,7 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
     private readonly MembershipAccessManager<TResource> _access;
     private readonly IMemberStore<TResource, TResourceId, TMemberId> _store;
     private readonly ICurrentUser _user;
+    private readonly AccessManager _work;
     private readonly TimeProvider _clock;
     private readonly MemberAdmission<TResourceId, TMemberId, TRoleId> _admission;
     private readonly IOwnPlaceWork<TResourceId, TMemberId>? _ownPlace;
@@ -99,6 +101,7 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
         _access = access;
         _store = store;
         _user = user;
+        _work = new AccessManager(user);
         _clock = clock;
         _ownPlace = ownPlace;
 
@@ -489,7 +492,7 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
             AddPartsOf(resource, parts);
             if (_store.ChangedBesides(parts).Count == 0)
             {
-                using (_ownPlace?.Begin(me, scope) ?? _user.BeginSystem(scope))
+                using (_ownPlace?.Begin(me, scope) ?? _work.BeginSystem(scope))
                 {
                     await _store.SaveAsync(cancellationToken).ConfigureAwait(false);
                 }

@@ -20,6 +20,8 @@ public sealed class CurrentUserTests
 
     private readonly CurrentUser _accessor = new();
 
+    private readonly AccessManager _access = new(new CurrentUser());
+
     private readonly CurrentUser _strict = new(new CurrentUserOptions { RequireExplicitCurrentUser = true });
 
     [Fact]
@@ -35,7 +37,7 @@ public sealed class CurrentUserTests
     {
         var ada = Guid.Parse("ada00000-0000-4000-8000-000000000001");
 
-        using (_accessor.BeginAs(ada))
+        using (_access.BeginAs(ada))
         {
             _accessor.IsBegun.Should().BeTrue();
             _accessor.Kind.Should().Be(CurrentUserKind.User);
@@ -46,7 +48,7 @@ public sealed class CurrentUserTests
             _accessor.Role.Should().Be("authenticated", "a user begun by id has the role a signed-in user's token carries");
             _accessor.FindClaim("email").Should().BeNull("a user begun by id has no other claims");
 
-            using (_accessor.BeginSystem("billing"))
+            using (_access.BeginSystem("billing"))
             {
                 _accessor.Kind.Should().Be(CurrentUserKind.SystemIn);
                 _accessor.Id.Should().BeNull("system work has no user id, whoever began it");
@@ -59,14 +61,14 @@ public sealed class CurrentUserTests
             _accessor.Id.Should().Be(ada, "once the system work ends, the user before it is current again");
         }
 
-        using (_strict.BeginAs(Alice))
+        using (new AccessManager(_strict).BeginAs(Alice))
         {
             _accessor.FindClaim("email").Should().Be("someone@example.com", "every instance sees what was begun for the flow");
         }
 
-        ((Func<IDisposable>)(() => _accessor.BeginSystem("Billing"))).Should().Throw<ArgumentException>("a scope is lower case").WithParameterName("scope");
+        ((Func<IDisposable>)(() => _access.BeginSystem("Billing"))).Should().Throw<ArgumentException>("a scope is lower case").WithParameterName("scope");
         BegunUser.Should().BeNull("a scope that is no scope begins nothing");
-        ((Func<IDisposable>)(() => _accessor.BeginAs(null!))).Should().Throw<ArgumentNullException>();
+        ((Func<IDisposable>)(() => _access.BeginAs(null!))).Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
@@ -119,13 +121,13 @@ public sealed class CurrentUserTests
     [Fact]
     public void A_begun_user_is_answered_either_way()
     {
-        using (TestUser.BeginAs(Alice))
+        using (TestAccess.BeginAs(Alice))
         {
             _accessor.Snapshot.Should().BeSameAs(Alice);
             _strict.Snapshot.Should().BeSameAs(Alice);
         }
 
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             _strict.Snapshot.Should().BeSameAs(CurrentUserSnapshot.System, "the system's work is allowed, once somebody said so");
         }
@@ -134,15 +136,15 @@ public sealed class CurrentUserTests
     [Fact]
     public void BeginNone_hides_the_begun_user_until_disposed()
     {
-        using (TestUser.BeginAs(Alice))
+        using (TestAccess.BeginAs(Alice))
         {
-            using (TestUser.BeginNone())
+            using (TestAccess.BeginNone())
             {
                 BegunUser.Should().BeNull();
                 _accessor.Snapshot.Should().BeSameAs(CurrentUserSnapshot.System, "without the option nobody is still the system");
                 ((Func<CurrentUserSnapshot>)(() => _strict.Snapshot)).Should().Throw<NoCurrentUserException>();
 
-                using (TestUser.BeginAs(Bob))
+                using (TestAccess.BeginAs(Bob))
                 {
                     _strict.Snapshot.Should().BeSameAs(Bob, "a caller begun inside it is answered");
                 }
@@ -170,6 +172,9 @@ public sealed class CurrentUserTests
         services.Count(descriptor => descriptor.ServiceType == typeof(CurrentUserOptions)).Should().Be(1, "registering it twice is harmless");
         services.Count(descriptor => descriptor.ServiceType == typeof(ICurrentUser)).Should().Be(1, "and so is registering the current user twice");
         services.Single(descriptor => descriptor.ServiceType == typeof(ICurrentUser)).Lifetime.Should().Be(ServiceLifetime.Singleton, "it reads the flow of work each time, so a context pool's interceptor can hold it");
+        services.Count(descriptor => descriptor.ServiceType == typeof(AccessManager)).Should().Be(1, "the access manager is registered beside it, once");
+        services.Single(descriptor => descriptor.ServiceType == typeof(AccessManager)).Lifetime.Should().Be(ServiceLifetime.Singleton, "it keeps no state, as the current user keeps none");
+        provider.GetRequiredService<AccessManager>().CurrentUser.Should().BeSameAs(provider.GetRequiredService<ICurrentUser>(), "its current user is the application's");
         provider.GetRequiredService<CurrentUserOptions>().RequireExplicitCurrentUser.Should().BeTrue();
         ((Func<CurrentUserSnapshot>)(() => provider.GetRequiredService<ICurrentUser>().Snapshot)).Should().Throw<NoCurrentUserException>();
 
@@ -185,12 +190,12 @@ public sealed class CurrentUserTests
         host.Snapshot.Should().BeSameAs(Bob, "where nothing is begun, the host's source answers, as for a request");
         host.IsBegun.Should().BeFalse("the host's answer is nothing anybody began");
 
-        using (host.BeginAs(Alice))
+        using (TestAccess.BeginAs(Alice))
         {
             host.Snapshot.Should().BeSameAs(Alice, "a user begun for the flow wins over the request's");
             host.IsBegun.Should().BeTrue();
 
-            using (host.BeginNone())
+            using (TestAccess.BeginNone())
             {
                 host.Snapshot.Should().BeSameAs(Bob, "BeginNone hides the begun user, and the host answers again");
             }
@@ -200,11 +205,11 @@ public sealed class CurrentUserTests
     [Fact]
     public void A_scope_makes_its_user_current_and_puts_back_the_one_before_it()
     {
-        using (TestUser.BeginAs(Alice))
+        using (TestAccess.BeginAs(Alice))
         {
             _accessor.Snapshot.Should().BeSameAs(Alice);
 
-            using (TestUser.BeginAs(Bob))
+            using (TestAccess.BeginAs(Bob))
             {
                 _accessor.Snapshot.Should().BeSameAs(Bob);
             }
@@ -218,7 +223,7 @@ public sealed class CurrentUserTests
     [Fact]
     public async Task A_begun_user_follows_the_work_into_awaits_and_tasks_but_not_back_out_of_them()
     {
-        using (TestUser.BeginAs(Alice))
+        using (TestAccess.BeginAs(Alice))
         {
             await Task.Yield();
             _accessor.Snapshot.Should().BeSameAs(Alice, "an await does not lose it");
@@ -233,8 +238,8 @@ public sealed class CurrentUserTests
     [Fact]
     public void Ending_a_scope_twice_changes_nothing_the_second_time()
     {
-        var outer = TestUser.BeginAs(Alice);
-        var inner = TestUser.BeginAs(Bob);
+        var outer = TestAccess.BeginAs(Alice);
+        var inner = TestAccess.BeginAs(Bob);
 
         inner.Dispose();
         inner.Dispose();
@@ -315,7 +320,7 @@ public sealed class CurrentUserTests
 
     private static async Task BeginWithoutEndingAsync(CurrentUserSnapshot caller)
     {
-        TestUser.BeginAs(caller);
+        TestAccess.BeginAs(caller);
         await Task.Yield();
     }
 }

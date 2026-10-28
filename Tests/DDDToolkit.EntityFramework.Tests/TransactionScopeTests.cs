@@ -559,12 +559,12 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
             Connection,
             PoolerFixture.Interceptor(new CurrentUser(required), RowLevelSecurityScope.Transaction, userOptions: required));
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
 
-            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 var read = () => TextsAsync(context);
 
@@ -586,11 +586,11 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         var logger = new KeptLogger<PostgresRowLevelSecurityInterceptor>();
         await using var context = PoolerFixture.Context(Connection, PoolerFixture.Interceptor(new CurrentUser(), RowLevelSecurityScope.Transaction, logger: logger));
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
 
-            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 (await TextsAsync(context)).Should().Equal(["Alice's"], "a transaction goes on as the caller it began with");
                 (await TextsAsync(context)).Should().Equal("Alice's");
@@ -602,7 +602,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         logger.Entries.Where(entry => entry.Level == LogLevel.Warning).Should().ContainSingle("it is logged once per connection")
             .Which.Message.Should().Contain($"from authenticated {Alice} to authenticated {Bob} while a transaction was open");
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             (await TextsAsync(context)).Should().Equal(["Bob's"], "outside the transaction every command is its caller's");
         }

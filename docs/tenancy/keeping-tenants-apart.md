@@ -139,14 +139,20 @@ public sealed class UnitImport(OrganizationManager organization, TenancyAccessMa
 }
 ```
 
-Each `Begin…` call starts two things, Tenancy's user and the toolkit's current user. Disposing the result ends both,
-and the caller and the user from before are current again. The generator writes `TenancyAccessManager` closed over your ids
-([Calls closed over your ids](your-module.md#calls-closed-over-your-ids)), so you write no id type. `AddTenancy`
-registers it per scope.
+Each call in the table below starts two things, Tenancy's user and the toolkit's current user. Disposing the result
+ends both, and the caller and the user from before are current again. The generator writes `TenancyAccessManager`
+closed over your ids ([Calls closed over your ids](your-module.md#calls-closed-over-your-ids)), so you write no id
+type. `AddTenancy` registers it per scope.
 
-| Call | Tenancy's user | The toolkit's current user, `ICurrentUser` |
+`TenancyAccessManager` derives from the core's `AccessManager`, so a Tenancy application takes this one class.
+`CurrentUser`, `BeginAs` and `BeginNone` are the core's. They leave Tenancy's user as it is. `BeginSystem` overrides
+the core's. Without a scope, the core's begins system work that row level security lets past every policy. Tenancy's
+begins its own scope, `tenancy`, instead. The core's `AccessManager` resolves in a Tenancy application too, for code
+such as a host's middleware, which has no scope to take `TenancyAccessManager` from.
+
+| Call | Tenancy's user | The toolkit's current user, begun by the core's `AccessManager` |
 |---|---|---|
-| `access.BeginSystem()` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `BeginSystem("tenancy")` |
+| `access.BeginSystem(scope)` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `BeginSystem(scope)`, `"tenancy"` by default |
 | `access.BeginSystemIn(tenant, actingSeat, scope)` | Works inside the tenant. It holds every permission there and none elsewhere. | `BeginSystem(scope)`, `"tenancy"` by default |
 | `access.BeginTokenIn(tenant, seat, scope)` | Works like `BeginSystemIn`. The work is recorded as a link's token and the seat the token stands for. | `BeginSystem(scope)`. The scope is required. |
 | `[Operator]` on a command | Your code calls nothing. The access check starts the work around the handler. It works like `BeginSystem`, or like `BeginSystemIn` in the tenant the command names. The work is recorded as the operator who sent the command ([Operators](operators-and-history.md#operators)). | `BeginSystem(scope)`, `"tenancy"` by default |
@@ -184,8 +190,8 @@ shows what the work holds, how Tenancy records it, and which database role it ru
 
 ### Scoped system work
 
-- No `Begin…` call of Tenancy's begins system work without a scope (`user.BeginSystem()`). Row level security lets
-  that work past every policy. On Postgres scoped system work runs as a database role that cannot bypass the
+- No `Begin…` call of Tenancy's begins system work without a scope (the core's `BeginSystem()` without a scope). Row
+  level security lets that work past every policy. On Postgres scoped system work runs as a database role that cannot bypass the
   policies, and the policies decide which rows it reaches
   ([The scoped system role](../row-level-security.md#the-scoped-system-role)).
 - The scope names whose work the system work is:

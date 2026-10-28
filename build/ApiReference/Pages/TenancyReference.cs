@@ -93,7 +93,9 @@ internal static class TenancyReference
                 "access.md",
                 "Access manager and users",
                 "`TenancyAccessManager` says who acts (`CurrentUser`, the toolkit's `ICurrentUser`) and which tenant and seat the "
-                + "work acts in (`CurrentTenant`). Its `Begin` methods start system work. Below it: the Tenancy user it reads, the actor a change "
+                + "work acts in (`CurrentTenant`). It derives from the core's `AccessManager`, whose `CurrentUser`, `BeginAs` and "
+                + "`BeginNone` it has as they are. Its `BeginSystem`, `BeginSystemIn` and `BeginTokenIn` start system work. "
+                + "Below it: the Tenancy user it reads, the actor a change "
                 + "records, the selection of a seat in the tenant a request names, and the requirements a request states with "
                 + "an attribute, `[Operator]` among them.\n\n"
                 + "Your code takes `TenancyAccessManager` with no type arguments. The generator writes it into the global "

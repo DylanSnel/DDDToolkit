@@ -97,7 +97,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </para>
 /// <para>
 /// With <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/>, work runs as system work without a scope only
-/// where code began it, with <see cref="ICurrentUser.BeginSystem"/>. An <see cref="ICurrentUser"/> that answers
+/// where code began it, with <see cref="AccessManager.BeginSystem"/>. An <see cref="ICurrentUser"/> that answers
 /// <see cref="CurrentUserSnapshot.System"/> for work that began nothing is refused with
 /// <see cref="NoCurrentUserException"/>, whichever <see cref="ICurrentUserSource"/> the host registered.
 /// </para>
@@ -864,7 +864,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         {
             throw new NoCurrentUserException(
                 $"{_user.GetType().Name} answered system work that nothing began, and this host requires every flow of work to say who it runs as (RequireExplicitCurrentUser). " +
-                "Begin system work with ICurrentUser.BeginSystem(), or a module's scoped system work with BeginSystem(scope).");
+                "Begin system work with AccessManager.BeginSystem(), or a module's scoped system work with BeginSystem(scope).");
         }
 
         string role;

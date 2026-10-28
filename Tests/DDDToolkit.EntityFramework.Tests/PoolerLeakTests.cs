@@ -80,7 +80,7 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
                     // Alice and Bob in turn, each flow starting with the other one.
                     var (id, name, team) = (flow + round) % 2 == 0 ? (Alice, "Alice", "amber") : (Bob, "Bob", "teal");
 
-                    using (TestUser.BeginAs(PooledNotesHost.User(id, team)))
+                    using (TestAccess.BeginAs(PooledNotesHost.User(id, team)))
                     {
                         await using var context = PoolerFixture.Context(Connection, interceptor);
 

@@ -223,7 +223,7 @@ Running as the login role means doing what that role may do. Where the host uses
 `postgres.login-role-owns-nothing` enforces, the login role holds nothing on the tables. The database then refuses
 such a context's first command. Such a context reads past the policies only where the login role owns the tables, in
 a host that skips that check with a reason. Work across callers usually belongs to system work instead,
-`user.BeginSystem("reports")`, in a context that runs as the current user.
+`access.BeginSystem("reports")` on `AccessManager`, in a context that runs as the current user.
 
 ### Writing a context part
 
@@ -1498,7 +1498,7 @@ occurred and when it was recorded, the aggregate that raised it, and who acted:
 |---|---|---|
 | A signed-in user | `user` | the user's id, or the token's `sub` where that is not a `uuid` |
 | System work | `system` | `null` |
-| System work inside a scope, `user.BeginSystem("ordering")` | `system` | the scope |
+| System work inside a scope, `access.BeginSystem("ordering")` | `system` | the scope |
 | A request without a user | `anonymous` | `null` |
 
 That pair is an `ActedBy`, and `IActedByAccessor` returns it. The accessor that the toolkit registers reads the

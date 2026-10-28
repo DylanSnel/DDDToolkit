@@ -209,7 +209,7 @@ public partial class RefusalTableTests
         harness.Options.OperatorTokenRoles.Add("operator");
         async Task<IReadOnlyDictionary<string, object?>> RefusingAnOperator(string code, Func<Harness, Task> act)
         {
-            using (TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid(), "operator")))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid(), "operator")))
             {
                 return (await Refused.WithCodeAsync(code, () => harness.Run(HostUser.Nobody(TenancyRefusals.NotSeated), act))).Arguments;
             }

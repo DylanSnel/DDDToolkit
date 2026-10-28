@@ -18,7 +18,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// An Azure Function on the isolated worker, through <see cref="SupabaseAuthMiddleware"/>: the invocation's
 /// token decides who the function's queries run as, against the same Postgres and the same policy as the
 /// ASP.NET Core tests. The worker has no ASP.NET Core pipeline, so the caller is made current with
-/// <see cref="ICurrentUser.BeginAs(CurrentUserSnapshot)"/>, and the context asks <see cref="CurrentUser"/>.
+/// <see cref="AccessManager.BeginAs(CurrentUserSnapshot)"/>, and the context asks <see cref="CurrentUser"/>.
 /// </summary>
 public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase database)
     : IClassFixture<SupabaseRowLevelSecurityDatabase>, IAsyncLifetime
@@ -85,7 +85,7 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
         // A message queued on Bob's behalf, carrying his claims: the function makes him the caller.
         var asBob = await InvokeAsync(WorkerInvocation.Queue(), options, async read =>
         {
-            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 return await read();
             }
@@ -106,7 +106,7 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
         ((Func<CurrentUserSnapshot>)(() => queued.GetSupabaseUser())).Should().Throw<NoCurrentUserException>()
             .WithMessage("*not an HTTP request and began no user*RequireExplicitCurrentUser*");
 
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             queued.GetSupabaseUser().Should().BeSameAs(CurrentUserSnapshot.System, "a function that begins a caller runs as it");
         }

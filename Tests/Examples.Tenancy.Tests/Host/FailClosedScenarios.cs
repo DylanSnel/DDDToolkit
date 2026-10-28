@@ -82,7 +82,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         // The rows are there: the role that owns the database counts every tenant's.
         (await onPostgres.AsOwnerAsync<long>(EveryProject, Cancellation)).Should().Be(Harbor.Projects.Count + Meadow.Projects.Count);
 
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();

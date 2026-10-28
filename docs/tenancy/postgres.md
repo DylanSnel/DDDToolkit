@@ -225,7 +225,7 @@ token's identity. `TenantSelection` returns the seat when the seat and its tenan
 app.Use(async (context, next) =>
 {
     var user = context.GetSupabaseUser();
-    using (context.RequestServices.GetRequiredService<ICurrentUser>().BeginAs(user))
+    using (context.RequestServices.GetRequiredService<AccessManager>().BeginAs(user))
     {
         // ITenantSelection has no type parameters, so the middleware names no id types
         var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()

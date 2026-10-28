@@ -261,8 +261,9 @@ var via = answer is null ? null : edit.Via(answer.AsMember, answer.FromAbove);
 
 ## System work
 
-- **System work without a scope**, `user.BeginSystem()`, holds every permission on every resource.
-- **Scoped system work**, `user.BeginSystem("filing")`, is nobody's member. It holds every permission where the rules
+- **System work without a scope**, `access.BeginSystem()` on the core's `AccessManager`, holds every permission on
+  every resource.
+- **Scoped system work**, `access.BeginSystem("filing")`, is nobody's member. It holds every permission where the rules
   let its scope through, and nothing elsewhere.
 - **By default, the rules let the module's own scope through**, for example `filing` for the module `Filing`
   ([Names](resources-and-members.md#names)). So a seeding, or a handler that saves as system work, needs no setting.
@@ -306,7 +307,7 @@ A save that changes a resource with members, or one of its members or roles, the
 | the resource the check read, at that version | saved |
 | that resource, changed since the check, whether or not a version was named | 409, whatever changed |
 | a resource that no check of the request read: a handler called directly, a transport that bypasses the pipeline, a save after the handling returned, or another resource than the request names | refused with `InvalidOperationException`. Nothing is saved. A member manager refuses a caller without the permission before that, with `not-permitted`. |
-| another resource, as system work begun by trusted code (`user.BeginSystem()`, or a scope the rules name) | saved. A resource the check read is still tied to its version. |
+| another resource, as system work begun by trusted code (`access.BeginSystem()`, or a scope the rules name) | saved. A resource the check read is still tied to its version. |
 | a new resource | saved |
 
 - **The hold finds the check through [the request in hand](../access-requirements.md#the-request-in-hand).**

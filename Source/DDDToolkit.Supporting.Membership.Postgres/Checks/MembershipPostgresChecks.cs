@@ -189,7 +189,7 @@ public static class MembershipPostgresChecks
     private static async Task<Found> FindingsAsync(IServiceProvider services, MembershipRegistration registration, CancellationToken cancellationToken)
     {
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using ((services.GetService<ICurrentUser>() ?? new CurrentUser()).BeginSystem())
+        using (new AccessManager(new CurrentUser()).BeginSystem())
         {
             var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             await using (scope.ConfigureAwait(false))

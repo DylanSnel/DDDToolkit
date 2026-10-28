@@ -93,7 +93,7 @@ public static class SupabaseAuthentication
     /// <b>The current user.</b> The scheme also makes the request's user what <see cref="ICurrentUser"/> answers,
     /// and so the user row level security runs the request's queries as. A request whose token this scheme validated
     /// runs as that user. Any other request runs as <c>anon</c>. Work outside a request is system work. A user that code
-    /// began with <see cref="ICurrentUser.BeginAs(Guid)"/> or <see cref="ICurrentUser.BeginSystem"/> always wins. With
+    /// began with <see cref="AccessManager.BeginAs(Guid)"/> or <see cref="AccessManager.BeginSystem"/> always wins. With
     /// <see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>, work outside a request that
     /// began no user throws <see cref="NoCurrentUserException"/> instead of running as system work.
     /// <see cref="SupabaseHttpContextExtensions.GetSupabaseUser"/> is the request's own user, whatever was begun

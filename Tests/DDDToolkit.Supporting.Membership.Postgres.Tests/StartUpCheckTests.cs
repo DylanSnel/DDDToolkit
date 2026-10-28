@@ -28,7 +28,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
 
         // And for a host whose contexts run as the caller, whoever is calling when it starts: the check asks as the application itself.
         using var asUser = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true, seed: false);
-        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(asUser.Services.Provider, Cancellation);
         }

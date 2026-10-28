@@ -165,7 +165,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // The seat a request acts as is found before a tenant is chosen, past the organization, which only names it.
         foreach (var (person, slug, seat) in new[] { (Oli, "harbor", Oli.Seat), (Ada, "harbor", Ada.Seat), (Oli, "orchard", OliInOrchard) })
         {
-            using (TestUser.BeginAs(person.Identity))
+            using (TestAccess.BeginAs(person.Identity))
             {
                 (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(person.Identity), slug, Cancellation)))
                     .Seat.Should().Be(seat, "{0} has a seat in {1}", person.Name, slug);
@@ -177,7 +177,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // organization through, to the employee as to the external seat.
         foreach (var (person, expected) in new[] { (Oli, new[] { ("harbor", "Harbor Works"), ("orchard", "Orchard Works") }), (Ada, new[] { ("harbor", "Harbor Works") }) })
         {
-            using (TestUser.BeginAs(person.Identity))
+            using (TestAccess.BeginAs(person.Identity))
             {
                 var mine = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync<HostSeat>(CurrentUserSnapshot.User(person.Identity), Cancellation));
                 mine.Select(found => (found.Slug, found.OrganizationName)).Should().BeEquivalentTo(expected, "{0} sees the tenants by name", person.Name);

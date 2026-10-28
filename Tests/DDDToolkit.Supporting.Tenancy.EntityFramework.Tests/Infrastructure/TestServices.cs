@@ -218,7 +218,7 @@ public sealed class TestServices : IDisposable
     public async Task<InvitationManager.AcceptedInvitation> AcceptAsync(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
     {
         await using var scope = Scope();
-        using (TestUser.BeginAs(identity))
+        using (TestAccess.BeginAs(identity))
         using (TenancyUsers.BeginNone())
         {
             return await scope.ServiceProvider.Invitations().AcceptAsync(token, verifiedAddress, CancellationToken.None, configure: seat => seat.Rename(displayName));

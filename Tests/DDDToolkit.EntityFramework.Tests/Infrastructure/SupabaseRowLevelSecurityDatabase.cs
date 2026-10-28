@@ -219,18 +219,6 @@ public sealed class UserOfTheTest : ICurrentUserSource, ICurrentUser
     public string? FindClaim(string path) => _user.FindClaim(path);
 
     /// <inheritdoc />
-    public IDisposable BeginAs(Guid userId) => _user.BeginAs(userId);
-
-    /// <inheritdoc />
-    public IDisposable BeginAs(CurrentUserSnapshot user) => _user.BeginAs(user);
-
-    /// <inheritdoc />
-    public IDisposable BeginSystem(string? scope = null) => _user.BeginSystem(scope);
-
-    /// <inheritdoc />
-    public IDisposable BeginNone() => _user.BeginNone();
-
-    /// <inheritdoc />
     public CurrentUserSnapshot RequireSystemWork() => _user.RequireSystemWork();
 }
 

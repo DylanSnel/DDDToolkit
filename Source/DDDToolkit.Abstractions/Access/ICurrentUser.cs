@@ -3,7 +3,7 @@ namespace DDDToolkit.Abstractions.Access;
 /// <summary>
 /// Who the current work runs as: a signed-in user, somebody who has not signed in, or system work. Code takes it from
 /// dependency injection and asks it each time it needs the answer. It reads the current flow of work on every call, so
-/// inside <see cref="BeginSystem"/> it answers system work, and after the <c>using</c> it answers the user again.
+/// inside system work that code began it answers system work, and after the <c>using</c> it answers the user again.
 /// <code>
 /// public sealed class PlaceOrderHandler(ICurrentUser user, OrderingContext context) : ICommandHandler&lt;PlaceOrder&gt;
 /// {
@@ -14,23 +14,26 @@ namespace DDDToolkit.Abstractions.Access;
 ///     }
 /// }
 /// </code>
+/// It only answers. Work is begun on the access manager, <c>AccessManager</c> in the <c>DDDToolkit</c> package, whose
+/// <c>CurrentUser</c> is this.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Where the answer comes from.</b> Work begun with <see cref="BeginAs(Guid)"/>, <see cref="BeginAs(CurrentUserSnapshot)"/>
-/// or <see cref="BeginSystem"/> runs as what was begun. Other work runs as the user the host says: in ASP.NET Core with
+/// <b>Where the answer comes from.</b> Work begun with the access manager's <c>BeginAs</c> or <c>BeginSystem</c> runs as
+/// what was begun. Other work runs as the user the host says: in ASP.NET Core with
 /// <c>DDDToolkit.Auth.Supabase.AspNetCore</c>, the user of the request's validated token, or somebody who has not signed in.
 /// Outside a request it is system work, unless the host requires every flow of work to begin its user. Then it throws.
 /// </para>
 /// <para>
-/// <b>Work without a request.</b> A job, a queue-triggered function or a test begins the user it runs as:
+/// <b>Work without a request.</b> A job, a queue-triggered function or a test begins the user it runs as on the access
+/// manager:
 /// <code>
-/// using (user.BeginAs(job.UserId))
+/// using (access.BeginAs(job.UserId))
 /// {
 ///     await handler.HandleAsync(job.Command, cancellationToken);
 /// }
 ///
-/// using (user.BeginSystem("billing"))   // system work inside the scope of the billing module
+/// using (access.BeginSystem("billing"))   // system work inside the scope of the billing module
 /// {
 ///     await invoices.CloseMonthAsync(cancellationToken);
 /// }
@@ -45,7 +48,7 @@ namespace DDDToolkit.Abstractions.Access;
 /// </para>
 /// <para>
 /// The toolkit's implementation is <c>CurrentUser</c> in the <c>DDDToolkit</c> package, which every registration of the
-/// toolkit that needs it registers as a singleton.
+/// toolkit that needs it registers as a singleton, with the <c>AccessManager</c> beside it.
 /// </para>
 /// </remarks>
 public interface ICurrentUser
@@ -83,7 +86,7 @@ public interface ICurrentUser
     /// </exception>
     bool IsSystem { get; }
 
-    /// <summary>The scope of scoped system work, as <see cref="BeginSystem"/> was given it. <see langword="null"/> for every other kind.</summary>
+    /// <summary>The scope of scoped system work, as <c>BeginSystem(scope)</c> was given it. <see langword="null"/> for every other kind.</summary>
     /// <exception cref="InvalidOperationException">
     /// <c>NoCurrentUserException</c>: nothing began a user for the work, and the host requires every flow of work to begin one.
     /// </exception>
@@ -109,9 +112,8 @@ public interface ICurrentUser
     CurrentUserSnapshot Snapshot { get; }
 
     /// <summary>
-    /// Whether code began the current user for this flow of work with <see cref="BeginAs(Guid)"/>,
-    /// <see cref="BeginAs(CurrentUserSnapshot)"/> or <see cref="BeginSystem"/>. False where the host answers, and inside
-    /// <see cref="BeginNone"/>. It never throws.
+    /// Whether code began the current user for this flow of work, with the access manager's <c>BeginAs</c> or
+    /// <c>BeginSystem</c>. False where the host answers, and inside <c>BeginNone()</c>. It never throws.
     /// </summary>
     bool IsBegun { get; }
 
@@ -127,44 +129,8 @@ public interface ICurrentUser
     string? FindClaim(string path);
 
     /// <summary>
-    /// Runs the work as the signed-in user <paramref name="userId"/>, with the role <c>authenticated</c> and no other
-    /// claims, until the result is disposed. Then the user before it is current again.
-    /// </summary>
-    /// <param name="userId">The user's id.</param>
-    IDisposable BeginAs(Guid userId);
-
-    /// <summary>
-    /// Runs the work as <paramref name="user"/> until the result is disposed. Then the user before it is current again.
-    /// A host begins the request's user with it, and a job begins the user of the token that queued it:
-    /// <c>user.BeginAs(CurrentUserSnapshot.FromClaims(job.Claims))</c>.
-    /// </summary>
-    /// <param name="user">The user to run as.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="user"/> is null.</exception>
-    IDisposable BeginAs(CurrentUserSnapshot user);
-
-    /// <summary>
-    /// Runs the work as system work until the result is disposed. Then the user before it is current again.
-    /// <para>
-    /// Without a scope it is system work above the policies: on Postgres it runs as the host's system role, which row
-    /// level security lets past every policy. Give a module's work its scope, <c>BeginSystem("billing")</c>. Scoped
-    /// system work runs as a role that cannot bypass the policies, and the module's policies read the scope.
-    /// </para>
-    /// </summary>
-    /// <param name="scope">The scope, in lower case letters, digits, <c>_</c> and <c>-</c>, such as the module's name. <see langword="null"/> for system work without a scope.</param>
-    /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is begun then.</exception>
-    IDisposable BeginSystem(string? scope = null);
-
-    /// <summary>
-    /// Makes nobody the begun user until the result is disposed, and the user before it current again afterwards.
-    /// The host's answer applies inside, as it does where nothing was begun. The toolkit runs the handlers of its own
-    /// background work inside it when the host requires every flow of work to begin its user, so a handler does not
-    /// inherit the system work of the bookkeeping that called it.
-    /// </summary>
-    IDisposable BeginNone();
-
-    /// <summary>
-    /// Refuses everyone but system work that code began for this flow with <see cref="BeginSystem"/>, with or without a
-    /// scope. A handler or a use case that only system work may run calls it first.
+    /// Refuses everyone but system work that code began for this flow with the access manager's <c>BeginSystem</c>, with
+    /// or without a scope. A handler or a use case that only system work may run calls it first.
     /// <code>
     /// public async Task HandleAsync(ImportPrices command, CancellationToken cancellationToken)
     /// {

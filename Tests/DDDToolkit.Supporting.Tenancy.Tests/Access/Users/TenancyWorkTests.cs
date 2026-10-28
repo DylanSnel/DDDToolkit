@@ -38,7 +38,7 @@ public class TenancyWorkTests
         var person = CurrentUserSnapshot.User(Guid.NewGuid());
         var seat = HostUser.InSeat(Harbor, Ada);
 
-        using (TestUser.BeginAs(person))
+        using (TestAccess.BeginAs(person))
         using (TenancyUsers.Begin(seat))
         {
             var work = TenancyWork.BeginSystemIn(Harbor, (SeatId?)Ada);
@@ -168,7 +168,7 @@ public class TenancyWorkTests
 
         // A person, as their seat: the directory and a command.
         var administrator = HostUser.InSeat(tenant, harbor.AdminSeat);
-        using (TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
         {
             await harness.Run(administrator, h => h.Seats.WhoAmIAsync(default));
             await harness.Run(administrator, h => h.Seats.ListAsync(default));

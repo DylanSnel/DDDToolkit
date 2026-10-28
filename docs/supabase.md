@@ -600,9 +600,9 @@ PostgREST does for each request:
 |---|---|---|
 | A request with a valid Supabase access token | `authenticated`, with the token's claims as they were signed | the user's id |
 | A request without a valid token, or signed in another way | `anon`, with the claims `{"role":"anon"}` | `null` |
-| System work inside a scope, `user.BeginSystem("projects")` | `ddd_system_in`, with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
+| System work inside a scope, `access.BeginSystem("projects")` | `ddd_system_in`, with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
 | System work outside any request, such as a hosted service of yours | `ddd_system`, the toolkit's bookkeeping role. `system=<role>` in `SupabaseRowAccessRoles` names another role, and `system=none` names the role the application logged in as. Where the host requires an explicit current user, this work runs as nobody. The toolkit's pollers then begin system work for their bookkeeping only. | `null` |
-| Code inside `using (user.BeginAs(userId))` | that user, whatever the request says | the user's |
+| Code inside `using (access.BeginAs(userId))` | that user, whatever the request says | the user's |
 
 So `auth.uid()`, `auth.jwt()` and every policy on every table the context touches apply to the context's queries. A
 policy you already test with pgTAP also decides what the application may see. The statement that sets the claims also
@@ -664,7 +664,7 @@ Rules written in C# do both for you ([Row access rules in the build](#row-access
 toolkit's bookkeeping and nothing else: reading, marking and deleting outbox rows, the inbox, and the record of which
 migrations ran. A hosted service of yours that reads or writes a module's tables is refused as `ddd_system`. So begin
 its work as [scoped system work](row-level-security.md#the-scoped-system-role):
-`using (user.BeginSystem("projects"))`. That work runs as `ddd_system_in`, under the policies the
+`using (access.BeginSystem("projects"))`, on `AccessManager`. That work runs as `ddd_system_in`, under the policies the
 module's rules write for `RowAccessRoles.SystemIn`.
 
 A host that logs in as `postgres` can run its background work as that owner, outside the policies. It sets this once
@@ -1076,7 +1076,7 @@ The policies are written for one database role per kind of caller, and they use 
 |---|---|---|
 | `user` | a signed-in user | `authenticated` |
 | `anonymous` | a caller without a token | `anon` |
-| `system-in` | system work under the policies, `user.BeginSystem(scope)` | `ddd_system_in` |
+| `system-in` | system work under the policies, `access.BeginSystem(scope)` | `ddd_system_in` |
 | `system` | system work outside a request: the toolkit's bookkeeping | `ddd_system` |
 | `token:<role>` | a signed-in user whose token carries that role | none mapped |
 
@@ -1505,7 +1505,7 @@ nothing for it, and the bookkeeping role then fails on the outbox when the first
 The isolated worker runs no ASP.NET Core pipeline, also not with its ASP.NET Core integration. So there is no
 `UseAuthentication()` for a bearer scheme. `DDDToolkit.Auth.Supabase.AzureFunctions` is a worker middleware instead.
 For each HTTP-triggered invocation, it validates the token in the request's `Authorization` header and runs the
-function inside `ICurrentUser.BeginAs`: as that user, or as `anon` without a valid token.
+function inside `AccessManager.BeginAs`: as that user, or as `anon` without a valid token.
 
 ```csharp
 var builder = FunctionsApplication.CreateBuilder(args);
@@ -1520,8 +1520,8 @@ builder.Services.AddDbContext<OrderingContext>((provider, options) => options
 ```
 
 - A queue, timer or Service Bus trigger has no request, so it runs as system work. The function can begin a user
-  itself with `ICurrentUser`, for example from the claims its message carries:
-  `user.BeginAs(CurrentUserSnapshot.FromClaims(message.Claims))`.
+  itself with `AccessManager`, for example from the claims its message carries:
+  `access.BeginAs(CurrentUserSnapshot.FromClaims(message.Claims))`.
 - `context.GetSupabaseUser()` returns the user an invocation runs as. Use it in a function that answers a caller
   without a user with a 401.
 - Where the host requires an explicit current user, an invocation without a request runs as nobody until the function
@@ -1534,7 +1534,7 @@ A worker service or a tool of yours needs no host package:
 - `SupabaseTokenValidator`, from `DDDToolkit.Auth.Supabase`, checks a token against the keys the project publishes,
   or against its secret when it was given one ([Signing keys and the JWT secret](#signing-keys-and-the-jwt-secret)).
   `UserOfAsync(authorization)` returns the token's user, a `CurrentUserSnapshot`.
-- `user.BeginAs(snapshot)`, on the `ICurrentUser` your code takes, makes that user current.
+- `access.BeginAs(snapshot)`, on the `AccessManager` your code takes, makes that user current.
 - `AddSupabaseRowLevelSecurity()` alone then runs the queries as that user. Where nothing was begun, the queries run
   as system work, or as nobody where the host requires an explicit current user.
 

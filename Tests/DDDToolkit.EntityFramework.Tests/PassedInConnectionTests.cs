@@ -115,7 +115,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
 
         await using var first = new NotesContext(new DbContextOptionsBuilder<NotesContext>().UseNpgsql(dataSource).AddInterceptors(Strict()).Options);
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using var transaction = await first.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(first)).Should().Equal("Alice's");
@@ -128,7 +128,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
             (await TextsAsync(second)).Should().Equal(["Alice's"], "it runs as the caller the transaction began with");
             _sent.Count(SetsTheRole).Should().Be(sentByTheFirst, "and sets nothing of its own");
 
-            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 var asBob = () => TextsAsync(second);
                 (await asBob.Should().ThrowAsync<InvalidOperationException>("a transaction runs as one caller, whichever context the command comes from"))
@@ -162,7 +162,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
             "This connection was opened outside Entity Framework and carries no user, and a transaction is open on it, so the user cannot be set safely. " +
             "Open the connection through a context, begin the transaction after a context opened it, or use CurrentUserConnections.";
 
-        using var alice = TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
+        using var alice = TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
 
         // A transaction begun on the connection itself, and handed to the context.
         await using (var connection = await dataSource.OpenConnectionAsync(Cancellation))
@@ -270,7 +270,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
         var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
         PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new CurrentUser(required), RowLevelSecurityScope.Transaction, [_tenant], required);
 
-        using var alice = TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
+        using var alice = TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
         await using var first = new NotesContext(new DbContextOptionsBuilder<NotesContext>().UseNpgsql(dataSource).AddInterceptors(Strict()).Options);
         var transaction = await first.Database.BeginTransactionAsync(Cancellation);
         (await TextsAsync(first)).Should().Equal("Alice's");
@@ -344,7 +344,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
 
         await using var first = new NotesContext(new DbContextOptionsBuilder<NotesContext>().UseNpgsql(dataSource).AddInterceptors(Strict()).Options);
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using (var transaction = await first.Database.BeginTransactionAsync(Cancellation))
             {
@@ -359,7 +359,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
                 _sent.Count(Calls).Should().Be(0, "no call is written in front of a command inside a transaction");
                 _sent.Count(AsksForTheMark).Should().Be(1, "it cost one question to the server, which handing the transaction over would have saved on every command but the first");
 
-                using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+                using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
                 {
                     var asBob = () => TextsAsync(second);
                     (await asBob.Should().ThrowAsync<InvalidOperationException>("a transaction runs as one caller, also for a context that was not told of it"))
@@ -458,7 +458,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
         await using var context = Over(connection, interceptor);
         DbTransaction earlier;
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             earlier = await connection.BeginTransactionAsync(Cancellation);
             await context.Database.UseTransactionAsync(earlier, Cancellation);
@@ -470,7 +470,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
             await earlier.DisposeAsync();
         }
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             await using var later = await connection.BeginTransactionAsync(Cancellation);
             TestContext.Current.TestOutputHelper?.WriteLine(

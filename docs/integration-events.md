@@ -445,7 +445,7 @@ before it asks the inbox anything, and ends it after the commit:
 
 ```csharp
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
-    .Around((services, message, contract) => services.GetRequiredService<ICurrentUser>().BeginSystem("shipping"))
+    .Around((services, message, contract) => services.GetRequiredService<AccessManager>().BeginSystem("shipping"))
     .Handle<OrderPlacedV1, BookShipment>());
 ```
 
@@ -473,7 +473,7 @@ sequenceDiagram
 ```csharp
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
     // begun around every delivery, outermost first
-    .Around((services, message, contract) => services.GetRequiredService<ICurrentUser>().BeginSystem(
+    .Around((services, message, contract) => services.GetRequiredService<AccessManager>().BeginSystem(
         message.Name == "ordering.order-placed" ? "shipping" : "shipping-cancellations"))
     .Handle<OrderPlacedV1, BookShipment>()
     .Handle<OrderCancelledV1, CancelShipment>());

@@ -75,7 +75,7 @@ public sealed class AggregateOwnerPostgresTests(ExplicitCurrentUserPostgres post
     private static async Task AskAsync(IServiceProvider host, CurrentUserSnapshot caller, IHivesRequest request)
     {
         await using var scope = host.CreateAsyncScope();
-        using var running = TestUser.BeginAs(caller);
+        using var running = TestAccess.BeginAs(caller);
         await scope.ServiceProvider.GetRequiredService<AccessChecks<IHivesRequest>>().RequireAsync(request, Cancellation);
     }
 

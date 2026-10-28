@@ -105,7 +105,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// itself holds every permission on every resource. An application whose work always begins its user says so,
     /// with <c>services.RequireExplicitCurrentUser()</c>, and a request that reaches the questions with no user
     /// then fails rather than passes as the application. Work in a scope
-    /// (<see cref="ICurrentUser.BeginSystem"/> with a scope) holds nothing on a resource unless the rules name that scope
+    /// (<see cref="AccessManager.BeginSystem"/> with a scope) holds nothing on a resource unless the rules name that scope
     /// (<see cref="MembershipRules.SystemScopes"/>).
     /// </para>
     /// <para>

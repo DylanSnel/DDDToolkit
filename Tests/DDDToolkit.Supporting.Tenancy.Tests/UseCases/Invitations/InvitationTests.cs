@@ -317,7 +317,7 @@ public class InvitationTests
         var seen = new List<string>();
 
         InvitationManager.AcceptedInvitation accepted;
-        using (TestUser.BeginAs(Wren))
+        using (TestAccess.BeginAs(Wren))
         {
             harness.Store.BeginUnitOfWork();
             accepted = await harness.Invitations.AcceptAsync(issued.Token, verifiedAddress: null, Cancellation, configure: seat =>
@@ -376,7 +376,7 @@ public class InvitationTests
     /// <summary>Accepts as Wren, with <paramref name="configure"/> as the host's callback, in a new unit of work.</summary>
     private static async Task<InvitationManager.AcceptedInvitation> AcceptWith(Harness harness, string token, Action<HostSeat> configure)
     {
-        using (TestUser.BeginAs(Wren))
+        using (TestAccess.BeginAs(Wren))
         {
             harness.Store.BeginUnitOfWork();
             return await harness.Invitations.AcceptAsync(token, verifiedAddress: null, Cancellation, configure: configure);
@@ -405,7 +405,7 @@ public class InvitationTests
         ];
         foreach (var other in others)
         {
-            using (other is null ? null : TestUser.BeginAs(other))
+            using (other is null ? null : TestAccess.BeginAs(other))
             {
                 harness.Store.BeginUnitOfWork();
                 var refusal = await Refused.WithCodeAsync(
@@ -421,7 +421,7 @@ public class InvitationTests
             .GetParameters().Should().NotContain(parameter => parameter.ParameterType == typeof(CurrentUserSnapshot) || parameter.ParameterType == typeof(Guid));
 
         // A seat of the tenant that is signed in is an identity like any other; a sign-in that says it is not anonymous is one too.
-        using (TestUser.BeginAs(CurrentUserSnapshot.User(Wren, claim: path => path == "is_anonymous" ? "false" : null)))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Wren, claim: path => path == "is_anonymous" ? "false" : null)))
         {
             harness.Store.BeginUnitOfWork();
             (await harness.Invitations.AcceptAsync(issued.Token, verifiedAddress: null, Cancellation)).Tenant.Id.Should().Be(harness.Tenant);
@@ -652,7 +652,7 @@ public class InvitationTests
         await harness.BySystemWork(use => use.Seats.SuspendAsync(hana, Cancellation));
 
         // A handler that catches the refusal and goes on saves the same unit of work again.
-        using (TestUser.BeginAs(Wren))
+        using (TestAccess.BeginAs(Wren))
         {
             harness.Store.BeginUnitOfWork();
             await Refused.WithCodeAsync(TenancyRefusals.InvitationUnbacked, () => harness.Invitations.AcceptAsync(issued.Token, null, Cancellation));

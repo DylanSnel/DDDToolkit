@@ -474,7 +474,7 @@ public sealed class MembershipRules
             if (string.IsNullOrEmpty(scope) || !scope.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_' or '-'))
             {
                 throw new ArgumentException(
-                    "'" + scope + "' is not a scope. A scope is lower case letters, digits, '_' and '-', such as a module's name: what ICurrentUser.BeginSystem(scope) is begun with.",
+                    "'" + scope + "' is not a scope. A scope is lower case letters, digits, '_' and '-', such as a module's name: what AccessManager.BeginSystem(scope) is begun with.",
                     "systemScopes");
             }
         }

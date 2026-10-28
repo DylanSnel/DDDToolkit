@@ -7,8 +7,8 @@ namespace DDDToolkit.Abstractions.Access;
 /// <summary>
 /// Who a flow of work runs as at one moment: a signed-in user, somebody who has not signed in, system work, or
 /// system work inside a scope a module chose. <see cref="ICurrentUser"/> answers from the snapshot that is current.
-/// A host hands one over for each request, and <see cref="ICurrentUser.BeginAs(CurrentUserSnapshot)"/> makes one
-/// current for a flow of work.
+/// A host hands one over for each request, and the access manager's <c>BeginAs(snapshot)</c>, in the <c>DDDToolkit</c>
+/// package, makes one current for a flow of work.
 /// </summary>
 /// <remarks>
 /// Application code asks <see cref="ICurrentUser"/>. A snapshot is for code that keeps the answer or passes it on: a

@@ -281,7 +281,7 @@ public class CombinedRequirementTests
             .Should().ThrowAsync<NoCurrentUserException>();
         scope.ServiceProvider.GetRequiredService<Asked>().Entries.Should().BeEmpty("no case is asked of such work");
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             await checks.RequireAsync(new ExportBoard(Met("north")), Cancellation);
         }

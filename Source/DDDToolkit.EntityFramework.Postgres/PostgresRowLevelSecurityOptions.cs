@@ -156,7 +156,7 @@ public sealed class PostgresRowLevelSecurityOptions
             CurrentUserKind.System => SystemRole ?? "none",
             CurrentUserKind.SystemIn => SystemInRole ?? throw new InvalidOperationException(
                 $"The current user is {user}, scoped system work, and PostgresRowLevelSecurityOptions.{nameof(SystemInRole)} is null, so there is no role for it to run as. " +
-                $"Set {nameof(SystemInRole)}, '{DefaultSystemInRole}' by default, or do not begin scoped system work (ICurrentUser.BeginSystem(scope)) in this host."),
+                $"Set {nameof(SystemInRole)}, '{DefaultSystemInRole}' by default, or do not begin scoped system work (AccessManager.BeginSystem(scope)) in this host."),
             _ => throw new InvalidOperationException(
                 $"No role is configured for a user of kind {user.Kind}, so its queries cannot run. A kind of user needs a role of its own before row level security can apply to it."),
         };

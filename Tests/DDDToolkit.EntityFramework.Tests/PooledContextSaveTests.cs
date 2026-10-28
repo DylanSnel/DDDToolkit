@@ -405,7 +405,7 @@ public sealed class PooledContextSaveTests : IDisposable
 
         async Task<DbContext> SettleAsAsync(CurrentUserSnapshot caller, string yard, int number)
         {
-            using var running = TestUser.BeginAs(caller);
+            using var running = TestAccess.BeginAs(caller);
             using var standing = YardOfTheFlow.Begin(yard);
 
             // Rented from the factory, with no scope anywhere and none bound: the log asks for none.

@@ -68,7 +68,7 @@ public sealed class OneUserOrAnotherTests(TenancyPostgres postgres)
         read.Should().Equal(["Barrels", "Crates"], "Harbor's, and no other tenant's: Tenancy keeps a seat to its tenant, whatever the module's rule says");
 
         // An operator: let through by the first case, and the operators' rule lets it read every tenant's.
-        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
         using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             var across = await services.InScopeAsync(async scoped =>

@@ -12,26 +12,24 @@ namespace DDDToolkit.Access;
 /// <remarks>
 /// It keeps no state of its own, so one instance serves the whole application, and the toolkit registers it as a
 /// singleton. Row level security asks it every time a context opens a connection, from a singleton that a context pool
-/// shares. What its begin methods start follows the flow of work, and every instance sees the same.
+/// shares. What <see cref="AccessManager"/> begins follows the flow of work, and every instance sees the same.
 /// <para>
 /// A host that knows its requests registers an <see cref="ICurrentUserSource"/>. <c>DDDToolkit.Auth.Supabase.AspNetCore</c>
 /// registers one that answers the user of the request's validated token. A worker service, an Azure Function or a test
-/// needs none: it begins the user its work runs as.
+/// needs none: it begins the user its work runs as, with <see cref="AccessManager"/>.
 /// </para>
 /// </remarks>
 /// <param name="options">Whether the host requires every flow of work to begin its user; registered by <see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>.</param>
 /// <param name="source">The host's answer where nothing was begun, such as the request's user; none when left out.</param>
 public sealed class CurrentUser(CurrentUserOptions? options = null, ICurrentUserSource? source = null) : ICurrentUser
 {
-    private static readonly AsyncLocal<CurrentUserSnapshot?> Begun = new();
-
     /// <inheritdoc />
-    public CurrentUserSnapshot Snapshot => Begun.Value
+    public CurrentUserSnapshot Snapshot => BegunUser.Value
         ?? source?.Current
         ?? (options?.RequireExplicitCurrentUser == true ? throw new NoCurrentUserException() : CurrentUserSnapshot.System);
 
     /// <inheritdoc />
-    public bool IsBegun => Begun.Value is not null;
+    public bool IsBegun => BegunUser.Value is not null;
 
     /// <inheritdoc />
     public CurrentUserKind Kind => Snapshot.Kind;
@@ -55,23 +53,6 @@ public sealed class CurrentUser(CurrentUserOptions? options = null, ICurrentUser
     public string? FindClaim(string path) => Snapshot.FindClaim(path);
 
     /// <inheritdoc />
-    public IDisposable BeginAs(Guid userId) => Begin(CurrentUserSnapshot.User(userId));
-
-    /// <inheritdoc />
-    public IDisposable BeginAs(CurrentUserSnapshot user)
-    {
-        ArgumentNullException.ThrowIfNull(user);
-        return Begin(user);
-    }
-
-    /// <inheritdoc />
-    public IDisposable BeginSystem(string? scope = null)
-        => Begin(scope is null ? CurrentUserSnapshot.System : CurrentUserSnapshot.SystemIn(scope));
-
-    /// <inheritdoc />
-    public IDisposable BeginNone() => Begin(null);
-
-    /// <inheritdoc />
     /// <exception cref="RefusalException"><see cref="ToolkitRefusals.SystemOnly"/> for anyone but begun system work.</exception>
     /// <exception cref="NoCurrentUserException">Nothing began a user for the work, and the host requires every flow of work to begin one.</exception>
     public CurrentUserSnapshot RequireSystemWork()
@@ -86,30 +67,5 @@ public sealed class CurrentUser(CurrentUserOptions? options = null, ICurrentUser
         }
 
         return current;
-    }
-
-    /// <summary>Makes <paramref name="user"/> the begun user until the result is disposed, and the one before it again afterwards.</summary>
-    private static Scope Begin(CurrentUserSnapshot? user)
-    {
-        var previous = Begun.Value;
-        Begun.Value = user;
-        return new Scope(previous);
-    }
-
-    /// <summary>Puts back the begun user from before <see cref="Begin"/>, once.</summary>
-    private sealed class Scope(CurrentUserSnapshot? previous) : IDisposable
-    {
-        private bool _disposed;
-
-        public void Dispose()
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-            Begun.Value = previous;
-        }
     }
 }

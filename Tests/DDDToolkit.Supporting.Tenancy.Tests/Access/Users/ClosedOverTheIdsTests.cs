@@ -33,7 +33,8 @@ public class ClosedOverTheIdsTests
     {
         (string Name, Func<IDisposable> Closed, Func<IDisposable> Open)[] pairs =
         [
-            ("BeginSystem", Access.BeginSystem, TenancyWork.BeginSystem<TenantId, SeatId>),
+            ("BeginSystem", () => Access.BeginSystem(), () => TenancyWork.BeginSystem<TenantId, SeatId>()),
+            ("BeginSystem in a module's scope", () => Access.BeginSystem("billing"), () => TenancyWork.BeginSystem<TenantId, SeatId>("billing")),
             ("BeginSystemIn", () => Access.BeginSystemIn(Harbor), () => TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor)),
             ("BeginSystemIn for a seat", () => Access.BeginSystemIn(Harbor, Ada, "projects"), () => TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor, (SeatId?)Ada, "projects")),
             ("BeginTokenIn", () => Access.BeginTokenIn(Harbor, Ada, "feeds"), () => TenancyWork.BeginTokenIn<TenantId, SeatId>(Harbor, Ada, "feeds")),
@@ -48,6 +49,45 @@ public class ClosedOverTheIdsTests
             BegunUser.Should().BeNull("{0} ends what it began", name);
             TenancyUsers.Ambient.Should().BeNull();
         }
+    }
+
+    [Fact]
+    public void It_is_the_cores_access_manager_and_the_system_work_it_begins_always_has_a_scope()
+    {
+        AccessManager core = Access;
+
+        using (core.BeginSystem())
+        {
+            BegunUser!.Kind.Should().Be(CurrentUserKind.SystemIn, "system work a Tenancy application begins stays under the policies");
+            BegunUser.SystemScope.Should().Be(TenancyWork.SystemScope, "Tenancy's own scope where none is given");
+            TenancyUsers.Current<TenantId, SeatId>().Should().Be(HostUser.System, "it acts in no tenant");
+        }
+
+        using (core.BeginSystem("billing"))
+        {
+            BegunUser!.SystemScope.Should().Be("billing");
+            var tenancy = TenancyUsers.Current<TenantId, SeatId>();
+            tenancy.Kind.Should().Be(TenancyUserKind.System, "a module's system work acts in no tenant either");
+            tenancy.Actor.Should().Be(TenancyActor<SeatId>.OfSystem("billing"), "and is recorded as the system in its scope");
+        }
+
+        // BeginAs and BeginNone are the core's: they leave Tenancy's user as it is.
+        using (TenancyUsers.Begin(HostUser.InSeat(Harbor, Ada)))
+        {
+            using (Access.BeginAs(Guid.NewGuid()))
+            {
+                Access.CurrentTenant.Seat.Should().Be(Ada);
+            }
+
+            using (Access.BeginNone())
+            {
+                Access.CurrentTenant.Seat.Should().Be(Ada);
+            }
+        }
+
+        FluentActions.Invoking(() => Access.BeginSystem("Billing!")).Should().Throw<ArgumentException>();
+        BegunUser.Should().BeNull("a scope that is no scope begins nothing");
+        TenancyUsers.Ambient.Should().BeNull();
     }
 
     [Fact]
@@ -128,7 +168,7 @@ public class ClosedOverTheIdsTests
     public void The_current_user_follows_what_is_begun()
     {
         var user = Guid.NewGuid();
-        using (TestUser.BeginAs(user))
+        using (TestAccess.BeginAs(user))
         {
             Access.CurrentUser.Id.Should().Be(user);
             Access.CurrentUser.IsAuthenticated.Should().BeTrue();
@@ -146,7 +186,7 @@ public class ClosedOverTheIdsTests
             Access.CurrentUser.Id.Should().Be(user, "after the using, the user acts again");
         }
 
-        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             Access.CurrentUser.Id.Should().BeNull();
             Access.CurrentUser.IsAuthenticated.Should().BeFalse();

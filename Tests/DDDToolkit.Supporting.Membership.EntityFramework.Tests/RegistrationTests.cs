@@ -289,7 +289,7 @@ public sealed class RegistrationTests
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
-        using (TestUser.BeginAs(TestUsers.User(UserId.CreateSequential())))
+        using (TestAccess.BeginAs(TestUsers.User(UserId.CreateSequential())))
         {
             FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Pallet>>().Reach("pens.view"))
                 .Should().Throw<InvalidOperationException>()
@@ -309,7 +309,7 @@ public sealed class RegistrationTests
 
         await using var other = misplaced.BuildServiceProvider();
         await using var asking = other.CreateAsyncScope();
-        using (TestUser.BeginAs(TestUsers.User(UserId.CreateSequential())))
+        using (TestAccess.BeginAs(TestUsers.User(UserId.CreateSequential())))
         {
             FluentActions.Invoking(() => asking.ServiceProvider.GetRequiredService<MembershipAccessManager<Crate>>().Reach(CratePermissions.Pack))
                 .Should().Throw<InvalidOperationException>()
@@ -341,7 +341,7 @@ public sealed class RegistrationTests
         await using var provider = services.BuildServiceProvider();
 
         var data = new DepotScenario(clock.Now);
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             await using var seeding = provider.CreateAsyncScope();
             var context = seeding.ServiceProvider.GetRequiredService<DepotContext>();
@@ -363,7 +363,7 @@ public sealed class RegistrationTests
 
         async Task<MemberHold<CrateId>?> HoldAsync(DepotPerson person, CrateId crate, string permission)
         {
-            using (TestUser.BeginAs(person.Caller))
+            using (TestAccess.BeginAs(person.Caller))
             {
                 await using var scope = provider.CreateAsyncScope();
                 return await scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Crate>>().HoldAsync(crate, permission, Cancellation);
@@ -417,7 +417,7 @@ public sealed class RegistrationTests
             register(services);
             await using var provider = services.BuildServiceProvider();
             await using var scope = provider.CreateAsyncScope();
-            using (TestUser.BeginAs(TestUsers.User(UserId.CreateSequential())))
+            using (TestAccess.BeginAs(TestUsers.User(UserId.CreateSequential())))
             {
                 return FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View))
                     .Should().Throw<InvalidOperationException>().Which;

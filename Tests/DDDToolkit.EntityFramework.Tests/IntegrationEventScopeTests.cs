@@ -99,7 +99,7 @@ public sealed class IntegrationEventScopeTests(ExplicitCurrentUserPostgres postg
         await using (var work = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(Cancellation),
             module => module
-                .Around((_, _, _) => TestUser.BeginSystem(ToolkitWork.ReceivingScope))
+                .Around((_, _, _) => TestAccess.BeginSystem(ToolkitWork.ReceivingScope))
                 .Handle<ShelfOpenedV3, ReceiptLog>(),
             requireExplicitCurrentUser: false))
         {
@@ -114,7 +114,7 @@ public sealed class IntegrationEventScopeTests(ExplicitCurrentUserPostgres postg
         await using (var elsewhere = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(Cancellation),
             module => module
-                .Around((_, _, _) => TestUser.BeginSystem("elsewhere"))
+                .Around((_, _, _) => TestAccess.BeginSystem("elsewhere"))
                 .Handle<ShelfOpenedV3, ReceiptLog>(),
             services: services => services.AddSingleton<KeptLogs>().AddLogging(logging => logging.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<KeptLogs>())),
             requireExplicitCurrentUser: false))
@@ -151,7 +151,7 @@ public sealed class IntegrationEventScopeTests(ExplicitCurrentUserPostgres postg
     private IntegrationEventScope Begins(string name) => (_, _, _) =>
     {
         _steps.Add($"begin {name}");
-        var caller = TestUser.BeginSystem(name);
+        var caller = TestAccess.BeginSystem(name);
         return new Ending(() =>
         {
             caller.Dispose();

@@ -26,7 +26,7 @@ public sealed class SupabaseCurrentUserSourceTests
         strict.GetRequiredService<IHttpContextAccessor>().HttpContext.Should().BeNull("this is work outside a request");
         ((Func<CurrentUserSnapshot>)(() => callers.Snapshot)).Should().Throw<NoCurrentUserException>();
 
-        using (TestUser.BeginSystem("reports"))
+        using (TestAccess.BeginSystem("reports"))
         {
             callers.Snapshot.Should().BeSameAs(BegunUser, "a caller begun around the work is answered");
         }
@@ -45,7 +45,7 @@ public sealed class SupabaseCurrentUserSourceTests
         strict.GetRequiredService<ICurrentUser>().Snapshot.Should().BeSameAs(CurrentUserSnapshot.Anonymous, "a request without a validated token is anon");
         requests.HttpContext.GetSupabaseUser().Should().BeSameAs(CurrentUserSnapshot.Anonymous);
 
-        using (TestUser.BeginNone())
+        using (TestAccess.BeginNone())
         {
             strict.GetRequiredService<ICurrentUser>().Snapshot.Should().BeSameAs(CurrentUserSnapshot.Anonymous, "BeginNone hides an ambient caller, not the request");
         }

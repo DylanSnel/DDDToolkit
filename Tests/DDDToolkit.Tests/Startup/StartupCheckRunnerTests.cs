@@ -65,7 +65,7 @@ public sealed class StartupCheckRunnerTests
             .AddStartupCheck(new StartupCheck("tests.leaves-a-caller-behind", StartupCheckStage.Services, (_, _) =>
             {
                 seen.Enqueue(BegunUser);
-                _ = TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid()));
+                _ = TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid()));
                 return Task.CompletedTask;
             }))
             .AddStartupCheck(new StartupCheck("tests.after-it", StartupCheckStage.Database, (_, _) =>
@@ -488,7 +488,7 @@ public sealed class StartupCheckRunnerTests
     {
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            using var system = TestUser.BeginSystem();
+            using var system = TestAccess.BeginSystem();
             await check(services, cancellationToken);
         }
 

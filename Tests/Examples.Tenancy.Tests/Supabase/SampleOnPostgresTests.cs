@@ -1176,13 +1176,13 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         }
 
         // The toolkit's own bookkeeping, which is what the system caller is: the connections kept for the background.
-        using (TestUser.BeginSystem())
+        using (TestAccess.BeginSystem())
         {
             (await ApplicationNameAsync()).Should().Be("tenancy-background");
         }
 
         // Anyone else: the connections requests are answered on. Read at each rental, so the same factory serves both.
-        using (TestUser.BeginAs(DemoPeople.Tove.Id))
+        using (TestAccess.BeginAs(DemoPeople.Tove.Id))
         {
             (await ApplicationNameAsync()).Should().Be("tenancy-requests");
         }

@@ -91,7 +91,7 @@ public sealed class FilingServices : IDisposable
     /// <summary>Asks something as <paramref name="caller"/>, in a scope of its own.</summary>
     public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
     {
-        using (TestUser.BeginAs(caller))
+        using (TestAccess.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             return await ask(scope.ServiceProvider);
@@ -101,7 +101,7 @@ public sealed class FilingServices : IDisposable
     /// <summary>Does something as <paramref name="caller"/>, in a scope of its own.</summary>
     public async Task AsAsync(CurrentUserSnapshot caller, Func<IServiceProvider, Task> work)
     {
-        using (TestUser.BeginAs(caller))
+        using (TestAccess.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             await work(scope.ServiceProvider);
