@@ -31,5 +31,5 @@ public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 {
     /// <summary>Whether <paramref name="seat"/> is the calling seat, or the calling seat manages seats for the whole tenant.</summary>
     public static bool Allows(Seat seat, ICurrentUser user)
-        => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
+        => seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
 }

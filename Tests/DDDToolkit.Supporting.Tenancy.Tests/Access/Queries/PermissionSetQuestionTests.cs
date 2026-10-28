@@ -30,15 +30,15 @@ public class PermissionSetQuestionTests
         return seat;
     }
 
-    private T Ask<T>(HostCaller caller, Func<ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId>, T> ask, TenancyCatalogue? catalogue = null)
+    private T Ask<T>(HostUser caller, Func<ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId>, T> ask, TenancyCatalogue? catalogue = null)
     {
-        using (TenancyCallers.Begin(caller))
+        using (TenancyUsers.Begin(caller))
         {
             return ask(new TenancyAccessManager(catalogue ?? _harbor.Catalogue, _clock, NoServices.Instance).In(_store, _store));
         }
     }
 
-    private static HostCaller As(HostSeat seat) => HostCaller.InSeat(seat.TenantId, seat.Id);
+    private static HostUser As(HostSeat seat) => HostUser.InSeat(seat.TenantId, seat.Id);
 
     private static UnitPermission<OrganizationUnitId> Pair(OrganizationUnitId unit, string permission) => new(unit, permission);
 
@@ -87,9 +87,9 @@ public class PermissionSetQuestionTests
         // Every permission is checked, wherever it stands in the list, and for every caller: a typo is a typo.
         FluentActions.Invoking(() => Ask(administrator, queries => queries.UnitsWhereIHold([HostCatalogue.WidgetRead, "widget.fly"])))
             .Should().Throw<ArgumentException>().WithMessage("*widget.fly*");
-        FluentActions.Invoking(() => Ask(HostCaller.Nobody(TenancyRefusals.NotSeated), queries => queries.UnitsWhereIHold(["widget.fly"])))
+        FluentActions.Invoking(() => Ask(HostUser.Nobody(TenancyRefusals.NotSeated), queries => queries.UnitsWhereIHold(["widget.fly"])))
             .Should().Throw<ArgumentException>();
-        FluentActions.Invoking(() => Ask(HostCaller.SystemIn(_harbor.Tenant.Id), queries => queries.RolesWithPermission(["widget.fly"])))
+        FluentActions.Invoking(() => Ask(HostUser.SystemIn(_harbor.Tenant.Id), queries => queries.RolesWithPermission(["widget.fly"])))
             .Should().Throw<ArgumentException>().WithMessage("*widget.fly*");
         FluentActions.Invoking(() => Ask(administrator, queries => queries.UnitsWhereIHold((IReadOnlyCollection<string>)null!))).Should().Throw<ArgumentNullException>();
         FluentActions.Invoking(() => Ask(administrator, queries => queries.RolesWithPermission((IReadOnlyCollection<string>)null!))).Should().Throw<ArgumentNullException>();
@@ -113,7 +113,7 @@ public class PermissionSetQuestionTests
             .Should().Equal(Pair(_harbor.South, HostCatalogue.WidgetChange));
         Ask(operatorSeat, queries => queries.RolesWithPermission(permissions).Select(pair => pair.Permission).Distinct().ToArray(), retired)
             .Should().Equal(HostCatalogue.WidgetChange);
-        Ask(HostCaller.SystemIn(_harbor.Tenant.Id), queries => queries.UnitsWhereIHold([HostCatalogue.WidgetCreate]).ToArray(), retired)
+        Ask(HostUser.SystemIn(_harbor.Tenant.Id), queries => queries.UnitsWhereIHold([HostCatalogue.WidgetCreate]).ToArray(), retired)
             .Should().BeEmpty("system work holds every live permission, and a retired one is none");
     }
 
@@ -125,10 +125,10 @@ public class PermissionSetQuestionTests
         string[] permissions = [HostCatalogue.WidgetRead, TenancyPermissions.RolesManage];
         OrganizationUnitId[] units = [_harbor.Root, _harbor.North, _harbor.NorthCoast, _harbor.South];
 
-        Ask(HostCaller.SystemIn(_harbor.Tenant.Id), queries => queries.UnitsWhereIHold(permissions).ToArray())
+        Ask(HostUser.SystemIn(_harbor.Tenant.Id), queries => queries.UnitsWhereIHold(permissions).ToArray())
             .Should().BeEquivalentTo(units.SelectMany(unit => permissions.Select(permission => Pair(unit, permission))), "every permission at every unit of its own tenant, and at none of another");
 
-        var nobody = HostCaller.Nobody(TenancyRefusals.NotSeated);
+        var nobody = HostUser.Nobody(TenancyRefusals.NotSeated);
         Ask(nobody, queries => queries.UnitsWhereIHold(permissions).ToArray()).Should().BeEmpty();
         Ask(nobody, queries => queries.RolesWithPermission(permissions).ToArray()).Should().BeEmpty();
         Ask(nobody, queries => queries.UnitsUnder(_harbor.Root).ToArray()).Should().BeEmpty();
@@ -139,7 +139,7 @@ public class PermissionSetQuestionTests
                      queries => queries.UnitsWhereIHold(permissions), queries => queries.RolesWithPermission(permissions), queries => queries.UnitsUnder(_harbor.Root),
                  })
         {
-            FluentActions.Invoking(() => Ask<object?>(HostCaller.System, queries =>
+            FluentActions.Invoking(() => Ask<object?>(HostUser.System, queries =>
                 {
                     ask(queries);
                     return null;
@@ -195,7 +195,7 @@ public class PermissionSetQuestionTests
         Ask(watcher, queries => queries.UnitsUnder(_harbor.North).ToArray())
             .Should().BeEquivalentTo([_harbor.North, _harbor.NorthCoast], "the tree is the tenant's to read, wherever the seat is placed in it");
         Ask(watcher, queries => queries.UnitsUnder(_harbor.NorthCoast).ToArray()).Should().Equal(_harbor.NorthCoast);
-        Ask(HostCaller.SystemIn(_harbor.Tenant.Id), queries => queries.UnitsUnder(_harbor.North).ToArray()).Should().BeEquivalentTo([_harbor.North, _harbor.NorthCoast]);
+        Ask(HostUser.SystemIn(_harbor.Tenant.Id), queries => queries.UnitsUnder(_harbor.North).ToArray()).Should().BeEquivalentTo([_harbor.North, _harbor.NorthCoast]);
 
         Ask(watcher, queries => queries.UnitsUnder(other.Root).ToArray()).Should().BeEmpty("a unit of another tenant answers nothing");
         Ask(watcher, queries => queries.UnitsUnder(OrganizationUnitId.CreateSequential()).ToArray()).Should().BeEmpty("nor does a unit of none");

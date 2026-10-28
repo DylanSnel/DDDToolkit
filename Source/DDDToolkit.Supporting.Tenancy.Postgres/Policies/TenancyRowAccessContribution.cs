@@ -37,8 +37,8 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For the context that maps Tenancy's tables, in its default schema: the functions <c>caller_seat</c>,
-/// <c>caller_tenant</c>, <c>system_tenant</c>, <c>units_where_i_hold_permission</c>, <c>readable_units</c>,
+/// For the context that maps Tenancy's tables, in its default schema: the functions <c>current_seat</c>,
+/// <c>current_tenant</c>, <c>system_tenant</c>, <c>units_where_i_hold_permission</c>, <c>readable_units</c>,
 /// <c>seats_in_my_units</c>, <c>roles_with_permission</c>, <c>holds_permission</c>, <c>holds_at_tenant</c>,
 /// <c>identity_tenants</c>, <c>unit_parent</c>,
 /// <c>permission_manages_access</c>, <c>permission_is_contained</c> and <c>starter_role_permissions</c>, executable by signed-in users and by system
@@ -65,14 +65,14 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// seats or units at its unit, held there or above it, and by the seats that manage roles for the whole tenant. What
 /// a seat may learn of other seats' rights, three functions answer, executable by signed-in users alone, as ids,
 /// permissions and dates: <c>tenant_administrators</c> and <c>seats_holding_permission_at</c> each right whose grant the seat may read,
-/// and <c>permissions_a_move_changes</c> to a seat that manages units at both parents of the move, of another seat's
+/// and <c>permissions_a_unit_move_changes</c> to a seat that manages units at both parents of the move, of another seat's
 /// rights only those the move changes, which reach one parent and not the other. Tenancy's own
 /// system work in a tenant writes that tenant's rights again with <c>rewrite_tenant_rights</c>, after rows were
 /// written past the trigger.
 /// </para>
 /// <para>
 /// A module reads Tenancy through six more functions, one for each row of the read model, which its context maps
-/// with <c>AddTenancyReadFunctions</c>: <c>caller_permissions</c>, <c>tenant_unit_paths</c>, <c>tenant_units</c>,
+/// with <c>AddTenancyReadFunctions</c>: <c>current_permissions</c>, <c>tenant_unit_paths</c>, <c>tenant_units</c>,
 /// <c>tenant_roles_with_starter_roles</c>, <c>tenant_placements</c> and <c>tenant_seats</c>. They are executable by signed-in users
 /// and by system work in a tenant, run as their caller, so the policies on Tenancy's tables decide their rows, and
 /// are written for Postgres to fold into the query that asks them: a module's question is planned over the
@@ -155,7 +155,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// against SQL an attacker runs on its connection, which can switch roles and set anything.
 /// </para>
 /// </remarks>
-public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunctions
+public class TenancyRowAccessContribution : IRowAccessContribution, ICurrentUserFunctions
 {
     /// <summary>The ids of the seat and the unit each model keeps, read once per model.</summary>
     private static readonly ConditionalWeakTable<IModel, Ids> IdsOfModels = new();
@@ -320,16 +320,16 @@ public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunct
 
     /// <inheritdoc />
     /// <remarks>
-    /// <see cref="TenancyFunctions.CallerSeat"/> for the application's seat id, where the context maps Tenancy's
+    /// <see cref="TenancyFunctions.CurrentSeat"/> for the application's seat id, where the context maps Tenancy's
     /// tables or its read model, which knows it: so a resource whose members are seats has its functions ask the
     /// caller's seat without its rules naming one.
     /// </remarks>
-    public DatabaseFunction? CallerAs(DbContext context, Type id)
+    public DatabaseFunction? CurrentUserAs(DbContext context, Type id)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(id);
 
-        return IdsOf(context.Model).Seat == id ? TenancyFunctions.CallerSeat : null;
+        return IdsOf(context.Model).Seat == id ? TenancyFunctions.CurrentSeat : null;
     }
 
     /// <inheritdoc />
@@ -338,7 +338,7 @@ public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunct
     /// tables or its read model: so a resource that hangs at a unit is reached from above through Tenancy's grants
     /// without its rules naming a function.
     /// </remarks>
-    public DatabaseFunction? PlacesWhereCallerHolds(DbContext context, Type place)
+    public DatabaseFunction? PlacesWhereCurrentUserHolds(DbContext context, Type place)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(place);

@@ -90,10 +90,10 @@ internal static class TenancyReference
                     new("Starter roles", [new(Tenancy, Folder: "StarterRoles")]),
                 ]),
             new(
-                "callers.md",
-                "Access manager and callers",
+                "access.md",
+                "Access manager and users",
                 "`TenancyAccessManager` says who acts (`CurrentUser`, the toolkit's `ICurrentUser`) and which tenant and seat the "
-                + "work acts in (`CurrentTenant`). Its `Begin` methods start system work. Below it: the callers it reads, the actor a change "
+                + "work acts in (`CurrentTenant`). Its `Begin` methods start system work. Below it: the Tenancy user it reads, the actor a change "
                 + "records, the selection of a seat in the tenant a request names, and the requirements a request states with "
                 + "an attribute, `[Operator]` among them.\n\n"
                 + "Your code takes `TenancyAccessManager` with no type arguments. The generator writes it into the global "
@@ -107,7 +107,7 @@ internal static class TenancyReference
                         "Access manager",
                         [new(Tenancy, Folder: "Access/Manager")],
                         Lead: ["TenancyAccessManager", "CurrentTenant", "TenantInScope", "ITenantsToSweep"]),
-                    new("Callers", [new(Tenancy, Folder: "Access/Callers")], Lead: ["TenancyCaller", "ITenancyCaller", "TenancyCallers", "TenancyWork"]),
+                    new("Users", [new(Tenancy, Folder: "Access/Users")], Lead: ["TenancyUser", "ITenancyUser", "TenancyUsers", "TenancyWork"]),
                     new("Actors", [new(Tenancy, Folder: "Access/ActedBy")]),
                     new("Tenant selection", [new(Tenancy, Folder: "Access/Selection")]),
                     new(

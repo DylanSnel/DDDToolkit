@@ -15,7 +15,7 @@ others:
 
 | The rules say | When left out | When set, and what you implement |
 |---|---|---|
-| **Who a member is** | It follows from the member id: the user id for an id over a `Guid`, the seat for [Tenancy's seat id](#with-tenancy). | `members: MemberSource.Resolved(...)` takes an id you resolve for the caller. You implement `ICallerMember<TResourceId, TMemberId>`. |
+| **Who a member is** | It follows from the member id: the user id for an id over a `Guid`, the seat for [Tenancy's seat id](#with-tenancy). | `members: MemberSource.Resolved(...)` takes an id you resolve for the caller. You implement `ICurrentMember<TResourceId, TMemberId>`. |
 | **Where the roles come from** | The rules always declare it. | `Roles.Fixed` or [`Roles.Custom`](permissions-and-roles.md#roles-a-customer-makes) need nothing from you. `Roles.External(...)` takes roles from rows you keep. You implement `IRolesWithPermission<TResourceId, TRoleId>` and `IMemberRoles<TResourceId, TRoleId>`. |
 | **Whether something above reaches the resource** | Nothing above reaches it. Only the members and the owner hold permissions on it. | `reachFromAbove: ...`, a permission marked `EveryMember`, and `[At]` on the property that says where the resource hangs. You implement `IPlacesReached<TResourceId, TPlaceId>`. |
 
@@ -91,7 +91,7 @@ project roles that each tenant makes from three starter roles.
 - **A change to the caller's own place** is saved as system work in the caller's tenant, in the resource's scope, for
   the caller's seat ([The caller's own place](resources-and-members.md#the-callers-own-place)). The history names the
   seat.
-- **Rules that take the member from the token are refused** when you register: `MemberSource.CallerId` and
+- **Rules that take the member from the token are refused** when you register: `MemberSource.CurrentUserId` and
   `MemberSource.Claim(...)`. A seat id is over the same type of value as a user id, so the registration would read a
   user id as a seat id.
 - **A port you registered earlier is kept.**
@@ -137,7 +137,7 @@ roles instead:
 ### What you still write
 
 - **The rules.** A resource of a tenant may take its members from elsewhere, keep roles any of the three ways, or
-  have no reach from above. Tenancy's `CallerSeat` and `UnitsWhereIHold` functions are found without being named. The
+  have no reach from above. Tenancy's `CurrentSeat` and `UnitsWhereIHold` functions are found without being named. The
   tenant's roles are named: `Roles.External(TenancyFunctions.RolesWithPermission)`.
 - **The context**, which maps Tenancy's rows beside the resource:
 
@@ -192,14 +192,14 @@ public static class CratePermissions
 // The depot's functions in the database, each named once, by its logical name
 public static class DepotFunctions
 {
-    public static DatabaseFunction CallerPorter { get; } = new("depot", "caller_porter");
+    public static DatabaseFunction CurrentPorter { get; } = new("depot", "current_porter");
     public static DatabaseFunction RolesWithPermission { get; } = new("depot", "roles_with_permission");
     public static DatabaseFunction BaysWhereIHold { get; } = new("depot", "bays_where_i_hold");
 }
 
 public static MembershipRules Rules { get; } = MembershipRules.For<Crate>(
     Roles.External(DepotFunctions.RolesWithPermission, otherPermissions: OtherPermissions.AllBut("depot.manage")),   // the depot's roles, without the depot's own permission
-    members: MemberSource.Resolved(DepotFunctions.CallerPorter),
+    members: MemberSource.Resolved(DepotFunctions.CurrentPorter),
     reachFromAbove: DepotFunctions.BaysWhereIHold);
 
 // The context's AddDDDToolkitConventions() maps the porters. Where a crate stands comes from its [At] property.
@@ -212,7 +212,7 @@ The class that implements the ports for the depot:
 
 ```csharp
 public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
-    : ICallerMember<CrateId, PorterId>, IMemberRoles<CrateId, DepotRoleId>,
+    : ICurrentMember<CrateId, PorterId>, IMemberRoles<CrateId, DepotRoleId>,
       IRolesWithPermission<CrateId, DepotRoleId>, IPlacesReached<CrateId, BayId>
 {
     // The caller's member id, or null. Uses only what is already known of the caller.
@@ -283,9 +283,9 @@ public sealed class DepotRowAccess : IRowAccessContribution
         return new(
             Functions:
             [
-                // depot/caller_porter: runs as its owner, and is granted to nobody
-                new ContributedFunction(DepotFunctions.CallerPorter.Name, "", "uuid",
-                    $"SELECT p.{id} FROM {RowAccessModel.Table(porters)} p WHERE p.{user} = {{caller:uid}} AND p.{active}",
+                // depot/current_porter: runs as its owner, and is granted to nobody
+                new ContributedFunction(DepotFunctions.CurrentPorter.Name, "", "uuid",
+                    $"SELECT p.{id} FROM {RowAccessModel.Table(porters)} p WHERE p.{user} = {{user:uid}} AND p.{active}",
                     SecurityDefiner: true),
                 // depot/roles_with_permission and depot/bays_where_i_hold: each takes the permission as text, and returns a set
             ],

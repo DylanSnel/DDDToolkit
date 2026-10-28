@@ -3,7 +3,7 @@ namespace DDDToolkit.Supporting.Tenancy.Tests.Support;
 /// <summary>A seat directory over a list, which records the lookups it was asked for.</summary>
 public sealed class ListedSeats : ISeatDirectory<TenantId, SeatId>
 {
-    private readonly List<(Guid Identity, SeatOfCaller<TenantId, SeatId> Seat, object? Own)> _seats = [];
+    private readonly List<(Guid Identity, SeatOfUser<TenantId, SeatId> Seat, object? Own)> _seats = [];
 
     /// <summary>Every lookup, in order: the identity and the slug as they reached the directory.</summary>
     public List<(Guid Identity, string Slug)> Lookups { get; } = [];
@@ -21,16 +21,16 @@ public sealed class ListedSeats : ISeatDirectory<TenantId, SeatId>
         SeatStatus seatState = SeatStatus.Active,
         object? own = null)
     {
-        _seats.Add((identity, new SeatOfCaller<TenantId, SeatId>(tenant, slug, "Tenant " + slug, tenantState, seat, seatState), own));
+        _seats.Add((identity, new SeatOfUser<TenantId, SeatId>(tenant, slug, "Tenant " + slug, tenantState, seat, seatState), own));
         return this;
     }
 
     /// <inheritdoc />
-    public Task<SeatOfCaller<TenantId, SeatId>?> FindAsync(Guid identity, string tenantSlug, CancellationToken cancellationToken)
+    public Task<SeatOfUser<TenantId, SeatId>?> FindAsync(Guid identity, string tenantSlug, CancellationToken cancellationToken)
     {
         Lookups.Add((identity, tenantSlug));
         var found = _seats.FirstOrDefault(entry => entry.Identity == identity && entry.Seat.Slug == tenantSlug).Seat;
-        return Task.FromResult<SeatOfCaller<TenantId, SeatId>?>(found);
+        return Task.FromResult<SeatOfUser<TenantId, SeatId>?>(found);
     }
 
     /// <summary>Every slug a tenant was looked up by, in order, for an operator.</summary>

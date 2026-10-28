@@ -67,7 +67,7 @@ no [supporting domain](writing-a-supporting-domain.md):
 | `IRequireAccess` | The interface a request implements. It has one member, `RequiredAccess`. |
 | `[AllowAnonymous]`, `[SignedIn]`, `[RequiresPermission(permission)]`, `[OrOwn]`, `[OwnOnly]` with `[Own]` | The core's attributes for stating a requirement on a request. Packages ship more attributes the same way. Stacked attributes must all hold. |
 | `AccessRequirement` | What `RequiredAccess` returns: a record that says what is required. The core defines the cases about who is calling, the caller's own, the owner of an aggregate, and the combinations `All` and `Any`. The package that decides a case defines the other cases. |
-| `ICallersOwn<TValue>` | Returns the caller's own value of a type. The core has one for `Guid`, Tenancy has one for its seat id, and an application can add one for a type it defines. |
+| `IOwnedByCurrentUser<TValue>` | Returns the caller's own value of a type. The core has one for `Guid`, Tenancy has one for its seat id, and an application can add one for a type it defines. |
 | `[Owner]`, `IAggregateOwners<TId>` | `[Owner]` marks the property of an aggregate root that names its owner. This is a fact of the domain. `IAggregateOwners<TId>` reads that owner for a request about the owner's own. The Entity Framework package registers one for every id. |
 | `IAccessCheck` | Decides the cases of one package. A package ships one, and a module writes one for its own cases. |
 | `CurrentUserAccessCheck` | The core's check of who is calling. It is first in every module's set. |
@@ -744,13 +744,13 @@ flowchart LR
     class Refused bad
 ```
 
-An `ICallersOwn<TValue>` returns the caller's own value of a type. The type decides who provides it:
+An `IOwnedByCurrentUser<TValue>` returns the caller's own value of a type. The type decides who provides it:
 
 | The member is a | The caller's own value is | Provided by |
 |---|---|---|
 | `Guid` | the caller's verified identity: the id the token names | the core, with nothing registered |
 | the application's seat id | the caller's seat in the request's tenant, when the seat is active and the tenant is active | Tenancy. `AddTenancy` registers it. |
-| a type the application defines, such as its `UserId` | what the application's handle returns | a small handle next to the requests, registered by the host: `services.AddCallersOwn<UserId, CallersUser>()` |
+| a type the application defines, such as its `UserId` | what the application's handle returns | a small handle next to the requests, registered by the host: `services.AddOwnedByCurrentUser<UserId, CurrentUserId>()` |
 | the id of an aggregate with an `[Owner]` property | the aggregate, when its owner, read from its row as the caller, is the caller's own value of the owner's type | the aggregate, which marks the property. The Entity Framework package reads it, with nothing registered ([The owner of an aggregate](#the-owner-of-an-aggregate)). |
 
 A caller who did not sign in has no own value, and neither has system work. System work holds every permission in its
@@ -789,13 +789,13 @@ public sealed record LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Se
 public sealed record CloseAccount([Own] UserId User) : IAccountsRequest;
 
 // The handle: what the caller's own UserId is, beside the requests, where the generator sees it
-public sealed class CallersUser : ICallersOwn<UserId>
+public sealed class CurrentUserId : IOwnedByCurrentUser<UserId>
 {
     public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
 }
 
 // The host registers it, once; a later registration for the same type takes the place of an earlier one
-services.AddCallersOwn<UserId, CallersUser>();
+services.AddOwnedByCurrentUser<UserId, CurrentUserId>();
 ```
 
 ```csharp title="the lines the generator writes, each into its module's interface, shortened"
@@ -811,7 +811,7 @@ CloseAccount request => AccessRequirement.Own(request.User),
 </details>
 
 The generator finds an application's handle in the requests' project, or in a project it references when the handle
-is public there. A package names the types of its own handles with `[assembly: CallersOwn(...)]`. It names them by
+is public there. A package names the types of its own handles with `[assembly: OwnedByCurrentUser(...)]`. It names them by
 type, or by the template the application declares its class with, as Tenancy does for the seat id. `Implies` on that
 attribute states what the caller's own already requires: a sign-in for a `Guid`, and a seat in the tenant for the seat
 id. A handle answers only from what is already known about the caller, because the check that asks it reads nothing.
@@ -900,7 +900,7 @@ flowchart LR
   would have failed with. A call of `OwnerOf` in a project that declares no request interface is found by its first
   request, with the same message.
 - **An own value of the id type comes first.** When something returns the caller's own value of the id type itself, such
-  as an `ICallersOwn` for that id or Tenancy for its seat id, the line compares the id directly, as `Own(request.Seat)`.
+  as an `IOwnedByCurrentUser` for that id or Tenancy for its seat id, the line compares the id directly, as `Own(request.Seat)`.
   The owner is then not read. That handle reads nothing, so it is used first.
 - **Next to a resource too.** `[OrOwn]` on the id of an aggregate that marks its owner, next to `[OnResource]`, works
   like the caller's own on a resource, with the owner instead of the value: `Any(All(OwnerOf(member), Sees(permission,
@@ -1039,7 +1039,7 @@ depends on who grants the table's privileges:
   not turn this error into a refusal.
 - When the host grants the privileges itself, as with the Postgres export, which writes no grants unless
   `WriteGrants` is set, the read succeeds and returns no rows, with no reason given. Tenancy's
-  `OneCallerOrAnotherTests` test this case on Postgres.
+  `OneUserOrAnotherTests` test this case on Postgres.
 
 <details>
 <summary>Show the code: the request, its two row rules, and the policies the export writes</summary>
@@ -1077,8 +1077,8 @@ CREATE POLICY "Seat managers read the audit log (select) for authenticated" ON "
 
 -- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "audit"."AuditEntries" AS RESTRICTIVE FOR ALL TO authenticated
-    USING ("TenantId" = (SELECT "tenancy".caller_tenant()))
-    WITH CHECK ("TenantId" = (SELECT "tenancy".caller_tenant()));
+    USING ("TenantId" = (SELECT "tenancy".current_tenant()))
+    WITH CHECK ("TenantId" = (SELECT "tenancy".current_tenant()));
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON "audit"."AuditEntries" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 -- ... and the same for update and delete
@@ -1093,7 +1093,7 @@ policy, and uses it to find the policy again.
 The same applies to the caller's own. `RenameSeat` lets a seat rename itself, or any seat with the permission. The
 Tenancy sample's column rule on the seat's name, `NameChangesByTheSeatOrWithTheSeatsPermission`, repeats both
 alternatives for each row:
-`seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission)`.
+`seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission)`.
 
 ## System work
 
@@ -1209,7 +1209,7 @@ the `IAccessCheck` that decides it:
 | The case is about | Its requirement | Its check is added with |
 |---|---|---|
 | who is calling: anyone, a signed-in user | `[AllowAnonymous]` and `[SignedIn]`, `AccessRequirement.AllowAnonymous()` and `SignedIn()`, from the core | Nothing. Every module's set asks the core's `CurrentUserAccessCheck` first, and `AllowAnonymous()` needs no check at all. |
-| the caller's own | `[OrOwn]`, `[OwnOnly]` with `[Own]`, `AccessRequirement.Own(value)`, from the core | Nothing for a `Guid` or for Tenancy's seat id. `services.AddCallersOwn<TValue, TCallersOwn>()` for a type you define. |
+| the caller's own | `[OrOwn]`, `[OwnOnly]` with `[Own]`, `AccessRequirement.Own(value)`, from the core | Nothing for a `Guid` or for Tenancy's seat id. `services.AddOwnedByCurrentUser<TValue, THandle>()` for a type you define. |
 | the owner of an aggregate | `[OrOwn]`, or `[OwnOnly]` with `[Own]`, on the id of an aggregate that marks its owner `[Owner]`; `AccessRequirement.OwnerOf(id)`; from the core | Nothing more on Entity Framework, whose `AddDDDToolkitEntityFramework` registers what reads the owner. The caller's own value of the owner's type, as in the row above. |
 | several cases at once, or one of several | stacked attributes, `AccessRequirement.All(...)` and `Any(...)`, from the core | Nothing. The set gives each case to the check that decides it. |
 | a tenant: a seat in it, a permission for the whole tenant or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or without a marker, `[Operator]` with `[ForTenant]`; `TenancyAccess.InTenant()` and the other cases of `TenancyRequirement`; from [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<TRequests, TContext>()`, once per module. It adds Tenancy's check and the check of the operator cases. |

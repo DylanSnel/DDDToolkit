@@ -183,14 +183,14 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             INSERT INTO widgets.slips VALUES (1, '{mine}', 'mine'), (2, '{theirs}', 'theirs');
             GRANT SELECT, INSERT, UPDATE, DELETE ON widgets.slips TO authenticated;
             ALTER TABLE widgets.slips ENABLE ROW LEVEL SECURITY;
-            CREATE POLICY "Holders read their slips" ON widgets.slips FOR SELECT TO authenticated USING (holder = (SELECT ddd.caller_id()));
+            CREATE POLICY "Holders read their slips" ON widgets.slips FOR SELECT TO authenticated USING (holder = (SELECT ddd.current_user_id()));
             CREATE POLICY "Anyone adds a slip" ON widgets.slips FOR INSERT TO authenticated WITH CHECK (true);
             CREATE POLICY "Anyone changes a slip" ON widgets.slips FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
             CREATE POLICY "Anyone removes a slip" ON widgets.slips FOR DELETE TO authenticated USING (true);
             """,
             Cancellation);
 
-        await using (var caller = await AsCaller.PersonAsync(database, mine, tenant: null, Cancellation))
+        await using (var caller = await AsUser.PersonAsync(database, mine, tenant: null, Cancellation))
         {
             (await caller.ListAsync<int>("SELECT id FROM widgets.slips", Cancellation)).Should().Equal(1);
 
@@ -379,7 +379,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             ANALYZE folding.reaches;
             GRANT USAGE ON SCHEMA folding TO authenticated;
             GRANT SELECT ON ALL TABLES IN SCHEMA folding TO authenticated;
-            CREATE POLICY "Holders read their own" ON folding.holdings FOR SELECT TO authenticated USING ("HolderId" = (SELECT ddd.caller_id()));
+            CREATE POLICY "Holders read their own" ON folding.holdings FOR SELECT TO authenticated USING ("HolderId" = (SELECT ddd.current_user_id()));
             ALTER TABLE folding.holdings ENABLE ROW LEVEL SECURITY;
             CREATE FUNCTION folding.held() {Held} STABLE {Holdings};
             CREATE FUNCTION folding.held_with_a_path() {Held} STABLE SET search_path = '' {Holdings};
@@ -399,7 +399,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
                 WHERE h."HolderId" = '{me}' AND h."Permission" = 'permission.3'
                 """;
 
-        await using var caller = await AsCaller.PersonAsync(database, me, tenant: null, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, me, tenant: null, Cancellation);
 
         // Written plainly, the functions are gone from the plan: Postgres reads the tables, the holdings through the
         // index on the holder and the permission, with the policy on them applied to the caller.
@@ -410,7 +410,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             .Should().ContainSingle("the holdings are found by the holder and the permission")
             .Which.Index.Should().Be("holdings_of_a_holder_by_permission");
         folded.Should().Contain(node => node.Relation == "reaches");
-        QueryPlans.InitPlansCalling(asked, "ddd.caller_id(").Should().NotBeEmpty("the policy on the holdings is still asked who is calling, once for the statement");
+        QueryPlans.InitPlansCalling(asked, "ddd.current_user_id(").Should().NotBeEmpty("the policy on the holdings is still asked who is calling, once for the statement");
         (await caller.ListAsync<Guid>(Reached("held"), Cancellation)).Should().HaveCount(104, "a hundred places held, each reaching itself and the four after it");
 
         // Any of the four keeps the function a step of its own, which answers every row it may before the query

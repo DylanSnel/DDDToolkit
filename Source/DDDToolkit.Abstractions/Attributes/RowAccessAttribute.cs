@@ -72,7 +72,7 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// public static partial class OnlyEmployeesReadTheOrganization
     /// {
     ///     public static bool Allows(Organization organization, ICurrentUser user)
-    ///         =&gt; TenancyRowAccess.CallerSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
+    ///         =&gt; TenancyRowAccess.CurrentSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
     /// }
     /// </code>
     /// So a rule written without it, about a table where a package's default already lets every member read, has no

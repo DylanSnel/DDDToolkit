@@ -72,7 +72,7 @@ public static class TenantsInfrastructure
         host.RequirePostgres().AddContext<TenantsContext>(services, (application, options) => options
             .UseDDDToolkit(application));
 
-        // The tenant of Tenancy's caller on every connection, the rights left to the database, whose trigger
+        // The tenant of Tenancy's user on every connection, the rights left to the database, whose trigger
         // writes them, and every flow of work required to say who it runs as. It brings Tenancy's start-up checks
         // of the database: the scoped system role stays in its tenant, the reads across tenants answer, and the
         // policies, functions and the index on a tenant's root are the ones this catalogue writes. The host runs
@@ -129,7 +129,7 @@ public static class TenantsInfrastructure
             host.Publish(outbox);
         }));
 
-        // The poller marks each stored event handled. It needs no Tenancy caller: the outbox is not kept to a tenant.
+        // The poller marks each stored event handled. It needs no Tenancy user: the outbox is not kept to a tenant.
         services.AddOutboxBackgroundService<TenantsContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
         return services;

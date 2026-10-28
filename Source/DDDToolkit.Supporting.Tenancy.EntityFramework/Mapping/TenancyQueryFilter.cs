@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
-/// The query filter that keeps every read of a tenant's rows to the current Tenancy caller's tenant. It
+/// The query filter that keeps every read of a tenant's rows to the current Tenancy user's tenant. It
 /// matches the rows of the tenant a seat or system work in a tenant acts in, and nothing for nobody and for
 /// system work outside any tenant.
 /// <para>
@@ -22,12 +22,12 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 public static class TenancyQueryFilter
 {
     /// <summary>The filter's name, for <c>IgnoreQueryFilters</c>.</summary>
-    public const string Name = "tenancy.caller-tenant";
+    public const string Name = "tenancy.current-tenant";
 
     private static readonly MethodInfo CurrentMethod = typeof(TenancyQueryFilter).GetMethod(nameof(Current))!;
 
     /// <summary>
-    /// The tenant the current Tenancy caller acts in, or <see langword="null"/> when it acts in none, which
+    /// The tenant the current Tenancy user acts in, or <see langword="null"/> when it acts in none, which
     /// the filter matches with nothing. The filter calls this; code that wants the tenant asks
     /// <c>access.CurrentTenant.Require()</c>.
     /// <para>
@@ -43,7 +43,7 @@ public static class TenancyQueryFilter
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static TTenantId? Current<TTenantId>(DbContext? context)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-        => TenancyCallers.CurrentTenantOrNull() as TTenantId?;
+        => TenancyUsers.CurrentTenantOrNull() as TTenantId?;
 
     /// <summary>
     /// The filter for an entity whose tenant <paramref name="tenant"/> reads:

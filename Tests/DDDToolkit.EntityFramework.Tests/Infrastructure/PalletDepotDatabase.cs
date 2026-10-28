@@ -11,7 +11,7 @@ namespace DDDToolkit.EntityFramework.Tests.Infrastructure;
 
 /// <summary>
 /// A plain Postgres with the pallet depot on it, set up as an application off Supabase sets itself up: the roles
-/// and the caller functions from <see cref="PostgresRowAccess.SetupScript"/>, the tables from the model, owned by
+/// and the current user functions from <see cref="PostgresRowAccess.SetupScript"/>, the tables from the model, owned by
 /// the login role, and the depot's two rules as policies. Alice and Bob each own a pallet, and both read both.
 /// Alice's pallet carries a stamp, and one policy written by hand lets nobody change a stamp once it is made,
 /// where the rules let a pallet's owner: a table of an aggregate's entities with a policy stricter than its root's.

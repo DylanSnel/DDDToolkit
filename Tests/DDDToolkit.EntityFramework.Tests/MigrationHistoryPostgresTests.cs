@@ -16,7 +16,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// is where the host, wired with <c>UseDDDToolkit</c>, reads them. Without it they record them in <c>public</c>, and
 /// the check says that the two look in different tables, rather than only that every migration is missing.
 /// </summary>
-public sealed class MigrationHistoryPostgresTests(ExplicitCallersPostgres postgres)
+public sealed class MigrationHistoryPostgresTests(ExplicitCurrentUserPostgres postgres)
 {
     private const string Nowhere = "Host=nowhere.invalid;Database=unused";
 

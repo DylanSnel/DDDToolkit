@@ -427,7 +427,7 @@ public sealed class MembershipRulesTests
     {
         (MemberSource.Inferred.Kind, MemberSource.Inferred.ClaimPath, MemberSource.Inferred.Function).Should().Be((MemberSourceKind.Inferred, null, null));
         Notes(Permissions, Roles.Fixed([Drafter])).Members.Should().BeSameAs(MemberSource.Inferred);
-        Notes(Permissions, Roles.Fixed([Drafter]), members: MemberSource.CallerId).Members.Should().BeSameAs(MemberSource.CallerId);
+        Notes(Permissions, Roles.Fixed([Drafter]), members: MemberSource.CurrentUserId).Members.Should().BeSameAs(MemberSource.CurrentUserId);
     }
 
     [Fact]
@@ -437,8 +437,8 @@ public sealed class MembershipRulesTests
 
         (claim.Kind, claim.ClaimPath).Should().Be((MemberSourceKind.Claim, "app_metadata.staff"));
         claim.Should().Be(MemberSource.Claim("app_metadata.staff"), "a source is data: two that say the same are equal");
-        (MemberSource.CallerId.Kind, MemberSource.CallerId.ClaimPath).Should().Be((MemberSourceKind.CallerId, null));
-        (MemberSource.CallerId.Function, claim.Function).Should().Be((null, null), "a caller's own id and a claim are read from the caller, by no function of anybody's");
+        (MemberSource.CurrentUserId.Kind, MemberSource.CurrentUserId.ClaimPath).Should().Be((MemberSourceKind.CurrentUserId, null));
+        (MemberSource.CurrentUserId.Function, claim.Function).Should().Be((null, null), "a caller's own id and a claim are read from the caller, by no function of anybody's");
 
         // The path goes into what is asked of the database as well, so it is names and dots and nothing else.
         foreach (var path in new[] { "", " ", "app_metadata.", ".staff", "app metadata", "staff'; --", "9lives", "a..b" })
@@ -466,11 +466,11 @@ public sealed class MembershipRulesTests
     [Fact]
     public void A_member_the_application_resolves_is_asked_of_the_application_and_names_its_function_for_a_database_that_answers()
     {
-        var porter = new DatabaseFunction("depot", "caller_porter");
+        var porter = new DatabaseFunction("depot", "current_porter");
         var resolved = MemberSource.Resolved(porter);
 
         (resolved.Kind, resolved.ClaimPath, resolved.Function).Should().Be((MemberSourceKind.Resolved, null, porter));
-        resolved.Should().Be(MemberSource.Resolved(new DatabaseFunction("depot", "caller_porter")), "a source is data: two that say the same are equal");
+        resolved.Should().Be(MemberSource.Resolved(new DatabaseFunction("depot", "current_porter")), "a source is data: two that say the same are equal");
         resolved.Should().NotBe(MemberSource.Resolved(new DatabaseFunction("depot", "acting_porter")));
 
         // An application whose database answers nothing names no function, and says the rest all the same.
@@ -478,7 +478,7 @@ public sealed class MembershipRulesTests
     }
 
     [Theory]
-    [InlineData("depot", "caller_porter")]
+    [InlineData("depot", "current_porter")]
     [InlineData("second-depot-2", "caller_Porter_2")]
     [InlineData("a", "_b")]
     public void A_function_is_named_by_its_owner_and_its_name(string owner, string name)
@@ -491,15 +491,15 @@ public sealed class MembershipRulesTests
     }
 
     [Theory]
-    [InlineData("", "caller_porter", "owner")]
-    [InlineData("Depot", "caller_porter", "owner")]
-    [InlineData("-depot", "caller_porter", "owner")]
-    [InlineData("depot-", "caller_porter", "owner")]
-    [InlineData("depot.x", "caller_porter", "owner")]
+    [InlineData("", "current_porter", "owner")]
+    [InlineData("Depot", "current_porter", "owner")]
+    [InlineData("-depot", "current_porter", "owner")]
+    [InlineData("depot-", "current_porter", "owner")]
+    [InlineData("depot.x", "current_porter", "owner")]
     [InlineData("depot", "", "name")]
     [InlineData("depot", "9lives", "name")]
     [InlineData("depot", "caller porter", "name")]
-    [InlineData("depot", "caller_porter()", "name")]
+    [InlineData("depot", "current_porter()", "name")]
     [InlineData("depot", "x}; DROP TABLE y; --", "name")]
     [InlineData("depot", "caller/porter", "name")]
     public void What_is_not_the_name_of_a_function_is_refused_when_it_is_said(string owner, string name, string parameter)

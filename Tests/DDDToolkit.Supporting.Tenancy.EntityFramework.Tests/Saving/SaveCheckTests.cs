@@ -40,7 +40,7 @@ public abstract class SaveCheckTests(TestDatabases databases) : IAsyncLifetime
             var context = scope.ServiceProvider.GetRequiredService<TestTenancyContext>();
             var catalogue = scope.ServiceProvider.GetRequiredService<TenancyCatalogue>();
 
-            using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
+            using (TenancyUsers.Begin(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat)))
             {
                 context.Add(TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(
                     RoleId.CreateSequential(), orchard.Tenant, new RoleDraft("Stowaway", string.Empty, [HostCatalogue.WidgetRead]), catalogue));
@@ -119,10 +119,10 @@ public abstract class SaveCheckTests(TestDatabases databases) : IAsyncLifetime
         context.Add(TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(
             RoleId.CreateSequential(), harbor.Tenant, new RoleDraft("Unclaimed", string.Empty, [HostCatalogue.WidgetRead]), catalogue));
 
-        TenancyCallers.Ambient.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
         await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => context.SaveChangesAsync(TestContext.Current.CancellationToken));
 
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.SeatSuspended)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.SeatSuspended)))
         {
             await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => context.SaveChangesAsync(TestContext.Current.CancellationToken));
         }
@@ -199,7 +199,7 @@ public abstract class SaveCheckTests(TestDatabases databases) : IAsyncLifetime
         await using var scope = _services.Scope();
         var widgets = scope.ServiceProvider.GetRequiredService<TestWidgetContext>();
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(harbor, seat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(harbor, seat)))
         {
             widgets.Widgets.Add(Widget(orchard, "not ours"));
             await Refused.WithCodeAsync(TenancyRefusals.OtherTenant, () => widgets.SaveChangesAsync(TestContext.Current.CancellationToken));
@@ -209,7 +209,7 @@ public abstract class SaveCheckTests(TestDatabases databases) : IAsyncLifetime
         widgets.Widgets.Add(Widget(harbor, "ours"));
         await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => widgets.SaveChangesAsync(TestContext.Current.CancellationToken));
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(harbor, seat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(harbor, seat)))
         {
             await widgets.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -231,7 +231,7 @@ public abstract class SaveCheckTests(TestDatabases databases) : IAsyncLifetime
 
         // ScopeToTenant marks the root; the derived type shares its table and its filter, and so its check.
         parcels.Model.FindEntityType(typeof(ExpressParcel))!.GetRootType().ClrType.Should().Be<Parcel>();
-        using (TenancyCallers.Begin(HostCaller.InSeat(harbor, SeatId.CreateSequential())))
+        using (TenancyUsers.Begin(HostUser.InSeat(harbor, SeatId.CreateSequential())))
         {
             parcels.Add(new ExpressParcel { Id = Guid.NewGuid(), TenantId = orchard, Courier = "Next door" });
             await Refused.WithCodeAsync(TenancyRefusals.OtherTenant, () => parcels.SaveChangesAsync(TestContext.Current.CancellationToken));

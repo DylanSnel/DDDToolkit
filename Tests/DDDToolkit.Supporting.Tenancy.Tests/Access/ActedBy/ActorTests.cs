@@ -9,7 +9,7 @@ using DDDToolkit.Testing;
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
-/// Who a change is recorded as: every Tenancy caller that can change something carries its actor, a seat as
+/// Who a change is recorded as: every Tenancy user that can change something carries its actor, a seat as
 /// itself, system work as the system in its scope, and the work begun for an operator or for a link's token as
 /// that operator or token. The actor maps onto the toolkit's own record of who acted, with ids only. Every
 /// domain event of Tenancy's carries it as <c>By</c>, and every use case passes its caller's.
@@ -28,7 +28,7 @@ public class ActorTests
             .OrderBy(type => type.Name, StringComparer.Ordinal),
     ];
 
-    private static HostCaller Current => TenancyCallers.Current<TenantId, SeatId>();
+    private static HostUser Current => TenancyUsers.Current<TenantId, SeatId>();
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -39,14 +39,14 @@ public class ActorTests
     [Fact]
     public void A_seat_caller_is_recorded_as_its_seat()
     {
-        var caller = HostCaller.InSeat(Harbor, Ada);
+        var caller = HostUser.InSeat(Harbor, Ada);
 
         caller.Actor.Should().Be(TenancyActor<SeatId>.OfSeat(Ada));
         caller.Actor!.Value.Should().Be(new TenancyActor<SeatId>(TenancyActorKind.Seat, Ada), "a seat is named by its id, with no scope and no operator");
-        ((ITenancyCaller)caller).Actor!.SeatId.Should().Be(Ada);
+        ((ITenancyUser)caller).Actor!.SeatId.Should().Be(Ada);
 
-        HostCaller.Nobody(TenancyRefusals.NotSeated).Actor.Should().BeNull("nobody changes nothing");
-        ((ITenancyCaller)HostCaller.Nobody(TenancyRefusals.SeatSuspended)).Actor.Should().BeNull();
+        HostUser.Nobody(TenancyRefusals.NotSeated).Actor.Should().BeNull("nobody changes nothing");
+        ((ITenancyUser)HostUser.Nobody(TenancyRefusals.SeatSuspended)).Actor.Should().BeNull();
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class ActorTests
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             Current.Actor.Should().Be(TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
-            Current.Should().Be(HostCaller.System);
+            Current.Should().Be(HostUser.System);
         }
 
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor))
@@ -73,8 +73,8 @@ public class ActorTests
         }
 
         // A caller made by hand, as a test makes one, is Tenancy's own work.
-        HostCaller.SystemIn(Harbor).Actor.Should().Be(TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
-        HostCaller.SystemIn(Harbor, Ada).Actor.Should().Be(TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope, Ada));
+        HostUser.SystemIn(Harbor).Actor.Should().Be(TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
+        HostUser.SystemIn(Harbor, Ada).Actor.Should().Be(TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope, Ada));
     }
 
     [Fact]
@@ -83,10 +83,10 @@ public class ActorTests
         // An operator's command that names no tenant runs as operator work in no tenant, as provisioning needs.
         await OperatorWork.RunAsync(Odette, () =>
         {
-            Current.Kind.Should().Be(TenancyCallerKind.System, "it provisions, as system work outside any tenant does");
+            Current.Kind.Should().Be(TenancyUserKind.System, "it provisions, as system work outside any tenant does");
             Current.Actor.Should().Be(TenancyActor<SeatId>.OfOperator(Odette, TenancyWork.SystemScope));
             Current.Seat.Should().BeNull();
-            TenancyCallers.CurrentTenantOrNull().Should().BeNull();
+            TenancyUsers.CurrentTenantOrNull().Should().BeNull();
             BegunUser!.Kind.Should().Be(CurrentUserKind.SystemIn);
             BegunUser.SystemScope.Should().Be(TenancyWork.SystemScope);
             BegunUser.Id.Should().BeNull("the operator is who the work is recorded as, never who it runs as");
@@ -96,7 +96,7 @@ public class ActorTests
         // One that names its tenant runs in that tenant.
         await OperatorWork.RunAsync(Odette, Harbor, () =>
         {
-            Current.Kind.Should().Be(TenancyCallerKind.SystemInTenant);
+            Current.Kind.Should().Be(TenancyUserKind.SystemInTenant);
             Current.Tenant.Should().Be(Harbor);
             Current.Seat.Should().BeNull("an operator holds no seat, and none is recorded for it");
             Current.Actor.Should().Be(new TenancyActor<SeatId>(TenancyActorKind.Operator, Operator: Odette, Scope: "tenancy"));
@@ -112,7 +112,7 @@ public class ActorTests
         }, scope: "operations");
 
         BegunUser.Should().BeNull();
-        TenancyCallers.Ambient.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
 
         // An operator is somebody: work for the empty identity is refused, before the handler runs. A scope that is none
         // is refused where the request says it.
@@ -122,7 +122,7 @@ public class ActorTests
         FluentActions.Invoking(() => TenancyAccess.Operator(Harbor, scope: "Not A Scope")).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => TenancyAccess.Operator(scope: "Not A Scope")).Should().Throw<ArgumentException>();
         BegunUser.Should().BeNull("a refused beginning leaves no caller behind");
-        TenancyCallers.Ambient.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class ActorTests
     {
         using (TenancyWork.BeginTokenIn(Harbor, Ada, scope: "projects"))
         {
-            Current.Kind.Should().Be(TenancyCallerKind.SystemInTenant, "it is system work in the tenant, not the seat");
+            Current.Kind.Should().Be(TenancyUserKind.SystemInTenant, "it is system work in the tenant, not the seat");
             Current.Tenant.Should().Be(Harbor);
             Current.Seat.Should().Be(Ada);
             Current.Actor.Should().Be(TenancyActor<SeatId>.OfToken(Ada, "projects"));
@@ -138,7 +138,7 @@ public class ActorTests
         }
 
         FluentActions.Invoking(() => TenancyWork.BeginTokenIn(Harbor, Ada, scope: "")).Should().Throw<ArgumentException>();
-        TenancyCallers.Ambient.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
     }
 
     [Fact]
@@ -146,9 +146,9 @@ public class ActorTests
     {
         var seat = TenancyActor<SeatId>.OfSeat(Ada);
 
-        FluentActions.Invoking(() => HostCaller.SystemIn(Harbor, seat)).Should().Throw<ArgumentException>().WithMessage("*never as a seat*");
-        FluentActions.Invoking(() => HostCaller.SystemBy(seat)).Should().Throw<ArgumentException>();
-        HostCaller.SystemBy(TenancyActor<SeatId>.OfOperator(Odette, "tenancy")).Kind.Should().Be(TenancyCallerKind.System);
+        FluentActions.Invoking(() => HostUser.SystemIn(Harbor, seat)).Should().Throw<ArgumentException>().WithMessage("*never as a seat*");
+        FluentActions.Invoking(() => HostUser.SystemBy(seat)).Should().Throw<ArgumentException>();
+        HostUser.SystemBy(TenancyActor<SeatId>.OfOperator(Odette, "tenancy")).Kind.Should().Be(TenancyUserKind.System);
     }
 
     [Fact]
@@ -172,8 +172,8 @@ public class ActorTests
         ];
         foreach (var actor in nobody)
         {
-            FluentActions.Invoking(() => HostCaller.SystemIn(Harbor, actor)).Should().Throw<ArgumentException>($"{actor} names nobody");
-            FluentActions.Invoking(() => HostCaller.SystemBy(actor)).Should().Throw<ArgumentException>($"{actor} names nobody");
+            FluentActions.Invoking(() => HostUser.SystemIn(Harbor, actor)).Should().Throw<ArgumentException>($"{actor} names nobody");
+            FluentActions.Invoking(() => HostUser.SystemBy(actor)).Should().Throw<ArgumentException>($"{actor} names nobody");
         }
 
         // What the factories make is taken as it is.
@@ -186,8 +186,8 @@ public class ActorTests
         ];
         foreach (var actor in somebody)
         {
-            HostCaller.SystemIn(Harbor, actor).Actor.Should().Be(actor);
-            HostCaller.SystemBy(actor).Actor.Should().Be(actor);
+            HostUser.SystemIn(Harbor, actor).Actor.Should().Be(actor);
+            HostUser.SystemBy(actor).Actor.Should().Be(actor);
         }
     }
 
@@ -361,7 +361,7 @@ public class ActorTests
         bySystem.AddRange(followed);
 
         // ... made a tree by its administrator, with the roles of the starter roles seeded for the new shape, ...
-        await harness.Run(HostCaller.InSeat(quay.Tenant, quay.AdminSeat), use => use.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, Cancellation));
+        await harness.Run(HostUser.InSeat(quay.Tenant, quay.AdminSeat), use => use.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, Cancellation));
 
         var byQuin = harness.Store.SavedEvents.Skip(before + bySystem.Count).ToList();
         byQuin.Select(raised => raised.GetType().GetGenericTypeDefinition()).Should().Contain([typeof(TenantShapeChanged<,>), typeof(RoleCreated<,,>)]);
@@ -520,7 +520,7 @@ public class ActorTests
 
         // It saves as system work in the tenant it makes, as any provisioning does, and still as the operator's act.
         var save = harness.Store.Observed.Single(call => call.Name == nameof(ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>.SaveAsync));
-        save.Tenancy!.Kind.Should().Be(TenancyCallerKind.SystemInTenant);
+        save.Tenancy!.Kind.Should().Be(TenancyUserKind.SystemInTenant);
         save.Tenancy.TenantId.Should().Be(provisioned.Tenant);
         save.Tenancy.Actor!.ToActedBy().Should().Be(new ActedBy("operator", Odette.ToString("D")));
         save.Core!.SystemScope.Should().Be(TenancyWork.SystemScope);

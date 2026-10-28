@@ -84,7 +84,7 @@ internal static class ShopModules
     /// What a host's own middleware does before the gateway: it makes the caller and the reader's language
     /// ambient for the rest of the request, and says which scope the HTTP request itself got.
     /// </summary>
-    public static void UseAmbientCaller(this WebApplication app)
+    public static void UseAmbientUser(this WebApplication app)
         => app.Use(async (context, next) =>
         {
             Ambient.Caller.Value = context.Request.Headers[CallerHeader].FirstOrDefault();

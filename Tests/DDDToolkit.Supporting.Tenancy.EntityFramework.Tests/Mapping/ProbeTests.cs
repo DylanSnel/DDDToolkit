@@ -106,7 +106,7 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
             await widgets.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(tenant, seat)))
         {
             var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             var readable = widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).OrderBy(widget => widget.Name);
@@ -145,7 +145,7 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
 
         // The table's name is the model's own, and the unit is a parameter.
         var children =
-            "SELECT u.\"Id\" AS \"UnitId\", u.\"Name\" AS \"Permission\", NULL AS \"EndsAt\", u.\"ParentId\" AS \"Parent\", u.\"Name\" = 'North' AS \"OfCaller\" FROM "
+            "SELECT u.\"Id\" AS \"UnitId\", u.\"Name\" AS \"Permission\", NULL AS \"EndsAt\", u.\"ParentId\" AS \"Parent\", u.\"Name\" = 'North' AS \"OfCurrentSeat\" FROM "
             + units + " u WHERE u.\"ParentId\" = {0}";
         var below = tenancy.Set<MoveReach<OrganizationUnitId>>().FromSqlRaw(children, harbor.RootUnit.Value);
 
@@ -288,7 +288,7 @@ public sealed class ProbeTestsOnPostgres(PostgresDatabases postgres) : ProbeTest
             await tenancy.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(tenant, seat)))
         {
             var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
 

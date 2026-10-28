@@ -710,7 +710,7 @@ builder.Services.RunStartupChecks();
 
 var app = builder.Build();
 app.UseExceptionHandler();
-app.UseCallerAndTenant();
+app.UseUserAndTenant();
 app.MapTenancyModule();
 app.Run();
 ```
@@ -726,7 +726,7 @@ namespace Harbor.Host.Requests;
 public static class RequestPipeline
 {
     // The rest of the request runs as its caller, and as that caller's seat in the tenant the header names.
-    public static IApplicationBuilder UseCallerAndTenant(this IApplicationBuilder app)
+    public static IApplicationBuilder UseUserAndTenant(this IApplicationBuilder app)
         => app.Use(async (context, next) =>
         {
             // A stand-in for sign-in, for development: a header says who calls.
@@ -735,7 +735,7 @@ public static class RequestPipeline
             {
                 var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
                     .ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
-                using (TenancyCallers.Begin(seat))
+                using (TenancyUsers.Begin(seat))
                 {
                     await next(context);
                 }
@@ -794,7 +794,7 @@ public sealed class RefusalsAsProblems : IExceptionHandler
 - `CurrentUserSnapshot.User(user)` is a signed-in user with that id. `CurrentUserSnapshot.Anonymous` is a caller
   without a user.
 - `BeginAs` on the toolkit's `ICurrentUser` makes the caller the current user for the rest of the request.
-  `TenancyCallers.Begin` does the same for the caller's seat.
+  `TenancyUsers.Begin` does the same for the caller's seat.
 - `ITenantSelection.ResolveAsync` looks up the caller's active seat in the tenant the `Tenant` header names. It throws
   nothing. When there is no seat, it returns "nobody" with the refusal's code, such as `tenancy.not-seated`. A
   request that needs a seat is then refused with that code.
@@ -980,7 +980,7 @@ builder.Services.RunStartupChecks();
 
 var app = builder.Build();
 app.UseExceptionHandler();
-app.UseCallerAndTenant();
+app.UseUserAndTenant();
 app.MapTenancyModule();
 if (app.Environment.IsDevelopment())
 {

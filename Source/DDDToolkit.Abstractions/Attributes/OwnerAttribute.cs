@@ -16,7 +16,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// </summary>
 /// <remarks>
 /// The property is of a type the caller has an own of: a <see cref="Guid"/>, the caller's verified identity;
-/// Tenancy's seat id; or a kind of the application's own that its <c>ICallersOwn</c> says the caller's own of. It may
+/// Tenancy's seat id; or a kind of the application's own that its <c>IOwnedByCurrentUser</c> says the caller's own of. It may
 /// be nullable, and a row whose owner is null is nobody's: nobody comes through as its owner. One per aggregate root,
 /// on the root itself, and never on an entity inside it, which a request does not name by its own id; on another
 /// type, or twice, it is DDD00087, and on a type nothing could say the caller's own of DDD00088.

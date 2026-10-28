@@ -136,11 +136,11 @@ public sealed class SystemReadTests
                 ("SELECT f.v AS \"Value\" FROM \"" + TenancyFunctionNames.RolePermissionsInUse + "\"() AS f(v)", "system in " + TenancyWork.SystemScope),
                 ("SELECT f.v AS \"TenantId\" FROM \"" + TenancyFunctionNames.TenantsToSweep + "\"() AS f(v)", "system in widgets"));
             services.Commands.Sent.Should().OnlyContain(
-                command => command.TenancyCaller == null && !ReferenceEquals(command.Context, scoped.TenancyContext()) && !command.InAmbientTransaction,
+                command => command.TenancyUser == null && !ReferenceEquals(command.Context, scoped.TenancyContext()) && !command.InAmbientTransaction,
                 "in no tenant, though the work around it is a seat's in harbor, and on a context of its own");
 
             // The seat's own work goes on as it was.
-            TenancyCallers.Ambient.Should().Be(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat));
+            TenancyUsers.Ambient.Should().Be(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat));
             BegunUser.Should().BeNull();
         });
     }

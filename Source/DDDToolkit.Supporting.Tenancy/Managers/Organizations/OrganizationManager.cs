@@ -306,7 +306,7 @@ public class OrganizationManager<
         var tenantId = gate.RequireTenant();
 
         // A seat a restrictive rule of the application's keeps out of the organization reads none of its units.
-        if (await gate.OrganizationTheCallerReadsAsync(tenantId, cancellationToken).ConfigureAwait(false) is not { } organization)
+        if (await gate.OrganizationTheUserReadsAsync(tenantId, cancellationToken).ConfigureAwait(false) is not { } organization)
         {
             return [];
         }

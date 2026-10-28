@@ -15,7 +15,7 @@ public class TenantManagerTests
         => new(slug, "Harbor Works", shape, "Harbor Works", Ada);
 
     private static async Task<ProvisionedTenant> Provision(Harness harness, TenantToProvision command)
-        => await harness.Run(HostCaller.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
+        => await harness.Run(HostUser.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
 
     [Fact]
     public async Task Provisioning_creates_tenant_organization_root_roles_first_admin_and_grant_in_one_save()
@@ -61,7 +61,7 @@ public class TenantManagerTests
         var harness = new Harness(New.Catalogue());
         var provisioned = await Provision(harness, Harbor());
 
-        var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var caller = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var tenantWide = await harness.Run(caller, async h =>
         {
             var queries = new TenancyAccessManager(h.Catalogue, h.Clock, NoServices.Instance).In(h.Store, h.Store);
@@ -128,7 +128,7 @@ public class TenantManagerTests
             grant.EndsAt.Should().BeNull();
 
             // So the seat holds every live permission for the whole tenant, and runs it: it makes a role, and gives it.
-            var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+            var caller = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
             var held = await harness.Run(caller, async h =>
             {
                 var queries = new TenancyAccessManager(h.Catalogue, h.Clock, NoServices.Instance).In(h.Store, h.Store);
@@ -143,7 +143,7 @@ public class TenantManagerTests
         // A flat tenant that turns hierarchical has the one starter role there is already: no role is added.
         var kiosk = provisionedAs["kiosk"];
         var roles = harness.Store.RolesOf(kiosk).Count;
-        await harness.Run(HostCaller.InSeat(kiosk, harness.Store.SeatsIn(kiosk).Single().Id),
+        await harness.Run(HostUser.InSeat(kiosk, harness.Store.SeatsIn(kiosk).Single().Id),
             h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
         harness.Store.Tenant(kiosk).Shape.Should().Be(TenantShape.Hierarchical);
         harness.Store.RolesOf(kiosk).Should().HaveCount(roles);
@@ -175,7 +175,7 @@ public class TenantManagerTests
             .Should().OnlyContain(right => right.UnitId == provisioned.RootUnit && right.EndsAt == null)
             .And.Subject.Select(right => right.Permission).Should().BeEquivalentTo(listed);
 
-        var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var caller = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var held = await harness.Run(caller, async h =>
         {
             var queries = new TenancyAccessManager(h.Catalogue, h.Clock, NoServices.Instance).In(h.Store, h.Store);
@@ -245,7 +245,7 @@ public class TenantManagerTests
         await FluentActions.Awaiting(() => harness.BySystemWork(h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Begin access.BeginSystem() for it, on the TenancyAccessManager your code takes.");
         await Refused.WithCodeAsync(TenancyRefusals.TenantRequired,
-            () => harness.Run(HostCaller.Nobody(TenancyRefusals.TenantRequired), h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)));
+            () => harness.Run(HostUser.Nobody(TenancyRefusals.TenantRequired), h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)));
 
         harness.Store.SaveCount.Should().Be(0);
     }
@@ -266,7 +266,7 @@ public class TenantManagerTests
                      h => h.Tenants.CloseAsync("no longer needed", default),
                  })
         {
-            await FluentActions.Awaiting(() => harness.Run(HostCaller.System, act))
+            await FluentActions.Awaiting(() => harness.Run(HostUser.System, act))
                 .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Begin access.BeginSystemIn(tenant) for it, on the TenancyAccessManager your code takes.");
         }
 
@@ -317,7 +317,7 @@ public class TenantManagerTests
     {
         var harness = new Harness(New.Catalogue());
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, "kiosk"));
-        var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var administrator = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var grantsBefore = harness.Store.Seat(provisioned.AdminSeat).Placements.SelectMany(placement => placement.Grants).ToArray();
         var supervisors = RoleId.CreateSequential();
 
@@ -356,7 +356,7 @@ public class TenantManagerTests
             []);
         var harness = new Harness(catalogue);
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, "kiosk"));
-        var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var administrator = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         provisioned.RolesByStarterRole.Keys.Should().NotContain("tree-admin", "that starter role is for a hierarchical tenant");
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
@@ -393,7 +393,7 @@ public class TenantManagerTests
     {
         var harness = new Harness(New.Catalogue());
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, "kiosk"));
-        var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var administrator = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         await harness.Run(administrator, h => h.Roles.CreateAsync("supervisor", "Made by hand", [HostCatalogue.WidgetRead], default));
 
         await harness.Run(administrator, async h =>

@@ -390,7 +390,7 @@ public sealed class BesideAnOrganizationTests
             .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(CratesInTheDepot.NotOfTheDepot);
         await depot.Services.CratesAsync(data.Ivo, access =>
         {
-            FluentActions.Invoking(access.RequireCaller).Should().Throw<RefusalException>().Which.Code.Should().Be(CratesInTheDepot.NotOfTheDepot);
+            FluentActions.Invoking(access.RequireCurrentUser).Should().Throw<RefusalException>().Which.Code.Should().Be(CratesInTheDepot.NotOfTheDepot);
             return Task.FromResult(true);
         });
         depot.Commands.Count.Should().Be(0, "nobody is refused as nobody, without a statement made for it");
@@ -402,7 +402,7 @@ public sealed class BesideAnOrganizationTests
         // A porter the depot let go is known to it, so it is not refused as a stranger: nothing is there for it.
         await depot.Services.CratesAsync(data.Ned, access =>
         {
-            access.RequireCaller();
+            access.RequireCurrentUser();
             return Task.FromResult(true);
         });
 

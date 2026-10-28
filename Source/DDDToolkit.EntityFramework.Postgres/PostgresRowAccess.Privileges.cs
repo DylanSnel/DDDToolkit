@@ -233,9 +233,9 @@ public static partial class PostgresRowAccess
             }
         }
 
-        // Everybody a privilege could have been given to before: the callers' roles, the bookkeeping role, and PUBLIC.
-        List<string> callers = [.. new[] { names.Anonymous, names.User, names.SystemIn }.Concat(names.TokenDatabaseRoles).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
-        var revoked = "PUBLIC, " + string.Join(", ", (system is null ? callers : [.. callers.Append(system).Order(StringComparer.Ordinal)]).Select(role => sql.DelimitIdentifier(role)));
+        // Everybody a privilege could have been given to before: the userRoles' roles, the bookkeeping role, and PUBLIC.
+        List<string> userRoles = [.. new[] { names.Anonymous, names.User, names.SystemIn }.Concat(names.TokenDatabaseRoles).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+        var revoked = "PUBLIC, " + string.Join(", ", (system is null ? userRoles : [.. userRoles.Append(system).Order(StringComparer.Ordinal)]).Select(role => sql.DelimitIdentifier(role)));
 
         var usage = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         void Uses(StoreObjectIdentifier table, string role)

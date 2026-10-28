@@ -222,7 +222,7 @@ public sealed class ProjectListScenarios(SampleHosts sample) : IClassFixture<Sam
 
         // Asked as a request asks: as the person, in her seat.
         using (TestUser.BeginAs(Harbor.Administrator.Person.Id))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.Administrator.Id)))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.Administrator.Id)))
         {
             string? after = null;
             foreach (var size in new[] { 1, 3 })

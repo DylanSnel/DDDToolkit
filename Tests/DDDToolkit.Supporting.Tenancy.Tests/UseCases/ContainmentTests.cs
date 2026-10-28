@@ -309,8 +309,8 @@ public class ContainmentTests
     /// </summary>
     private static async Task PassQuizAsync(Harness harness, int score)
     {
-        var caller = TenancyCallers.Current<TenantId, SeatId>();
-        if (caller is not { Kind: TenancyCallerKind.Seat, Tenant: { } tenant, Seat: { } seat })
+        var caller = TenancyUsers.Current<TenantId, SeatId>();
+        if (caller is not { Kind: TenancyUserKind.Seat, Tenant: { } tenant, Seat: { } seat })
         {
             throw new InvalidOperationException("A quiz is passed by a seat.");
         }

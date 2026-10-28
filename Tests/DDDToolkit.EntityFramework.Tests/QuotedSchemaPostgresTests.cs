@@ -160,7 +160,7 @@ public sealed class QuotedSchemaPostgresTests(HelpDeskDatabase database) : IClas
     {
         database.Require();
         await using var context = database.CreateContext(CurrentUserSnapshot.System);
-        await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, Cancellation);
+        await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync(context, Cancellation);
 
         // The login role owns the schema, which the check finds by the name the catalog keeps, and names as SQL writes it.
         (await FluentActions.Awaiting(() => PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, Cancellation))

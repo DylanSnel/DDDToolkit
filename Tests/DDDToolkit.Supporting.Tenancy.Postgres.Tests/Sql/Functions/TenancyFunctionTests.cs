@@ -47,8 +47,8 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
         var csharp = await CSharpAnswersAsync(database, identity, slug, now, permissions);
         var sql = await SqlAnswersAsync(database, identity, tenant, permissions);
 
-        sql.Seat.Should().Be(csharp.Seat, "caller_seat() is the seat the application selects");
-        sql.Tenant.Should().Be(csharp.Tenant, "caller_tenant() is that seat's tenant");
+        sql.Seat.Should().Be(csharp.Seat, "current_seat() is the seat the application selects");
+        sql.Tenant.Should().Be(csharp.Tenant, "current_tenant() is that seat's tenant");
         sql.Readable.Should().BeEquivalentTo(csharp.Readable, "readable_units() is ReadableUnits()");
         foreach (var permission in permissions)
         {
@@ -67,9 +67,9 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
         // Sue holds an Operator grant at South, and Quin every permission of Quay; neither answers for anything now.
         foreach (var (identity, tenant, placed) in new[] { (Sue.Identity, Harbor, South), (Quin.Identity, Quay, QuayRoot) })
         {
-            await using var caller = await AsCaller.PersonAsync(database, identity, tenant, Cancellation);
-            (await caller.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", Cancellation)).Should().BeNull();
-            (await caller.ScalarAsync<long?>("SELECT tenancy.caller_tenant()", Cancellation)).Should().BeNull();
+            await using var caller = await AsUser.PersonAsync(database, identity, tenant, Cancellation);
+            (await caller.ScalarAsync<Guid?>("SELECT tenancy.current_seat()", Cancellation)).Should().BeNull();
+            (await caller.ScalarAsync<long?>("SELECT tenancy.current_tenant()", Cancellation)).Should().BeNull();
             (await caller.ListAsync<Guid>("SELECT tenancy.readable_units()", Cancellation)).Should().BeEmpty("the seat is still placed at {0}, and answers for no unit", placed);
             (await caller.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission('widget.read')", Cancellation)).Should().BeEmpty();
             (await caller.ListAsync<Guid>("SELECT tenancy.roles_with_permission('widget.read')", Cancellation)).Should().BeEmpty();
@@ -79,7 +79,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
         }
 
         // The rows are there: the seat and the tenant are what stops them.
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, Quin.Seat.Value)).Should().BePositive();
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatPlacements\" WHERE \"SeatId\" = $1", Cancellation, Sue.Seat.Value)).Should().Be(1);
     }
@@ -90,8 +90,8 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
         // Eve's Watcher grant at South ended yesterday, and her Operator grant there starts the day after tomorrow.
-        await using var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation);
-        (await eve.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", Cancellation)).Should().Be(Eve.Seat.Value, "Eve is seated");
+        await using var eve = await AsUser.PersonAsync(database, Eve.Identity, Harbor, Cancellation);
+        (await eve.ScalarAsync<Guid?>("SELECT tenancy.current_seat()", Cancellation)).Should().Be(Eve.Seat.Value, "Eve is seated");
         (await eve.ListAsync<Guid>("SELECT tenancy.readable_units()", Cancellation)).Should().Equal([South.Value], "and placed at South");
         foreach (var permission in new[] { "widget.read", "widget.change", "widget.create" })
         {
@@ -124,8 +124,8 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
                      (Stranger, Harbor, null),
                  })
         {
-            await using var caller = await AsCaller.PersonAsync(database, identity, tenant, Cancellation);
-            (await caller.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", Cancellation))
+            await using var caller = await AsUser.PersonAsync(database, identity, tenant, Cancellation);
+            (await caller.ScalarAsync<Guid?>("SELECT tenancy.current_seat()", Cancellation))
                 .Should().Be(seat?.Value, "the seat is found from the verified identity and the tenant picked, never from a seat id");
 
             if (seat is null)
@@ -142,7 +142,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
         // A placement row no use case writes, past every policy: Oli's seat in Orchard, at Harbor's North, of Harbor.
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ExecuteAsync(
                     "INSERT INTO tenancy.\"SeatPlacements\" (\"UnitId\", \"SeatId\", \"IsPrimary\", \"PlacedAt\", \"TenantId\") VALUES ($1, $2, false, now(), 1)",
@@ -153,7 +153,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
             await owner.CommitAsync(Cancellation);
         }
 
-        await using var inOrchard = await AsCaller.PersonAsync(database, Oli.Identity, Orchard, Cancellation);
+        await using var inOrchard = await AsUser.PersonAsync(database, Oli.Identity, Orchard, Cancellation);
         (await inOrchard.ListAsync<Guid>("SELECT tenancy.readable_units()", Cancellation)).Should().Equal(OrchardRoot.Value);
     }
 
@@ -174,7 +174,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
             // Whatever tenant the setting names, or none.
             foreach (TenantId? tenant in new TenantId?[] { null, Harbor, Orchard })
             {
-                await using var caller = await AsCaller.PersonAsync(database, identity, tenant, Cancellation);
+                await using var caller = await AsUser.PersonAsync(database, identity, tenant, Cancellation);
                 (await caller.ListAsync<long>("SELECT tenancy.identity_tenants()", Cancellation)).Should().BeEquivalentTo(expected.Select(id => id.Value));
             }
 
@@ -196,12 +196,12 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
         var caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>()
             .ResolveAsync(CurrentUserSnapshot.User(identity), slug, Cancellation);
 
-        using (TenancyCallers.Begin(caller))
+        using (TenancyUsers.Begin(caller))
         {
             var queries = scope.ServiceProvider.TenancyContext().Tenancy();
             var answers = new Answers(
                 caller.Seat?.Value,
-                caller.Kind == TenancyCallerKind.Seat ? caller.Tenant?.Value : null,
+                caller.Kind == TenancyUserKind.Seat ? caller.Tenant?.Value : null,
                 [.. (await queries.ReadableUnits().ToListAsync(Cancellation)).Select(unit => unit.Value)]);
 
             foreach (var permission in permissions)
@@ -218,10 +218,10 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
     /// <summary>What the SQL functions answer for the person, with <paramref name="tenant"/> in the setting.</summary>
     private static async Task<Answers> SqlAnswersAsync(TestDatabase database, Guid identity, TenantId tenant, IReadOnlyList<string> permissions)
     {
-        await using var caller = await AsCaller.PersonAsync(database, identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, identity, tenant, Cancellation);
         var answers = new Answers(
-            await caller.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", Cancellation),
-            await caller.ScalarAsync<long?>("SELECT tenancy.caller_tenant()", Cancellation),
+            await caller.ScalarAsync<Guid?>("SELECT tenancy.current_seat()", Cancellation),
+            await caller.ScalarAsync<long?>("SELECT tenancy.current_tenant()", Cancellation),
             await caller.ListAsync<Guid>("SELECT tenancy.readable_units()", Cancellation));
 
         foreach (var permission in permissions)

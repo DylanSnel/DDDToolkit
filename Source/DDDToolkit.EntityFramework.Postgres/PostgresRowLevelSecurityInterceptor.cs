@@ -25,7 +25,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <code>
 /// SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"…"}', false), …
 /// </code>
-/// after which the caller functions answer for that user, <c>"ddd".caller_id()</c> on a Postgres of your
+/// after which the current user functions answer for that user, <c>"ddd".current_user_id()</c> on a Postgres of your
 /// own and <c>auth.uid()</c> on Supabase, and every policy on every table the context touches applies.
 /// </summary>
 /// <remarks>
@@ -48,7 +48,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <para>
 /// <b>In <see cref="RowLevelSecurityScope.Transaction"/> scope nothing is ever set on a session</b>, so a
 /// pooler that hands each transaction any free server connection carries nothing from one client to the
-/// next. A command outside a transaction gets <c>RESET ROLE; CALL "ddd".use_caller(…);</c> in front of its
+/// next. A command outside a transaction gets <c>RESET ROLE; CALL "ddd".use_current_user(…);</c> in front of its
 /// text, which sets the same role, claims and settings for the transaction that one command is; the provider
 /// sends them together, so it costs no round trip. The reset takes off a role some other client left on the
 /// server connection, so the call is always made by the role the application logged in as, the only one that
@@ -149,7 +149,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// asks the server for it, rather than trust what was remembered about a transaction object: a provider may
     /// hand the same object out again for the next transaction, which carries nothing.
     /// </summary>
-    internal const string MarkSetting = "ddd.caller_mark";
+    internal const string MarkSetting = "ddd.current_user_mark";
 
     private const string RoleParameter = "__ddd_role";
 
@@ -170,7 +170,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// as that role, and refused. Nothing of a caller lives on a session in this scope, so taking a role off it
     /// loses nothing.
     /// </remarks>
-    private const string Call = "RESET ROLE;\nCALL \"ddd\".use_caller(@" + RoleParameter + ", @" + ClaimsParameter + ", @" + NamesParameter + ", @" + ValuesParameter + ");\n";
+    private const string Call = "RESET ROLE;\nCALL \"ddd\".use_current_user(@" + RoleParameter + ", @" + ClaimsParameter + ", @" + NamesParameter + ", @" + ValuesParameter + ");\n";
 
     private const string TimeoutSetting = "statement_timeout";
 
@@ -207,7 +207,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     /// <summary>
     /// The roles this interceptor gives each kind of user and how long the settings last: what
-    /// <see cref="PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync"/> holds the database to. Public so a
+    /// <see cref="PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync"/> holds the database to. Public so a
     /// start-up check of another package, such as Supabase's check that these are the roles the access files were
     /// written for, asks about the roles a context really runs with, found among its interceptors, and a host that
     /// runs such a check by hand hands over the context alone. Read them; a change made here after the first
@@ -669,7 +669,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     /// <summary>
     /// The claims a user made without a token gets: their id as <c>sub</c> and their role, which is all
-    /// the caller functions read. A user of a token gets the token's claims as they were signed.
+    /// the current user functions read. A user of a token gets the token's claims as they were signed.
     /// </summary>
     internal static string ClaimsOf(CurrentUserSnapshot user)
     {
@@ -721,7 +721,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <exception cref="RefusalException">The caller's token carries a role that is on no list.</exception>
     internal void EnsureConnects(DbConnection connection)
     {
-        EnsureSettingsStayWithTheCaller(connection);
+        EnsureSettingsStayWithTheUser(connection);
 
         // Worked out before connecting, so a caller that cannot run fails before anything reaches the server.
         _ = Desired(applied: null);
@@ -741,7 +741,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
             cancellationToken);
     }
 
-    private void EnsureSettingsStayWithTheCaller(DbConnection connection)
+    private void EnsureSettingsStayWithTheUser(DbConnection connection)
     {
         var scope = _scope;
         if (Refusals.GetOrAdd((scope, connection.ConnectionString ?? string.Empty), static key => RefusalFor(key.Scope, key.ConnectionString)) is { } refusal)
@@ -806,7 +806,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     }
 
     /// <summary>
-    /// The statement that sets a caller: the role, the claims, and the four settings Supabase's caller functions
+    /// The statement that sets a caller: the role, the claims, and the four settings Supabase's current user functions
     /// read before the claims, emptied, then one <c>set_config</c> pair of parameters per module setting.
     /// Positional parameters, which Npgsql binds with or without its SQL rewriting.
     /// </summary>
@@ -1060,29 +1060,29 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         if (applied is null)
         {
             // A connection opened outside Entity Framework, so nothing set a caller on it.
-            EnsureSettingsStayWithTheCaller(connection);
-            var caller = Desired(applied: null);
+            EnsureSettingsStayWithTheUser(connection);
+            var unset = Desired(applied: null);
             if (!inTransaction)
             {
-                return caller;
+                return unset;
             }
 
-            const string NoCaller =
+            const string NoUser =
                 "This connection was opened outside Entity Framework and carries no user, and a transaction is open on it, so the user cannot be set safely.";
             if (_requireExplicitCurrentUser)
             {
                 throw new InvalidOperationException(
-                    NoCaller + $" Open the connection through a context, begin the transaction after a context opened it, or use {nameof(CurrentUserConnections)}.");
+                    NoUser + $" Open the connection through a context, begin the transaction after a context opened it, or use {nameof(CurrentUserConnections)}.");
             }
 
             var entry = EntryOf(connection);
-            if (!entry.WarnedNoCaller)
+            if (!entry.WarnedNoUser)
             {
-                entry.WarnedNoCaller = true;
+                entry.WarnedNoUser = true;
                 _logger.LogWarning(
-                    NoCaller + " The command runs as the role the connection carries, not as {User}. " +
+                    NoUser + " The command runs as the role the connection carries, not as {User}. " +
                     "Open the connection through a context, begin the transaction after a context opened it, or use CurrentUserConnections; with RequireExplicitCurrentUser this is refused.",
-                    caller.User);
+                    unset.User);
             }
 
             return null;
@@ -1534,13 +1534,13 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         public Applied? Applied { get; set; }
 
         /// <summary>Whether a command on it inside a transaction nobody set a caller for was logged already, so it is logged once while the connection is open.</summary>
-        public bool WarnedNoCaller { get; set; }
+        public bool WarnedNoUser { get; set; }
 
         /// <summary>The connection closed, broke or opened: whatever was set is gone, or was never there.</summary>
         public void Forget(object sender, StateChangeEventArgs change)
         {
             Applied = null;
-            WarnedNoCaller = false;
+            WarnedNoUser = false;
         }
     }
 

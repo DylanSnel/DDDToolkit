@@ -52,7 +52,7 @@ public sealed class OneCallTests
         await using (var scope = services.Scope())
         {
             var widgets = scope.ServiceProvider.GetRequiredService<TestWidgetContext>();
-            using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
+            using (TenancyUsers.Begin(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat)))
             {
                 widgets.Widgets.Add(new Widget { Id = Guid.NewGuid(), TenantId = orchard.Tenant, UnitId = OrganizationUnitId.CreateSequential(), Name = "not ours" });
                 await Refused.WithCodeAsync(TenancyRefusals.OtherTenant, () => widgets.SaveChangesAsync(Cancellation));
@@ -63,7 +63,7 @@ public sealed class OneCallTests
         await using (var scope = services.Scope())
         {
             var notices = scope.ServiceProvider.GetRequiredService<NoticeBoardContext>();
-            using (TenancyCallers.BeginNone())
+            using (TenancyUsers.BeginNone())
             {
                 notices.Notices.Add(new Notice { Id = Guid.NewGuid(), Text = "The yard is closed on Sunday." });
                 await notices.SaveChangesAsync(Cancellation);

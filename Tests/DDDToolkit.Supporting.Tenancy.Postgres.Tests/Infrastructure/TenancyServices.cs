@@ -151,13 +151,13 @@ public sealed class TenancyServices : IAsyncDisposable
 
     /// <summary>
     /// Runs <paramref name="act"/> as a person signed in with <paramref name="identity"/>, through their seat in
-    /// <paramref name="tenant"/>: the toolkit's caller is the user, whose role and claims reach Postgres, and the
-    /// Tenancy caller the seat, whose tenant does.
+    /// <paramref name="tenant"/>: the toolkit's current user is the user, whose role and claims reach Postgres, and the
+    /// Tenancy user the seat, whose tenant does.
     /// </summary>
     public async Task<T> BySeat<T>(Guid identity, TenantId tenant, SeatId seat, Func<IServiceProvider, Task<T>> act)
     {
         using (TestUser.BeginAs(identity))
-        using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(tenant, seat)))
         {
             return await InScopeAsync(act);
         }
@@ -173,12 +173,12 @@ public sealed class TenancyServices : IAsyncDisposable
 
     /// <summary>
     /// Runs <paramref name="act"/> as a person signed in with <paramref name="identity"/> who names no tenant: the
-    /// toolkit's caller is the user, and there is no Tenancy caller, as in a request that accepts an invitation.
+    /// toolkit's current user is the user, and there is no Tenancy user, as in a request that accepts an invitation.
     /// </summary>
     public async Task<T> BySignedInUser<T>(Guid identity, Func<IServiceProvider, Task<T>> act)
     {
         using (TestUser.BeginAs(identity))
-        using (TenancyCallers.BeginNone())
+        using (TenancyUsers.BeginNone())
         {
             return await InScopeAsync(act);
         }

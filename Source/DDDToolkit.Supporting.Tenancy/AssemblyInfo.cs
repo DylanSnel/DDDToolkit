@@ -42,4 +42,4 @@ using DDDToolkit.Supporting.Tenancy.Managers;
 // from the template here. Only a seat in the tenant has a seat of its own there, and a seat is a signed-in user, so
 // [InTenant] or [SignedIn] beside [OwnOnly] with [Own] on the seat id says nothing more, and neither does [InTenant]
 // beside a permission of Tenancy's with [OrOwn] on it.
-[assembly: CallersOwn(IdOf = typeof(SeatAggregateAttribute<>), Implies = [typeof(InTenantAttribute), typeof(SignedInAttribute)])]
+[assembly: OwnedByCurrentUser(IdOf = typeof(SeatAggregateAttribute<>), Implies = [typeof(InTenantAttribute), typeof(SignedInAttribute)])]

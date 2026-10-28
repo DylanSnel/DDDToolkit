@@ -74,10 +74,10 @@ public sealed class ContributionTests(TenancyPostgres postgres)
 
         functions.Should().Equal(
             "administrator_remains true search_path=\"\" false false false",
-            "caller_permissions false none true true false",
-            "caller_seat true search_path=\"\" true true false",
-            "caller_seat_row true search_path=\"\" true true false",
-            "caller_tenant true search_path=\"\" true true false",
+            "current_permissions false none true true false",
+            "current_seat true search_path=\"\" true true false",
+            "current_seat_row true search_path=\"\" true true false",
+            "current_tenant true search_path=\"\" true true false",
             "grant_is_fixed false search_path=\"\" false false false",
             "holds_at_tenant true search_path=\"\" true true false",
             "holds_permission true search_path=\"\" true true false",
@@ -90,7 +90,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
             "permission_is_contained false search_path=\"\" true true false",
             "permission_is_live false search_path=\"\" false false false",
             "permission_manages_access false search_path=\"\" true true false",
-            "permissions_a_move_changes true search_path=\"\" true false false",
+            "permissions_a_unit_move_changes true search_path=\"\" true false false",
             "placement_is_fixed false search_path=\"\" false false false",
             "readable_units true search_path=\"\" true true false",
             "rewrite_tenant_rights true search_path=\"\" false true false",
@@ -126,7 +126,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         // its owner: a function that runs with its owner's rights never looks a name up along the caller's path.
         string[] folded =
         [
-            TenancyFunctionNames.CallerPermissions, TenancyFunctionNames.TenantPlacements, TenancyFunctionNames.TenantRoles,
+            TenancyFunctionNames.CurrentPermissions, TenancyFunctionNames.TenantPlacements, TenancyFunctionNames.TenantRoles,
             TenancyFunctionNames.TenantSeats, TenancyFunctionNames.TenantUnitPaths, TenancyFunctionNames.TenantUnits,
         ];
         functions.Where(function => function.Contains(" none ", StringComparison.Ordinal)).Select(function => function.Split(' ')[0]).Should().Equal(folded);
@@ -352,11 +352,11 @@ public sealed class ContributionTests(TenancyPostgres postgres)
                 ("WidgetPart", "Closed to anonymous callers", "ALL", "@anonymous", true),
             ]);
         result.Policies.Single(policy => policy.Table.GetTableName() == "WidgetPart" && policy.Role == "@user").Using
-            .Should().Be("EXISTS (SELECT 1 FROM \"widgets\".\"Widgets\" r WHERE r.\"Id\" = \"widgets\".\"WidgetPart\".\"WidgetId\" AND r.\"TenantId\" = (SELECT {fn:tenancy/caller_tenant}()))",
+            .Should().Be("EXISTS (SELECT 1 FROM \"widgets\".\"Widgets\" r WHERE r.\"Id\" = \"widgets\".\"WidgetPart\".\"WidgetId\" AND r.\"TenantId\" = (SELECT {fn:tenancy/current_tenant}()))",
                 "a table of the aggregate's entities is kept to the tenant through the row it belongs to");
     }
 
-    private static Task<AsCaller> OwnerAsync(TestDatabase database) => AsCaller.OwnerAsync(database, Cancellation);
+    private static Task<AsUser> OwnerAsync(TestDatabase database) => AsUser.OwnerAsync(database, Cancellation);
 
     /// <summary>
     /// Tenancy's context as <see cref="TestTenancyContext"/> maps it, but with a role's permissions stored as a JSON document, as

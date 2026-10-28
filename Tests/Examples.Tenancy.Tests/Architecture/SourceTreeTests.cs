@@ -545,7 +545,7 @@ public sealed partial class SourceTreeTests
     /// A call of Tenancy's that names one of its ids where a closed form of it exists: system work or the current
     /// caller with type arguments, or a registration with an id among them.
     /// </summary>
-    [GeneratedRegex(@"TenancyWork\.Begin\w*<|TenancyCallers\.Current<|AddTenancy\w*<[^>(]*\b(?:TenantId|SeatId|OrganizationUnitId|RoleId)\b")]
+    [GeneratedRegex(@"TenancyWork\.Begin\w*<|TenancyUsers\.Current<|AddTenancy\w*<[^>(]*\b(?:TenantId|SeatId|OrganizationUnitId|RoleId)\b")]
     private static partial Regex NamesTenancysIdsInACall();
 
     /// <summary>The namespace a file declares: file-scoped, or with braces as a migration's files have it.</summary>

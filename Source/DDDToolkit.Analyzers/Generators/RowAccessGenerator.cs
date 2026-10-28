@@ -17,15 +17,15 @@ namespace DDDToolkit.Analyzers;
 /// <code>
 /// public static bool Allows(Order order, ICurrentUser user)
 ///     =&gt; order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
-/// // (({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}))
+/// // (({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {user:uid}))
 /// </code>
 /// </summary>
 /// <remarks>
 /// The SQL is a template, because two things in it are not the rule's to know. Which column a property is
 /// stored in is Entity Framework's to say, so a property is <c>{col:Path}</c>, and an enum constant compared
 /// with one is <c>{val:Path:Number}</c>, to be put through the property's converter. And what the caller is
-/// depends on the database, so it is <c>{caller:uid}</c>, <c>{caller:signedin}</c>, <c>{caller:role}</c> or
-/// <c>{caller:claim:path}</c>. Braces in a string constant are doubled.
+/// depends on the database, so it is <c>{user:uid}</c>, <c>{user:signedin}</c>, <c>{user:role}</c> or
+/// <c>{user:claim:path}</c>. Braces in a string constant are doubled.
 /// <para>
 /// A restrictive rule, one with <c>Restrictive = true</c>, is translated as every rule is, and its SQL starts with
 /// <c>{restrictive}</c>, for the same reason a column rule's starts with <c>{columns}</c>: an export that does not know
@@ -866,7 +866,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     private static string SqlConstant(string sql)
         => "/// <summary>\n"
            + "/// <c>Allows</c> as SQL, translated when this compiled. <c>{col:Path}</c> is a property, whose column\n"
-           + "/// the export takes from the Entity Framework model, and <c>{caller:...}</c> is the caller, as the\n"
+           + "/// the export takes from the Entity Framework model, and <c>{user:...}</c> is the caller, as the\n"
            + "/// database knows them.\n"
            + "/// </summary>\n"
            + "public const string " + KnownTypes.RowAccessSqlField + " = " + SymbolDisplay.FormatLiteral(sql, quote: true) + ";";
@@ -1393,7 +1393,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     private sealed class Translator(
         SemanticModel model,
         IParameterSymbol aggregate,
-        IParameterSymbol caller,
+        IParameterSymbol user,
         IReadOnlyList<IParameterSymbol> extras,
         bool isFunction,
         string? columnRule,
@@ -1428,7 +1428,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             _ when IsNow(expression) => "now()",
             _ when RowColumnOf(expression) is { } rowColumn => rowColumn,
             _ when ColumnOf(expression) is { } column => "{col:" + column + "}",
-            _ when CallerOf(expression) is { } known => known,
+            _ when CurrentUserOf(expression) is { } known => known,
             _ when ArgumentOf(expression) is { } argument => argument,
             _ when Unwrapped(expression) is InvocationExpressionSyntax wrapped && !ReferenceEquals(wrapped, expression) && ScalarOf(wrapped) is not null => Invocation(wrapped),
             _ when ConstantOf(expression) is { } constant => constant,
@@ -1512,7 +1512,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                     : Translate(side);
 
         /// <summary>
-        /// A property of what an <c>[AccessRow]</c> question answers, <c>TenancyRowAccess.CallerSeat&lt;Seat&gt;().Kind</c>:
+        /// A property of what an <c>[AccessRow]</c> question answers, <c>TenancyRowAccess.CurrentSeat&lt;Seat&gt;().Kind</c>:
         /// <c>{row:name:plain:Type:q1}{col:q1:Kind}{/row}</c>, which the export writes as
         /// <c>(SELECT q1."Kind" FROM schema.name() q1)</c>, the column the model maps the property to on the type's table.
         /// Null where the expression is no such property.
@@ -1620,13 +1620,13 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             }
 
             if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "FindClaim" } claim
-                && IsParameter(claim.Expression, caller)
+                && IsParameter(claim.Expression, user)
                 && invocation.ArgumentList.Arguments.Count == 1
                 && invocation.ArgumentList.Arguments[0].Expression is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.StringLiteralExpression } path
                 && path.Token.ValueText.Length > 0
                 && path.Token.ValueText.IndexOfAny(['{', '}', ':']) < 0)
             {
-                return "{caller:claim:" + path.Token.ValueText + "}";
+                return "{user:claim:" + path.Token.ValueText + "}";
             }
 
             return Fail(invocation);
@@ -1877,7 +1877,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 || !SymbolEqualityComparer.Default.Equals(about.OriginalDefinition, aggregate.Type.OriginalDefinition)
                 || arguments.Count < 2
                 || !IsParameter(arguments[0].Expression, aggregate)
-                || !IsParameter(arguments[1].Expression, caller))
+                || !IsParameter(arguments[1].Expression, user))
             {
                 return Fail(invocation);
             }
@@ -1974,18 +1974,18 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             => model.GetSymbolInfo(expression).Symbol is IPropertySymbol { Name: "UtcNow", IsStatic: true } now
                && now.ContainingType.ToDisplayString() is "System.DateTimeOffset" or "System.DateTime";
 
-        private string? CallerOf(ExpressionSyntax expression)
+        private string? CurrentUserOf(ExpressionSyntax expression)
         {
-            if (expression is not MemberAccessExpressionSyntax member || !IsParameter(member.Expression, caller))
+            if (expression is not MemberAccessExpressionSyntax member || !IsParameter(member.Expression, user))
             {
                 return null;
             }
 
             return member.Name.Identifier.ValueText switch
             {
-                "Id" => "{caller:uid}",
-                "IsAuthenticated" => "{caller:signedin}",
-                "Role" => "{caller:role}",
+                "Id" => "{user:uid}",
+                "IsAuthenticated" => "{user:signedin}",
+                "Role" => "{user:role}",
                 _ => null,
             };
         }

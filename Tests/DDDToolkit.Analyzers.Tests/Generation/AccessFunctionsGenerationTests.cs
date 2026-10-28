@@ -67,8 +67,8 @@ public class AccessFunctionsGenerationTests
             [AccessScalar("level_of")]
             public static partial int LevelOf(OrderId order);
 
-            [AccessScalar("caller_team")]
-            public static partial string CallerTeam();
+            [AccessScalar("current_team")]
+            public static partial string CurrentTeam();
         }
 
 
@@ -167,7 +167,7 @@ public class AccessFunctionsGenerationTests
         result.ShouldCompile();
         result.ShouldContain("ShopQuestions.AccessFunctions", "public static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> OrdersIFollow(string reason) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop/orders_i_follow\");");
 
-        var asked = () => result.Emit().Type("Shop.ShopQuestions").GetMethod("CallerTeam")!.Invoke(null, null);
+        var asked = () => result.Emit().Type("Shop.ShopQuestions").GetMethod("CurrentTeam")!.Invoke(null, null);
         asked.Should().Throw<TargetInvocationException>().WithInnerException<InvalidOperationException>()
             .Which.GetType().Name.Should().Be("DatabaseOnlyException");
     }

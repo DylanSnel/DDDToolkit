@@ -49,7 +49,7 @@ internal sealed class EfMemberStore<TContext, TResource, TResourceId, TMember, T
                 return null;
             }
 
-            return asMember is { } known ? known(user) : services.GetRequiredService<ICallerMember<TResourceId, TMemberId>>().Find(user);
+            return asMember is { } known ? known(user) : services.GetRequiredService<ICurrentMember<TResourceId, TMemberId>>().Find(user);
         }
     }
 

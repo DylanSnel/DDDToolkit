@@ -28,7 +28,7 @@ public sealed class DirectoryLoaderTests(SampleHosts sample) : IClassFixture<Sam
         var most = SeatManager.MostIds;
         SeatId[] ids = [.. Enumerable.Range(0, most).Select(_ => SeatId.CreateSequential()), .. Harbor.Seats.Select(seat => seat.Id)];
 
-        using (SampleCallers.BeginSeatOf(DemoPeople.Juno, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Juno, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var seats = (IDataLoader<SeatId, Seat>)scope.ServiceProvider.GetRequiredService(registered);

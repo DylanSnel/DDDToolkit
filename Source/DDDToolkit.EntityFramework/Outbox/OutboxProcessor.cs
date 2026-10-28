@@ -83,7 +83,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     private readonly DDDEntityFrameworkOptions _options;
     private readonly OutboxOptions _outbox;
     private readonly ILogger _logger;
-    private readonly bool _requireExplicitCallers;
+    private readonly bool _requireExplicitCurrentUser;
 
     /// <summary>Creates a processor for the (scoped) <paramref name="context"/>.</summary>
     /// <exception cref="InvalidOperationException"><typeparamref name="TContext"/> has no outbox, or it has neither a sink nor a dispatch delegate to deliver through.</exception>
@@ -93,7 +93,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? NullLogger<OutboxProcessor<TContext>>.Instance;
-        _requireExplicitCallers = ToolkitWork.Required(serviceProvider);
+        _requireExplicitCurrentUser = ToolkitWork.Required(serviceProvider);
 
         // The context's own outbox when it has one, the shared one otherwise: the same answer the
         // interceptor gave when it wrote the rows.
@@ -127,7 +127,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
 
         // The rows, their marks and the sinks are the toolkit's own bookkeeping; the handlers are not.
-        using var bookkeeping = ToolkitWork.BeginBookkeeping(_requireExplicitCallers);
+        using var bookkeeping = ToolkitWork.BeginBookkeeping(_requireExplicitCurrentUser);
 
         var outbox = _outbox;
         var maxAttempts = outbox.MaxAttempts;
@@ -297,7 +297,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     /// </summary>
     private async Task DispatchInProcessAsync(OutboxMessage message, IDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        if (!_requireExplicitCallers)
+        if (!_requireExplicitCurrentUser)
         {
             await _options.Dispatcher!(_serviceProvider, [domainEvent], cancellationToken).ConfigureAwait(false);
             return;

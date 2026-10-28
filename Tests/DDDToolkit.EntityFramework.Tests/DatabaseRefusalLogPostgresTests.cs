@@ -25,7 +25,7 @@ public sealed class DatabaseRefusalLogPostgresTests(PalletDepotDatabase database
 
     private const string Pallets = PalletContext.Schema + ".\"Pallets\"";
 
-    private const string IsKeeper = "EXISTS (SELECT 1 FROM " + Keepers + " k WHERE k.\"Depot\" = " + Pallets + ".\"Depot\" AND k.\"User\" = (SELECT ddd.caller_id()))";
+    private const string IsKeeper = "EXISTS (SELECT 1 FROM " + Keepers + " k WHERE k.\"Depot\" = " + Pallets + ".\"Depot\" AND k.\"User\" = (SELECT ddd.current_user_id()))";
 
     private const string RightsChangedLine =
         "The database refused a save to depot.Pallets after the access check of {0} (KeepsDepot) let the caller through. Asked again, the check refuses as well: "

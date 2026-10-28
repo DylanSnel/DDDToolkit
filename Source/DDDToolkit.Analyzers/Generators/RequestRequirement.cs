@@ -624,8 +624,8 @@ internal sealed record RequestRequirement(
 
     /// <summary>
     /// What the project can tell of the types something says the caller's own of: those a package names with
-    /// <c>[assembly: CallersOwn]</c>, by type or by the template of a class an application declares, with what the caller's
-    /// own of each already requires, and those an <c>ICallersOwn&lt;TValue&gt;</c> of a concrete type is declared for, in the
+    /// <c>[assembly: OwnedByCurrentUser]</c>, by type or by the template of a class an application declares, with what the caller's
+    /// own of each already requires, and those an <c>IOwnedByCurrentUser&lt;TValue&gt;</c> of a concrete type is declared for, in the
     /// project or one it references. Read once per compilation, and a referenced assembly once.
     /// </summary>
     private static OwnTypes OwnTypesIn(Compilation compilation, CancellationToken cancellationToken)
@@ -633,13 +633,13 @@ internal sealed record RequestRequirement(
         {
             var exact = new Dictionary<string, ImmutableArray<INamedTypeSymbol>>(StringComparer.Ordinal);
             var templates = new List<OwnTemplate>();
-            var handle = compilation.GetTypeByMetadataName(KnownTypes.CallersOwnInterface);
+            var handle = compilation.GetTypeByMetadataName(KnownTypes.OwnedByCurrentUserInterface);
 
             foreach (var assembly in new[] { compilation.Assembly }.Concat(compilation.SourceModule.ReferencedAssemblySymbols))
             {
                 foreach (var attribute in assembly.GetAttributes())
                 {
-                    if (attribute.AttributeClass is not { } attributeClass || !Is(attributeClass, KnownTypes.CallersOwnAttribute))
+                    if (attribute.AttributeClass is not { } attributeClass || !Is(attributeClass, KnownTypes.OwnedByCurrentUserAttribute))
                     {
                         continue;
                     }
@@ -687,7 +687,7 @@ internal sealed record RequestRequirement(
             return new OwnTypes(exact, templates);
         });
 
-    /// <summary>The types an <c>ICallersOwn&lt;TValue&gt;</c> of <paramref name="assembly"/> is declared for, over a type it names.</summary>
+    /// <summary>The types an <c>IOwnedByCurrentUser&lt;TValue&gt;</c> of <paramref name="assembly"/> is declared for, over a type it names.</summary>
     private static string[] HandlesIn(IAssemblySymbol assembly, INamedTypeSymbol handle)
     {
         var found = new List<string>();
@@ -750,7 +750,7 @@ internal sealed record RequestRequirement(
 
     /// <summary>
     /// The requirement attributes the caller's own of <paramref name="type"/> already requires, as its package says with
-    /// <c>Implies</c> on <c>[assembly: CallersOwn]</c>: none where nothing says.
+    /// <c>Implies</c> on <c>[assembly: OwnedByCurrentUser]</c>: none where nothing says.
     /// </summary>
     private static ImmutableArray<INamedTypeSymbol> ImpliedByOwn(ITypeSymbol type, Compilation compilation, CancellationToken cancellationToken)
     {
@@ -1349,7 +1349,7 @@ internal sealed record RequestRequirement(
                     var aggregate = DefinitionFactory.IsEntityId(marker.Type) ? OwnerDeclarations.AggregatesWithId(marker.Type, compilation).FirstOrDefault() : null;
                     Report(DiagnosticDescriptors.OwnOnATypeWithoutOwn, marker.Location ?? _location, _name, marker.Name, Bracketed(marker.Class).Trim('[', ']'),
                         "which is a '" + written + "': nothing says what the caller's own " + written + " is. A Guid is the caller's verified identity and Tenancy's seat id the caller's seat; for a kind of the application's own, "
-                        + "declare a small ICallersOwn<" + written + "> beside the requests and register it with services.AddCallersOwn<" + written + ", ...>()"
+                        + "declare a small IOwnedByCurrentUser<" + written + "> beside the requests and register it with services.AddOwnedByCurrentUser<" + written + ", ...>()"
                         + (aggregate is null ? string.Empty : "; for the id of '" + aggregate.Aggregate.Name + "', a request about its owner, mark the property of '" + aggregate.Aggregate.Name + "' that names its owner [Owner]"));
                     return;
                 }
@@ -1459,7 +1459,7 @@ internal sealed record RequestRequirement(
         /// it is one and is reported (DDD00087, DDD00088), and nothing is written.
         /// </summary>
         /// <remarks>
-        /// The caller's own of the id wins where something says it, an <c>ICallersOwn</c> of the id's own, or a package's
+        /// The caller's own of the id wins where something says it, an <c>IOwnedByCurrentUser</c> of the id's own, or a package's
         /// template the aggregate is declared with, as Tenancy's seat: that one reads nothing, and is what the id says first.
         /// </remarks>
         /// <param name="marker">The member marked <c>[Own]</c> or <c>[OrOwn]</c>.</param>
@@ -1496,7 +1496,7 @@ internal sealed record RequestRequirement(
                     marked + ", the id of '" + aggregate.Aggregate.Name + "', whose [Owner] '" + owner.Name + "' is a '" + written + "': " + (CannotHaveOwn(ownerType)
                         ? "the owner is compared with the caller's own of its type, a struct that is IEquatable of itself, so nothing can say the caller's own " + written
                         : "nothing says what the caller's own " + written + " is. A Guid is the caller's verified identity and Tenancy's seat id the caller's seat; for a kind of the application's own, "
-                          + "declare a small ICallersOwn<" + written + "> beside the requests and register it with services.AddCallersOwn<" + written + ", ...>()"));
+                          + "declare a small IOwnedByCurrentUser<" + written + "> beside the requests and register it with services.AddOwnedByCurrentUser<" + written + ", ...>()"));
                 return false;
             }
 
@@ -1579,7 +1579,7 @@ internal sealed record RequestRequirement(
         /// DDD00084: a requirement attribute the request carries that another beside it already requires, as the other's
         /// package says with <c>Implies</c>, or that the request it derives from carries already. The caller's own of
         /// <c>[OwnOnly]</c> requires what its package says the own of the member's type requires, <c>[assembly:
-        /// CallersOwn(..., Implies = ...)]</c>: a sign-in for a <see cref="Guid"/>, a seat in the tenant for Tenancy's seat
+        /// OwnedByCurrentUser(..., Implies = ...)]</c>: a sign-in for a <see cref="Guid"/>, a seat in the tenant for Tenancy's seat
         /// id. A permission with <c>[OrOwn]</c> lets either through, so only what both the permission and the caller's own require is
         /// counted for it.
         /// </summary>

@@ -37,26 +37,26 @@ public class AccessQuestionTests
     }
 
     /// <summary>Asks as <paramref name="caller"/>, over <paramref name="source"/> or the filtered store, and runs the answer while the caller is current.</summary>
-    private T Ask<T>(HostCaller caller, Func<ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId>, T> ask,
+    private T Ask<T>(HostUser caller, Func<ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId>, T> ask,
         ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null, TenancyCatalogue? catalogue = null)
     {
-        using (TenancyCallers.Begin(caller))
+        using (TenancyUsers.Begin(caller))
         {
             var tenancy = new TenancyAccessManager(catalogue ?? _harbor.Catalogue, _clock, NoServices.Instance);
             return ask(tenancy.In(source ?? _store, _store));
         }
     }
 
-    private OrganizationUnitId[] UnitsWhere(HostCaller caller, string permission, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
+    private OrganizationUnitId[] UnitsWhere(HostUser caller, string permission, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
         => Ask(caller, queries => queries.UnitsWhereIHold(permission).ToArray(), source);
 
-    private bool HoldsAt(HostCaller caller, string permission, OrganizationUnitId unit, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
+    private bool HoldsAt(HostUser caller, string permission, OrganizationUnitId unit, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
         => Ask(caller, queries => queries.HoldsAtAsync(permission, unit, default).GetAwaiter().GetResult(), source);
 
-    private bool HoldsAtTenant(HostCaller caller, string permission)
+    private bool HoldsAtTenant(HostUser caller, string permission)
         => Ask(caller, queries => queries.HoldsAtTenantAsync(permission, default).GetAwaiter().GetResult());
 
-    private HostCaller As(HostSeat seat) => HostCaller.InSeat(seat.TenantId, seat.Id);
+    private HostUser As(HostSeat seat) => HostUser.InSeat(seat.TenantId, seat.Id);
 
     [Fact]
     public void A_permission_held_at_a_unit_reaches_its_whole_subtree()
@@ -201,7 +201,7 @@ public class AccessQuestionTests
     [Fact]
     public void Nobody_holds_nothing()
     {
-        var nobody = HostCaller.Nobody(TenancyRefusals.NotSeated);
+        var nobody = HostUser.Nobody(TenancyRefusals.NotSeated);
 
         UnitsWhere(nobody, HostCatalogue.WidgetRead).Should().BeEmpty();
         HoldsAt(nobody, HostCatalogue.WidgetRead, _harbor.Root).Should().BeFalse();
@@ -213,7 +213,7 @@ public class AccessQuestionTests
         Ask(nobody, queries => queries.Roles().ToArray()).Should().BeEmpty();
         Ask(nobody, queries => queries.Seats().ToArray()).Should().BeEmpty();
 
-        using (TenancyCallers.Begin(nobody))
+        using (TenancyUsers.Begin(nobody))
         {
             var access = new TenancyAccessManager(_harbor.Catalogue, _clock, NoServices.Instance);
             Refused.With(TenancyRefusals.NotSeated, () => access.CurrentTenant.Require());
@@ -225,7 +225,7 @@ public class AccessQuestionTests
     {
         var other = new HarborBuilder().Tenant(2, "quarry").Build();
         _store.Seed(other.Aggregates);
-        var system = HostCaller.SystemIn(_harbor.Tenant.Id);
+        var system = HostUser.SystemIn(_harbor.Tenant.Id);
         var harborUnits = new[] { _harbor.Root, _harbor.North, _harbor.NorthCoast, _harbor.South };
 
         foreach (var source in new[] { _store.Filtered, _store.Unfiltered })
@@ -244,7 +244,7 @@ public class AccessQuestionTests
         // A seat's own questions keep to its tenant too, even over rows that are not filtered.
         UnitsWhere(As(_harbor.Administrator), TenancyPermissions.UnitsManage, _store.Unfiltered).Should().BeEquivalentTo(harborUnits);
 
-        using (TenancyCallers.Begin(system))
+        using (TenancyUsers.Begin(system))
         {
             new TenancyAccessManager(_harbor.Catalogue, _clock, NoServices.Instance).CurrentTenant.Require()
                 .Should().Be(new TenantInScope<TenantId, SeatId>(_harbor.Tenant.Id, null, BySystem: true));
@@ -254,7 +254,7 @@ public class AccessQuestionTests
     [Fact]
     public void Global_system_asking_is_a_programming_error()
     {
-        var system = HostCaller.System;
+        var system = HostUser.System;
 
         var questions = new Action[]
         {
@@ -274,7 +274,7 @@ public class AccessQuestionTests
             question.Should().Throw<InvalidOperationException>().WithMessage("*Begin access.BeginSystemIn(tenant) for work inside one, on the TenancyAccessManager your code takes.");
         }
 
-        using (TenancyCallers.Begin(system))
+        using (TenancyUsers.Begin(system))
         {
             FluentActions.Invoking(() => new TenancyAccessManager(_harbor.Catalogue, _clock, NoServices.Instance).CurrentTenant.Require())
                 .Should().Throw<InvalidOperationException>()
@@ -292,7 +292,7 @@ public class AccessQuestionTests
         FluentActions.Invoking(() => HoldsAtTenant(administrator, "widget.fly")).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => HoldsAt(administrator, "widget.fly", _harbor.Root)).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => Ask(administrator, queries => queries.RolesWithPermission("widget.fly"))).Should().Throw<ArgumentException>();
-        FluentActions.Invoking(() => UnitsWhere(HostCaller.Nobody(TenancyRefusals.NotSeated), "widget.fly"))
+        FluentActions.Invoking(() => UnitsWhere(HostUser.Nobody(TenancyRefusals.NotSeated), "widget.fly"))
             .Should().Throw<ArgumentException>("a typo is a typo, whoever runs it");
     }
 
@@ -304,9 +304,9 @@ public class AccessQuestionTests
         var store = new InMemoryTenancyStore(harbor.Catalogue);
         store.Seed(harbor.Aggregates);
         var retired = New.Catalogue(gauge with { Retired = true });
-        var administrator = HostCaller.InSeat(harbor.Tenant.Id, harbor.Administrator.Id);
+        var administrator = HostUser.InSeat(harbor.Tenant.Id, harbor.Administrator.Id);
 
-        using (TenancyCallers.Begin(administrator))
+        using (TenancyUsers.Begin(administrator))
         {
             var live = new TenancyAccessManager(harbor.Catalogue, _clock, NoServices.Instance).In(store, store);
             var now = new TenancyAccessManager(retired, _clock, NoServices.Instance).In(store, store);

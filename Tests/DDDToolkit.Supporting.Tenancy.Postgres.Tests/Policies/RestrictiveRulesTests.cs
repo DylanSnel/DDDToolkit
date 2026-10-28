@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// A restrictive rule of the application's on Tenancy's organization: <c>Restrictive = true</c>, so its policy is
 /// AND-ed with every policy that allows, Tenancy's defaults included, and only narrows what they allow. Here only an
 /// employee's seat reads the organization, its units and the closure of its tree, which the application says by a
-/// field of its own seat class, read through <c>TenancyRowAccess.CallerSeat&lt;HostSeat&gt;()</c>. Tenancy's own
+/// field of its own seat class, read through <c>TenancyRowAccess.CurrentSeat&lt;HostSeat&gt;()</c>. Tenancy's own
 /// work, and what its functions answer as their owner, keep working under it: every use case runs, and a seat the rule
 /// keeps out of the organization still learns what the unit it works at is called.
 /// </summary>
@@ -37,7 +37,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         var tenancy = TenancyPostgres.AccessScripts(rules: [.. WidgetRules.All, OnlyEmployees])[0];
 
         // The kind is stored as its number, as the TestHost's model maps an enum: an employee's is 0.
-        const string Condition = "(SELECT q1.\"Kind\" FROM \"tenancy\".caller_seat_row() q1) = 0";
+        const string Condition = "(SELECT q1.\"Kind\" FROM \"tenancy\".current_seat_row() q1) = 0";
         foreach (var table in new[] { "Organizations", "OrganizationUnits", "OrganizationUnitPaths" })
         {
             tenancy.Should().Contain(
@@ -80,7 +80,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // Odette is an employee of Orchard: she reads Orchard's units, and none of Harbor's, which Tenancy's policy
         // never allowed her. A restrictive rule grants nothing.
         (await UnitsReadByAsync(database, Odette, Orchard)).Should().BeEquivalentTo([OrchardRoot.Value]);
-        await using (var odette = await AsCaller.PersonAsync(database, Odette.Identity, Orchard, Cancellation))
+        await using (var odette = await AsUser.PersonAsync(database, Odette.Identity, Orchard, Cancellation))
         {
             (await odette.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"OrganizationUnits\" WHERE \"TenantId\" = 1", Cancellation)).Should().BeEmpty();
         }
@@ -115,7 +115,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         named.Select(unit => (unit.Id, unit.Name, unit.Path, unit.Depth)).Should().Equal((NorthPier, "North Pier", "Harbor / North / North Pier", 3));
 
         // While what she reads of the tables themselves is nothing.
-        await using (var caller = await AsCaller.PersonAsync(database, Lark, Harbor, Cancellation))
+        await using (var caller = await AsUser.PersonAsync(database, Lark, Harbor, Cancellation))
         {
             (await caller.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"OrganizationUnits\"", Cancellation)).Should().BeEmpty();
             (await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"OrganizationUnitPaths\"", Cancellation)).Should().Be(0);
@@ -138,7 +138,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         var overview = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation));
 
         overview.TenantName.Should().Be("Harbor Works", "as the tenant picker names it");
-        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        await using (var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\"", Cancellation)).Should().Be(0, "the organizations stay closed to him");
         }
@@ -187,7 +187,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // While the organizations themselves stay closed to the external seat, before a tenant is chosen and in it.
         foreach (var tenant in new TenantId?[] { null, Harbor })
         {
-            await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, tenant, Cancellation);
+            await using var oli = await AsUser.PersonAsync(database, Oli.Identity, tenant, Cancellation);
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\" WHERE \"Id\" = 1", Cancellation)).Should().Be(0);
         }
     }
@@ -206,21 +206,21 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
     /// <summary>The ids of the units <paramref name="person"/> reads, with the connection naming <paramref name="tenant"/>.</summary>
     private static async Task<List<Guid>> UnitsReadByAsync(TestDatabase database, Person person, TenantId tenant)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant, Cancellation);
         return await caller.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"OrganizationUnits\"", Cancellation);
     }
 
     /// <summary>How many rows of the closure of the tree <paramref name="person"/> reads.</summary>
     private static async Task<long> PathsReadByAsync(TestDatabase database, Person person, TenantId tenant)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant, Cancellation);
         return await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"OrganizationUnitPaths\"", Cancellation);
     }
 
     /// <summary>How many organizations <paramref name="person"/> reads.</summary>
     private static async Task<long> OrganizationsReadByAsync(TestDatabase database, Person person, TenantId tenant)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant, Cancellation);
         return await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\"", Cancellation);
     }
 }
@@ -233,5 +233,5 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
 public static partial class OnlyEmployeesReadTheOrganization
 {
     public static bool Allows(HostOrganization organization, ICurrentUser user)
-        => TenancyRowAccess.CallerSeat<HostSeat>().Kind == HostSeatKind.Employee;
+        => TenancyRowAccess.CurrentSeat<HostSeat>().Kind == HostSeatKind.Employee;
 }

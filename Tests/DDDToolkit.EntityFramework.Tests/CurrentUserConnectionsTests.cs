@@ -27,7 +27,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         $"coalesce(pg_catalog.current_setting('{TenantSetting.Tenant}', true), '') || '|' || pg_catalog.current_setting('statement_timeout') || '|' || " +
         """coalesce((SELECT string_agg("Text", ',' ORDER BY "Text") FROM notes."Notes"), '')""";
 
-    private readonly CallerOfTheTest _caller = new();
+    private readonly UserOfTheTest _user = new();
     private readonly TenantSetting _tenant = new() { Current = "north" };
     private readonly SentStatements _sent = new();
     private readonly string _pool = "caller-" + Guid.NewGuid().ToString("N")[..12];
@@ -65,7 +65,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
         var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         int backend;
         await using (var connection = await connections.OpenAsync(Cancellation))
         {
@@ -75,7 +75,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         }
 
         // Another caller, another connection; the pool's one backend, which kept nothing of the first.
-        _caller.Current = CurrentUserSnapshot.Anonymous;
+        _user.Current = CurrentUserSnapshot.Anonymous;
         _tenant.Current = null;
         await using (var connection = await connections.OpenAsync(Cancellation))
         {
@@ -99,7 +99,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         await using var dataSource = perTransaction ? _sent.DataSource(database.Pooled(_pool)) : Direct(scope);
         var connections = new CurrentUserConnections(dataSource, Interceptor(scope));
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         BackendState state;
         await using (var transaction = await connections.BeginTransactionAsync(Cancellation))
         await using (var connection = transaction.Connection!)
@@ -141,7 +141,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         database.Require();
         await using var dataSource = Direct(RowLevelSecurityScope.Transaction);
         var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Transaction));
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         var open = async () => await connections.OpenAsync(Cancellation);
 
@@ -156,7 +156,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         database.Require();
         await using var dataSource = _sent.DataSource(database.Direct(_pool));
         var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         var open = async () => await connections.OpenAsync(Cancellation);
         var begin = async () => await connections.BeginTransactionAsync(Cancellation);
@@ -196,9 +196,9 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
             "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'beyond_the_grants') THEN CREATE ROLE beyond_the_grants NOLOGIN NOINHERIT; END IF; END $$; SELECT 1");
 
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
-        var beyond = new CurrentUserConnections(dataSource, PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Connection, [_tenant], configure: options => options.SystemInRole = "beyond_the_grants"));
+        var beyond = new CurrentUserConnections(dataSource, PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Connection, [_tenant], configure: options => options.SystemInRole = "beyond_the_grants"));
 
-        _caller.Current = CurrentUserSnapshot.SystemIn("tenancy");
+        _user.Current = CurrentUserSnapshot.SystemIn("tenancy");
         var open = async () => await beyond.OpenAsync(Cancellation);
         var begin = async () => await beyond.BeginTransactionAsync(Cancellation);
 
@@ -206,7 +206,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         (await begin.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
 
         // The pool's one connection came back each time, so the next caller gets it, and gets it clean.
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
         await using var connection = await connections.OpenAsync(Cancellation);
         (await ScalarAsync(connection, Who)).Should().Be($"authenticated|{Alice}|north|300ms|Alice's");
@@ -218,7 +218,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         database.Require();
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
         var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         await using var connection = await connections.OpenAsync(Cancellation);
         _sent.Count(SetsTheRole).Should().Be(1);
@@ -229,7 +229,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         _sent.Count(SetsTheRole).Should().Be(1, "what the caller connection set is remembered where the interceptor remembers it");
 
         // And it follows a caller that changes afterwards, as on any connection it holds.
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
         (await context.Notes.Select(note => note.Text).ToListAsync(Cancellation)).Should().Equal("Bob's");
         _sent.Count(SetsTheRole).Should().Be(2);
     }
@@ -269,13 +269,13 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
 
         await using var services = new ServiceCollection()
-            .AddPostgresRowLevelSecurity<CallerOfTheTest>(Timed)
+            .AddPostgresRowLevelSecurity<UserOfTheTest>(Timed)
             .AddRowLevelSecuritySettings<TenantSetting>()
             .AddCurrentUserConnections(_ => throw new InvalidOperationException("Replaced by the registration after it."))
             .AddCurrentUserConnections(_ => dataSource)
             .BuildServiceProvider();
 
-        ((CallerOfTheTest)services.GetRequiredService<ICurrentUserSource>()).Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
+        ((UserOfTheTest)services.GetRequiredService<ICurrentUserSource>()).Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
         var connections = services.GetRequiredService<CurrentUserConnections>();
         connections.Should().BeSameAs(services.GetRequiredService<CurrentUserConnections>(), "one for the application, as the interceptor is");
 
@@ -298,7 +298,7 @@ public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsync
         => _sent.DataSource(new NpgsqlConnectionStringBuilder(database.Direct(_pool)) { NoResetOnClose = scope == RowLevelSecurityScope.Transaction }.ConnectionString);
 
     private PostgresRowLevelSecurityInterceptor Interceptor(RowLevelSecurityScope scope)
-        => PoolerFixture.Interceptor(_caller, scope, [_tenant], configure: Timed);
+        => PoolerFixture.Interceptor(_user, scope, [_tenant], configure: Timed);
 
     /// <summary>A user's statements get 300 milliseconds; the other kinds get the login role's own.</summary>
     private static void Timed(PostgresRowLevelSecurityOptions options) => options.StatementTimeouts[CurrentUserKind.User] = TimeSpan.FromMilliseconds(300);

@@ -12,8 +12,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// application's own work. Never a name, and never an address.
 /// <para>
 /// Make one with <see cref="OfSeat"/>, <see cref="OfOperator"/>, <see cref="OfSystem"/> or <see cref="OfToken"/>,
-/// which give each kind what it is named by. The Tenancy caller carries the actor of the work it stands for
-/// (<see cref="TenancyCaller{TTenantId, TSeatId}.Actor"/>), so nothing works one out for itself: a request's seat,
+/// which give each kind what it is named by. The Tenancy user carries the actor of the work it stands for
+/// (<see cref="TenancyUser{TTenantId, TSeatId}.Actor"/>), so nothing works one out for itself: a request's seat,
 /// and what <see cref="TenancyWork"/> began on purpose.
 /// </para>
 /// <para>

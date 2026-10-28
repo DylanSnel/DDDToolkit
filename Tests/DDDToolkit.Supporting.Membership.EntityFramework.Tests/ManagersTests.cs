@@ -43,7 +43,7 @@ public sealed class ManagersTests
         var newcomer = UserId.CreateSequential();
 
         // Ada owns the minutes, and the owner holds the permission that shares them by owning them.
-        var answered = await filing.Services.AsAsync(TestCallers.User(data.Ada), provider =>
+        var answered = await filing.Services.AsAsync(TestUsers.User(data.Ada), provider =>
             provider.GetRequiredService<DocumentShareManager>().AddAsync(data.Minutes, newcomer, DocumentMembership.Onlooker, until: null, Cancellation));
 
         var read = await filing.Services.ReadAsync(data.Minutes);
@@ -54,7 +54,7 @@ public sealed class ManagersTests
         filing.Services.Raised.OfType<DocumentShared>().Should().Contain(raised => raised.With == newcomer, "the document's hook raised it, and the save sent it");
 
         // Ben only contributes: the share permission is not his, and nothing is written.
-        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.Services.AsAsync(TestCallers.User(data.Ben), provider =>
+        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.Services.AsAsync(TestUsers.User(data.Ben), provider =>
             provider.GetRequiredService<DocumentShareManager>().RemoveAsync(data.Minutes, newcomer, Cancellation)));
         (await filing.Services.ReadAsync(data.Minutes)).Version.Should().Be(answered.Version);
     }
@@ -66,16 +66,16 @@ public sealed class ManagersTests
         var data = filing.Scenario;
 
         // Ben sees the minutes, where he contributes, and the budget, which he owns.
-        var listed = await filing.Services.AsAsync(TestCallers.User(data.Ben), provider =>
+        var listed = await filing.Services.AsAsync(TestUsers.User(data.Ben), provider =>
             provider.GetRequiredService<DocumentShareManager>().ListAsync([data.Minutes, data.Budget], Cancellation));
         listed.Keys.Should().BeEquivalentTo([data.Minutes, data.Budget]);
         listed[data.Minutes][0].MemberId.Should().Be(data.Ada, "the owner comes first");
         listed[data.Budget].Select(member => member.MemberId).Should().Equal(data.Ben, data.Ada);
 
         // Hal is on neither: he is answered about neither, and a list of one he does not see is not found.
-        (await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<DocumentShareManager>().ListAsync([data.Minutes, data.Budget], Cancellation)))
+        (await filing.Services.AsAsync(TestUsers.User(data.Hal), provider => provider.GetRequiredService<DocumentShareManager>().ListAsync([data.Minutes, data.Budget], Cancellation)))
             .Should().NotContainKey(data.Minutes).And.NotContainKey(data.Budget);
-        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => filing.Services.AsAsync(TestCallers.User(data.Hal), provider =>
+        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => filing.Services.AsAsync(TestUsers.User(data.Hal), provider =>
             provider.GetRequiredService<DocumentShareManager>().ListAsync(data.Minutes, Cancellation)));
     }
 

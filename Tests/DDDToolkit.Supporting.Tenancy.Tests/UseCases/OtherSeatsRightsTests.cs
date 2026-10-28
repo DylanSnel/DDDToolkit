@@ -30,7 +30,7 @@ public class OtherSeatsRightsTests
         // With a second administrator it may: a seat that read the rights itself would find its own alone, and take
         // itself for the last one.
         var second = await harness.SeatAt("Cy", harness.Harbor.Root, HostCatalogue.AdministratorStarterRole);
-        using (TenancyCallers.Begin(harness.SeatCaller(harness.Administrator)))
+        using (TenancyUsers.Begin(harness.SeatUser(harness.Administrator)))
         {
             harness.Store.Filtered.SeatRights.Select(right => right.SeatId).Distinct().Should().Equal([harness.Administrator], "the rows show the seat its own rights alone");
         }
@@ -90,7 +90,7 @@ public class OtherSeatsRightsTests
         await harness.Grant(acting, harness.Harbor.North, HostCatalogue.SupervisorStarterRole, until: FixedClock.Start.AddDays(7));
         await harness.SeatAt("Fay", harness.Harbor.South, HostCatalogue.OperatorStarterRole);
 
-        await harness.Run(harness.SeatCaller(harness.Administrator), async h =>
+        await harness.Run(harness.SeatUser(harness.Administrator), async h =>
         {
             // An administrator holds the role permission at the root, with no end, from now or earlier: one that ends, or
             // is still to start, is none.
@@ -102,14 +102,14 @@ public class OtherSeatsRightsTests
             // above it, once for each parent they reach; and another seat's of a permission that manages access where it
             // reaches one parent and not the other, which is where the move changes it.
             var reaches = await h.Store.RightsAMoveChangesAsync(h.Tenant, harness.Administrator, h.Harbor.North, h.Harbor.South, h.Catalogue.AccessManagingPermissions, FixedClock.Start, default);
-            reaches.Where(reach => reach.OfCaller).Should().HaveCount(2 * h.Catalogue.LivePermissions.Count, "every permission of the administrator, held at the root, reaches both");
-            reaches.Where(reach => !reach.OfCaller)
+            reaches.Where(reach => reach.OfCurrentSeat).Should().HaveCount(2 * h.Catalogue.LivePermissions.Count, "every permission of the administrator, held at the root, reaches both");
+            reaches.Where(reach => !reach.OfCurrentSeat)
                 .Should().OnlyContain(
                     reach => h.Catalogue.ManagesAccess(reach.Permission) && reach.UnitId == h.Harbor.North && reach.Parent == h.Harbor.North,
                     "the supervisors' permissions that manage access, held at North, reach North alone, and the widget permissions of their roles are nobody's business")
                 .And.HaveCount(6, "Ed's three and Gus's three");
             reaches.Should().NotContain(reach => reach.UnitId == h.Harbor.South, "an operator at South holds no permission that manages access");
-            reaches.Should().NotContain(reach => !reach.OfCaller && reach.UnitId == h.Harbor.Root, "the other administrators' rights at the root reach both parents, wherever the unit hangs");
+            reaches.Should().NotContain(reach => !reach.OfCurrentSeat && reach.UnitId == h.Harbor.Root, "the other administrators' rights at the root reach both parents, wherever the unit hangs");
             reaches.Should().Contain(reach => reach.EndsAt == FixedClock.Start.AddDays(7), "Gus's, which end later, have not ended");
         });
     }

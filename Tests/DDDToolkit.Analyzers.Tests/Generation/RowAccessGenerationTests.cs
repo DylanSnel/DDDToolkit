@@ -138,12 +138,12 @@ public class RowAccessGenerationTests
     [Fact]
     public void A_customer_and_a_guest_is_ownership_with_csharps_nulls()
         => SqlOf("order.PlacedBy == null || order.PlacedBy?.Value == user.Id")
-            .Should().Be("(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}))");
+            .Should().Be("(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {user:uid}))");
 
     [Fact]
     public void Roles_and_departments_are_claims_and_an_amount_is_a_column_of_a_value_object()
         => SqlOf("user.FindClaim(\"app_metadata.role\") == \"staff\" && (order.Total.Amount <= 500 || user.FindClaim(\"app_metadata.department\") == \"finance\")")
-            .Should().Be("(({caller:claim:app_metadata.role} IS NOT DISTINCT FROM 'staff') AND (coalesce({col:Total.Amount} <= 500, FALSE) OR ({caller:claim:app_metadata.department} IS NOT DISTINCT FROM 'finance')))");
+            .Should().Be("(({user:claim:app_metadata.role} IS NOT DISTINCT FROM 'staff') AND (coalesce({col:Total.Amount} <= 500, FALSE) OR ({user:claim:app_metadata.department} IS NOT DISTINCT FROM 'finance')))");
 
     [Fact]
     public void An_enum_constant_is_left_for_the_column_to_say_how_it_is_stored()
@@ -156,7 +156,7 @@ public class RowAccessGenerationTests
         SqlOf("order.Status == OrderStatus.Placed && order.IsPublic == true && order.Level != 3")
             .Should().Be("((({col:Status} = {val:Status:0}) AND ({col:IsPublic} = TRUE)) AND ({col:Level} <> 3))", "none of them can be null in C#, so SQL's = means ==, and an index can answer it");
         SqlOf("order.PlacedBy?.Value == user.Id")
-            .Should().Be("({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})", "a customer id that may be null equals a caller without one in C#");
+            .Should().Be("({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})", "a customer id that may be null equals a caller without one in C#");
         SqlOf("order.Team == \"north\"")
             .Should().Be("({col:Team} IS NOT DISTINCT FROM 'north')", "a string may be null");
         SqlOf("order.Id == order.Id")
@@ -178,11 +178,11 @@ public class RowAccessGenerationTests
             [AccessFunctions(Owner = "shop")]
             public static partial class ShopQuestions
             {
-                [AccessScalar("caller_customer")]
-                public static partial CustomerId CallerCustomer();
+                [AccessScalar("current_customer")]
+                public static partial CustomerId CurrentCustomer();
 
-                [AccessScalar("caller_level")]
-                public static partial int CallerLevel();
+                [AccessScalar("current_level")]
+                public static partial int CurrentLevel();
             }
 
 
@@ -203,12 +203,12 @@ public class RowAccessGenerationTests
             return ConstantIn(result.Source("TheRule.RowAccess"));
         }
 
-        Of("order.PlacedBy == ShopQuestions.CallerCustomer()")
-            .Should().Be("({col:PlacedBy} = (SELECT {fn:shop/caller_customer}()))", "a caller the question does not know answers null, and a null customer must not match it: SQL's = is null then, which a policy counts as no");
-        Of("order.PlacedBy != ShopQuestions.CallerCustomer()")
-            .Should().Be("({col:PlacedBy} <> (SELECT {fn:shop/caller_customer}()))", "IS DISTINCT FROM a null would pass every order that has a customer");
-        Of("ShopQuestions.CallerLevel() == order.Level")
-            .Should().Be("((SELECT {fn:shop/caller_level}()) = {col:Level})", "the question need not be on the right");
+        Of("order.PlacedBy == ShopQuestions.CurrentCustomer()")
+            .Should().Be("({col:PlacedBy} = (SELECT {fn:shop/current_customer}()))", "a caller the question does not know answers null, and a null customer must not match it: SQL's = is null then, which a policy counts as no");
+        Of("order.PlacedBy != ShopQuestions.CurrentCustomer()")
+            .Should().Be("({col:PlacedBy} <> (SELECT {fn:shop/current_customer}()))", "IS DISTINCT FROM a null would pass every order that has a customer");
+        Of("ShopQuestions.CurrentLevel() == order.Level")
+            .Should().Be("((SELECT {fn:shop/current_level}()) = {col:Level})", "the question need not be on the right");
     }
 
     [Fact]
@@ -219,11 +219,11 @@ public class RowAccessGenerationTests
             [AccessFunctions(Owner = "shop")]
             public static partial class ShopQuestions
             {
-                [AccessScalar("caller_customer")]
-                public static partial CustomerId CallerCustomer();
+                [AccessScalar("current_customer")]
+                public static partial CustomerId CurrentCustomer();
 
-                [AccessScalar("caller_level")]
-                public static partial int CallerLevel();
+                [AccessScalar("current_level")]
+                public static partial int CurrentLevel();
             }
 
 
@@ -246,14 +246,14 @@ public class RowAccessGenerationTests
 
         // coalesce(..., FALSE) would be FALSE for such a caller, and NOT would make that a yes: SQL's own
         // comparison is null, and NOT null is null, which a policy counts as no.
-        Of("!(order.PlacedBy == ShopQuestions.CallerCustomer())")
-            .Should().Be("(NOT ({col:PlacedBy} = (SELECT {fn:shop/caller_customer}())))");
-        Of("!(ShopQuestions.CallerLevel() < order.Level)")
-            .Should().Be("(NOT ((SELECT {fn:shop/caller_level}()) < {col:Level}))");
-        Of("(order.PlacedBy == ShopQuestions.CallerCustomer()) == false")
-            .Should().Be("(({col:PlacedBy} = (SELECT {fn:shop/caller_customer}())) = FALSE)", "a comparison of the comparison stays SQL's own too");
-        Of("!(order.PlacedBy == ShopQuestions.CallerCustomer() && order.IsPublic)")
-            .Should().Be("(NOT (({col:PlacedBy} = (SELECT {fn:shop/caller_customer}())) AND {col:IsPublic}))");
+        Of("!(order.PlacedBy == ShopQuestions.CurrentCustomer())")
+            .Should().Be("(NOT ({col:PlacedBy} = (SELECT {fn:shop/current_customer}())))");
+        Of("!(ShopQuestions.CurrentLevel() < order.Level)")
+            .Should().Be("(NOT ((SELECT {fn:shop/current_level}()) < {col:Level}))");
+        Of("(order.PlacedBy == ShopQuestions.CurrentCustomer()) == false")
+            .Should().Be("(({col:PlacedBy} = (SELECT {fn:shop/current_customer}())) = FALSE)", "a comparison of the comparison stays SQL's own too");
+        Of("!(order.PlacedBy == ShopQuestions.CurrentCustomer() && order.IsPublic)")
+            .Should().Be("(NOT (({col:PlacedBy} = (SELECT {fn:shop/current_customer}())) AND {col:IsPublic}))");
     }
 
     [Fact]
@@ -263,12 +263,12 @@ public class RowAccessGenerationTests
     [Fact]
     public void A_flag_the_caller_and_a_negation()
         => SqlOf("user.IsAuthenticated && !order.IsPublic && user.Role == \"authenticated\"")
-            .Should().Be("(({caller:signedin} AND (NOT {col:IsPublic})) AND ({caller:role} IS NOT DISTINCT FROM 'authenticated'))");
+            .Should().Be("(({user:signedin} AND (NOT {col:IsPublic})) AND ({user:role} IS NOT DISTINCT FROM 'authenticated'))");
 
     [Fact]
     public void A_team_from_the_token_against_a_column()
         => SqlOf("order.Team != null && order.Team == user.FindClaim(\"app_metadata.team\") && order.Level < 3")
-            .Should().Be("((({col:Team} IS NOT NULL) AND ({col:Team} IS NOT DISTINCT FROM {caller:claim:app_metadata.team})) AND coalesce({col:Level} < 3, FALSE))");
+            .Should().Be("((({col:Team} IS NOT NULL) AND ({col:Team} IS NOT DISTINCT FROM {user:claim:app_metadata.team})) AND coalesce({col:Level} < 3, FALSE))");
 
     [Fact]
     public void Braces_in_a_constant_are_doubled_so_they_are_not_filled_in()
@@ -278,7 +278,7 @@ public class RowAccessGenerationTests
     [Fact]
     public void A_sql_function_is_called_with_its_arguments_translated_like_the_rest()
         => SqlOf("order.PlacedBy?.Value == user.Id || Sql.Call<bool>(\"private.is_support_agent\", user.Id, order.Level)")
-            .Should().Be("(({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}) OR private.is_support_agent({caller:uid}, {col:Level}))");
+            .Should().Be("(({col:PlacedBy} IS NOT DISTINCT FROM {user:uid}) OR private.is_support_agent({user:uid}, {col:Level}))");
 
     [Fact]
     public void Raw_sql_goes_in_as_it_is_in_parentheses_with_its_braces_kept()
@@ -304,7 +304,7 @@ public class RowAccessGenerationTests
     [Fact]
     public void An_access_function_asks_the_aggregates_entities_with_an_exists()
         => FunctionSqlOf("order.Members.Any(member => member.UserId == user.Id && member.IsAdmin)")
-            .Should().Be("{exists:Members:e1}(({col:e1:UserId} IS NOT DISTINCT FROM {caller:uid}) AND {col:e1:IsAdmin}){/exists}");
+            .Should().Be("{exists:Members:e1}(({col:e1:UserId} IS NOT DISTINCT FROM {user:uid}) AND {col:e1:IsAdmin}){/exists}");
 
     [Fact]
     public void Any_without_a_condition_is_whether_there_is_one()
@@ -417,7 +417,7 @@ public class RowAccessGenerationTests
                 + " && (member.EndsAt == null || member.EndsAt > DateTimeOffset.UtcNow)"
                 + " && member.Duties.Any(duty => duty.Kind == kind && (duty.EndsAt == null || duty.EndsAt > DateTimeOffset.UtcNow)))")
             .Should().Be(
-                "{exists:Members:e1}((({col:e1:UserId} IS NOT DISTINCT FROM {caller:uid})"
+                "{exists:Members:e1}((({col:e1:UserId} IS NOT DISTINCT FROM {user:uid})"
                 + " AND (({col:e1:EndsAt} IS NULL) OR coalesce({col:e1:EndsAt} > now(), FALSE)))"
                 + " AND {exists:e1:Duties:e2}(({col:e2:Kind} IS NOT DISTINCT FROM {arg:1})"
                 + " AND (({col:e2:EndsAt} IS NULL) OR coalesce({col:e2:EndsAt} > now(), FALSE))){/exists}){/exists}",

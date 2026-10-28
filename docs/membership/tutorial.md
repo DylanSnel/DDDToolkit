@@ -699,7 +699,7 @@ lock on the member rows and on the owner column.
   - `ResourceAccessSet.Seen`: the boards the caller sees;
   - `ResourceAccessSet.HeldOn`: the boards the caller holds a given permission on.
 - **Asking about the organization**: a rule calls Tenancy's functions, such as `TenancyRowAccess.UnitsWhereIHold(...)`
-  and `CallerSeatId()`.
+  and `CurrentSeatId()`.
 - **A policy cannot see the command.** Adding a member raises the board's version, so it updates the board row. So
   the rule for changing a board allows anyone who may edit the board or manage its members. The check before the
   handler tells the two commands apart.
@@ -780,7 +780,7 @@ public static partial class SeatsOpenBoardsWhereTheyMay
 {
     public static bool Allows(Board board, ICurrentUser user)
         => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(BoardPermissions.Create).Contains(board.UnitId)
-            && board.OwnerSeatId == TenancyRowAccess.CallerSeatId<SeatId>();
+            && board.OwnerSeatId == TenancyRowAccess.CurrentSeatId<SeatId>();
 }
 
 // A seat changes a board it may edit, or whose members it may manage: adding a member raises the board's version.
@@ -812,7 +812,7 @@ namespace Harbor.Boards.Infrastructure.Access;
 [RowAccess<BoardRole>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsReadTheirTenantsBoardRoles
 {
-    public static bool Allows(BoardRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CallerTenant<TenantId>();
+    public static bool Allows(BoardRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CurrentTenant<TenantId>();
 }
 
 // A role's row decides what everybody who holds it may do: only who manages the roles of boards writes one.
@@ -871,7 +871,7 @@ database.
 - `BoardsISee.Ids().Contains(board.Id)` becomes a subquery in the policy. The subquery calls the boards function once
   per statement.
 - The create rule makes the database check the same thing as the command: the owner is the caller's seat.
-- `TenancyRowAccess.CallerTenant<TenantId>()`: the tenant of the caller's seat. `HoldsAtTenant(permission)`: whether
+- `TenancyRowAccess.CurrentTenant<TenantId>()`: the tenant of the caller's seat. `HoldsAtTenant(permission)`: whether
   the caller's seat holds the permission now, at the root, so for the whole tenant.
 - `ManagesMembers`: the member manager adds, changes and removes members only for a caller who holds
   `boards.members.manage` on the board. In the database, a member row is written only on such a board.
@@ -1143,7 +1143,7 @@ builder.Services.RunStartupChecks();
 
 var app = builder.Build();
 app.UseExceptionHandler();
-app.UseCallerAndTenant();
+app.UseUserAndTenant();
 app.MapTenancyModule();
 app.MapBoardsModule();
 if (app.Environment.IsDevelopment())
@@ -1843,7 +1843,7 @@ You can test the lock of step 4 without the API. Open psql in the database with
 begin;
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"d0000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
-select set_config('tenancy.caller_tenant', '<tenant id>', true);
+select set_config('tenancy.current_tenant', '<tenant id>', true);
 
 update boards."Boards" set "Name" = 'By hand' where "Id" = '<board id>';             -- UPDATE 1: he may edit it
 update boards."Boards" set "OwnerSeatId" = '<Leo seat id>' where "Id" = '<board id>';  -- refused

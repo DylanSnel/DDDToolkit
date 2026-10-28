@@ -15,9 +15,9 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// settings are set on every connection the context opens, as they are on one opened from a connection string,
 /// and nothing of them stays on a connection that goes back to the data source.
 /// </summary>
-public sealed class DataSourceRowLevelSecurityTests(ExplicitCallersPostgres postgres)
+public sealed class DataSourceRowLevelSecurityTests(ExplicitCurrentUserPostgres postgres)
 {
-    private const string Who = """SELECT current_user::text || '|' || coalesce(ddd.caller_id()::text, 'none') || '|' || coalesce(ddd.caller_claims() ->> 'scope', '') AS "Value" """;
+    private const string Who = """SELECT current_user::text || '|' || coalesce(ddd.current_user_id()::text, 'none') || '|' || coalesce(ddd.current_user_claims() ->> 'scope', '') AS "Value" """;
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -56,15 +56,15 @@ public sealed class DataSourceRowLevelSecurityTests(ExplicitCallersPostgres post
     {
         var database = await ApiaryDatabase.CreateAsync(postgres);
         await using var dataSource = NpgsqlDataSource.Create(Budgeted(database, maximum: 1));
-        await using var host = database.BuildHost(services => services.AddRowLevelSecuritySettings<TeamOfTheCaller>(), dataSource: dataSource);
-        const string team = $"""SELECT coalesce(current_setting('{TeamOfTheCaller.Setting}', true), '') AS "Value" """;
+        await using var host = database.BuildHost(services => services.AddRowLevelSecuritySettings<TeamOfTheUser>(), dataSource: dataSource);
+        const string team = $"""SELECT coalesce(current_setting('{TeamOfTheUser.Setting}', true), '') AS "Value" """;
 
         var north = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{ApiaryDatabase.AliceId}}","role":"authenticated","team":"north"}""");
         (await ApiaryDatabase.AsAsync(host, north, context => context.Database.SqlQueryRaw<string>(team).SingleAsync(Cancellation))).Should().Be("north", "a module's setting travels with the caller, in the same statement");
         (await ApiaryDatabase.AsAsync(host, ApiaryDatabase.Bob, context => context.Database.SqlQueryRaw<string>(team).SingleAsync(Cancellation))).Should().Be("", "and is empty for a caller without one, on the same connection");
 
         await using var plain = await dataSource.OpenConnectionAsync(Cancellation);
-        await using var command = new NpgsqlCommand($"SELECT coalesce(current_setting('{TeamOfTheCaller.Setting}', true), '')", plain);
+        await using var command = new NpgsqlCommand($"SELECT coalesce(current_setting('{TeamOfTheUser.Setting}', true), '')", plain);
         (await command.ExecuteScalarAsync(Cancellation)).Should().Be("", "the reset takes the settings off with the role");
     }
 

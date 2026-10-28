@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 public sealed record GardenPerson(string Name, Guid User, GardenId Garden)
 {
     /// <summary>The caller: a signed-in user, whose token says the garden its requests are in, as the host's database reads it.</summary>
-    public CurrentUserSnapshot Caller => CurrentUserSnapshot.FromClaims(TestCallers.Claims(User, staff: null, garden: Garden.Value));
+    public CurrentUserSnapshot Caller => CurrentUserSnapshot.FromClaims(TestUsers.Claims(User, staff: null, garden: Garden.Value));
 
     /// <summary>Who the user is as a gardener.</summary>
     public UserId Member => new(User);

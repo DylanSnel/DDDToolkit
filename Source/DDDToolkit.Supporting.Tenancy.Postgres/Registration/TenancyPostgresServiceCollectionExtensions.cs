@@ -10,7 +10,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 public static class TenancyPostgresServiceCollectionExtensions
 {
     /// <summary>
-    /// Sets <see cref="TenancyRowLevelSecurity.TenantSetting"/> to the current Tenancy caller's tenant whenever a
+    /// Sets <see cref="TenancyRowLevelSecurity.TenantSetting"/> to the current Tenancy user's tenant whenever a
     /// context under row level security connects, next to the caller's role and claims and in the same
     /// statement; turns the last administrator the trigger keeps at commit, which no index states, into the
     /// refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the

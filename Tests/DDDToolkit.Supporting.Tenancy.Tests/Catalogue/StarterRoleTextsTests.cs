@@ -19,7 +19,7 @@ public class StarterRoleTextsTests
         => new("harbor", "Harbor Works", shape, "Harbor Works", Guid.NewGuid(), Language: language);
 
     private static Task<ProvisionedTenant> Provision(Harness harness, TenantToProvision command)
-        => harness.Run(HostCaller.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
+        => harness.Run(HostUser.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
 
     /// <summary>The host's four starter roles in Dutch.</summary>
     private static StarterRoleTexts DutchTexts() => new StarterRoleTexts()
@@ -60,7 +60,7 @@ public class StarterRoleTextsTests
         var texts = DutchTexts();
         var harness = new Harness(New.Catalogue()) { StarterRoleTexts = texts };
         var provisioned = await Provision(harness, Harbor(TenantShape.Hierarchical, Dutch));
-        var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var administrator = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var watcher = provisioned.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
 
         // The application's texts change afterwards, and the tenant renames a role itself.
@@ -118,7 +118,7 @@ public class StarterRoleTextsTests
     {
         var harness = new Harness(New.Catalogue()) { StarterRoleTexts = DutchTexts() };
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, language: null));
-        var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var administrator = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, Dutch, default));
 
@@ -134,7 +134,7 @@ public class StarterRoleTextsTests
     {
         var harness = new Harness(New.Catalogue()) { StarterRoleTexts = DutchTexts() };
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, Dutch));
-        var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var administrator = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
 
@@ -161,7 +161,7 @@ public class StarterRoleTextsTests
     {
         var harness = new Harness(New.Catalogue()) { StarterRoleTexts = DutchTexts().In("nl", HostCatalogue.SupervisorStarterRole, "bediener", "Leidt een deel van de organisatie") };
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, Dutch));
-        var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var administrator = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.RoleNameTaken,
             () => harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, Dutch, default)));
@@ -236,7 +236,7 @@ public class StarterRoleTextsTests
             await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
             await using var scope = provider.CreateAsyncScope();
             var store = provider.GetRequiredService<InMemoryTenancyStore>();
-            using (TenancyCallers.Begin(HostCaller.System))
+            using (TenancyUsers.Begin(HostUser.System))
             {
                 store.BeginUnitOfWork();
                 await scope.ServiceProvider.GetRequiredService<CoreTenantManager>()

@@ -76,7 +76,7 @@ public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
 
 Namespace `DDDToolkit.Supporting.Tenancy.Access`.
 
-What the current caller may do, asked over one read source. Made by `db.Tenancy()` over a context, or by [`TenancyAccessManager.In`](callers.md#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor) over another read source. Either fixes the caller and the moment "now" once, so every answer of one set of queries agrees with the others.
+What the current caller may do, asked over one read source. Made by `db.Tenancy()` over a context, or by [`TenancyAccessManager.In`](access.md#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor) over another read source. Either fixes the caller and the moment "now" once, so every answer of one set of queries agrees with the others.
 
 The queries are not run here: a module composes them into its own query, where they become subqueries, or runs them itself. A permission granted at the root holds for the whole tenant; one granted lower down covers its unit and every unit below it. A grant counts from its start until its end, and a permission the catalogue has retired holds nowhere.
 
@@ -512,7 +512,7 @@ A right a move of a unit would change: where it is held, the permission, until w
 | `string Permission { get; init; }` | The permission. |
 | `DateTimeOffset? EndsAt { get; init; }` | The first moment the right no longer applies, or `null` when it has no end. |
 | `TUnitId Parent { get; init; }` | The parent it reaches. A right held above both parents comes once for each. |
-| `bool OfCaller { get; init; }` | Whether the right is the moving seat's own. |
+| `bool OfCurrentSeat { get; init; }` | Whether the right is the moving seat's own. |
 
 #### `MoveReach(TUnitId, string, DateTimeOffset?, TUnitId, bool)`
 
@@ -522,7 +522,7 @@ public MoveReach(
     string Permission,
     DateTimeOffset? EndsAt,
     TUnitId Parent,
-    bool OfCaller)
+    bool OfCurrentSeat)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -533,7 +533,7 @@ The primary constructor: the type's summary says what it makes.
 - `Permission`: The permission.
 - `EndsAt`: The first moment the right no longer applies, or `null` when it has no end.
 - `Parent`: The parent it reaches. A right held above both parents comes once for each.
-- `OfCaller`: Whether the right is the moving seat's own.
+- `OfCurrentSeat`: Whether the right is the moving seat's own.
 
 ### `NamedUnit<TUnitId>`
 
@@ -583,7 +583,7 @@ public interface ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Where Tenancy's queries read their rows. The storage supplies it over whichever context a query is composed into, so a module asks Tenancy inside its own query, and Tenancy's query becomes a subquery of it rather than a second round trip. Over an Entity Framework context, `db.Tenancy()` uses the package's own source. A storage that is not Entity Framework implements this interface, and asks with the access manager's long form, [`TenancyAccessManager.In`](callers.md#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor):
+Where Tenancy's queries read their rows. The storage supplies it over whichever context a query is composed into, so a module asks Tenancy inside its own query, and Tenancy's query becomes a subquery of it rather than a second round trip. Over an Entity Framework context, `db.Tenancy()` uses the package's own source. A storage that is not Entity Framework implements this interface, and asks with the access manager's long form, [`TenancyAccessManager.In`](access.md#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor):
 
 ```csharp
 var queries = access.In(readSource, executor);
@@ -926,7 +926,7 @@ Each is named by its owner, [`TenancyRowAccess.Owner`](#tenancyrowaccess), and i
 
 | Member | Summary |
 |---|---|
-| `static DatabaseFunction CallerSeat { get; }` | Answers the calling seat: the active seat of the caller's verified identity in the tenant the connection names, or `NULL` for a caller without one. As [`TenancyRowAccess.CallerSeatId<TSeatId>`](#callerseatid). |
+| `static DatabaseFunction CurrentSeat { get; }` | Answers the calling seat: the active seat of the caller's verified identity in the tenant the connection names, or `NULL` for a caller without one. As [`TenancyRowAccess.CurrentSeatId<TSeatId>`](#currentseatid). |
 | `static DatabaseFunction UnitsWhereIHold { get; }` | Answers, for a permission, the units the calling seat's hold of it reaches: where it is held, and every unit below. As [`TenancyRowAccess.UnitsWhereIHold<TUnitId>`](#unitswhereiholdstring-1). |
 | `static DatabaseFunction RolesWithPermission { get; }` | Answers, for a permission, the roles of the caller's tenant in use that give it. As [`TenancyRowAccess.RolesWithPermission<TRoleId>`](#roleswithpermissionstring-1). |
 
@@ -951,7 +951,7 @@ Only the database answers them: the SQL functions of the same names, which `DDDT
 
 The functions answer for a seat: a signed-in user's, found from the verified identity and the tenant. A suspended or deactivated seat holds nothing, and neither does any seat of a suspended or closed tenant; a question about the caller answers `NULL` for someone without an active seat there, which no comparison passes. A rule for anonymous callers that asks one is refused when the policies are written. System work in a tenant has no seat, so every question answers nothing for it, where the C# questions answer the whole tenant: the policies Tenancy writes keep system work to its tenant themselves, so a rule for it asks none of these.
 
-The same questions say who reads Tenancy's own seats and invitations, where the application replaces Tenancy's default with a read rule on its class: `seat.TenantId == CallerTenant<TenantId>()` for the caller's tenant, `seat.Id == CallerSeatId<SeatId>()` for the caller itself, `UnitsWhereIHold<OrganizationUnitId>(permission).Contains(invitation.UnitId)` for where it holds a permission, [`HoldsPermission`](#holdspermissionstring) and [`HoldsAtTenant`](#holdsattenantstring), and [`SeatsInMyUnits<TSeatId>`](#seatsinmyunits) for the seats placed where it is placed, or below.
+The same questions say who reads Tenancy's own seats and invitations, where the application replaces Tenancy's default with a read rule on its class: `seat.TenantId == CurrentTenant<TenantId>()` for the caller's tenant, `seat.Id == CurrentSeatId<SeatId>()` for the caller itself, `UnitsWhereIHold<OrganizationUnitId>(permission).Contains(invitation.UnitId)` for where it holds a permission, [`HoldsPermission`](#holdspermissionstring) and [`HoldsAtTenant`](#holdsattenantstring), and [`SeatsInMyUnits<TSeatId>`](#seatsinmyunits) for the seats placed where it is placed, or below.
 
 The questions named `...InTenant` take the tenant as an argument, and read no setting of the connection: for a policy that runs where the application's connection is not the one asking, such as one on the path of a stored file or on a channel, whose tenant is in the path or the channel's name. They answer for the seat the caller's verified identity has in that tenant, while that seat and the tenant are active, and nothing to anyone else. A set-shaped one is worked out once per statement, so its tenant comes from the parameters of an access function of the module's own, which a policy then asks about each row.
 
@@ -962,9 +962,9 @@ The questions named `...InTenant` take the tenant as an argument, and read no se
 | [`ReadableUnits()`](#readableunits-1) | Answered by the SQL function `tenancy/readable_units`, a set a row access rule asks with `Contains`, once per statement. |
 | [`SeatsInMyUnits()`](#seatsinmyunits) | Answered by the SQL function `tenancy/seats_in_my_units`, a set a row access rule asks with `Contains`, once per statement. |
 | [`RolesWithPermission(string)`](#roleswithpermissionstring-1) | Answered by the SQL function `tenancy/roles_with_permission`, a set a row access rule asks with `Contains`, once per statement. |
-| [`CallerSeatId()`](#callerseatid) | Answered by the SQL function `tenancy/caller_seat`, one value a row access rule compares, once per statement when no argument reads the row. |
-| [`CallerSeat()`](#callerseat) | Answered by the SQL function `tenancy/caller_seat_row`, one row whose properties a row access rule reads, once per statement. |
-| [`CallerTenant()`](#callertenant) | Answered by the SQL function `tenancy/caller_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`CurrentSeatId()`](#currentseatid) | Answered by the SQL function `tenancy/current_seat`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`CurrentSeat()`](#currentseat) | Answered by the SQL function `tenancy/current_seat_row`, one row whose properties a row access rule reads, once per statement. |
+| [`CurrentTenant()`](#currenttenant) | Answered by the SQL function `tenancy/current_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
 | [`HoldsPermission(string)`](#holdspermissionstring) | Answered by the SQL function `tenancy/holds_permission`, one value a row access rule compares, once per statement when no argument reads the row. |
 | [`HoldsAtTenant(string)`](#holdsattenantstring) | Answered by the SQL function `tenancy/holds_at_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
 | [`SeatInTenant(TTenantId)`](#seatintenantttenantid) | Answered by the SQL function `tenancy/seat_in_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
@@ -1025,40 +1025,40 @@ Answered by the SQL function `tenancy/roles_with_permission`, a set a row access
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `CallerSeatId()`
+#### `CurrentSeatId()`
 
 ```csharp
-public static TSeatId CallerSeatId<TSeatId>()
+public static TSeatId CurrentSeatId<TSeatId>()
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Answered by the SQL function `tenancy/caller_seat`, one value a row access rule compares, once per statement when no argument reads the row. Only the database can answer it, so called in C# it throws.
+Answered by the SQL function `tenancy/current_seat`, one value a row access rule compares, once per statement when no argument reads the row. Only the database can answer it, so called in C# it throws.
 
 **Exceptions**
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `CallerSeat()`
+#### `CurrentSeat()`
 
 ```csharp
-public static TSeat CallerSeat<TSeat>()
+public static TSeat CurrentSeat<TSeat>()
     where TSeat : class
 ```
 
-Answered by the SQL function `tenancy/caller_seat_row`, one row whose properties a row access rule reads, once per statement. Only the database can answer it, so called in C# it throws.
+Answered by the SQL function `tenancy/current_seat_row`, one row whose properties a row access rule reads, once per statement. Only the database can answer it, so called in C# it throws.
 
 **Exceptions**
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `CallerTenant()`
+#### `CurrentTenant()`
 
 ```csharp
-public static TTenantId CallerTenant<TTenantId>()
+public static TTenantId CurrentTenant<TTenantId>()
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
 ```
 
-Answered by the SQL function `tenancy/caller_tenant`, one value a row access rule compares, once per statement when no argument reads the row. Only the database can answer it, so called in C# it throws.
+Answered by the SQL function `tenancy/current_tenant`, one value a row access rule compares, once per statement when no argument reads the row. Only the database can answer it, so called in C# it throws.
 
 **Exceptions**
 
@@ -1172,7 +1172,7 @@ System work outside any tenant writes no tenant's rows either. It acts in no ten
 
 | Member | Summary |
 |---|---|
-| [`Check(object)`](#checkobject) | Checks one changed row against the current Tenancy caller. |
+| [`Check(object)`](#checkobject) | Checks one changed row against the current Tenancy user. |
 
 #### `Check(object)`
 
@@ -1180,7 +1180,7 @@ System work outside any tenant writes no tenant's rows either. It acts in no ten
 public static void Check(object entryTenant)
 ```
 
-Checks one changed row against the current Tenancy caller.
+Checks one changed row against the current Tenancy user.
 
 **Parameters**
 

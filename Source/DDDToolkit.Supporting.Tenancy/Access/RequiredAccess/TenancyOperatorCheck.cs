@@ -11,8 +11,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </summary>
 /// <remarks>
 /// It reads nothing. Whether the caller is an operator is the toolkit's current user's to say, by its token's role. The tenant
-/// the request names beside the command is the Tenancy caller's, as tenant selection found it
-/// (<see cref="TenancyCaller{TTenantId, TSeatId}.NamedTenant"/>).
+/// the request names beside the command is the Tenancy user's, as tenant selection found it
+/// (<see cref="TenancyUser{TTenantId, TSeatId}.NamedTenant"/>).
 /// <para>
 /// The work it begins is the only way operator work is begun. It is system work recorded as the operator, whose identity
 /// is the current user's id. The class is internal, since an application names <see cref="OperatorAttribute"/>, never the
@@ -51,7 +51,7 @@ internal sealed class TenancyOperatorCheck<TTenantId, TSeatId, TUnitId, TRoleId>
             return ValueTask.CompletedTask;
         }
 
-        // The token's own role, never the Tenancy caller: an operator is nobody in every tenant.
+        // The token's own role, never the Tenancy user: an operator is nobody in every tenant.
         if (!options.IsOperator(user.Snapshot))
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
@@ -68,7 +68,7 @@ internal sealed class TenancyOperatorCheck<TTenantId, TSeatId, TUnitId, TRoleId>
                 break;
 
             case TenancyRequirement.OperatorIn<TTenantId> required:
-                if (TenancyCallers.Current<TTenantId, TSeatId>().NamedTenant is { } named && !named.Equals(required.Tenant))
+                if (TenancyUsers.Current<TTenantId, TSeatId>().NamedTenant is { } named && !named.Equals(required.Tenant))
                 {
                     throw TenancyRefusals.Refuse(TenancyRefusals.TenantMismatch);
                 }
@@ -95,8 +95,8 @@ internal sealed class TenancyOperatorCheck<TTenantId, TSeatId, TUnitId, TRoleId>
         ArgumentNullException.ThrowIfNull(requirement);
         ArgumentNullException.ThrowIfNull(request);
 
-        var caller = user.Snapshot;
-        if (isQuery || !options.IsOperator(caller) || caller.Id is not { } identity)
+        var snapshot = user.Snapshot;
+        if (isQuery || !options.IsOperator(snapshot) || snapshot.Id is not { } identity)
         {
             return null;
         }
@@ -122,16 +122,16 @@ internal sealed class TenancyOperatorCheck<TTenantId, TSeatId, TUnitId, TRoleId>
     /// </summary>
     private static TTenantId TenantTheRequestNames()
     {
-        var caller = TenancyCallers.Current<TTenantId, TSeatId>();
-        return caller.NamedTenant ?? throw TenancyRefusals.Refuse(caller is { Kind: TenancyCallerKind.Nobody, Refusal: { } refusal } ? refusal : TenancyRefusals.TenantRequired);
+        var tenancyUser = TenancyUsers.Current<TTenantId, TSeatId>();
+        return tenancyUser.NamedTenant ?? throw TenancyRefusals.Refuse(tenancyUser is { Kind: TenancyUserKind.Nobody, Refusal: { } refusal } ? refusal : TenancyRefusals.TenantRequired);
     }
 
     /// <summary>
     /// Whether this flow is inside the operator work begun for <paramref name="request"/>: the request in hand, let through
-    /// already, and the Tenancy caller recorded as an operator.
+    /// already, and the Tenancy user recorded as an operator.
     /// </summary>
     private static bool InWorkBegunFor(IRequireAccess request)
         => RequestInHand.Current is { } hand
            && ReferenceEquals(hand.Request, request)
-           && TenancyCallers.Current<TTenantId, TSeatId>() is { Actor: { Kind: TenancyActorKind.Operator } };
+           && TenancyUsers.Current<TTenantId, TSeatId>() is { Actor: { Kind: TenancyActorKind.Operator } };
 }

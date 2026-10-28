@@ -62,7 +62,7 @@ public class OrderAccessTests
     [Fact]
     public void The_rules_are_written_as_the_sql_the_policies_are_made_of()
     {
-        ACustomerHasTheirOrders.RowAccessSql.Should().Be("(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}))");
-        NobodyOrdersForSomebodyElse.RowAccessSql.Should().Be("({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})");
+        ACustomerHasTheirOrders.RowAccessSql.Should().Be("(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {user:uid}))");
+        NobodyOrdersForSomebodyElse.RowAccessSql.Should().Be("({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})");
     }
 }

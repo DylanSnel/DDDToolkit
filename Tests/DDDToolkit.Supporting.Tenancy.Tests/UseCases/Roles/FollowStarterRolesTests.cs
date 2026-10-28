@@ -71,7 +71,7 @@ public class FollowStarterRolesTests
         var harness = Harness.OfHarbor();
 
         await Refused.WithCodeAsync(ToolkitRefusals.SystemOnly, () => harness.As(harness.Administrator, h => Roles(h, Later()).FollowStarterRolesAsync(default)));
-        (await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => Roles(h, Later()).FollowStarterRolesAsync(default)))
+        (await FluentActions.Awaiting(() => harness.Run(HostUser.System, h => Roles(h, Later()).FollowStarterRolesAsync(default)))
             .Should().ThrowAsync<InvalidOperationException>("system work outside any tenant only provisions"))
             .WithMessage("A tenant's roles are made to follow their starter roles by system work in that tenant. Begin access.BeginSystemIn(tenant) for it, "
                 + "on the TenancyAccessManager your code takes.");
@@ -104,7 +104,7 @@ public class FollowStarterRolesTests
         var holder = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.OperatorStarterRole);
         var later = Catalogue(starterRoles => starterRoles.Select(starterRole => starterRole.Key == HostCatalogue.OperatorStarterRole ? starterRole with { Permissions = [.. starterRole.Permissions, TenancyPermissions.UnitsManage] } : starterRole));
 
-        var followed = await harness.Run(harness.SystemCaller(harness.Administrator), h => Roles(h, later).FollowStarterRolesAsync(default));
+        var followed = await harness.Run(harness.SystemUser(harness.Administrator), h => Roles(h, later).FollowStarterRolesAsync(default));
 
         followed.Changed.Should().Equal(operatorRole);
         var raised = harness.Store.SavedEvents.OfType<RoleFollowedItsStarterRole<TenantId, RoleId, SeatId>>().Single();

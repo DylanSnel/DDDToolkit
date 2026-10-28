@@ -153,10 +153,10 @@ public abstract partial record AccessRequirement
     /// caller's own alone.
     /// </summary>
     /// <remarks>
-    /// What the caller's own value is, whoever knows says, with an <see cref="ICallersOwn{TValue}"/>: the core for a
+    /// What the caller's own value is, whoever knows says, with an <see cref="IOwnedByCurrentUser{TValue}"/>: the core for a
     /// <see cref="Guid"/>, the caller's verified identity, which is the id its token names; Tenancy for its seat id, the
     /// caller's seat in the tenant of the request; and the application for a type of its own, its own user id say,
-    /// with a small implementation it registers, <c>services.AddCallersOwn&lt;UserId, CallersUser&gt;()</c>. A value of
+    /// with a small implementation it registers, <c>services.AddOwnedByCurrentUser&lt;UserId, CurrentUserId&gt;()</c>. A value of
     /// a type nobody said that for lets nobody through: the request is stopped as one with a requirement no check
     /// decides.
     /// </remarks>

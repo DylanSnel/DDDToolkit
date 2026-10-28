@@ -20,7 +20,7 @@ public class ProvisioningHooksTests
             ConfigureFirstSeat: configureFirstSeat);
 
     private static Task<ProvisionedTenant> Provision(Harness harness, TenantToProvision command)
-        => harness.Run(HostCaller.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
+        => harness.Run(HostUser.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
 
     [Fact]
     public async Task The_host_fields_set_at_provisioning_are_saved_with_the_tenant()

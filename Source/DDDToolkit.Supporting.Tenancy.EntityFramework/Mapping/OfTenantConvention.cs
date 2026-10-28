@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
-/// Keeps every class whose tenant is marked <see cref="OfTenantAttribute"/> to the current Tenancy caller's tenant, as
+/// Keeps every class whose tenant is marked <see cref="OfTenantAttribute"/> to the current Tenancy user's tenant, as
 /// <see cref="TenancyModelBuilderExtensions.ScopeToTenant"/> keeps a class it is called on: the tenant filter on its
 /// reads, and Tenancy's save check on its writes. A context needs no line for it:
 /// <code>

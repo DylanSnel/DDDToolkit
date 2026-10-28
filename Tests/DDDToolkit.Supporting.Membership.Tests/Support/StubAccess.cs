@@ -57,7 +57,7 @@ public sealed class StubAccess<TResource, TResourceId>(MembershipRules rules) : 
         => Manager.ViaAsync(resource, permission, cancellationToken);
 
     /// <inheritdoc />
-    public void RequireCaller()
+    public void RequireCurrentUser()
     {
         Asked.Add("caller");
         if (Nobody is not null)

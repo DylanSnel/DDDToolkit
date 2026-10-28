@@ -59,7 +59,7 @@ What it registers is asked for by the resource, so there is one for each kind of
 
 The rules say three things apart from each other, and what they say decides what the application has to answer. Rules that need an answer nobody registered are refused here, when the application starts, with what to register, rather than read as something they are not:
 
-- **Who a member is.** The caller's user id ([`MemberSource.CallerId`](rules.md#membersource)), for a member id over a `Guid`; a claim of its token ([`MemberSource.Claim`](rules.md#claimstring)), for one over a text; or what the application resolves for the caller ([`MemberSource.Resolved`](rules.md#resolveddatabasefunction)), which needs an [`ICallerMember<TResourceId, TMemberId>`](rules.md#icallermembertresourceid-tmemberid).
+- **Who a member is.** The caller's user id ([`MemberSource.CurrentUserId`](rules.md#membersource)), for a member id over a `Guid`; a claim of its token ([`MemberSource.Claim`](rules.md#claimstring)), for one over a text; or what the application resolves for the caller ([`MemberSource.Resolved`](rules.md#resolveddatabasefunction)), which needs an [`ICurrentMember<TResourceId, TMemberId>`](rules.md#icurrentmembertresourceid-tmemberid).
 - **Where the roles come from.** The rules declare them, and a member holds them as [`NamedRole`](resource-and-members.md#namedrole); or a customer makes them ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions-string)), as rows of the application's role class, which needs nothing registered: the context maps that class with `IsCustomRole`, and the roles are read from there; or they are kept elsewhere ([`Roles.External`](rules.md#externaldatabasefunction-otherpermissions)), which needs an [`IRolesWithPermission<TResourceId, TRoleId>`](#iroleswithpermissiontresourceid-troleid) for which roles give a permission and an [`IMemberRoles<TResourceId, TRoleId>`](rules.md#imemberrolestresourceid-troleid) for which roles there are.
 - **Whether a resource is reached from above** ([`MembershipRules.ReachFromAbove`](rules.md#membershiprules)), which needs an [`IPlacesReached<TResourceId, TPlaceId>`](#iplacesreachedtresourceid-tplaceid) for where a caller holds a permission, and the resource marking where it hangs `[At]`.
 
@@ -116,7 +116,7 @@ services.AddCrateMembership<DepotContext, CratesInTheDepot>(CrateMembership.Rule
 
 `TPorts` is registered, one for each scope, and every port of this resource it implements is answered by that one instance:
 
-- [`ICallerMember<TResourceId, TMemberId>`](rules.md#icallermembertresourceid-tmemberid): who the caller is as a member, for rules with [`MemberSource.Resolved`](rules.md#resolveddatabasefunction).
+- [`ICurrentMember<TResourceId, TMemberId>`](rules.md#icurrentmembertresourceid-tmemberid): who the caller is as a member, for rules with [`MemberSource.Resolved`](rules.md#resolveddatabasefunction).
 - [`IRolesWithPermission<TResourceId, TRoleId>`](#iroleswithpermissiontresourceid-troleid) and [`IMemberRoles<TResourceId, TRoleId>`](rules.md#imemberrolestresourceid-troleid): which roles give a permission, and which roles there are, for rules whose roles are kept elsewhere.
 - [`IPlacesReached<TResourceId, TPlaceId>`](#iplacesreachedtresourceid-tplaceid): where the caller holds a permission, for rules that let a resource be reached from above.
 - [`IMemberDirectory<TResourceId, TMemberId>`](managers.md#imemberdirectorytresourceid-tmemberid) and [`IMemberRolePolicy<TResourceId, TRoleId>`](managers.md#imemberrolepolicytresourceid-troleid), which no rules need: who can be made a member, and which roles go to one, as the member manager asks.
@@ -817,7 +817,7 @@ public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot us
 
 The questions of one request may be asked side by side, each on a context of its own, so it keeps nothing between two questions and reads on no context but the one it is handed.
 
-It is asked about every signed-in caller, a member of the resource or not, and also about one the application answered nobody for as a member ([`ICallerMember.Find`](rules.md#findcurrentusersnapshot)): reach from above is for callers that are on no member list. So whether the caller still counts is asked here as well, of the same rows or the same fact the application answers who a member is from. An application that answers from the caller's id alone lets somebody it no longer counts keep what they held.
+It is asked about every signed-in caller, a member of the resource or not, and also about one the application answered nobody for as a member ([`ICurrentMember.Find`](rules.md#findcurrentusersnapshot)): reach from above is for callers that are on no member list. So whether the caller still counts is asked here as well, of the same rows or the same fact the application answers who a member is from. An application that answers from the caller's id alone lets somebody it no longer counts keep what they held.
 
 What is above what is the application's to know: the package compares where a resource sits (the property its class marks `[At]`) with what this answers, and keeps no places and no tree of them. A permission answered here is held whatever the rules say a member's role gives: that list is about members.
 

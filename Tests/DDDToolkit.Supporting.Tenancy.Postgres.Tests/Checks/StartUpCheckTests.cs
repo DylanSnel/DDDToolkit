@@ -286,17 +286,17 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await ConfinementFailsAsync(database, "scoped_as_the_owner", "*has the privileges of tenancy_app, which owns tables*REVOKE tenancy_app FROM scoped_as_the_owner*");
 
         // And for a function of Tenancy's that runs as its owner, which the anonymous role may execute.
-        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "GRANT EXECUTE ON FUNCTION tenancy.caller_seat() TO anon", Cancellation);
+        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "GRANT EXECUTE ON FUNCTION tenancy.current_seat() TO anon", Cancellation);
         await using var granted = new TenancyServices(database);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(granted.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*anon may execute \"tenancy\".caller_seat()*REVOKE EXECUTE*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*anon may execute \"tenancy\".current_seat()*REVOKE EXECUTE*");
 
         // And for each function that answers about other seats' rights, writes the rights, reads across tenants, or
         // takes the tenant as an argument, given to the anonymous role or to every role at once.
-        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "REVOKE EXECUTE ON FUNCTION tenancy.caller_seat() FROM anon", Cancellation);
+        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "REVOKE EXECUTE ON FUNCTION tenancy.current_seat() FROM anon", Cancellation);
         foreach (var function in new[]
                  {
-                     "\"tenancy\".tenant_administrators()", "\"tenancy\".permissions_a_move_changes(uuid,uuid)", "\"tenancy\".seats_holding_permission_at(text,uuid)",
+                     "\"tenancy\".tenant_administrators()", "\"tenancy\".permissions_a_unit_move_changes(uuid,uuid)", "\"tenancy\".seats_holding_permission_at(text,uuid)",
                      "\"tenancy\".rewrite_tenant_rights()", "\"tenancy\".rights_follow_grants()",
                      "\"tenancy\".role_permissions_in_use()", "\"tenancy\".tenants_to_sweep()", "\"tenancy\".seats_of_identity(uuid)",
                      "\"tenancy\".seat_in_tenant(bigint)", "\"tenancy\".seated_in_tenant(bigint)", "\"tenancy\".holds_permission_in_tenant(bigint,text)",
@@ -484,7 +484,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await TenancyPostgres.ExecuteAsync(
             database.ConnectionString,
             """
-            ALTER FUNCTION tenancy.caller_permissions() SET search_path = '';
+            ALTER FUNCTION tenancy.current_permissions() SET search_path = '';
             ALTER FUNCTION tenancy.tenant_roles_with_starter_roles() SECURITY DEFINER;
             ALTER FUNCTION tenancy.tenant_units() STRICT;
             ALTER FUNCTION tenancy.tenant_unit_paths() VOLATILE;
@@ -496,7 +496,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage(
                 "The functions of \"tenancy\" that modules read Tenancy through are not as Tenancy's contribution writes them: " +
-                $"caller_permissions{Changed}, tenant_roles_with_starter_roles{Changed}, tenant_seats (missing), tenant_unit_paths{Changed}, tenant_units{Changed}.*AddTenancyReadFunctions*");
+                $"current_permissions{Changed}, tenant_roles_with_starter_roles{Changed}, tenant_seats (missing), tenant_unit_paths{Changed}, tenant_units{Changed}.*AddTenancyReadFunctions*");
 
         // The access files applied again write each as it was: replacing a function takes its settings off as well.
         foreach (var script in TenancyPostgres.AccessScripts())

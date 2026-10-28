@@ -14,7 +14,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// for: what an exported access file records on the <c>ddd</c> schema, read back from a database it was applied to,
 /// and compared with the host's options. The database decides, so these run on Postgres.
 /// </summary>
-public sealed class SupabaseRolesMatchTests(ExplicitCallersPostgres postgres) : IDisposable
+public sealed class SupabaseRolesMatchTests(ExplicitCurrentUserPostgres postgres) : IDisposable
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -164,7 +164,7 @@ public sealed class SupabaseRolesMatchTests(ExplicitCallersPostgres postgres) : 
 
         var check = services.GetStartupChecks().InOrder().Single(registered => registered.Name == SupabaseRowAccessChecks.RolesMatchAccessFilesCheck);
         check.Stage.Should().Be(StartupCheckStage.Login);
-        check.RunsBefore.Should().Equal(PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck);
+        check.RunsBefore.Should().Equal(PostgresRowAccessChecks.LoginRoleMaySwitchToUserRolesCheck);
 
         await using var provider = services.BuildServiceProvider();
         await check.RunAsync(provider, Cancellation);

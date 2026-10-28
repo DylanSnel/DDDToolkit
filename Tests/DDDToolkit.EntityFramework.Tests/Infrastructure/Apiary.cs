@@ -109,7 +109,7 @@ public static partial class KeepersHaveTheirHives
 
 /// <summary>Whoever signed in reads every hive.</summary>
 [RowAccess<Hive>(RowOperations.Read, To = [RowAccessRoles.User])]
-public static partial class SignedInCallersReadEveryHive
+public static partial class SignedInUsersReadEveryHive
 {
     public static bool Allows(Hive hive, ICurrentUser user) => user.IsAuthenticated;
 }
@@ -132,7 +132,7 @@ public static class ApiaryRules
 
     public static readonly RowAccessRule Keepers = RowAccessRule.For<Hive>("Keepers have their hives", RowOperations.All, KeepersHaveTheirHives.RowAccessSql, RowAccessRoles.User);
 
-    public static readonly RowAccessRule SignedIn = RowAccessRule.For<Hive>("Signed in callers read every hive", RowOperations.Read, SignedInCallersReadEveryHive.RowAccessSql, RowAccessRoles.User);
+    public static readonly RowAccessRule SignedIn = RowAccessRule.For<Hive>("Signed in callers read every hive", RowOperations.Read, SignedInUsersReadEveryHive.RowAccessSql, RowAccessRoles.User);
 
     public static readonly RowAccessRule Visitors = RowAccessRule.For<Hive>("Visitors read open hives", RowOperations.Read, VisitorsReadOpenHives.RowAccessSql, RowAccessRoles.Anonymous);
 

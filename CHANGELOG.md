@@ -342,16 +342,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   its hold kept for the expert hold on either way. `MemberAccess.Sees` is Membership's new case for it, and a resource
   with a permission marked `ManagesMembers` has its member rows locked to it in the database, so the member manager
   saves the caller's own place as the resource's own work once the request is the one in hand (the docs show it). `[OwnOnly]`
-  on the request with `[Own]` on the member is `Own(member)` alone. What the caller's own is, an `ICallersOwn<TValue>`
+  on the request with `[Own]` on the member is `Own(member)` alone. What the caller's own is, an `IOwnedByCurrentUser<TValue>`
   says (`TValue? Find(ICurrentUser user)`): the core for a `Guid`, the caller's verified identity, with nothing
   registered;
   Tenancy for the application's seat id, the caller's seat in the tenant of the request, which `AddTenancy` registers,
   and `TenancyAccess.Own(seat)` spells beside its other cases; an application for a kind of its own with a small handle
-  of its own beside its requests, registered by the host with `services.AddCallersOwn<UserId, CallersUser>()`, which
+  of its own beside its requests, registered by the host with `services.AddOwnedByCurrentUser<UserId, CurrentUserId>()`, which
   takes the place of one registered before. The core's `CurrentUserAccessCheck` decides the case, and now takes the
   scope's
   services, `new CurrentUserAccessCheck(user, services)`. A package names the types its handles are for with `[assembly:
-  CallersOwn(typeof(...))]` or, for an id of the application's class, `[assembly: CallersOwn(IdOf =
+  OwnedByCurrentUser(typeof(...))]` or, for an id of the application's class, `[assembly: OwnedByCurrentUser(IdOf =
   typeof(Template<>))]`, with `Implies` there for what its caller's own requires already (the core's `Guid`
   `[SignedIn]`, Tenancy's seat id `[InTenant]` and `[SignedIn]`, which DDD00084 counts beside `[OwnOnly]`, and beside a
   permission with `[OrOwn]` where the permission requires it too), and says a marker may stand beside `[OrOwn]` by
@@ -368,7 +368,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `[OrOwn] BoardId Board` beside `[RequiresPermission(permission)]` for the owner or the permission. The generator sees
   the aggregate, in the project or one it references, and writes `AccessRequirement.OwnerOf(request.Board)`, the new
   case `AccessRequirement.OwnedAggregate<TId>`; beside `[OnResource]` it stands in the place of `Own(member)`. A handle
-  of the id's own wins over the owner, so where an `ICallersOwn` of the id, or Tenancy for its seat id, says the
+  of the id's own wins over the owner, so where an `IOwnedByCurrentUser` of the id, or Tenancy for its seat id, says the
   caller's own, the line compares the id as before; DDD00086 stays for a type that is neither, and says where an
   aggregate's owner would be marked. The core's `CurrentUserAccessCheck` decides the case: it asks the caller's own of
   the
@@ -440,7 +440,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   (`StartupCheck.RunsBefore`). The first that fails stops the start with what it threw, unchanged, and its name in
   the exception's `Data` and the log. `SkipStartupCheck(name, reason)` turns one off and `SkipStartupChecks(reason)`
   every one, each with a reason the log repeats. The registrations' checks: `entity-framework.toolkit-wired`
-  (`AddDDDToolkitEntityFramework`); `postgres.row-level-security-wired`, `postgres.login-role-may-switch-to-callers`,
+  (`AddDDDToolkitEntityFramework`); `postgres.row-level-security-wired`, `postgres.login-role-may-switch-to-user-roles`,
   `postgres.login-role-owns-nothing` and `postgres.definer-owners-bypass` (`AddPostgresRowLevelSecurity`, and so
   `AddSupabaseRowLevelSecurity`); `supabase.migrations-applied` (`AddSupabaseMigrations`);
   `access.behaviors-registered`, Tenancy's and Membership's below; and `pgmq.extension-installed` (`AddPgmqSink`,
@@ -794,7 +794,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `RowAccessRoleNames.From(options)` the roles `PostgresRowLevelSecurityOptions` configures.
   `RowAccessRoleNames.From(options)` validates the options as the registration does, and throws
   `ArgumentException` for a role they would refuse. A role's own name keeps working. `PostgresRowAccess.Script`
-  and `CreateStatements` take a `RowAccessExport` with the roles and the caller functions, and
+  and `CreateStatements` take a `RowAccessExport` with the roles and the current user functions, and
   `PostgresRowAccess.Scripts` writes several contexts' scripts in the order to run them. See
   [One policy per command and role](docs/row-level-security.md#one-policy-per-command-and-role).
 - **Row level security: token roles.** `PostgresRowLevelSecurityOptions.TokenRoles` maps the roles a
@@ -820,20 +820,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Settings of your own on the connection.** An `IRowLevelSecuritySettings`, registered with
   `services.AddRowLevelSecuritySettings<TSettings>()`, puts settings next to the role and the claims, in the
   same statement: every name it declares, to its value or to `''`. Names are checked when the interceptor is
-  built, `prefix.name` in lower case, not `request.*`, one owner each, and not `ddd.caller_mark`, which marks a
+  built, `prefix.name` in lower case, not `request.*`, one owner each, and not `ddd.current_user_mark`, which marks a
   transaction the caller was set for; a value for a name a provider did not declare fails the connection. See
   [Settings of your own](docs/row-level-security.md#custom-connection-settings).
 - **Row level security through a transaction pooler.** `PostgresRowLevelSecurityOptions.Scope`, set to
   `RowLevelSecurityScope.Transaction`, sets the caller's role, claims and settings for one transaction at a
   time, so nothing lives on a session and a pooler that hands each transaction another server connection,
   PgBouncer in transaction mode or Supabase's transaction pooler, carries nothing from one client to the
-  next. A command outside a transaction gets `RESET ROLE; CALL "ddd".use_caller(…);` in front of its text, in
+  next. A command outside a transaction gets `RESET ROLE; CALL "ddd".use_current_user(…);` in front of its text, in
   the same round trip; a transaction a context begins, or is handed with `UseTransaction`, gets the settings
   as its first statement, and so does a `TransactionScope`; a save always runs in a transaction, the
   context's `AutoTransactionBehavior` being set to `Always`; and a
   command that would end the transaction or change the role itself, `COMMIT` or `SET ROLE` in SQL of your
   own, is refused. `No Reset On Close` and port 6543 are allowed in that scope. `PostgresRowAccess.SetupScript`,
-  every script of policies and every exported access file make the procedure `ddd.use_caller`, which only
+  every script of policies and every exported access file make the procedure `ddd.use_current_user`, which only
   the role the application logs in as may call. `Connection`, as before, stays the default. See
   [How the settings travel](docs/row-level-security.md#settings-per-connection-or-per-transaction) and, for Supabase,
   [Through the transaction pooler](docs/supabase.md#the-transaction-pooler).
@@ -1002,7 +1002,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   refused, naming that table, since there it would allow reading and nothing else. A default for another command,
   or a restrictive one, is refused. See
   [Policies a package ships](docs/row-level-security.md#policies-a-package-ships).
-- `{caller:claims}` in a rule's or a contribution's SQL is the caller's claims, `(SELECT auth.jwt())` on
+- `{user:claims}` in a rule's or a contribution's SQL is the caller's claims, `(SELECT auth.jwt())` on
   Supabase.
 - **A resource's access, asked by its id.** `[ResourceAccessContract<TKey>(ResourceAccessSet.Seen)]` on an empty static
   partial class, in the contracts of the module that owns a resource, publishes the resources the caller sees, `Ids()`,
@@ -1049,10 +1049,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   with the one fix, to log in as a role of its own, and
   `EnsureRowLevelSecurityWired` that a context runs its commands as the caller. See
   [A login that owns nothing](docs/row-level-security.md#a-login-that-owns-nothing).
-- `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync` checks at start-up that the role the
+- `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync` checks at start-up that the role the
   application logged in as may switch to every role the context's interceptor switches to: the user's, the
   anonymous caller's, the scoped system role, `SystemRole` and the role of every mapped token role, and, where the
-  settings last one transaction, that it may call `ddd.use_caller`. The scoped system role is asked about where it
+  settings last one transaction, that it may call `ddd.use_current_user`. The scoped system role is asked about where it
   exists: Supabase's access files make it only where a rule is for it or the grants are written, as they are
   unless the project turns that off, so an application whose rules name it nowhere and that writes its privileges
   itself starts without one. A role is switched to when a caller of its kind
@@ -1089,7 +1089,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   narrows those of the signed-in and the anonymous caller that something lets use the table; one where nothing lets
   anyone use it is refused, naming it, and so is one with `Columns`. A question may now answer a row of the caller's
   own: `[AccessRow("name")]` on a method of an `[AccessFunctions]` class that returns the class a table is mapped to,
-  read by field, `(SELECT q1."Region" FROM ...caller_profile() q1)`, once per statement. See
+  read by field, `(SELECT q1."Region" FROM ...current_profile() q1)`, once per statement. See
   [Rules that only narrow](docs/row-level-security.md#restrictive-rules).
 
 #### Supabase and Auth
@@ -1127,13 +1127,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   so an architecture test tells them from the host's own code. `AddSupabaseMigrations<TContext, TFactory>()` and
   `AddSupabaseMigrations(source)` stay, for a host that checks some contexts and not others. See
   [Checking at start-up](docs/supabase.md#checking-at-start-up).
-- **Roles and caller functions for the Supabase export.** `SupabaseMigrationOptions.Roles` and
-  `SupabaseMigrationOptions.CallerFunctions`, and in the build the project properties
-  `SupabaseRowAccessRoles` (`user=…|anonymous=…|system-in=…|system=…`) and `SupabaseCallerFunctions`
+- **Roles and current user functions for the Supabase export.** `SupabaseMigrationOptions.Roles` and
+  `SupabaseMigrationOptions.CurrentUserFunctions`, and in the build the project properties
+  `SupabaseRowAccessRoles` (`user=…|anonymous=…|system-in=…|system=…`) and `SupabaseCurrentUserFunctions`
   (`uid=…|role=…|claims=…`). The pairs are separated by `|`, because MSBuild splits the export's variables
   at every `;`; a `;` fails the build, and an unknown key, a malformed pair, a role no policy can be for
-  or a caller function that is not a call without arguments is an `error :` line. See
-  [Roles and caller functions of your own](docs/supabase.md#custom-roles-and-caller-functions).
+  or a current user function that is not a call without arguments is an `error :` line. See
+  [Roles and current user functions of your own](docs/supabase.md#custom-roles-and-current-user-functions).
 - **The roles are said once, in the project file, and the host checks them against the database.** The build
   records `SupabaseRowAccessRoles` in an application whose project sets it, and that is not a test project, as
   `[assembly: AssemblyMetadata("SupabaseRowAccessRoles", "...")]` in a file of its own under `obj`, the way
@@ -1150,14 +1150,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   (`SupabaseRowAccessChecks.RolesMatchAccessFilesCheck`, `EnsureRolesMatchAccessFilesAsync(context, cancellationToken)`
   by hand, which reads the roles from the context's interceptor), which `AddSupabaseRowLevelSecurity` brings,
   compares the roles each context on Postgres that runs as its caller switches to with that record. It runs as the
-  login role, in the stage of the login and before `postgres.login-role-may-switch-to-callers`, and names each
+  login role, in the stage of the login and before `postgres.login-role-may-switch-to-user-roles`, and names each
   difference with the fixes on both sides: the pair of the host's own `SupabaseRowAccessRoles` or the line of its
   code, and the pair of the exporter's. A database without a record passes, and so does a host without a scoped
   system role, for that one; files without a bookkeeping role expect system work that runs as the login role or
   as one of the platform's roles. The next build writes a new access file for every module, which adds the record
   and nothing else. `PostgresRowLevelSecurityInterceptor.Options` is public, so such a check reads the roles a
   context really runs with. See
-  [Roles and caller functions of your own](docs/supabase.md#custom-roles-and-caller-functions).
+  [Roles and current user functions of your own](docs/supabase.md#custom-roles-and-current-user-functions).
 - **The role the application logs in as, written by the export.** `<SupabaseLoginRole>sample_api</SupabaseLoginRole>`
   in the project that exports, beside `SupabaseRowAccessRoles`, and `SupabaseMigrationOptions.LoginRole` by hand,
   write the migration that makes that role, `{version}_login_role.sample_api.ddd.sql`: `NOLOGIN NOINHERIT`,
@@ -1443,7 +1443,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `TenancyAccess.Operator(forTenant, ...)`, which returns the new case `TenancyRequirement.OperatorIn<TTenantId>`.
     `TenancyRequirement.Operator` carries `Tenant` and `Scope`.
   - Tenant selection keeps the tenant an operator names. For a user with an operator's token role, selection looks the
-    slug up and returns nobody with that tenant kept, `TenancyCaller.OperatorNaming(tenant)`, whose `NamedTenant` is
+    slug up and returns nobody with that tenant kept, `TenancyUser.OperatorNaming(tenant)`, whose `NamedTenant` is
     the tenant. `ISeatDirectory<TTenantId, TSeatId>` has `FindTenantAsync(slug, cancellationToken)` for it, and
     `TenantSelection` takes the operators' token roles.
   - The operator cases have a check of their own. `AddTenancyAccess<TRequests, TContext>()` adds it beside Tenancy's
@@ -1634,7 +1634,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `SeatAggregate.DisplayName`, `MaxDisplayNameLength`, `Rename` and its rule `DisplayNameIsValid`,
     `SeatCommands.RenameAsync`, the event `SeatRenamed` (`tenancy.seat-renamed`), the invitation's
     `DisplayName`, `MaxDisplayNameLength` and rule, `OpenInvitation.DisplayName`, `SeatSummary.DisplayName` and
-    `SeatOfCaller.DisplayName` are gone, and `tenancy.name-invalid` no longer refuses a seat's name (`What`
+    `SeatOfUser.DisplayName` are gone, and `tenancy.name-invalid` no longer refuses a seat's name (`What`
     `display-name`, `Field` `displayName`). An event already stored keeps its payload. A `tenancy.seat-renamed`
     the outbox has not delivered yet fails as a name it does not know, so let the outbox empty before upgrading.
   - A storage of your own implements `ITenancyStore.ListSeatsAsync` as returning the seats themselves, read only.
@@ -1743,7 +1743,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `tenant_seats()`, which modules read Tenancy through, and `db.Tenancy().Seats()`, which reads it. So Membership's
     admission on a member list joined to Tenancy takes only a seat the caller reads, and refuses another with
     `member-not-active`, as it refuses a seat that does not exist.
-  - A rule changes nothing Tenancy's queries about the caller and about rights return, since `caller_seat`,
+  - A rule changes nothing Tenancy's queries about the caller and about rights return, since `current_seat`,
     `units_where_i_hold_permission`, `seats_holding_permission_at`, `tenant_administrators` and the others run as their
     owner. It hides a seat's row, and the seat is still there: the placements keep Tenancy's read, so every member
     still reads every seat's id and where it is placed.
@@ -1765,10 +1765,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   organization, seat or role class narrows Tenancy's own policies there: on the organization its units and the closure
   of its tree as well, and on the seats their placements and grants (see Entity Framework and row level security,
   `Restrictive = true`).
-  - `TenancyRowAccess.CallerSeat<Seat>()` is the calling seat's own row, through the new `caller_seat_row()`, which
+  - `TenancyRowAccess.CurrentSeat<Seat>()` is the calling seat's own row, through the new `current_seat_row()`, which
     runs as its owner. So a rule reads a field of the application's seat class,
-    `CallerSeat<Seat>().Kind == SeatKind.Employee`.
-  - A restrictive rule on a tenant or an invitation is the new DDD00100. `CallerSeat<T>()` over another class than the
+    `CurrentSeat<Seat>().Kind == SeatKind.Employee`.
+  - A restrictive rule on a tenant or an invitation is the new DDD00100. `CurrentSeat<T>()` over another class than the
     seat class is the new DDD00101. Both are errors.
   - Tenancy's own work keeps working under such a rule, every command of it. A seat the rule keeps out of the
     organization still reads what a unit is called: `OrganizationManager.UnitsByIdAsync` reads through the new
@@ -1914,8 +1914,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
   See [What a request requires of its caller](docs/tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller).
 - **Tenancy: who acted.** `TenancyActor` names who made a change, with ids only: a seat, an operator's verified
-  identity, the system with its scope, or a link's token. Every Tenancy caller that can change something carries one,
-  `TenancyCaller.Actor`. Operator work, which `[Operator]` begins on a command, is recorded as the operator it is
+  identity, the system with its scope, or a link's token. Every Tenancy user that can change something carries one,
+  `TenancyUser.Actor`. Operator work, which `[Operator]` begins on a command, is recorded as the operator it is
   carried out for. `access.BeginTokenIn` begins system work that answers a link's token. `AddTenancy` puts
   `TenancyActedByAccessor` around the `IActedByAccessor` registered before it, so an event log says `seat`,
   `operator`, `system` or `token`. An accessor registered as a scoped service is refused there, since the wrapper is a
@@ -1933,7 +1933,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   (`TenancyActorKindJsonConverter`), whatever the serializer's options say about enums.
 - **Tenancy: who changed a row.** `entity.RecordsWhoChanged()` adds six shadow columns to an entity kept to a
   tenant, who wrote the row first and who changed it last, each as a kind, a seat and an operator's identity,
-  and Tenancy's save interceptor fills them from the Tenancy caller. Who wrote a row first is fixed
+  and Tenancy's save interceptor fills them from the Tenancy user. Who wrote a row first is fixed
   once the row is there. On Postgres the contribution writes a trigger on every such table that holds a
   signed-in user to its own seat, keeps scoped system work from writing a seat's kind, and lets neither change
   who wrote the row first. The first save refuses a model that calls it on an entity that is not kept to a
@@ -2027,7 +2027,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   caller at each use, which its tests hold for saves through a pooled context, on SQLite and on Postgres, and on
   a data source of one connection. Its messages for a read across tenants that finds no context to make, and for
   a start-up check on Postgres that finds no context with Tenancy's tables, name `AddScopedFromPool`.
-- `TenancyCallers.BeginNone()`: no Tenancy caller until it is disposed, for a read that is no seat's and no
+- `TenancyUsers.BeginNone()`: no Tenancy user until it is disposed, for a read that is no seat's and no
   tenant's made in the middle of somebody's work, as `user.BeginNone()` is for the toolkit's current user.
 - **Tenancy on Postgres**, in `DDDToolkit.Supporting.Tenancy.Postgres`. Tenancy's rules as row level security, under
   the tenant filter and the save check. `TenancyRowAccessContribution` is written into every application that
@@ -2036,7 +2036,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   tenant's administrator, back every right with a grant, keep the closure to the tree, and keep a seat, a placement and
   a grant to what they are about. The policies know which permissions manage access and which permissions a copy of
   each starter role holds, from functions written from the catalogue. `AddTenancyPostgres()` carries the tenant in the
-  setting `tenancy.caller_tenant`, turns the last administrator its trigger keeps into Tenancy's refusal, and requires
+  setting `tenancy.current_tenant`, turns the last administrator its trigger keeps into Tenancy's refusal, and requires
   an explicit current user. `TenancyPostgresChecks` checks at start-up that the host and the database are set up as the
   policies rely on. Modules ask Tenancy's functions in their rules through `TenancyRowAccess`. See
   [Row level security on Postgres](docs/tenancy/postgres.md).
@@ -2061,7 +2061,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `rewrite_tenant_rights()` writes a tenant's rights again for Tenancy's own system work, after rows were written
     past the trigger.
   - The rule that a tenant keeps an administrator, and the check of a move, ask the database about other seats through
-    `tenant_administrators()` and `permissions_a_move_changes(...)`. They return ids, permissions and dates. The first
+    `tenant_administrators()` and `permissions_a_unit_move_changes(...)`. They return ids, permissions and dates. The first
     returns each administrator whose grant at the root the caller may read. The second returns, to a seat that manages
     units at both parents of the move, the rights of other seats that the move changes.
   - Where the database returns nothing about a move, because it does not see the calling seat, the store fails and the
@@ -2081,7 +2081,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   same rule by the tree. So a move by a seat that holds the permission at the old parent through one grant and at the
   new parent through another goes through, although the save removes the unit's old paths before it changes the unit.
 - `AddTenancyReadFunctions` and the six read functions of Tenancy on Postgres, which `TenancyFunctionNames` names:
-  `caller_permissions`, `tenant_unit_paths`, `tenant_units`, `tenant_roles_with_starter_roles`, `tenant_placements`
+  `current_permissions`, `tenant_unit_paths`, `tenant_units`, `tenant_roles_with_starter_roles`, `tenant_placements`
   and `tenant_seats`. A module's context maps its read model to them in place of the views of `AddTenancyReadModel`, so
   its model names no table of Tenancy's, and `db.Tenancy()` asks in one statement all the same. Where the database keeps
   the rights, as `AddTenancyPostgres()` says it does, `db.Tenancy()` refuses a module's context that maps the views, and
@@ -2231,7 +2231,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     was given.
   - An answer names the resource as it was asked about: `MemberHold<Board>` for a board, and `MemberHold<BoardId>` for
     an id.
-  - `Rules`, `RequireCaller()`, `Reach(permission)` and `ReachSeen()`, the reach of what the caller sees, are the lower
+  - `Rules`, `RequireCurrentUser()`, `Reach(permission)` and `ReachSeen()`, the reach of what the caller sees, are the lower
     level, for a statement of your own (`Within`, `Reached`).
   - `MembershipAccessManager.MostResources` is the most resources one call takes.
   - What a storage returns is `IMembershipStorage<TResource, TResourceId>`, which an application never takes.
@@ -2361,7 +2361,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Membership beside an organization.** A resource's rules say three things apart from each other, each with
   the default a resource of plain users has, and any of the one goes with any of the others. Who a member is:
   what follows from the member id, a claim, or an id the application resolves for the caller,
-  `MemberSource.Resolved(...)`, answered through `ICallerMember<TResourceId, TMemberId>`. Where the roles come
+  `MemberSource.Resolved(...)`, answered through `ICurrentMember<TResourceId, TMemberId>`. Where the roles come
   from: declared in the rules, `Roles.Fixed`, or kept elsewhere, `Roles.External(...)`, where the application
   answers which of them give a permission (`IRolesWithPermission<TResourceId, TRoleId>`) and which there are
   (`IMemberRoles`); what such a role gives a member is still cut to what a role may give, `InRoles` and
@@ -2449,7 +2449,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   and answers the members now of every resource the caller is a member of now, the caller among them, which
   Membership writes as `<name>_fellow_members()` beside the other four functions of a resource; a contract that does
   not declare its `Ids` is DDD00038, since the members' id is no resource's. A read rule on Tenancy's seats asks it:
-  `CallerSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id)`. Such a rule asks a
+  `CurrentSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id)`. Such a rule asks a
   module whose functions ask Tenancy's in turn, and Postgres refuses a policy that asks a function that does not
   exist yet, so the export writes the asking context's file first with a function of its own, of the same name, that
   asks the other one when it runs: made with the check of its body turned off, it breaks the circle, and the rule is
@@ -2462,7 +2462,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **The webshop's order is its customer's, in the access check too.** `Order.PlacedBy` is marked `[Owner]`, and
   `POST /orders/{id}/ship-to` sends an order elsewhere with `ShipElsewhere`, `[OwnOnly]` with `[Own]` on the order's
   id: Ordering's first request with an access requirement, whose endpoint asks the checks itself, with Ordering's
-  `AccessChecks<IOrderingRequest>` and its handle `CallersCustomer` registered by `AddOrderingModule`. Only the
+  `AccessChecks<IOrderingRequest>` and its handle `CurrentCustomer` registered by `AddOrderingModule`. Only the
   customer who placed an order sends it elsewhere, and only while it is placed: `Order.DeliverTo` refuses a confirmed
   or cancelled one with `ordering.no-longer-placed`. A guest's order is nobody's, so it is 403 for everybody; on
   Supabase another customer's is 404, since the policy keeps it from the caller the owner is read as.
@@ -2497,8 +2497,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the sync out with the other hosted services that ask the database something.
 - **The Tenancy sample names Tenancy's ids only where nothing else can.** The host seeds inside
   `access.BeginSystem()` and `access.BeginSystemIn(tenant, seat)`, on its `TenancyAccessManager`. Its gates read the
-  caller from `TenancyCallers.Ambient`, as an `ITenancyCaller`. Its tenant header asks `ITenantSelection`, and begins
-  nobody with `TenancyCallers.BeginNone()` where the lookup fails, so it names no id. The Tenants module registers its
+  caller from `TenancyUsers.Ambient`, as an `ITenancyUser`. Its tenant header asks `ITenantSelection`, and begins
+  nobody with `TenancyUsers.BeginNone()` where the lookup fails, so it names no id. The Tenants module registers its
   domain events and its access history with `AddTenancyDomainEvents()`, `AddTenancyInvitationEvents<InvitationId>()`
   and `AddTenancyEventLog()`, and the tests begin their system work on the access manager. Projects and Inspections,
   which see the ids alone, name them once each, with `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId,
@@ -3056,7 +3056,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Docs: Tenancy's API reference follows the managers.** [Tenancy API: managers](docs/tenancy/reference/managers.md)
   is the page that was `use-cases.md`, with `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager`,
   `InvitationManager`, the stores and the registration. [Tenancy API: access manager and
-  callers](docs/tenancy/reference/callers.md) opens with `TenancyAccessManager`, and [Tenancy API: queries and row
+  users](docs/tenancy/reference/access.md) opens with `TenancyAccessManager`, and [Tenancy API: queries and row
   access](docs/tenancy/reference/queries.md) with `db.Tenancy()`. Membership's [managers and
   access](docs/membership/reference/managers.md) is the page that was its `use-cases.md`, with the member manager, the
   role manager, who may be a member, and the access manager.
@@ -3189,17 +3189,68 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       and `MembershipRules.IsOwnWork` take a `CurrentUserSnapshot`. `MemberAccessCheck` takes an `ICurrentUser`.
     - The texts of exceptions and log lines say user where they said caller, such as "The current user changed from
       ... while a transaction was open on this connection".
+    - The user's own: `ICallersOwn<TValue>`: `IOwnedByCurrentUser<TValue>`. `[assembly: CallersOwn(...)]` and
+      `CallersOwnAttribute`: `[assembly: OwnedByCurrentUser(...)]` and `OwnedByCurrentUserAttribute`.
+      `services.AddCallersOwn<TValue, TCallersOwn>()`: `services.AddOwnedByCurrentUser<TValue, THandle>()`.
+    - Row level security: `PostgresCallerFunctions`: `PostgresCurrentUserFunctions`. `ICallerFunctions`, its
+      `CallerAs` and its `PlacesWhereCallerHolds`: `ICurrentUserFunctions`, `CurrentUserAs` and
+      `PlacesWhereCurrentUserHolds`. `RowAccessExport.CallerFunctions`, `SupabaseMigrationOptions.CallerFunctions` and
+      `SupabaseRowLevelSecurity.CallerFunctions`: `CurrentUserFunctions`. The parameter `callerFunctions` of
+      `PostgresRowAccess.Script` and `CreateStatements`: `currentUserFunctions`. The project property
+      `SupabaseCallerFunctions`: `SupabaseCurrentUserFunctions`.
+    - `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync` and `LoginRoleMaySwitchToCallersCheck`:
+      `EnsureLoginRoleMaySwitchToUserRolesAsync` and `LoginRoleMaySwitchToUserRolesCheck`. The start-up check
+      `postgres.login-role-may-switch-to-callers`: `postgres.login-role-may-switch-to-user-roles`.
+    - The toolkit's SQL: `ddd.caller_id()`, `ddd.caller_role()` and `ddd.caller_claims()`: `ddd.current_user_id()`,
+      `ddd.current_user_role()` and `ddd.current_user_claims()`. The procedure `ddd.use_caller(...)`:
+      `ddd.use_current_user(...)`. The setting `ddd.caller_mark`: `ddd.current_user_mark`. The places
+      `{caller:uid}`, `{caller:signedin}`, `{caller:role}`, `{caller:claims}` and `{caller:claim:path}` in the SQL of a
+      contribution: `{user:uid}`, `{user:signedin}`, `{user:role}`, `{user:claims}` and `{user:claim:path}`.
+    - Tenancy's user: `TenancyCaller<TTenantId, TSeatId>`, `ITenancyCaller`, `TenancyCallerKind` and `TenancyCallers`:
+      `TenancyUser<TTenantId, TSeatId>`, `ITenancyUser`, `TenancyUserKind` and `TenancyUsers`.
+      `SeatOfCaller<TTenantId, TSeatId>`: `SeatOfUser<TTenantId, TSeatId>`. The name of the query filter,
+      `tenancy.caller-tenant`: `tenancy.current-tenant`.
+    - Tenancy's row access: `TenancyRowAccess.CallerSeat<TSeat>()`, `CallerSeatId<TSeatId>()` and
+      `CallerTenant<TTenantId>()`: `CurrentSeat<TSeat>()`, `CurrentSeatId<TSeatId>()` and `CurrentTenant<TTenantId>()`.
+      `TenancyFunctions.CallerSeat`: `TenancyFunctions.CurrentSeat`. `TenancyFunctionNames.CallerPermissions` and
+      `PermissionsAMoveChanges`: `CurrentPermissions` and `PermissionsAUnitMoveChanges`. `MoveReach.OfCaller`:
+      `OfCurrentSeat`. The descriptor of DDD00101, `CallerSeatOfAnotherType`: `CurrentSeatOfAnotherType`.
+    - Tenancy's SQL: `tenancy.caller_seat()`, `caller_seat_row()`, `caller_tenant()` and `caller_permissions()`:
+      `tenancy.current_seat()`, `current_seat_row()`, `current_tenant()` and `current_permissions()`. The setting
+      `tenancy.caller_tenant`, `TenancyRowLevelSecurity.TenantSetting`: `tenancy.current_tenant`.
+      `permissions_a_move_changes(...)`, which answered `"OfCaller"`: `permissions_a_unit_move_changes(...)`, which
+      answers `"OfCurrentSeat"`. The export refuses a function whose answer changed under the same name, so the
+      function has a new one. The trigger `tenancy_attribution_matches_caller` and its function
+      `attribution_matches_caller()` in the module's schema: `tenancy_attribution_matches_current_user` and
+      `attribution_matches_current_user()`.
+    - Membership: `ICallerMember<TResourceId, TMemberId>`: `ICurrentMember<TResourceId, TMemberId>`.
+      `MemberSource.CallerId` and `MemberSourceKind.CallerId`: `MemberSource.CurrentUserId` and
+      `MemberSourceKind.CurrentUserId`. `RequireCaller()` of `MembershipAccessManager` and of `IMembershipStorage`:
+      `RequireCurrentUser()`. Membership's SQL is written in form 9, so a database that holds form 8 is found by the
+      start-up check until the new access file is applied.
+    - The page of Tenancy's API reference `docs/tenancy/reference/callers.md`: `docs/tenancy/reference/access.md`.
   - **Breaking, for a host with an accessor of its own.** A user that code began always wins over the host's answer.
     An accessor of the host's own used to decide that itself, and one that did not ask `Callers.Ambient` answered the
     request's user inside `Callers.Begin(...)` as well. The toolkit's own accessors already let a begun user win.
-  - The database keeps its names: `ddd.caller_id()`, `caller_role()` and `caller_claims()`, the `{caller:...}` tokens
-    in the SQL of a contribution, and `PostgresCallerFunctions`. So do the caller's own (`ICallersOwn`,
-    `[CallersOwn]`, `AddCallersOwn`), Tenancy's caller (`TenancyCaller`, `TenancyCallers`,
-    `TenancyRowAccess.CallerSeat`) and Membership's `ICallerMember`.
+  - The samples follow. The Webshop's `CallersCustomer` is `CurrentCustomer`. Each sample has the access files the
+    export writes with the new names, and after them a migration written by hand that drops what the earlier files
+    made under the old names: `*_current_user_names.sql` in `Examples/Tenancy/supabase/migrations` and in
+    `Examples/ModularMonolith.Supabase/supabase/migrations`.
   - **Upgrading.** Rebuild, and rename as the list says. A handler that took `ICallerAccessor callers` takes
     `ICurrentUser user` and reads `user.Id` where it read `callers.Current.UserId`. A rule changes its second parameter
     and its members. A host that turned off `tenancy.explicit-callers` by name turns off
-    `tenancy.explicit-current-user`.
+    `tenancy.explicit-current-user`, and one that turned off `postgres.login-role-may-switch-to-callers` turns off
+    `postgres.login-role-may-switch-to-user-roles`. A project that sets `SupabaseCallerFunctions` sets
+    `SupabaseCurrentUserFunctions`. A contribution's SQL writes `{user:...}` where it wrote `{caller:...}`.
+  - **Upgrading the database.** Let the export write the new access files. They make the new functions, and no
+    policy asks an old one after them. A database made by the earlier files still holds the old ones:
+    `ddd.use_caller(text, text, text[], text[])`; Tenancy's `caller_seat()`, `caller_seat_row()`, `caller_tenant()` and
+    `caller_permissions()` where a policy of a module whose file came later used them; and on each table that
+    records who changed it, the trigger `tenancy_attribution_matches_caller`, whose function asks `caller_seat()`.
+    Drop them in a migration of your own after the new access files, as the samples' `*_current_user_names.sql` do.
+    On a Postgres of your own, `PostgresRowAccess.SetupScript()` makes `ddd.current_user_id()`,
+    `ddd.current_user_role()`, `ddd.current_user_claims()` and `ddd.use_current_user(...)`. Drop
+    `ddd.caller_id()`, `ddd.caller_role()`, `ddd.caller_claims()` and `ddd.use_caller(...)` after it runs.
 - **For the 3.2.0 previews: Tenancy and Membership as 3.2.0 ships them.** After 3.2.0-preview.5 the API of the two
   supporting domains was regrouped. Tenancy has a manager per aggregate and an access manager, Membership has an
   access manager, a member manager and a role manager per kind of resource, an operator's command says `[Operator]`, the markers for domain classes are in
@@ -3218,7 +3269,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
         and its `RolePermissions(permissions)` is `RolesWithPermission(permissions)`.
       - `TenancyUseCases.BeginSystem()`, `BeginSystemIn(...)` and `BeginTokenIn(...)`: `access.BeginSystem()`,
         `access.BeginSystemIn(...)` and `access.BeginTokenIn(...)`. `TenancyUseCases.CurrentCaller()`:
-        `access.CurrentTenant` and `access.CurrentUser`, or `TenancyCallers.Ambient` where the ids are not known.
+        `access.CurrentTenant` and `access.CurrentUser`, or `TenancyUsers.Ambient` where the ids are not known.
       - `TenancySystemReads.TenantsToSweepAsync<TTenant, TTenantId>(context, scope, ...)`:
         `access.TenantsToSweepAsync(scope, ...)`, which reads over Tenancy's own context.
       - `AddTenancy` and `AddTenancyAccess` take the access manager to register as a type parameter. The generated
@@ -3476,7 +3527,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   placements reads them to keep a placement that has any. `tenant_administrators()`,
   `seats_holding_permission_at(permission, unit)` and `db.Tenancy().SeatsHoldingPermissionAt` return a right only where
   the caller may read the grant that gives it, from the same definition as the policy: a seat that manages one part of
-  the tree no longer learns who holds a permission from above it. `permissions_a_move_changes(parent, new_parent)`,
+  the tree no longer learns who holds a permission from above it. `permissions_a_unit_move_changes(parent, new_parent)`,
   which the check of a move needs wherever a right is held, answers another seat's right only where it reaches one
   parent and not the other, which is a right the move changes; one above both parents it no longer answers, and the
   store does the same on every database. Every manager works as before for every caller its request admits, since each
@@ -3513,7 +3564,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     role a filter of your own on the role class hides, whose name a grant summary gave as empty), and whether a
     grant applies with `grant.AppliesAt(overview.AsOf)`.
   - `TenantSelection.SeatsOfAsync(caller)` and `ISeatDirectory.AllOfAsync(identity)` take the seat class,
-    `SeatsOfAsync<Seat>(caller, ct)`, and answer `SeatInTenant<Seat>`. `SeatOfCaller` stays what `FindAsync`
+    `SeatsOfAsync<Seat>(caller, ct)`, and answer `SeatInTenant<Seat>`. `SeatOfUser` stays what `FindAsync`
     answers, for selecting the caller's seat. A seat directory of your own implements `AllOfAsync<TSeat>`, and a
     store of your own `ITenancyStore.ReadOrganizationAsync`.
   - Never let a route or a GraphQL type write every field of the seat class: it carries the identity. List the
@@ -3719,8 +3770,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Every schema the toolkit writes is in double quotes, so a module's schema may be any name Entity Framework
   takes.** `HasDefaultSchema("Tenancy")`, `"Help_Desk"` and `"order"` work as `HasDefaultSchema("tenancy")` does. A
   script, and so every Supabase access file, the setup script and the statement the interceptor sends name every
-  schema in double quotes, a lower-case one and the toolkit's own `ddd` included: `"tenancy".caller_seat()`,
-  `"desk"."Tickets"`, `GRANT USAGE ON SCHEMA "ddd"`, `CALL "ddd".use_caller(...)`. One helper writes them, and nothing
+  schema in double quotes, a lower-case one and the toolkit's own `ddd` included: `"tenancy".current_seat()`,
+  `"desk"."Tickets"`, `GRANT USAGE ON SCHEMA "ddd"`, `CALL "ddd".use_current_user(...)`. One helper writes them, and nothing
   decides any more whether a name needs the quotes. Two members are new: `RowAccessModel.Schema(model)`, the schema a
   contribution's statements make a function of their own in, a trigger's say, and `RowAccessModel.Schema(name)`, for
   any other schema. The quotes hold for the access functions named relative to their module, the functions a
@@ -3728,13 +3779,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   rule's `{fn:owner/name}` becomes and what `PostgresRowAccess.FunctionNamesOf` answers, the policies, grants and
   comments, the `ENABLE ROW LEVEL SECURITY` line the Supabase export adds to a migration's file for a new table of a
   schema the Data API serves, `ALTER TABLE "desk"."Tickets" ENABLE ROW LEVEL SECURITY;`, and
-  `PostgresCallerFunctions.Toolkit`, which asks `"ddd".caller_id()` and its two siblings. Where a script finds what an
+  `PostgresCurrentUserFunctions.Toolkit`, which asks `"ddd".current_user_id()` and its two siblings. Where a script finds what an
   earlier one made, to drop it, keep it or take back its grants, it compares the schema and the name the catalog
   keeps, as strings, capitals and all, and two names are one function where Postgres keeps them as one; a script
   writes its functions in the order it always did. The start-up checks name a schema the same way,
   `"tenancy".key_is_live`, `REVOKE CREATE ON SCHEMA "ddd" FROM PUBLIC;`, so a fix they name runs as it is written. A
   table, a column and a function keep their own names, and what the toolkit does not name is written as it was given:
-  an access function named `schema.name`, `Sql.Call`, caller functions of your own, a hand-given
+  an access function named `schema.name`, `Sql.Call`, current user functions of your own, a hand-given
   `RowAccessExport.FunctionNames`, Supabase's `auth.uid()` and pgmq's functions; the rest of a migration's file is
   Entity Framework's SQL and names a schema as Entity Framework does. A migration file exported before this change
   whose new table names a schema now compares as `Changed`, so delete it and export it again (no sample has one). Up
@@ -3747,9 +3798,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   serves goes into `[api] schemas` as the model spells it, without quotes. See
   [Schema names](docs/row-level-security.md#schema-names) and
   [A schema of any name](docs/supabase.md#schema-names-with-capitals-or-sql-keywords).
-  - From `3.2.0-preview.3`: what the toolkit writes says `"tenancy".caller_seat()` where it said
+  - From `3.2.0-preview.3`: what the toolkit writes says `"tenancy".current_seat()` where it said
     `tenancy.caller_seat()`, `GRANT USAGE ON SCHEMA "ddd"` where it said `GRANT USAGE ON SCHEMA ddd`, and
-    `CALL "ddd".use_caller(...)` where it said `CALL ddd.use_caller(...)`. Postgres reads a lower-case schema the
+    `CALL "ddd".use_current_user(...)` where it said `CALL ddd.use_caller(...)`. Postgres reads a lower-case schema the
     same either way, so no caller gains or loses a row: commit the new access files (`Check` fails in CI until they
     are there) and apply them with `supabase db push`. A test of your own that compares the toolkit's text, a
     script, a start-up check's message or the interceptor's statement, compares the quoted form.
@@ -3795,7 +3846,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     as they are. A host that logs in as a role of its own made by hand grants that role `ddd_system_in` in a
     migration of its own (`grant ddd_system_in to <login role>;`), or names it with `SupabaseLoginRole`, whose
     migration does: every access file now makes the scoped system role, and
-    `EnsureLoginRoleMaySwitchToCallersAsync` asks about it wherever it exists.
+    `EnsureLoginRoleMaySwitchToUserRolesAsync` asks about it wherever it exists.
   - While the access files write the privileges, `Roles.System` set to one of Postgres's or Supabase's own
     roles, `service_role` for one, fails an export by hand before anything is written: every file makes the
     bookkeeping role and holds it to the policies, so such a role would fail every file where it was applied. The
@@ -3877,7 +3928,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   whole process, so a connection one context opened carries its caller into another context with another
   instance of the interceptor, and it is forgotten when the connection closes, whoever closes it. See
   [A connection you pass in](docs/row-level-security.md#a-connection-you-pass-in).
-- Every script of policies and every exported access file makes `ddd.use_caller` in its prelude, so the next
+- Every script of policies and every exported access file makes `ddd.use_current_user` in its prelude, so the next
   build of an application that exports its migrations writes a new access file for every module that has one. The setup script
   gives the login role `USAGE` on the `ddd` schema, which the procedure needs.
 - The refusals of `No Reset On Close` and of Supabase's transaction pooler name the `Transaction` scope as a way
@@ -3994,8 +4045,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   migrations run as different roles, run this version's `SetupScript()` first, as the role that ran it
   before, so a script whose policies are for `ddd_system_in` finds the role made and granted.
 - `PostgresRowAccess.Script` and `CreateStatements` have overloads that take a `RowAccessExport`, so a call
-  that passes `null` for the caller functions by position, `Script(context, rules, functions, null)`, is
-  ambiguous now and no longer compiles. Pass it by name, `callerFunctions: null`, or leave it out.
+  that passes `null` for the current user functions by position, `Script(context, rules, functions, null)`, is
+  ambiguous now and no longer compiles. Pass it by name, `currentUserFunctions: null`, or leave it out.
 - `CurrentUserKind`, which was `CallerKind`, has a fourth value, `SystemIn`. A `switch` of your own over it that has no
   default arm
   misses a case, and the interceptor refuses a kind it has no role for rather than running it as the
@@ -4125,7 +4176,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       `rules.ReachFromAbove`; and `HasMembers(..., at: row => row.UnitId)`: `[At]` on `UnitId`.
     - `members: MemberSource.Resolved("tenancy/caller_seat")`: left out, since who a member is follows from the
       seat id (`MemberSource.Inferred`); `MemberSource.Resolved("depot/caller_porter")`:
-      `MemberSource.Resolved(DepotFunctions.CallerPorter)`, a `DatabaseFunction`.
+      `MemberSource.Resolved(DepotFunctions.CurrentPorter)`, a `DatabaseFunction`.
     - `changeMembersKey:` and `changeOwnerKey:`: `[On<Document>(ManagesMembers = true)]` and `NamesOwner = true`;
       `rules.ChangeMembersKey` and `rules.ChangeOwnerKey`: `rules.ManagesMembersPermission` and
       `rules.NamesOwnerPermission`.
@@ -4194,7 +4245,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       `membership.permission-not-for-members` and the like.
     - The diagnostics say permission where they said key, and `[RequiresPermission]` where they said
       `[RequiresKey]`; nothing else about them changed.
-    - Tenancy's functions: `caller_rights`: `caller_permissions`; `holds_key` and `holds_key_in_tenant`:
+    - Tenancy's functions: `caller_rights`: `current_permissions`; `holds_key` and `holds_key_in_tenant`:
       `holds_permission` and `holds_permission_in_tenant`; `holds_tenant_wide`: `holds_at_tenant`;
       `units_where_i_hold` and `units_where_i_hold_in_tenant`: `units_where_i_hold_permission` and
       `units_where_i_hold_permission_in_tenant`; `roles_with_key` and `roles_with_key_in_tenant`:
@@ -4202,7 +4253,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       `manages_access` and `pack_keys`: `permission_is_live`, `permission_is_contained`,
       `permission_manages_access` and `pack_permissions`; `role_keys_in_use`: `role_permissions_in_use`;
       `seats_holding_at`: `seats_holding_permission_at`; `tenant_roles`: `tenant_roles_with_permissions`;
-      `rights_a_move_changes`: `permissions_a_move_changes`. The columns they answer, `"Key"` and `"Keys"`, are
+      `rights_a_move_changes`: `permissions_a_unit_move_changes`. The columns they answer, `"Key"` and `"Keys"`, are
       `"Permission"` and `"Permissions"`. The export refuses a function whose arguments or answer changed under
       the same name, so each of these has a new one; the access file drops the old ones.
     - Tenancy's columns: `SeatRights."Key"`, with its index `IX_SeatRights_SeatId_Key`: `"Permission"` and
@@ -4224,11 +4275,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     on Tenancy's event log and outbox. On Postgres, let the export write the new access file after it. See
     [Upgrading from key to permission](docs/tenancy/design.md#upgrading-from-key-to-permission).
 
-- **Tenancy: `CallerSeat<TSeatId>()` is `CallerSeatId<TSeatId>()`, and a unit asked for by id is named alone.**
+- **Tenancy: `CallerSeat<TSeatId>()` is `CurrentSeatId<TSeatId>()`, and a unit asked for by id is named alone.**
   New in 3.2.0-preview.5, with the restrictive rules above. Nobody uses the packages yet, so the old names are
   gone with no alias.
   - From 3.2.0-preview.4, was, now:
-    - `TenancyRowAccess.CallerSeat<SeatId>()`, the calling seat's id: `CallerSeatId<SeatId>()`. `CallerSeat<Seat>()`
+    - `TenancyRowAccess.CallerSeat<SeatId>()`, the calling seat's id: `CurrentSeatId<SeatId>()`. `CurrentSeat<Seat>()`
       is now the calling seat's row, over the application's seat class.
     - `TenancyDirectory.UnitsByIdAsync(ids, ct)` answered the application's units, whole, as `UnitInTree`: it answers
       `NamedUnit<TUnitId>`, a unit's `Id`, `Name`, `Path` and `Depth`, and nothing more, also to a seat a restrictive
@@ -4245,7 +4296,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     mutations of the tree answer, and its fields are no longer nullable. A mutation of the tree answers the unit its
     command answers (see The Tenancy sample's commands answer the aggregate, above).
   - **Upgrading.** Rebuild, and on Postgres let the export write the new access files: Tenancy's has
-    `caller_seat_row()`, `units_named()` and `identity_tenant_names()`, and each resource with members
+    `current_seat_row()`, `units_named()` and `identity_tenant_names()`, and each resource with members
     `<name>_fellow_members()`. No table changes; the next migration you add names Tenancy's new rows, `NamedUnit` and
     the tenant names the picker reads, in its snapshot.
 

@@ -27,13 +27,13 @@ public sealed class UseDDDToolkitPostgresTests(SupabaseRowLevelSecurityDatabase 
 
         var registered = new ServiceCollection();
         registered.AddDDDToolkitEntityFramework();
-        registered.AddSupabaseRowLevelSecurity<CallerOfTheTest>();
+        registered.AddSupabaseRowLevelSecurity<UserOfTheTest>();
         registered.AddDbContext<NotesContext>((provider, options) => options.UseNpgsql(database.ApplicationConnectionString).UseDDDToolkit(provider));
         registered.AddDbContext<GuardedNotesContext>((provider, options) => options.UseNpgsql(database.ApplicationConnectionString).UseDDDToolkitCore(provider));
         registered.AddSingleton(new NotesConnection(database.ApplicationConnectionString));
         registered.AddDbContext<SelfConfiguredNotesContext>((provider, options) => options.UseDDDToolkit(provider));
         await using var services = registered.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        var callers = (CallerOfTheTest)services.GetRequiredService<ICurrentUserSource>();
+        var callers = (UserOfTheTest)services.GetRequiredService<ICurrentUserSource>();
 
         callers.Current = CurrentUserSnapshot.Anonymous;
         await using (var scope = services.CreateAsyncScope())

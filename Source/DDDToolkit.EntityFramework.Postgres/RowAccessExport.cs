@@ -13,19 +13,19 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </summary>
 public sealed class RowAccessExport
 {
-    private readonly PostgresCallerFunctions _callerFunctions = PostgresCallerFunctions.Toolkit;
+    private readonly PostgresCurrentUserFunctions _currentUserFunctions = PostgresCurrentUserFunctions.Toolkit;
 
     private readonly RowAccessRoleNames _roles = RowAccessRoleNames.Default;
 
     /// <summary>
     /// How a policy asks about the caller, which is what a rule's <c>user.Id</c>, <c>user.Role</c> and
-    /// <c>user.FindClaim(...)</c> become. <see cref="PostgresCallerFunctions.Toolkit"/> by default.
+    /// <c>user.FindClaim(...)</c> become. <see cref="PostgresCurrentUserFunctions.Toolkit"/> by default.
     /// </summary>
     /// <exception cref="ArgumentNullException">Set to null.</exception>
-    public PostgresCallerFunctions CallerFunctions
+    public PostgresCurrentUserFunctions CurrentUserFunctions
     {
-        get => _callerFunctions;
-        init => _callerFunctions = value ?? throw new ArgumentNullException(nameof(value));
+        get => _currentUserFunctions;
+        init => _currentUserFunctions = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     /// <summary>
@@ -95,7 +95,7 @@ public sealed class RowAccessExport
             ? this
             : new RowAccessExport
             {
-                CallerFunctions = CallerFunctions,
+                CurrentUserFunctions = CurrentUserFunctions,
                 Roles = Roles,
                 FunctionNames = FunctionNames,
                 Contributions = Contributions,

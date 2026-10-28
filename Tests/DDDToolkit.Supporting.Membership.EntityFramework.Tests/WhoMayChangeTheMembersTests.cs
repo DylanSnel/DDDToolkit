@@ -26,7 +26,7 @@ public sealed class WhoMayChangeTheMembersTests
         var until = data.Now.AddDays(2);
 
         // Ada owns the minutes, and an owner holds every permission of a document.
-        await filing.Services.SendAsync(TestCallers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal, DocumentMembership.Onlooker, until));
+        await filing.Services.SendAsync(TestUsers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal, DocumentMembership.Onlooker, until));
 
         var shared = (await filing.Services.ReadAsync(data.Minutes)).Shares.Single(share => share.MemberId == data.Hal);
         (shared.StartsAt, shared.EndsAt, shared.AddedBy).Should().Be((data.Now, until, data.Ada));
@@ -35,7 +35,7 @@ public sealed class WhoMayChangeTheMembersTests
 
         // Ian is no owner. He holds the manager's role, which gives the permission, and that is all the request asks.
         var newcomer = UserId.CreateSequential();
-        await filing.Services.SendAsync(TestCallers.User(data.Ian), new ShareDocument(data.Minutes, newcomer));
+        await filing.Services.SendAsync(TestUsers.User(data.Ian), new ShareDocument(data.Minutes, newcomer));
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Single(share => share.MemberId == newcomer).AddedBy.Should().Be(data.Ian);
     }
 
@@ -48,14 +48,14 @@ public sealed class WhoMayChangeTheMembersTests
 
         // Ben contributes: he sees the minutes and does not hold the permission. To Hal the minutes are not there.
         (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted,
-            () => filing.Services.SendAsync(TestCallers.User(data.Ben), new ShareDocument(data.Minutes, data.Hal, DocumentMembership.Onlooker))))
+            () => filing.Services.SendAsync(TestUsers.User(data.Ben), new ShareDocument(data.Minutes, data.Hal, DocumentMembership.Onlooker))))
             .Arguments.Should().Contain("Permission", DocumentPermissions.Share);
         await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound,
-            () => filing.Services.SendAsync(TestCallers.User(data.Hal), new ShareDocument(data.Minutes, data.Hal, DocumentMembership.Onlooker)));
+            () => filing.Services.SendAsync(TestUsers.User(data.Hal), new ShareDocument(data.Minutes, data.Hal, DocumentMembership.Onlooker)));
 
         // What makes a share well formed is still asked, of whoever may share: a role there is for a document.
         await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.RoleNotForMembers,
-            () => filing.Services.SendAsync(TestCallers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal, FolderMembership.Clerk)));
+            () => filing.Services.SendAsync(TestUsers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal, FolderMembership.Clerk)));
 
         var after = await filing.Services.ReadAsync(data.Minutes);
         after.Version.Should().Be(before);
@@ -70,10 +70,10 @@ public sealed class WhoMayChangeTheMembersTests
 
         // Dee holds the permission that shares for two more hours, through the manager's role.
         await filing.Services.ChangeAsync(data.Minutes, document => document.GiveRole(data.Dee, DocumentMembership.Manager, MemberPeriod.Between(data.Now, data.Now.AddHours(2)), data.Now, by: data.Ada));
-        (await filing.DocumentsAsync(TestCallers.User(data.Dee), access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, TestContext.Current.CancellationToken)))!.Until.Should().Be(data.Now.AddHours(2));
+        (await filing.DocumentsAsync(TestUsers.User(data.Dee), access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, TestContext.Current.CancellationToken)))!.Until.Should().Be(data.Now.AddHours(2));
 
         // She shares with no end, in the very role she holds for two hours. The folders' rule is the folders'.
-        await filing.Services.SendAsync(TestCallers.User(data.Dee), new ShareDocument(data.Minutes, data.Hal, DocumentMembership.Manager));
+        await filing.Services.SendAsync(TestUsers.User(data.Dee), new ShareDocument(data.Minutes, data.Hal, DocumentMembership.Manager));
 
         var shared = (await filing.Services.ReadAsync(data.Minutes)).Shares.Single(share => share.MemberId == data.Hal);
         (shared.EndsAt, shared.AddedBy).Should().Be(((DateTimeOffset?)null, (UserId?)data.Dee));
@@ -87,11 +87,11 @@ public sealed class WhoMayChangeTheMembersTests
         var data = filing.Scenario;
         var read = (await filing.Services.ReadAsync(data.Minutes)).Version;
 
-        await filing.Services.SendAsync(TestCallers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal, ExpectedVersion: read));
+        await filing.Services.SendAsync(TestUsers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal, ExpectedVersion: read));
         (await filing.Services.ReadAsync(data.Minutes)).Version.Should().Be(read + 1);
 
         // The same version again: somebody changed the members since, and that somebody was this caller.
-        var lost = await FluentActions.Awaiting(() => filing.Services.SendAsync(TestCallers.User(data.Ada), new ShareDocument(data.Minutes, UserId.CreateSequential(), ExpectedVersion: read)))
+        var lost = await FluentActions.Awaiting(() => filing.Services.SendAsync(TestUsers.User(data.Ada), new ShareDocument(data.Minutes, UserId.CreateSequential(), ExpectedVersion: read)))
             .Should().ThrowAsync<ConcurrencyConflictException>();
         (lost.Which.AggregateType, lost.Which.AggregateId).Should().Be((typeof(Document), data.Minutes));
     }
@@ -112,7 +112,7 @@ public sealed class WhoMayChangeTheMembersTests
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
         var mine = await DeputyAsync(filing);
-        var deputy = TestCallers.Staff(data.Visitor);
+        var deputy = TestUsers.Staff(data.Visitor);
         var before = (await filing.Services.ReadAsync(data.Cabinet)).Version;
 
         // For longer than the deputy's own three days, and with no end at all: refused by the host's own rule,
@@ -146,7 +146,7 @@ public sealed class WhoMayChangeTheMembersTests
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
 
-        await filing.Services.SendAsync(TestCallers.Staff(data.Keeper), new AdmitStaff(data.Cabinet, new StaffCode("N-300"), FolderMembership.Clerk));
+        await filing.Services.SendAsync(TestUsers.Staff(data.Keeper), new AdmitStaff(data.Cabinet, new StaffCode("N-300"), FolderMembership.Clerk));
         await filing.Services.SendAsync(CurrentUserSnapshot.System, new AdmitStaff(data.Cabinet, new StaffCode("N-400"), FolderMembership.Visitor, data.Now.AddYears(5)));
 
         var cabinet = await filing.Services.ReadAsync(data.Cabinet);
@@ -166,15 +166,15 @@ public sealed class WhoMayChangeTheMembersTests
         // The clerk is on the cabinet without the permission that decides its staff: refused by the check, under the package's
         // rule and the folder's code, whatever period is asked for. Somebody who is on no folder does not see it.
         (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted,
-            () => filing.Services.SendAsync(TestCallers.Staff(data.Clerk), new AdmitStaff(data.Cabinet, new StaffCode("N-500"), FolderMembership.Visitor, data.Now.AddHours(1)))))
+            () => filing.Services.SendAsync(TestUsers.Staff(data.Clerk), new AdmitStaff(data.Cabinet, new StaffCode("N-500"), FolderMembership.Visitor, data.Now.AddHours(1)))))
             .Arguments.Should().Contain("Permission", FolderPermissions.Staff);
         await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotFound,
-            () => filing.Services.SendAsync(TestCallers.Staff(data.Nobody), new AdmitStaff(data.Cabinet, new StaffCode("N-500"), FolderMembership.Visitor, data.Now.AddHours(1))));
+            () => filing.Services.SendAsync(TestUsers.Staff(data.Nobody), new AdmitStaff(data.Cabinet, new StaffCode("N-500"), FolderMembership.Visitor, data.Now.AddHours(1))));
 
         // Once the deputy's three days are over the permission is no longer theirs, and neither is the question of how long.
         filing.Clock.Advance(TimeSpan.FromDays(3));
         await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted,
-            () => filing.Services.SendAsync(TestCallers.Staff(data.Visitor), new AdmitStaff(data.Cabinet, new StaffCode("N-500"), FolderMembership.Visitor, mine)));
+            () => filing.Services.SendAsync(TestUsers.Staff(data.Visitor), new AdmitStaff(data.Cabinet, new StaffCode("N-500"), FolderMembership.Visitor, mine)));
 
         (await filing.Services.ReadAsync(data.Cabinet)).Staff.Should().NotContain(member => member.MemberId == new StaffCode("N-500"));
     }
@@ -184,7 +184,7 @@ public sealed class WhoMayChangeTheMembersTests
     {
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
-        var keeper = TestCallers.Staff(data.Keeper);
+        var keeper = TestUsers.Staff(data.Keeper);
 
         // A role that is none of a folder's, and somebody who is on the folder already.
         await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.RoleNotForMembers,
@@ -196,10 +196,10 @@ public sealed class WhoMayChangeTheMembersTests
         // In that order. Asked for longer than the deputy holds the permission, in a role that is none of a folder's:
         // the host's rule answers. Within the hold, in that role, for somebody already on the folder: the role does.
         var mine = await DeputyAsync(filing);
-        (await FluentActions.Awaiting(() => filing.Services.SendAsync(TestCallers.Staff(data.Visitor), new AdmitStaff(data.Cabinet, data.Clerk, DocumentMembership.Contributor, mine.AddDays(1))))
+        (await FluentActions.Awaiting(() => filing.Services.SendAsync(TestUsers.Staff(data.Visitor), new AdmitStaff(data.Cabinet, data.Clerk, DocumentMembership.Contributor, mine.AddDays(1))))
             .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(FolderRefusals.LongerThanHeld);
         await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.RoleNotForMembers,
-            () => filing.Services.SendAsync(TestCallers.Staff(data.Visitor), new AdmitStaff(data.Cabinet, data.Clerk, DocumentMembership.Contributor, mine)));
+            () => filing.Services.SendAsync(TestUsers.Staff(data.Visitor), new AdmitStaff(data.Cabinet, data.Clerk, DocumentMembership.Contributor, mine)));
 
         // The folder's own guard still stands in front of its member list.
         await filing.Services.ChangeAsync(data.Cabinet, folder => folder.Lock());

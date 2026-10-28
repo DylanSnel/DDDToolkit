@@ -289,7 +289,7 @@ public class TenantManager<
     /// Only an operator asks: a signed-in user whose token carries one of
     /// <see cref="TenancyOptions{TTenantId, TSeatId, TUnitId, TRoleId}.OperatorTokenRoles"/>. An operator holds no
     /// seat and acts in no tenant, so this is the one read that asks the toolkit's current user rather than the
-    /// Tenancy caller. It reads as that caller, never as the system: on a database that keeps tenants apart by
+    /// Tenancy user. It reads as that caller, never as the system: on a database that keeps tenants apart by
     /// itself, such as Postgres with row level security, the operator's own database role and its policies decide
     /// what it reads, and a host that mapped no such role reads nothing.
     /// </para>

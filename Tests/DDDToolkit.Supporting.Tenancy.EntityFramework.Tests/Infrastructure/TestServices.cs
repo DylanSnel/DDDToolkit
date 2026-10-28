@@ -182,17 +182,17 @@ public sealed class TestServices : IDisposable
         => BySystemIn(tenant.Tenant, services => services.Seats().GrantAsync(seat, tenant.RolesByStarterRole[starterRole], unit, until, reason: null, CancellationToken.None, from));
 
     /// <summary>Runs <paramref name="act"/> as <paramref name="caller"/>, in a scope of its own.</summary>
-    public async Task<T> RunAsync<T>(ITenancyCaller caller, Func<IServiceProvider, Task<T>> act)
+    public async Task<T> RunAsync<T>(ITenancyUser caller, Func<IServiceProvider, Task<T>> act)
     {
         await using var scope = Scope();
-        using (TenancyCallers.Begin(caller))
+        using (TenancyUsers.Begin(caller))
         {
             return await act(scope.ServiceProvider);
         }
     }
 
     /// <summary>Runs <paramref name="act"/> as <paramref name="caller"/>, in a scope of its own.</summary>
-    public Task RunAsync(ITenancyCaller caller, Func<IServiceProvider, Task> act)
+    public Task RunAsync(ITenancyUser caller, Func<IServiceProvider, Task> act)
         => RunAsync(caller, async services =>
         {
             await act(services);
@@ -200,26 +200,26 @@ public sealed class TestServices : IDisposable
         });
 
     /// <summary>Runs <paramref name="act"/> as system work in <paramref name="tenant"/>, in a scope of its own.</summary>
-    public Task<T> BySystemIn<T>(TenantId tenant, Func<IServiceProvider, Task<T>> act) => RunAsync(HostCaller.SystemIn(tenant), act);
+    public Task<T> BySystemIn<T>(TenantId tenant, Func<IServiceProvider, Task<T>> act) => RunAsync(HostUser.SystemIn(tenant), act);
 
     /// <summary>Runs <paramref name="act"/> as system work in <paramref name="tenant"/>, in a scope of its own.</summary>
-    public Task BySystemIn(TenantId tenant, Func<IServiceProvider, Task> act) => RunAsync(HostCaller.SystemIn(tenant), act);
+    public Task BySystemIn(TenantId tenant, Func<IServiceProvider, Task> act) => RunAsync(HostUser.SystemIn(tenant), act);
 
     /// <summary>Runs <paramref name="act"/> as a seat, in a scope of its own.</summary>
-    public Task<T> BySeat<T>(TenantId tenant, SeatId seat, Func<IServiceProvider, Task<T>> act) => RunAsync(HostCaller.InSeat(tenant, seat), act);
+    public Task<T> BySeat<T>(TenantId tenant, SeatId seat, Func<IServiceProvider, Task<T>> act) => RunAsync(HostUser.InSeat(tenant, seat), act);
 
     /// <summary>Runs <paramref name="act"/> as a seat, in a scope of its own.</summary>
-    public Task BySeat(TenantId tenant, SeatId seat, Func<IServiceProvider, Task> act) => RunAsync(HostCaller.InSeat(tenant, seat), act);
+    public Task BySeat(TenantId tenant, SeatId seat, Func<IServiceProvider, Task> act) => RunAsync(HostUser.InSeat(tenant, seat), act);
 
     /// <summary>
     /// Accepts an invitation as a person signed in with <paramref name="identity"/>, in a scope of its own: the
-    /// toolkit's caller is the user, and no Tenancy caller is begun, as in a request that names no tenant.
+    /// toolkit's current user is the user, and no Tenancy user is begun, as in a request that names no tenant.
     /// </summary>
     public async Task<InvitationManager.AcceptedInvitation> AcceptAsync(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
     {
         await using var scope = Scope();
         using (TestUser.BeginAs(identity))
-        using (TenancyCallers.BeginNone())
+        using (TenancyUsers.BeginNone())
         {
             return await scope.ServiceProvider.Invitations().AcceptAsync(token, verifiedAddress, CancellationToken.None, configure: seat => seat.Rename(displayName));
         }

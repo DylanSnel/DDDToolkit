@@ -219,11 +219,11 @@ public sealed class UsersReachedFromAboveTests
 
         /// <summary>What <paramref name="user"/> holds of <paramref name="permission"/> on a document, as the access questions answer it.</summary>
         public Task<MemberHold<DocumentId>?> HoldAsync(UserId user, DocumentId document, string permission)
-            => AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(document, permission, Cancellation));
+            => AsAsync(TestUsers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(document, permission, Cancellation));
 
         /// <summary>The documents within the reach of <paramref name="permission"/>, in a statement of the host's own.</summary>
         public Task<List<DocumentId>> WithinAsync(UserId user, string permission)
-            => AsAsync(TestCallers.User(user), provider =>
+            => AsAsync(TestUsers.User(user), provider =>
             {
                 var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(permission);
                 return provider.GetRequiredService<DeskContext>().Documents.Within(reach).Select(document => document.Id).ToListAsync(Cancellation);
@@ -232,7 +232,7 @@ public sealed class UsersReachedFromAboveTests
         /// <summary>The permissions <paramref name="user"/> holds on each of the three documents it sees, in the order of their text.</summary>
         public async Task<List<(DocumentId Document, string Keys)>> PermissionsOnAsync(UserId user)
         {
-            var held = await AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>()
+            var held = await AsAsync(TestUsers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>()
                 .PermissionsOnAsync([Minutes, Agenda, Notes], [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation));
 
             return [.. held.Select(pair => (pair.Key, string.Join(' ', pair.Value.Order(StringComparer.Ordinal))))];

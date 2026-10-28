@@ -22,7 +22,7 @@ public sealed partial class SourceTreeTests
     public void Each_package_keeps_its_files_in_folders_by_concern()
     {
         FoldersOf(Core).Should().Equal(
-            "Access/Callers",
+            "Access/Members",
             "Access/Questions",
             "Access/RequiredAccess",
             "Access/Rules",

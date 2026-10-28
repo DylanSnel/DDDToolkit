@@ -1244,7 +1244,7 @@ It answers what a caller holds and nothing more. Who may add a member, give a ro
 | Member | Summary |
 |---|---|
 | `MembershipRules Rules { get; }` | The rules of the resource, with the codes it refuses under. |
-| [`RequireCaller()`](#requirecaller) | Refuses a caller nothing can be answered for at all, with that caller's own refusal. |
+| [`RequireCurrentUser()`](#requirecurrentuser) | Refuses a caller nothing can be answered for at all, with that caller's own refusal. |
 | [`Reach(string)`](#reachstring) | The resources the caller reaches for `permission`, as a set a statement of your own takes: the lower level under `db.Boards.WhereIHold(permission)`, for a statement that reads how each resource is held, or one on another context than the request's. |
 | [`ReachSeen()`](#reachseen) | The resources the caller sees, as a set a statement of your own takes: those it is a member of now, whatever roles it holds there; those it owns, from the moment the resource names it; and, where the rules let a resource be reached from above and name the permission every member holds ([`MembershipRules.EveryMemberPermission`](rules.md#membershiprules)), those that sit where the caller holds that permission, or below. |
 | [`HoldAsync(TResource, string, CancellationToken)`](#holdasynctresource-string-cancellationtoken) | What the caller holds on `resource`, in one statement: `null` when the caller does not see it, which is also the answer for a resource that no longer exists; otherwise the resource, the version it is at, and how the caller holds `permission` on it and until when, if it does. |
@@ -1252,10 +1252,10 @@ It answers what a caller holds and nothing more. Who may add a member, give a ro
 | [`ViaAsync(TResource, string, CancellationToken)`](#viaasynctresource-string-cancellationtoken) | How the caller holds `permission` on a resource it may see, or `null` when it does not hold it: for a query that answers with what its caller may do, where not holding the permission is an answer and not a refusal. |
 | [`PermissionsOnAsync(IReadOnlyCollection<TResource>, IReadOnlyCollection<string>, CancellationToken)`](#permissionsonasyncireadonlycollectiontresource-ireadonlycollectionstring-cancellationtoken) | The permissions of `permissions` the caller holds on each of `resources` it sees, in one statement whatever their number, keyed by the resources that were given. |
 
-#### `RequireCaller()`
+#### `RequireCurrentUser()`
 
 ```csharp
-public void RequireCaller()
+public void RequireCurrentUser()
 ```
 
 Refuses a caller nothing can be answered for at all, with that caller's own refusal. Where the caller's member id is its own id or a claim there is no such caller: one that is nobody's member simply reaches nothing, so this returns for everybody. Where the application resolves who a caller is as a member ([`MemberSource.Resolved`](rules.md#resolveddatabasefunction)), a caller the application refuses outright, somebody who is nobody in the organization the resources belong to, is refused here, before anything is read.
@@ -1677,19 +1677,19 @@ The storage answers, because whether a membership and a role apply now is compar
 | Member | Summary |
 |---|---|
 | `MembershipRules Rules { get; }` | The rules of the resource, with the codes it refuses under. |
-| [`RequireCaller()`](#requirecaller-1) | Refuses a caller nothing can be answered for at all, with that caller's own refusal. |
+| [`RequireCurrentUser()`](#requirecurrentuser-1) | Refuses a caller nothing can be answered for at all, with that caller's own refusal. |
 | [`Reach(string)`](#reachstring-1) | The resources the caller reaches for `permission`, as a set the storage puts into a statement: what [`MembershipAccessManager.Reach`](#reachstring) answers. |
 | [`ReachSeen()`](#reachseen-1) | The resources the caller sees, as a set the storage puts into a statement: what [`MembershipAccessManager.ReachSeen`](#reachseen) answers. |
 | [`HoldAsync(TResourceId, string, CancellationToken)`](#holdasynctresourceid-string-cancellationtoken) | What the caller holds on one resource, in one statement: `null` when the caller does not see the resource, which is also the answer for a resource that does not exist; otherwise the resource, its version, and how the caller holds `permission` on it and until when, if it does. |
 | [`PermissionsOnAsync(IReadOnlyCollection<TResourceId>, IReadOnlyCollection<string>, CancellationToken)`](#permissionsonasyncireadonlycollectiontresourceid-ireadonlycollectionstring-cancellationtoken) | The permissions of `permissions` the caller holds on each of `resources` it sees, in one statement whatever their number. |
 
-#### `RequireCaller()`
+#### `RequireCurrentUser()`
 
 ```csharp
-void RequireCaller()
+void RequireCurrentUser()
 ```
 
-Refuses a caller nothing can be answered for at all, with that caller's own refusal. Where the caller's member id is its own id or a claim there is no such caller: one that is nobody's member simply reaches nothing, so this returns for everybody. Where the application resolves who a caller is as a member ([`MemberSource.Resolved`](rules.md#resolveddatabasefunction)), a caller the application refuses outright is refused here, before anything is read ([`ICallerMember.Require`](rules.md#requirecurrentusersnapshot)).
+Refuses a caller nothing can be answered for at all, with that caller's own refusal. Where the caller's member id is its own id or a claim there is no such caller: one that is nobody's member simply reaches nothing, so this returns for everybody. Where the application resolves who a caller is as a member ([`MemberSource.Resolved`](rules.md#resolveddatabasefunction)), a caller the application refuses outright is refused here, before anything is read ([`ICurrentMember.Require`](rules.md#requirecurrentusersnapshot)).
 
 **Exceptions**
 

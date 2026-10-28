@@ -31,7 +31,7 @@ public class RegistrationTests
         await using var scope = provider.CreateAsyncScope();
         var store = provider.GetRequiredService<InMemoryTenancyStore>();
         ProvisionedTenant provisioned;
-        using (TenancyCallers.Begin(HostCaller.System))
+        using (TenancyUsers.Begin(HostUser.System))
         {
             store.BeginUnitOfWork();
             provisioned = await scope.ServiceProvider.GetRequiredService<CoreTenantManager>().ProvisionWithIdsAsync(scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
@@ -54,7 +54,7 @@ public class RegistrationTests
         var harbor = new TenantId(1);
         var seat = SeatId.CreateSequential();
 
-        async Task<(HostCaller Member, HostCaller User)> ResolvedWith(Action<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>> configure)
+        async Task<(HostUser Member, HostUser User)> ResolvedWith(Action<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>> configure)
         {
             var services = new ServiceCollection();
             AddTenancyCore(services, options =>
@@ -71,11 +71,11 @@ public class RegistrationTests
         }
 
         // Left alone, the option seats signed-in users, as before there was one.
-        (await ResolvedWith(_ => { })).Should().Be((HostCaller.Nobody(TenancyRefusals.NotSeated), HostCaller.InSeat(harbor, seat)));
+        (await ResolvedWith(_ => { })).Should().Be((HostUser.Nobody(TenancyRefusals.NotSeated), HostUser.InSeat(harbor, seat)));
 
         // What the host adds reaches the selection the services make.
         (await ResolvedWith(options => options.TenantSelection.SeatedTokenRoles.Add("member")))
-            .Should().Be((HostCaller.InSeat(harbor, seat), HostCaller.InSeat(harbor, seat)));
+            .Should().Be((HostUser.InSeat(harbor, seat), HostUser.InSeat(harbor, seat)));
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public class RegistrationTests
     /// <summary>A host's own answer to who a request's caller is in Tenancy: here, always nobody.</summary>
     private sealed class OwnSelection : ITenantSelection
     {
-        public Task<ITenancyCaller> ResolveAsync(CurrentUserSnapshot caller, string? tenantSlug, CancellationToken cancellationToken)
-            => Task.FromResult<ITenancyCaller>(HostCaller.Nobody(TenancyRefusals.NotSeated));
+        public Task<ITenancyUser> ResolveAsync(CurrentUserSnapshot caller, string? tenantSlug, CancellationToken cancellationToken)
+            => Task.FromResult<ITenancyUser>(HostUser.Nobody(TenancyRefusals.NotSeated));
     }
 }

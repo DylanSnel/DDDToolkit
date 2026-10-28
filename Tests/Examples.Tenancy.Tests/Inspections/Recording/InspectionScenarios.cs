@@ -56,7 +56,7 @@ public sealed class InspectionScenarios(SampleHosts sample) : IClassFixture<Samp
         // two recorded at the same instant would otherwise come back in whatever order the database had them. Asked
         // as a request asks: as the person, in her seat. A provider quotes an alias or leaves it bare.
         using (TestUser.BeginAs(DemoPeople.Juno.Id))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Juno))))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Juno))))
         {
             await using var scope = host.Services.CreateAsyncScope();
             counter.WatchThisFlow();

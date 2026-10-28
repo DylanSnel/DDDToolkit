@@ -251,7 +251,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
     /// </summary>
     private async Task<ConcurrencyConflictException> RaceAsync(Func<IServiceProvider, Task> interrupted, Func<IServiceProvider, Task> interrupting, SeatId? interruptedSeat = null)
     {
-        var caller = interruptedSeat is { } seat ? HostCaller.InSeat(_harbor.Tenant, seat) : HostCaller.SystemIn(_harbor.Tenant);
+        var caller = interruptedSeat is { } seat ? HostUser.InSeat(_harbor.Tenant, seat) : HostUser.SystemIn(_harbor.Tenant);
         var conflict = await _services.RunAsync(caller, async services =>
         {
             _services.Hook.BeforeSave(services.TenancyContext(), () => _services.BySystemIn(_harbor.Tenant, interrupting));

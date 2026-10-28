@@ -143,7 +143,7 @@ public class MembershipRegistrationTests
 
                 namespace Shop;
 
-                public sealed class DocumentsOfTheFirm : ICallerMember<DocumentId, UserId>
+                public sealed class DocumentsOfTheFirm : ICurrentMember<DocumentId, UserId>
                 {
                     public UserId? Find(CurrentUserSnapshot user) => null;
                 }

@@ -15,14 +15,14 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every question is asked for the caller that is current when it is asked, and at one moment: the reach that
-/// sees and the reach that acts of one question share it. Who the caller is as a member comes from the rules,
+/// Every question is asked for the user that is current when it is asked, and at one moment: the reach that
+/// sees and the reach that acts of one question share it. Who the user is as a member comes from the rules,
 /// its user id, a claim of its token, or what the application resolves for it, and only a signed-in user is
 /// one. The owner of a resource is found by the resource's own owner column, holds the permissions the rules give
 /// an owner, holding no role, and sees it. Which roles give a permission is what the rules declare; where the roles are
 /// kept for the resource, what their rows say, read inside the statement; or, where they are kept elsewhere,
 /// what the application answers inside the statement. Either way only for a permission a member's role can give
-/// at all. Where the rules let a resource be reached from above, a signed-in caller holds a permission on it as well
+/// at all. Where the rules let a resource be reached from above, a signed-in user holds a permission on it as well
 /// when the application answers that it holds the permission where the resource sits. The application itself
 /// (<see cref="CurrentUserSnapshot.System"/>) holds every permission on every resource, and so does its work in a scope the rules
 /// name as its own for the resource (<see cref="MembershipRules.SystemScopes"/>). Work in any other scope is
@@ -54,7 +54,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     private readonly MembershipRegistration _registration;
     private readonly MemberNamesOf<TContext, TResource, TRoleId> _names;
     private readonly Func<CurrentUserSnapshot, TMemberId?> _asMember;
-    private readonly ICallerMember<TResourceId, TMemberId>? _resolved;
+    private readonly ICurrentMember<TResourceId, TMemberId>? _resolved;
     private readonly IRolesWithPermission<TResourceId, TRoleId>? _kept;
     private readonly ICurrentUser _user;
     private readonly TimeProvider _clock;
@@ -62,7 +62,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     /// <summary>The access questions of one kind of resource.</summary>
     /// <param name="registration">The resource, with its rules.</param>
     /// <param name="asMember">
-    /// Who a caller is as a member, as the rules say, or nobody; <see langword="null"/> where the application
+    /// Who a user is as a member, as the rules say, or nobody; <see langword="null"/> where the application
     /// resolves it, and is asked.
     /// </param>
     /// <param name="services">The services of the scope the questions are asked in.</param>
@@ -78,7 +78,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         _clock = services.GetRequiredService<TimeProvider>();
 
         // What the application answers is asked of the scope the questions are asked in: it knows the request.
-        _resolved = asMember is null ? services.GetRequiredService<ICallerMember<TResourceId, TMemberId>>() : null;
+        _resolved = asMember is null ? services.GetRequiredService<ICurrentMember<TResourceId, TMemberId>>() : null;
         _asMember = asMember ?? _resolved!.Find;
         _kept = rules.Roles.Kind == RolesKind.External ? services.GetRequiredService<IRolesWithPermission<TResourceId, TRoleId>>() : null;
     }
@@ -88,17 +88,17 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
 
     /// <inheritdoc />
     /// <remarks>
-    /// Nobody is refused here where a caller's member id is its own id or a claim: a caller that is nobody's
+    /// Nobody is refused here where a user's member id is its own id or a claim: a user that is nobody's
     /// member simply reaches nothing. Where the application resolves it, the application says who it refuses
-    /// outright, about every caller that is not its own work for this resource: work in a scope the rules do
+    /// outright, about every user that is not its own work for this resource: work in a scope the rules do
     /// not name is asked about like anybody.
     /// </remarks>
-    public void RequireCaller()
+    public void RequireCurrentUser()
     {
-        var caller = _user.Snapshot;
-        if (_resolved is not null && !Rules.IsOwnWork(caller))
+        var user = _user.Snapshot;
+        if (_resolved is not null && !Rules.IsOwnWork(user))
         {
-            _resolved.Require(caller);
+            _resolved.Require(user);
         }
     }
 
@@ -143,7 +143,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
             return null;
         }
 
-        // Whether it is there for the caller is the filter; how the caller holds the permission on it, and until
+        // Whether it is there for the user is the filter; how the user holds the permission on it, and until
         // when, is what is read. A permission held from above is held for as long as the resource is seen.
         var act = ReachFor(permission, asked);
         var held = await ReadAsync(
@@ -171,7 +171,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         {
             throw new ArgumentException(
                 "Which permissions are held is asked about at most " + MembershipAccessManager.MostResources + " different resources at once, and these are "
-                + about.Count + ". A use case that takes the ids from a request refuses its caller before it asks.",
+                + about.Count + ". A use case that takes the ids from a request refuses its user before it asks.",
                 nameof(resources));
         }
 
@@ -210,27 +210,27 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
             ? throw new ArgumentException("A permission is not blank.", nameof(permissions))
             : [.. permissions.Distinct(StringComparer.Ordinal)];
 
-    /// <summary>Who asks, and when: taken once for a question, so everything it is answered from is of one caller and one moment.</summary>
+    /// <summary>Who asks, and when: taken once for a question, so everything it is answered from is of one user and one moment.</summary>
     private Asking Ask()
     {
-        var caller = _user.Snapshot;
-        var signedIn = caller.Kind == CurrentUserKind.User;
+        var user = _user.Snapshot;
+        var signedIn = user.Kind == CurrentUserKind.User;
         return new Asking(
-            caller,
+            user,
 
             // The application itself, and its work in a scope the rules name as its own for this resource.
             // Work in any other scope is not above the rules, and is no signed-in user either: it holds nothing.
-            Rules.IsOwnWork(caller),
+            Rules.IsOwnWork(user),
             signedIn,
-            signedIn ? _asMember(caller) : null,
+            signedIn ? _asMember(user) : null,
             _clock.GetUtcNow());
     }
 
     /// <summary>
-    /// The reach of what the caller sees: the resources it is a member of now, whatever roles it holds there;
+    /// The reach of what the user sees: the resources it is a member of now, whatever roles it holds there;
     /// those it owns, by the owner column, since the owner sees what it owns, from the moment the resource names
     /// it, before its own membership has begun; and, where the
-    /// rules let a resource be reached from above and name a permission for seeing, those that sit where the caller
+    /// rules let a resource be reached from above and name a permission for seeing, those that sit where the user
     /// holds that permission. The functions in the database see a resource the same way.
     /// </summary>
     private EfMemberReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> See(Asking asked)
@@ -302,8 +302,8 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
                 // statement. Only for a permission a member's role can give: whatever else such a role holds, it
                 // gives no permission the rules keep from members.
                 var answers = _kept;
-                var caller = asked.User;
-                kept = context => answers.RolesWith(context, caller, permission)
+                var user = asked.User;
+                kept = context => answers.RolesWith(context, user, permission)
                     ?? throw new InvalidOperationException(answers.GetType().Name + " answered no query for the roles that give '" + permission + "'. Answer an empty one for none.");
                 heldBy |= MemberHeldBy.Roles;
             }
@@ -359,10 +359,10 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     private MemberNames<TResource, TRoleId> Names() => _names.Read(_services, _registration);
 
     /// <summary>Who asks, and when.</summary>
-    /// <param name="User">The caller the question is asked for.</param>
-    /// <param name="Everything">Whether the caller is the application's own work for this resource.</param>
-    /// <param name="SignedIn">Whether the caller is a signed-in user: the only caller that is a member, or holds a permission from above.</param>
-    /// <param name="Member">Who the caller is as a member, or nobody.</param>
+    /// <param name="User">The user the question is asked for.</param>
+    /// <param name="Everything">Whether the user is the application's own work for this resource.</param>
+    /// <param name="SignedIn">Whether the user is a signed-in user: the only user that is a member, or holds a permission from above.</param>
+    /// <param name="Member">Who the user is as a member, or nobody.</param>
     /// <param name="Now">The moment the question is asked at.</param>
     private readonly record struct Asking(CurrentUserSnapshot User, bool Everything, bool SignedIn, TMemberId? Member, DateTimeOffset Now);
 }

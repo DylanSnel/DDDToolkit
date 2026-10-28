@@ -162,7 +162,7 @@ public class InvitationManager<
             grantUntil,
             issuedAt: gate.Now,
             expiresAt: gate.Now + open,
-            issuedBy: gate.Caller.Seat,
+            issuedBy: gate.User.Seat,
             issuedAsSystem: gate.BySystem,
             gate.By);
 
@@ -480,7 +480,7 @@ public class InvitationManager<
         }
 
         // The toolkit's current user stays the system work this runs as: only who Tenancy asks about changes.
-        using (TenancyCallers.Begin(TenancyCaller<TTenantId, TSeatId>.InSeat(invitation.TenantId, issuer)))
+        using (TenancyUsers.Begin(TenancyUser<TTenantId, TSeatId>.InSeat(invitation.TenantId, issuer)))
         {
             var asIssuer = Gate();
             try

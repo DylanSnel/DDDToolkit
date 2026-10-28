@@ -79,10 +79,10 @@ public class TenancyRestrictiveRuleTests
     [Fact]
     public void Only_employees_read_the_organization_is_a_field_of_the_callers_own_seat_asked_once_per_statement()
     {
-        var result = Run(Rule("Organization", "TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee"));
+        var result = Run(Rule("Organization", "TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee"));
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00100").ShouldNotHaveDiagnostic("DDD00101").ShouldCompile();
-        SqlIn(result).Should().Be("{restrictive}({row:tenancy/caller_seat_row:0:Campus.Tenants.Seat:q1}{col:q1:Kind}{/row} = {rowval:Campus.Tenants.Seat:Kind:0})");
+        SqlIn(result).Should().Be("{restrictive}({row:tenancy/current_seat_row:0:Campus.Tenants.Seat:q1}{col:q1:Kind}{/row} = {rowval:Campus.Tenants.Seat:Kind:0})");
     }
 
     [Theory]
@@ -90,7 +90,7 @@ public class TenancyRestrictiveRuleTests
     [InlineData("Seat", "RowOperations.Read | RowOperations.Change")]
     [InlineData("Role", "RowOperations.All")]
     public void A_restrictive_rule_on_the_organization_the_seats_or_the_roles_is_no_diagnostic(string aggregate, string operations)
-        => Run(Rule(aggregate, "TenancyRowAccess.CallerSeat<Seat>().Kind != SeatKind.External", operations))
+        => Run(Rule(aggregate, "TenancyRowAccess.CurrentSeat<Seat>().Kind != SeatKind.External", operations))
             .ShouldNotHaveDiagnostic("DDD00100").ShouldNotHaveDiagnostic("DDD00101").ShouldCompile();
 
     [Theory]
@@ -112,9 +112,9 @@ public class TenancyRestrictiveRuleTests
     [Fact]
     public void The_callers_seat_asked_as_another_class_is_DDD00101()
     {
-        var reported = Run(Rule("Organization", "TenancyRowAccess.CallerSeat<Role>().Name == \"Employee\"")).ShouldHaveDiagnostic("DDD00101", at: "TenancyRowAccess.CallerSeat<Role>()");
+        var reported = Run(Rule("Organization", "TenancyRowAccess.CurrentSeat<Role>().Name == \"Employee\"")).ShouldHaveDiagnostic("DDD00101", at: "TenancyRowAccess.CurrentSeat<Role>()");
 
         reported.Severity.Should().Be(DiagnosticSeverity.Error);
-        reported.GetMessage().Should().Contain("TenancyRowAccess.CallerSeat<Role>() asks for a seat of 'Role', which is not the application's seat class");
+        reported.GetMessage().Should().Contain("TenancyRowAccess.CurrentSeat<Role>() asks for a seat of 'Role', which is not the application's seat class");
     }
 }

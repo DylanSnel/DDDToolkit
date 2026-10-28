@@ -18,7 +18,7 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
     private static readonly SupabaseMigrationSource Shelves = SupabaseMigrationSource.For(() => SupabaseShelfContext.Create());
 
     private static readonly RowAccessRule ShelvesByName = RowAccessRule.For<SupabaseShelf>(
-        "Shelves by name", RowOperations.All, "({col:Name} IS NOT DISTINCT FROM {caller:claim:shelf})", RowAccessRoles.User);
+        "Shelves by name", RowOperations.All, "({col:Name} IS NOT DISTINCT FROM {user:claim:shelf})", RowAccessRoles.User);
 
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "ddd-privileges-" + Guid.NewGuid().ToString("N"));
 
@@ -56,7 +56,7 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
     private (int ExitCode, string Output) Build(RowAccessRule[] rules, string? roles = null, string? grants = null, string? force = null)
     {
         using var output = new StringWriter();
-        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], rules, [], [], _directory, start: null, roles, callerFunctions: null, grants, force, output);
+        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], rules, [], [], _directory, start: null, roles, currentUserFunctions: null, grants, force, output);
         return (exitCode, output.ToString());
     }
 

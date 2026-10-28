@@ -59,7 +59,7 @@ public static class MembershipAccessManagerExtensions
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     {
         var storage = StorageOf<TResource, TResourceId>(access);
-        return MembershipAccessManager.RequireAsync(storage.Rules, storage.RequireCaller, () => storage.HoldAsync(resource, permission, cancellationToken), permission);
+        return MembershipAccessManager.RequireAsync(storage.Rules, storage.RequireCurrentUser, () => storage.HoldAsync(resource, permission, cancellationToken), permission);
     }
 
     /// <summary>
@@ -84,7 +84,7 @@ public static class MembershipAccessManagerExtensions
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     {
         var storage = StorageOf<TResource, TResourceId>(access);
-        return MembershipAccessManager.ViaAsync(storage.Rules, storage.RequireCaller, () => storage.HoldAsync(resource, permission, cancellationToken), permission);
+        return MembershipAccessManager.ViaAsync(storage.Rules, storage.RequireCurrentUser, () => storage.HoldAsync(resource, permission, cancellationToken), permission);
     }
 
     /// <summary>

@@ -321,7 +321,7 @@ public static class TenancyModelBuilderExtensions
     }
 
     /// <summary>
-    /// Keeps an entity of any module to the current Tenancy caller's tenant. It adds the tenant filter, a named
+    /// Keeps an entity of any module to the current Tenancy user's tenant. It adds the tenant filter, a named
     /// query filter that sits next to the entity's other named filters rather than replacing them, and marks
     /// the entity for Tenancy's save check, which <c>UseDDDToolkit</c> adds: a row of another tenant is refused before anything is
     /// written, whoever loaded or made it.

@@ -138,7 +138,7 @@ public class RequirementCombinationDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00086");
         Message(result, "DDD00086", at: "OrOwn").Should().Contain("marks 'User' [OrOwn], which is a 'UserId': nothing says what the caller's own UserId is")
-            .And.Contain("services.AddCallersOwn<UserId, ...>()");
+            .And.Contain("services.AddOwnedByCurrentUser<UserId, ...>()");
         result.ShouldNotContain("BillingAccessBehavior.", "EditProfile", "a request stopped every time it is sent gets no line");
     }
 

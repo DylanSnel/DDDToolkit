@@ -9,8 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
-/// The tenant of the current Tenancy caller travels to Postgres as a setting next to the caller's role and claims,
-/// whatever the toolkit's caller is, and is empty for a caller that acts in no tenant.
+/// The tenant of the current Tenancy user travels to Postgres as a setting next to the caller's role and claims,
+/// whatever the toolkit's current user is, and is empty for a caller that acts in no tenant.
 /// </summary>
 public sealed class TenancySettingTests(TenancyPostgres postgres) : IDisposable
 {
@@ -29,13 +29,13 @@ public sealed class TenancySettingTests(TenancyPostgres postgres) : IDisposable
     [Fact]
     public void The_tenant_setting_follows_the_tenancy_caller()
     {
-        Setting.Names.Should().Equal(TenancyRowLevelSecurity.TenantSetting).And.Equal("tenancy.caller_tenant");
+        Setting.Names.Should().Equal(TenancyRowLevelSecurity.TenantSetting).And.Equal("tenancy.current_tenant");
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(Harbor, Ada)))
+        using (TenancyUsers.Begin(HostUser.InSeat(Harbor, Ada)))
         {
             Values(CurrentUserSnapshot.User(Guid.NewGuid())).Should().Equal(Pair("42"));
 
-            // The toolkit's caller changes nothing: which role may reach what with it is for the SQL to decide.
+            // The toolkit's current user changes nothing: which role may reach what with it is for the SQL to decide.
             Values(CurrentUserSnapshot.System).Should().Equal(Pair("42"));
 
             // But for an anonymous one. A signed-in user whose token role is on no list, in a host that has such a
@@ -51,7 +51,7 @@ public sealed class TenancySettingTests(TenancyPostgres postgres) : IDisposable
 
         // A tenant id over a Guid is written as its D form, whatever the culture.
         var tenant = new GuidTenant(Guid.Parse("a0000000-0000-4000-8000-000000000001"));
-        using (TenancyCallers.Begin(TenancyCaller<GuidTenant, SeatId>.SystemIn(tenant)))
+        using (TenancyUsers.Begin(TenancyUser<GuidTenant, SeatId>.SystemIn(tenant)))
         {
             Values(CurrentUserSnapshot.SystemIn("projects")).Should().Equal(Pair("a0000000-0000-4000-8000-000000000001"));
         }
@@ -63,7 +63,7 @@ public sealed class TenancySettingTests(TenancyPostgres postgres) : IDisposable
         // Left out, which the interceptor sets to ''.
         Values(CurrentUserSnapshot.Anonymous).Should().BeEmpty();
 
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             Values(CurrentUserSnapshot.User(Guid.NewGuid())).Should().BeEmpty("nobody acts in no tenant");
         }
@@ -109,20 +109,20 @@ public sealed class TenancySettingTests(TenancyPostgres postgres) : IDisposable
         }
 
         provisioned.Tenant.Should().Be(lagoon);
-        using (TenancyCallers.Begin(HostCaller.InSeat(lagoon, provisioned.AdminSeat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(lagoon, provisioned.AdminSeat)))
         {
             Values(CurrentUserSnapshot.User(identity)).Should().Equal(Pair("9007199254740993"));
         }
 
-        await using (var system = await AsCaller.SystemInAsync(database, lagoon, TenancyWork.SystemScope, TestContext.Current.CancellationToken))
+        await using (var system = await AsUser.SystemInAsync(database, lagoon, TenancyWork.SystemScope, TestContext.Current.CancellationToken))
         {
             (await system.ScalarAsync<long?>("SELECT tenancy.system_tenant()", TestContext.Current.CancellationToken)).Should().Be(lagoon.Value);
             (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Seats\"", TestContext.Current.CancellationToken)).Should().Be(1);
         }
 
-        await using var administrator = await AsCaller.PersonAsync(database, identity, lagoon, TestContext.Current.CancellationToken);
-        (await administrator.ScalarAsync<long?>("SELECT tenancy.caller_tenant()", TestContext.Current.CancellationToken)).Should().Be(lagoon.Value);
-        (await administrator.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", TestContext.Current.CancellationToken)).Should().Be(provisioned.AdminSeat.Value);
+        await using var administrator = await AsUser.PersonAsync(database, identity, lagoon, TestContext.Current.CancellationToken);
+        (await administrator.ScalarAsync<long?>("SELECT tenancy.current_tenant()", TestContext.Current.CancellationToken)).Should().Be(lagoon.Value);
+        (await administrator.ScalarAsync<Guid?>("SELECT tenancy.current_seat()", TestContext.Current.CancellationToken)).Should().Be(provisioned.AdminSeat.Value);
     }
 
     private static string Pair(string value) => TenancyRowLevelSecurity.TenantSetting + "=" + value;

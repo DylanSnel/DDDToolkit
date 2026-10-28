@@ -529,12 +529,12 @@ public class SeatManager<
     public async Task<SeatOverview> WhoAmIAsync(CancellationToken cancellationToken)
     {
         var gate = Gate();
-        if (gate.Caller.Kind != TenancyCallerKind.Seat)
+        if (gate.User.Kind != TenancyUserKind.Seat)
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.NotSeated);
         }
 
-        return await OverviewAsync(gate, gate.Caller.Tenant!.Value, gate.Caller.Seat!.Value, cancellationToken).ConfigureAwait(false);
+        return await OverviewAsync(gate, gate.User.Tenant!.Value, gate.User.Seat!.Value, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -782,7 +782,7 @@ public class SeatManager<
         var seat = (await store.ListSeatsAsync(tenantId, [seatId], cancellationToken).ConfigureAwait(false)).FirstOrDefault()
                    ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
         var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
-        var organization = await gate.OrganizationTheCallerReadsAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        var organization = await gate.OrganizationTheUserReadsAsync(tenantId, cancellationToken).ConfigureAwait(false);
         var roles = (await store.ListRolesAsync(tenantId, cancellationToken).ConfigureAwait(false)).ToDictionary(role => role.Id);
         var units = organization is null
             ? await UnitsNamedOnlyAsync(tenantId, seat, cancellationToken).ConfigureAwait(false)

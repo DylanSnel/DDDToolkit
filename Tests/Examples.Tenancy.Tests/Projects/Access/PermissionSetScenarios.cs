@@ -28,7 +28,7 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
     /// Where a statement reads what a seat holds in the organization: the function Tenancy gives another module
     /// to ask, in place of its tables.
     /// </summary>
-    private const string SeatRights = """tenancy\.caller_permissions\(\)""";
+    private const string SeatRights = """tenancy\.current_permissions\(\)""";
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -120,7 +120,7 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
         // statement: the organization's permissions, the crew's and the permission that sees, put together where it runs. Asked
         // as a request asks: as the person, in her seat.
         using (TestUser.BeginAs(DemoPeople.Rhea.Id))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Rhea))))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Rhea))))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var access = scope.ServiceProvider.GetRequiredService<ProjectAccess>();

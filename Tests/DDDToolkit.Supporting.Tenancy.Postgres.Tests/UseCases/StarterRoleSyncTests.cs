@@ -61,7 +61,7 @@ public sealed class StarterRoleSyncTests(TenancyPostgres postgres)
         var operatorRole = HarborRoles.Operator.Value.ToString();
 
         // The administrator changes a role's permissions, and nothing of what its starter role gave it or which starter role that was.
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"Permissions\" = ARRAY['widget.read'] WHERE \"Id\" = '{operatorRole}'", Cancellation)).Should().Be(1);
             var remembered = await FluentActions.Awaiting(() => ada.ExecuteAsync(Remembering(operatorRole), Cancellation)).Should().ThrowAsync<PostgresException>();
@@ -69,7 +69,7 @@ public sealed class StarterRoleSyncTests(TenancyPostgres postgres)
             remembered.Which.ConstraintName.Should().Be("tenancy_role_follows_its_starter_role");
         }
 
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await FluentActions.Awaiting(() => ada.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"FromStarterRole\" = 'watcher' WHERE \"Id\" = '{operatorRole}'", Cancellation))
                     .Should().ThrowAsync<PostgresException>())
@@ -77,19 +77,19 @@ public sealed class StarterRoleSyncTests(TenancyPostgres postgres)
         }
 
         // Another module's system work writes no role; Tenancy's own writes what a sync writes.
-        await using (var widgets = await AsCaller.SystemInAsync(database, Harbor, "widgets", Cancellation))
+        await using (var widgets = await AsUser.SystemInAsync(database, Harbor, "widgets", Cancellation))
         {
             (await widgets.ExecuteAsync(Remembering(operatorRole), Cancellation)).Should().Be(0);
         }
 
-        await using (var tenancy = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
+        await using (var tenancy = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
         {
             (await tenancy.ExecuteAsync(Remembering(operatorRole), Cancellation)).Should().Be(1);
         }
 
         // And Tenancy's own work is held to the tenant's last administrator, as everyone is: what the use case keeps a
         // role for, the database refuses at commit.
-        await using var lastAdministrator = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
+        await using var lastAdministrator = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
         (await lastAdministrator.ExecuteAsync(
                 $"UPDATE tenancy.\"Roles\" SET \"Permissions\" = pg_catalog.array_remove(\"Permissions\", 'tenancy.roles.manage') WHERE \"Id\" = '{HarborRoles.Administrator.Value}'",
                 Cancellation))
@@ -127,7 +127,7 @@ public sealed class StarterRoleSyncTests(TenancyPostgres postgres)
     private async Task<TestDatabase> BehindAndForcedAsync()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ExecuteAsync(
                     $"""

@@ -138,7 +138,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
         // package's directory as his seat, which asks no permission and reads under the policies: they give him the seat and
         // where it is placed, and nobody's roles but his own.
         var host = await sample.SharedAsync();
-        using (SampleCallers.BeginSeatOf(DemoPeople.Leo, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Leo, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var handler = new SeatGrantsHandler(scope.ServiceProvider.GetRequiredService<ITenancyReads>());
@@ -148,7 +148,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
         }
 
         // The same read as Maud answers: what Leo was given is nothing, not a read that does not work.
-        using (SampleCallers.BeginSeatOf(DemoPeople.Maud, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Maud, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             (await new SeatGrantsHandler(scope.ServiceProvider.GetRequiredService<ITenancyReads>()).Handle(new SeatGrants(Harbor.SeatOf(DemoPeople.Rhea)), Cancellation))
@@ -164,7 +164,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
         // line of its own, wider than the request's, a permission reading only where it applies: Vic's role at North Inland,
         // below North, and nothing of Maud's at the root, or Seth's at South Bay.
         var host = await sample.SharedAsync();
-        using (SampleCallers.BeginSeatOf(DemoPeople.Rhea, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Rhea, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var reads = scope.ServiceProvider.GetRequiredService<ITenancyReads>();

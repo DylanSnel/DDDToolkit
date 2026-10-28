@@ -80,7 +80,7 @@ const sidebars = {
                 'tenancy/reference/aggregates',
                 'tenancy/reference/managers',
                 'tenancy/reference/catalogue',
-                'tenancy/reference/callers',
+                'tenancy/reference/access',
                 'tenancy/reference/queries',
                 'tenancy/reference/refusals',
                 'tenancy/reference/entity-framework',

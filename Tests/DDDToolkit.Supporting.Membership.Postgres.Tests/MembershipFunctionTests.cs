@@ -23,7 +23,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
 
         foreach (var user in data.Users)
         {
-            var caller = TestCallers.User(user);
+            var caller = TestUsers.User(user);
             await using var session = await filing.SessionAsync(caller);
 
             // The documents the caller sees, and those it is a member of: the same, for members that are users.
@@ -67,7 +67,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         foreach (var staff in data.Staff)
         {
             // Known by the claim the folder's rules name, in C# and in the database alike.
-            var caller = TestCallers.Staff(staff);
+            var caller = TestUsers.Staff(staff);
             await using var session = await filing.SessionAsync(caller);
 
             var seen = data.FoldersSeenBy(staff).Select(id => id.Value).ToList();
@@ -101,7 +101,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
 
         foreach (var user in data.Users)
         {
-            await using var session = await filing.SessionAsync(TestCallers.User(user));
+            await using var session = await filing.SessionAsync(TestUsers.User(user));
             var expected = data.Documents
                 .Where(document => document.Shares.Any(share => share.MemberId == user && share.AppliesAt(data.Now)))
                 .SelectMany(document => document.Shares.Where(share => share.AppliesAt(data.Now)).Select(share => share.MemberId.Value))
@@ -111,12 +111,12 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
 
         // Eve's membership ended yesterday and Gil's starts tomorrow: neither works with anyone now, and nobody now
         // works with either. Hal is a member of nothing.
-        await using var ben = await filing.SessionAsync(TestCallers.User(data.Ben));
+        await using var ben = await filing.SessionAsync(TestUsers.User(data.Ben));
         var withBen = await ben.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.FellowMembers}() AS id");
         withBen.Should().Contain([data.Ben.Value, data.Ian.Value]).And.NotContain([data.Eve.Value, data.Gil.Value, data.Hal.Value]);
         foreach (var outside in new[] { data.Eve, data.Gil, data.Hal })
         {
-            await using var session = await filing.SessionAsync(TestCallers.User(outside));
+            await using var session = await filing.SessionAsync(TestUsers.User(outside));
             (await session.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.FellowMembers}() AS id")).Should().BeEmpty();
         }
     }
@@ -131,8 +131,8 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         // a token that names no user at all.
         (CurrentUserSnapshot Caller, string What)[] outsiders =
         [
-            (TestCallers.User(data.Hal), "a user who is no member"),
-            (TestCallers.Staff(data.Nobody, user: data.Hal), "staff on no folder"),
+            (TestUsers.User(data.Hal), "a user who is no member"),
+            (TestUsers.Staff(data.Nobody, user: data.Hal), "staff on no folder"),
             (CurrentUserSnapshot.FromClaims("""{"role":"authenticated"}"""), "a token without a user"),
         ];
 
@@ -152,11 +152,11 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         }
 
         // A member of one is answered nothing by the functions of the other.
-        await using var ada = await filing.SessionAsync(TestCallers.User(data.Ada));
+        await using var ada = await filing.SessionAsync(TestUsers.User(data.Ada));
         (await ada.ListAsync<Guid>($"SELECT id FROM {Filing}{DocumentMembership.Rules.Functions.Seen}() AS id")).Should().HaveCount(2);
         (await ada.ListAsync<long>($"SELECT id FROM {Filing}{FolderMembership.Rules.Functions.Seen}() AS id")).Should().BeEmpty();
 
-        await using var keeper = await filing.SessionAsync(TestCallers.Staff(data.Keeper));
+        await using var keeper = await filing.SessionAsync(TestUsers.Staff(data.Keeper));
         (await keeper.ListAsync<long>($"SELECT id FROM {Filing}{FolderMembership.Rules.Functions.Seen}() AS id")).Should().Equal(data.Cabinet.Value);
         (await keeper.ListAsync<Guid>($"SELECT id FROM {Filing}{DocumentMembership.Rules.Functions.Seen}() AS id")).Should().BeEmpty();
     }
@@ -214,12 +214,12 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         var data = filing.Scenario;
 
         // A row access rule of the folders' is for the archivists' role, next to signed-in users, so it asks their functions; no rule of the documents' is for it.
-        await using var archivist = await filing.SessionAsync(TestCallers.Staff(data.Clerk), role: FilingPostgres.ArchivistRole);
+        await using var archivist = await filing.SessionAsync(TestUsers.Staff(data.Clerk), role: FilingPostgres.ArchivistRole);
 
         (await archivist.ListAsync<long>($"SELECT id FROM {Filing}folders_i_see() AS id")).Should().BeEquivalentTo([data.Cabinet.Value, data.Annex.Value]);
         (await archivist.ListAsync<long>($"SELECT id FROM {Filing}folders_where_i_hold($1) AS id", FolderPermissions.Staff)).Should().Equal(data.Annex.Value);
 
-        await using var again = await filing.SessionAsync(TestCallers.Staff(data.Clerk), role: FilingPostgres.ArchivistRole);
+        await using var again = await filing.SessionAsync(TestUsers.Staff(data.Clerk), role: FilingPostgres.ArchivistRole);
         (await FluentActions.Awaiting(() => again.ListAsync<Guid>($"SELECT id FROM {Filing}documents_i_see() AS id")).Should().ThrowAsync<PostgresException>())
             .Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
     }
@@ -242,7 +242,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
 
         async Task<(bool Member, bool Seen, bool WithARole, bool Held)> AskAsync(UserId user, string? before)
         {
-            await using var session = await filing.SessionAsync(TestCallers.User(user), before: before);
+            await using var session = await filing.SessionAsync(TestUsers.User(user), before: before);
             return (
                 (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.AsMember}() AS id")).Contains(minutes),
                 (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.Seen}() AS id")).Contains(minutes),

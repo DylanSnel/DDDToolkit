@@ -369,7 +369,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
 
             leftover.Rename("Not hers to rename");
 
-            using (SampleCallers.BeginSeatOf(DemoPeople.Juno, Harbor))
+            using (SampleUsers.BeginSeatOf(DemoPeople.Juno, Harbor))
             {
                 var taking = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(new TakeCrewRole(PierSeven.Id, juno, surveyor), Cancellation);
 
@@ -672,7 +672,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
         // seat's membership is looked up. A provider quotes an alias or leaves it bare, and names the table's
         // schema or has none, so the pattern takes both. Asked as a request asks: as the person, in her seat.
         using (TestUser.BeginAs(DemoPeople.Juno.Id))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Juno))))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Juno))))
         {
             await using var scope = host.Services.CreateAsyncScope();
             counter.WatchThisFlow();

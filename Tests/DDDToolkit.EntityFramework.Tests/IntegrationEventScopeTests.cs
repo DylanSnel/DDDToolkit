@@ -19,7 +19,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// What a module begins around each delivery to its handlers: begun before the inbox is asked anything and
 /// ended after its commit, one per handler, nested in the order the module added them.
 /// </summary>
-public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres) : IDisposable
+public sealed class IntegrationEventScopeTests(ExplicitCurrentUserPostgres postgres) : IDisposable
 {
     private readonly SqliteDatabase _db = new();
     private readonly List<string> _steps = [];
@@ -94,21 +94,21 @@ public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres)
     [Fact]
     public async Task A_handler_under_a_scoped_system_caller_saves_its_rows_and_the_inbox_row_as_that_caller()
     {
-        var claims = $$"""{"role":"{{ExplicitCallersPostgres.SystemInRole}}","scope":"{{ToolkitWork.ReceivingScope}}"}""";
+        var claims = $$"""{"role":"{{ExplicitCurrentUserPostgres.SystemInRole}}","scope":"{{ToolkitWork.ReceivingScope}}"}""";
 
         await using (var work = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(Cancellation),
             module => module
                 .Around((_, _, _) => TestUser.BeginSystem(ToolkitWork.ReceivingScope))
                 .Handle<ShelfOpenedV3, ReceiptLog>(),
-            requireExplicitCallers: false))
+            requireExplicitCurrentUser: false))
         {
             await work.QueueAsync("Fiction");
 
             (await work.ProcessAsync()).Should().Be(1);
 
-            (await work.ReceiptsAsync()).Should().Equal(new Written("Fiction", ExplicitCallersPostgres.SystemInRole, claims));
-            (await work.InboxAsync()).Should().Equal(new Written("callers.receipt-log", ExplicitCallersPostgres.SystemInRole, claims));
+            (await work.ReceiptsAsync()).Should().Equal(new Written("Fiction", ExplicitCurrentUserPostgres.SystemInRole, claims));
+            (await work.InboxAsync()).Should().Equal(new Written("callers.receipt-log", ExplicitCurrentUserPostgres.SystemInRole, claims));
         }
 
         await using (var elsewhere = await ToolkitWork.StartAsync(
@@ -117,13 +117,13 @@ public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres)
                 .Around((_, _, _) => TestUser.BeginSystem("elsewhere"))
                 .Handle<ShelfOpenedV3, ReceiptLog>(),
             services: services => services.AddSingleton<KeptLogs>().AddLogging(logging => logging.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<KeptLogs>())),
-            requireExplicitCallers: false))
+            requireExplicitCurrentUser: false))
         {
             await elsewhere.QueueAsync("Fiction");
 
             (await elsewhere.ProcessAsync()).Should().Be(0);
 
-            (await elsewhere.OutboxAsync()).Single().LastError.Should().Contain("CallerInboxContext/callers.receipt-log");
+            (await elsewhere.OutboxAsync()).Single().LastError.Should().Contain("UserInboxContext/callers.receipt-log");
             elsewhere.Services.GetRequiredService<KeptLogs>().Exceptions.OfType<DbUpdateException>()
                 .Select(failure => failure.InnerException).OfType<PostgresException>()
                 .Should().NotBeEmpty()

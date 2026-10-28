@@ -22,7 +22,7 @@ public sealed class SupabaseRoleDefaultsTests : IDisposable
     private static readonly SupabaseMigrationSource Shelves = SupabaseMigrationSource.For(() => SupabaseShelfContext.Create());
 
     private static readonly RowAccessRule ShelvesByName = RowAccessRule.For<SupabaseShelf>(
-        "Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {caller:claim:shelf})", RowAccessRoles.User);
+        "Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {user:claim:shelf})", RowAccessRoles.User);
 
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "ddd-role-defaults-" + Guid.NewGuid().ToString("N"));
 
@@ -46,7 +46,7 @@ public sealed class SupabaseRoleDefaultsTests : IDisposable
         RowAccessRoleNames.From(options).Should().Be(SupabaseRowLevelSecurity.DefaultRoles, "the host and the export take the same defaults");
         new SupabaseMigrationOptions().Roles.Should().Be(SupabaseRowLevelSecurity.DefaultRoles, "and so does an export by hand");
 
-        Registered(services => services.AddSupabaseRowLevelSecurity<CallerOfTheTest>()).SystemRole.Should().Be("ddd_system", "the registration with an accessor of its own takes them too");
+        Registered(services => services.AddSupabaseRowLevelSecurity<UserOfTheTest>()).SystemRole.Should().Be("ddd_system", "the registration with an accessor of its own takes them too");
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public sealed class SupabaseRoleDefaultsTests : IDisposable
     private (int ExitCode, string Output) Build(string? roles)
     {
         using var output = new StringWriter();
-        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, roles, callerFunctions: null, grants: null, force: null, output);
+        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, roles, currentUserFunctions: null, grants: null, force: null, output);
         return (exitCode, output.ToString());
     }
 }

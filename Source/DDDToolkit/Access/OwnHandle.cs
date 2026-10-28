@@ -13,7 +13,7 @@ internal abstract class OwnHandle
     private static readonly ConcurrentDictionary<Type, OwnHandle?> Handles = new();
 
     /// <summary>
-    /// The handle of <paramref name="type"/>, or <see langword="null"/> for a type no <see cref="ICallersOwn{TValue}"/> can
+    /// The handle of <paramref name="type"/>, or <see langword="null"/> for a type no <see cref="IOwnedByCurrentUser{TValue}"/> can
     /// be of: one that is no struct, an enum, a struct that is not <see cref="IEquatable{T}"/> of itself, or a nullable one.
     /// </summary>
     /// <param name="type">The type of the caller's own.</param>
@@ -39,7 +39,7 @@ internal abstract class OwnHandle
     public abstract object? Find(ICurrentUser user, IServiceProvider? services);
 }
 
-/// <summary>The handle of <typeparamref name="TValue"/>: the <see cref="ICallersOwn{TValue}"/> registered for it, or the core's for a <see cref="Guid"/>.</summary>
+/// <summary>The handle of <typeparamref name="TValue"/>: the <see cref="IOwnedByCurrentUser{TValue}"/> registered for it, or the core's for a <see cref="Guid"/>.</summary>
 /// <typeparam name="TValue">The type of the caller's own.</typeparam>
 internal sealed class OwnHandle<TValue> : OwnHandle
     where TValue : struct, IEquatable<TValue>
@@ -49,9 +49,9 @@ internal sealed class OwnHandle<TValue> : OwnHandle
     /// the caller's verified identity; <see langword="null"/> where nothing does.
     /// </summary>
     /// <param name="services">The scope's services, where a handle is registered; <see langword="null"/> for none.</param>
-    public static ICallersOwn<TValue>? In(IServiceProvider? services)
-        => (ICallersOwn<TValue>?)services?.GetService(typeof(ICallersOwn<TValue>))
-           ?? (typeof(TValue) == typeof(Guid) ? (ICallersOwn<TValue>)(object)CallersIdentity.Instance : null);
+    public static IOwnedByCurrentUser<TValue>? In(IServiceProvider? services)
+        => (IOwnedByCurrentUser<TValue>?)services?.GetService(typeof(IOwnedByCurrentUser<TValue>))
+           ?? (typeof(TValue) == typeof(Guid) ? (IOwnedByCurrentUser<TValue>)(object)CurrentUserIdentity.Instance : null);
 
     /// <inheritdoc />
     public override bool CanBeAnswered(IServiceProvider? services) => In(services) is not null;
@@ -59,6 +59,6 @@ internal sealed class OwnHandle<TValue> : OwnHandle
     /// <inheritdoc />
     public override object? Find(ICurrentUser user, IServiceProvider? services)
         => (In(services) ?? throw new InvalidOperationException(
-                $"Nothing says what the caller's own {WrittenTypeNames.Of(typeof(TValue))} is. Register an ICallersOwn<{WrittenTypeNames.Of(typeof(TValue))}> with services.AddCallersOwn<{WrittenTypeNames.Of(typeof(TValue))}, TCallersOwn>(); a requirement nothing checks lets nobody through."))
+                $"Nothing says what the caller's own {WrittenTypeNames.Of(typeof(TValue))} is. Register an IOwnedByCurrentUser<{WrittenTypeNames.Of(typeof(TValue))}> with services.AddOwnedByCurrentUser<{WrittenTypeNames.Of(typeof(TValue))}, THandle>(); a requirement nothing checks lets nobody through."))
             .Find(user);
 }

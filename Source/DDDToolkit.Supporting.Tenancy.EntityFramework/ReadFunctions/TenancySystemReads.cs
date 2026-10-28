@@ -106,7 +106,7 @@ internal static class TenancySystemReads
     /// <summary>
     /// Runs one read across tenants on a new context of the same type as <paramref name="like"/>, made in a new
     /// scope of the services <paramref name="like"/> was made from: <paramref name="throughFunctions"/> as
-    /// scoped system work in <paramref name="scope"/> with no Tenancy caller, so in no tenant, where the database keeps
+    /// scoped system work in <paramref name="scope"/> with no Tenancy user, so in no tenant, where the database keeps
     /// the rights; <paramref name="overTables"/> as system work without a scope anywhere else.
     /// </summary>
     /// <param name="like">A context of the type to read, made by the application's services: it names the type and the services, and is not read.</param>
@@ -149,7 +149,7 @@ internal static class TenancySystemReads
         // scope, writes it. With none, the tables answer nothing, and only the function does.
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
         using (user.BeginAs(asksTheDatabase ? scoped : CurrentUserSnapshot.System))
-        using (asksTheDatabase ? TenancyCallers.BeginNone() : null)
+        using (asksTheDatabase ? TenancyUsers.BeginNone() : null)
         {
             await using var lifetime = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var context = lifetime.ServiceProvider.GetService(like.GetType()) as DbContext

@@ -28,7 +28,7 @@ public static class TenancyFunctionNames
     /// <c>"TenantId"</c>, <c>"SeatId"</c>, <c>"UnitId"</c>, <c>"RoleId"</c>, <c>"Permission"</c>, <c>"StartsAt"</c> and
     /// <c>"EndsAt"</c>.
     /// </summary>
-    public const string CallerPermissions = "caller_permissions";
+    public const string CurrentPermissions = "current_permissions";
 
     /// <summary>
     /// The closure of the organization's tree, as rows of <see cref="Access.OrganizationUnitPath{TTenantId, TUnitId}"/>:
@@ -71,11 +71,11 @@ public static class TenancyFunctionNames
 
     /// <summary>
     /// The rights a move of a unit changes, as rows of <c>"UnitId"</c>, <c>"Permission"</c>, <c>"EndsAt"</c>,
-    /// <c>"Parent"</c> and <c>"OfCaller"</c>: its parameters are the unit's parent and the parent it would get.
+    /// <c>"Parent"</c> and <c>"OfCurrentSeat"</c>: its parameters are the unit's parent and the parent it would get.
     /// Answered to a seat that manages units at both: its own rights, and another seat's only where it reaches one
     /// parent and not the other, which is where the move changes it.
     /// </summary>
-    public const string PermissionsAMoveChanges = "permissions_a_move_changes";
+    public const string PermissionsAUnitMoveChanges = "permissions_a_unit_move_changes";
 
     /// <summary>
     /// The seats that hold a permission at a unit, as rows of <c>"SeatId"</c>: its parameters are the permission and the unit.

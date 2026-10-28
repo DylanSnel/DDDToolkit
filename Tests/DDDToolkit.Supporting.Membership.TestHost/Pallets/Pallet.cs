@@ -107,7 +107,7 @@ public static class PalletMembership
     /// <summary>The rules.</summary>
     public static MembershipRules Rules { get; } = MembershipRules.For<Pallet>(
         Roles.Fixed([new("loader", [PalletPermissions.See, PalletPermissions.Load]), new("checker", [PalletPermissions.See])]),
-        members: MemberSource.Resolved(DepotFunctions.CallerPorter));
+        members: MemberSource.Resolved(DepotFunctions.CurrentPorter));
 
     /// <summary>The role that loads.</summary>
     public static NamedRole Loader { get; } = new("loader");

@@ -152,7 +152,7 @@ public sealed partial class ShopSeat
    {
        // ITenantSelection: the selection without its ids, so the middleware names none
        var seat = await selection.ResolveAsync(requestUser, context.Request.Headers["Tenant"], context.RequestAborted);
-       using (TenancyCallers.Begin(seat))
+       using (TenancyUsers.Begin(seat))
        {
            await next(context);
        }
@@ -302,8 +302,8 @@ Who reads the seats, and who besides the seats managers reads an invitation, are
 or invitation class, `[RowAccess<Seat>(RowOperations.Read)]` (without `To` it is for signed-in users, as the
 default is), takes the place of one, held to the tenant, beside what Tenancy's own work reads (a person's own seats;
 every seat of the tenant to a seat that manages seats, grants or units anywhere, or roles for the whole tenant),
-which no rule takes away. Write it with `TenancyRowAccess`'s functions (`CallerSeatId`, `CallerTenant`,
-`UnitsWhereIHold`, `SeatsInMyUnits`: the seats placed at or below the caller's units; `CallerSeat<Seat>().Kind`, a
+which no rule takes away. Write it with `TenancyRowAccess`'s functions (`CurrentSeatId`, `CurrentTenant`,
+`UnitsWhereIHold`, `SeatsInMyUnits`: the seats placed at or below the caller's units; `CurrentSeat<Seat>().Kind`, a
 field of the caller's own seat), or a module's `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]`
 (declaring `static partial AccessSet<SeatId> Ids();`), the people on the caller's projects. It changes what a read of the
 seats returns, a direct read, the managers' reads, `tenant_seats()` and `db.Tenancy().Seats()`, so Membership's
@@ -311,7 +311,7 @@ member manager then admits only seats the caller reads (`member-not-active` othe
 the caller and rights, the placements (every member still reads each seat's id and units), or who writes. A read
 rule on any other class of Tenancy's is refused.
 To take away what Tenancy allows, write a restrictive rule, `[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]`:
-AND-ed with Tenancy's policies, it narrows and never grants (`CallerSeat<Seat>().Kind == SeatKind.Employee` keeps an
+AND-ed with Tenancy's policies, it narrows and never grants (`CurrentSeat<Seat>().Kind == SeatKind.Employee` keeps an
 external seat out of the organization, its units and its tree). It goes on the organization, seat or role class;
 a tenant or invitation is DDD00100. Tenancy's own work and its owner-run functions keep working.
 See `tenancy/postgres.md` ("Row level security on Postgres"): "Default read policies for seats and invitations",

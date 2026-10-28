@@ -136,25 +136,25 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
         var other = await _services.ProvisionAsync("orchard");
         OrganizationUnitId[] units = [_harbor.RootUnit, _north, _south, _coast];
 
-        var asLin = await AskAsync(HostCaller.InSeat(_harbor.Tenant, _lin));
+        var asLin = await AskAsync(HostUser.InSeat(_harbor.Tenant, _lin));
         asLin.Held.Should().BeEquivalentTo([(_coast, HostCatalogue.WidgetChange)], "Lin operates at Coast, and holds neither of the other permissions anywhere");
         asLin.Under.Should().BeEquivalentTo(units, "the tree is the tenant's to read");
         asLin.UnderOther.Should().BeEmpty("a unit of another tenant answers nothing");
         asLin.Roles.Should().HaveCount(3 + 3, "the administrators hold all three permissions, the supervisors two, and the operators one")
             .And.OnlyContain(pair => _harbor.RolesByStarterRole.Values.Contains(pair.Role));
 
-        var bySystem = await AskAsync(HostCaller.SystemIn(_harbor.Tenant));
+        var bySystem = await AskAsync(HostUser.SystemIn(_harbor.Tenant));
         bySystem.Held.Should().BeEquivalentTo(units.SelectMany(unit => Keys.Select(permission => (unit, permission))), "system work holds every permission at every unit of its tenant");
         bySystem.Under.Should().BeEquivalentTo(units);
         bySystem.UnderOther.Should().BeEmpty();
         bySystem.Roles.Should().BeEquivalentTo(asLin.Roles, "which roles grant a permission does not depend on who asks");
 
-        var asNobody = await AskAsync(HostCaller.Nobody(TenancyRefusals.NotSeated));
+        var asNobody = await AskAsync(HostUser.Nobody(TenancyRefusals.NotSeated));
         asNobody.Held.Should().BeEmpty();
         asNobody.Under.Should().BeEmpty();
         asNobody.Roles.Should().BeEmpty();
 
-        async Task<(List<(OrganizationUnitId Unit, string Key)> Held, List<OrganizationUnitId> Under, List<OrganizationUnitId> UnderOther, List<(RoleId Role, string Key)> Roles)> AskAsync(HostCaller caller)
+        async Task<(List<(OrganizationUnitId Unit, string Key)> Held, List<OrganizationUnitId> Under, List<OrganizationUnitId> UnderOther, List<(RoleId Role, string Key)> Roles)> AskAsync(HostUser caller)
             => await _services.RunAsync(caller, async services =>
             {
                 var queries = services.Widgets().Tenancy();

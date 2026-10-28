@@ -23,7 +23,7 @@ public static class DepotFunctions
     public const string Owner = "depot";
 
     /// <summary>Answers the calling porter, or <c>NULL</c> for a caller the depot does not count.</summary>
-    public static DatabaseFunction CallerPorter { get; } = new(Owner, "caller_porter");
+    public static DatabaseFunction CurrentPorter { get; } = new(Owner, "current_porter");
 
     /// <summary>Answers, for a permission, the depot's roles in use that give it.</summary>
     public static DatabaseFunction RolesWithPermission { get; } = new(Owner, "roles_with_permission");
@@ -58,7 +58,7 @@ public sealed class DepotDesk
 /// </summary>
 /// <param name="desk">Who the depot knows its callers as.</param>
 /// <param name="context">The depot's rows.</param>
-public sealed class PalletsInTheDepot(DepotDesk desk, DepotContext context) : ICallerMember<PalletId, PorterId>, IMemberDirectory<PalletId, PorterId>
+public sealed class PalletsInTheDepot(DepotDesk desk, DepotContext context) : ICurrentMember<PalletId, PorterId>, IMemberDirectory<PalletId, PorterId>
 {
     /// <inheritdoc />
     public PorterId? Find(CurrentUserSnapshot caller) => desk.ActivePorterOf(caller);
@@ -75,7 +75,7 @@ public sealed class PalletsInTheDepot(DepotDesk desk, DepotContext context) : IC
 /// <param name="desk">Who the depot knows its callers as.</param>
 /// <param name="context">The depot's rows, for what is asked outside a statement.</param>
 public sealed class CratesInTheDepot(DepotDesk desk, DepotContext context)
-    : ICallerMember<CrateId, PorterId>,
+    : ICurrentMember<CrateId, PorterId>,
       IMemberDirectory<CrateId, PorterId>,
       IMemberRoles<CrateId, DepotRoleId>,
       IRolesWithPermission<CrateId, DepotRoleId>,

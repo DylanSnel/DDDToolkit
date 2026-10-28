@@ -44,7 +44,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <param name="Kept">
 /// What the role still reads, whatever the rule says, OR-ed with it: the rows the package's own work needs. SQL
 /// as a policy's <c>Using</c> is, which may ask functions by <c>{fn:owner/name}</c> and the caller by
-/// <c>{caller:...}</c>. <see langword="null"/> for nothing, and then the rule alone decides within
+/// <c>{user:...}</c>. <see langword="null"/> for nothing, and then the rule alone decides within
 /// <paramref name="Within"/>.
 /// </param>
 /// <param name="Within">

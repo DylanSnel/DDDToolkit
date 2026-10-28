@@ -33,7 +33,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </para>
 /// <para>
 /// It is asked about every signed-in caller, a member of the resource or not, and also about one the
-/// application answered nobody for as a member (<see cref="ICallerMember{TResourceId, TMemberId}.Find"/>):
+/// application answered nobody for as a member (<see cref="ICurrentMember{TResourceId, TMemberId}.Find"/>):
 /// reach from above is for callers that are on no member list. So whether the caller still counts is asked
 /// here as well, of the same rows or the same fact the application answers who a member is from. An
 /// application that answers from the caller's id alone lets somebody it no longer counts keep what they held.

@@ -29,7 +29,7 @@ public sealed class StartupCheckRegistrationTests
             (PostgresRowAccessChecks.RowLevelSecurityWiredCheck, StartupCheckStage.Services),
             (TenancyPostgresChecks.ExplicitCurrentUserCheck, StartupCheckStage.Services),
             (TenancyPostgresChecks.SeatedTokenRolesCheck, StartupCheckStage.Services),
-            (PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck, StartupCheckStage.Login),
+            (PostgresRowAccessChecks.LoginRoleMaySwitchToUserRolesCheck, StartupCheckStage.Login),
             (PostgresRowAccessChecks.LoginRoleOwnsNothingCheck, StartupCheckStage.Database),
             (PostgresRowAccessChecks.DefinerOwnersBypassCheck, StartupCheckStage.Database),
             (TenancyPostgresChecks.SystemInRoleConfinedCheck, StartupCheckStage.Database),

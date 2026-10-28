@@ -35,7 +35,7 @@ public class OwnerDocsExampleTests
             public const string Manage = "boards.manage";
         }
 
-        public sealed class CallersUser : ICallersOwn<UserId>
+        public sealed class CurrentUserId : IOwnedByCurrentUser<UserId>
         {
             public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
         }

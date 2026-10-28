@@ -34,7 +34,7 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
     {
         var (exitCode, output) = await BuildAsync(
             roles: "user=desk_user | anonymous=desk_guest | system-in=desk_scoped | token:analyst=desk_analyst",
-            callerFunctions: "uid=who.id()|role=who.role()|claims=who.claims()");
+            currentUserFunctions: "uid=who.id()|role=who.role()|claims=who.claims()");
 
         exitCode.Should().Be(0, output);
         var sql = File.ReadAllText(Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Should().ContainSingle().Subject);
@@ -48,7 +48,7 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
         sql.Should().Contain("(SELECT who.id())", "uid=who.id() reached the export");
         sql.Should().Contain("(SELECT who.role())", "role=who.role() reached the export");
         sql.Should().Contain("(SELECT who.claims() #>> '{app_metadata,team}')", "claims=who.claims() reached the export");
-        sql.Should().Contain("SELECT coalesce(((SELECT who.claims()) ->> 'on_duty')::boolean, false)", "the caller functions reached the contribution the build handed over");
+        sql.Should().Contain("SELECT coalesce(((SELECT who.claims()) ->> 'on_duty')::boolean, false)", "the current user functions reached the contribution the build handed over");
         sql.Should().Contain("GRANT EXECUTE ON FUNCTION \"desk\".on_duty() TO desk_user;\n", "and so did the roles its grants name");
         sql.Should().NotContain("authenticated").And.NotContain("auth.", "nothing of the defaults is left");
     }
@@ -57,7 +57,7 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
     public async Task The_build_reads_the_privileges_and_the_force_switch_and_the_system_role_from_the_environment()
     {
         // Left out, both switches are on.
-        var (exitCode, output) = await BuildAsync(roles: "token:analyst=desk_analyst|system=desk_books", callerFunctions: null);
+        var (exitCode, output) = await BuildAsync(roles: "token:analyst=desk_analyst|system=desk_books", currentUserFunctions: null);
 
         exitCode.Should().Be(0, output);
         var sql = File.ReadAllText(Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Should().ContainSingle().Subject);
@@ -70,14 +70,14 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
 
         // Turned off, both reach the export, and the file says nothing of either.
         Directory.Delete(Migrations, recursive: true);
-        (await BuildAsync(roles: "token:analyst=desk_analyst", callerFunctions: null, grants: "None", force: "false")).ExitCode.Should().Be(0);
+        (await BuildAsync(roles: "token:analyst=desk_analyst", currentUserFunctions: null, grants: "None", force: "false")).ExitCode.Should().Be(0);
         File.ReadAllText(Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Single()).Should().NotContain(" ON TABLE ").And.NotContain("FORCE");
     }
 
     [Fact]
     public async Task The_build_reads_the_login_role_from_the_environment()
     {
-        var (exitCode, output) = await BuildAsync(roles: "token:analyst=desk_analyst|system=desk_books", callerFunctions: null, loginRole: "desk_api");
+        var (exitCode, output) = await BuildAsync(roles: "token:analyst=desk_analyst|system=desk_books", currentUserFunctions: null, loginRole: "desk_api");
 
         exitCode.Should().Be(0, output);
         var files = Directory.GetFiles(Migrations).Select(path => Path.GetFileName(path)).Order(StringComparer.Ordinal).ToList();
@@ -90,14 +90,14 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
 
         // Left out, there is no such file.
         Directory.Delete(Migrations, recursive: true);
-        (await BuildAsync(roles: "token:analyst=desk_analyst", callerFunctions: null)).ExitCode.Should().Be(0);
+        (await BuildAsync(roles: "token:analyst=desk_analyst", currentUserFunctions: null)).ExitCode.Should().Be(0);
         Directory.GetFiles(Migrations, "*_login_role.*").Should().BeEmpty();
     }
 
     [Fact]
     public async Task A_semicolon_in_the_login_role_is_refused_naming_what_a_name_is()
     {
-        var (exitCode, output) = await BuildAsync(roles: null, callerFunctions: null, loginRole: "desk_api;DDDTOOLKIT_SUPABASE_EXPORT=Check");
+        var (exitCode, output) = await BuildAsync(roles: null, currentUserFunctions: null, loginRole: "desk_api;DDDTOOLKIT_SUPABASE_EXPORT=Check");
 
         exitCode.Should().NotBe(0);
         output.Should().Contain("SupabaseLoginRole is 'desk_api;DDDTOOLKIT_SUPABASE_EXPORT=Check', with a ';'. It is the name of one role, a plain lowercase identifier such as sample_api");
@@ -106,12 +106,12 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
 
     [Theory]
     [InlineData("SupabaseRowAccessRoles", "user=desk_user;anonymous=desk_guest")]
-    [InlineData("SupabaseCallerFunctions", "uid=who.id();role=who.role()")]
+    [InlineData("SupabaseCurrentUserFunctions", "uid=who.id();role=who.role()")]
     public async Task A_semicolon_in_a_build_property_is_refused_naming_the_bar(string property, string value)
     {
         var (exitCode, output) = await BuildAsync(
             roles: property == "SupabaseRowAccessRoles" ? value : null,
-            callerFunctions: property == "SupabaseCallerFunctions" ? value : null);
+            currentUserFunctions: property == "SupabaseCurrentUserFunctions" ? value : null);
 
         exitCode.Should().NotBe(0);
         output.Should().Contain($"{property} is '{value}', with a ';'. Separate its pairs with '|' instead");
@@ -291,10 +291,10 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
 
     /// <summary>
     /// Builds a project that imports the targets file as a host does, an application with the export on, writing
-    /// into <see cref="Migrations"/>, and <paramref name="roles"/>, <paramref name="callerFunctions"/>,
+    /// into <see cref="Migrations"/>, and <paramref name="roles"/>, <paramref name="currentUserFunctions"/>,
     /// <paramref name="grants"/>, <paramref name="force"/> and <paramref name="loginRole"/> as the project would set them.
     /// </summary>
-    private Task<(int ExitCode, string Output)> BuildAsync(string? roles, string? callerFunctions, string? grants = null, string? force = null, string? loginRole = null)
+    private Task<(int ExitCode, string Output)> BuildAsync(string? roles, string? currentUserFunctions, string? grants = null, string? force = null, string? loginRole = null)
     {
         var properties = new Dictionary<string, string>
         {
@@ -304,7 +304,7 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
 
         foreach (var (name, value) in (IEnumerable<(string, string?)>)[
             ("SupabaseRowAccessRoles", roles),
-            ("SupabaseCallerFunctions", callerFunctions),
+            ("SupabaseCurrentUserFunctions", currentUserFunctions),
             ("SupabaseRowAccessGrants", grants),
             ("SupabaseForceRowLevelSecurity", force),
             ("SupabaseLoginRole", loginRole)])

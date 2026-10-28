@@ -57,7 +57,7 @@ modelBuilder.Entity<Delivery>().ScopeToTenant(delivery => delivery.ShipperTenant
   Entity Framework refuses a save that changes it. The
   [privileges written from the policies](../row-level-security.md#privileges-from-the-policies) also leave the
   tenant column out of `UPDATE`.
-- **The filter has a name**, `TenancyQueryFilter.Name` (`tenancy.caller-tenant`). A filter of yours on the same
+- **The filter has a name**, `TenancyQueryFilter.Name` (`tenancy.current-tenant`). A filter of yours on the same
   class, such as a soft delete, applies next to it. A read across tenants skips only the tenant filter with
   `IgnoreQueryFilters([TenancyQueryFilter.Name])`.
 - **Your filter hides rows from your queries only.** Tenancy's bookkeeping skips every filter. It reads the hidden
@@ -139,12 +139,12 @@ public sealed class UnitImport(OrganizationManager organization, TenancyAccessMa
 }
 ```
 
-Each `Begin…` call starts two things, Tenancy's caller and the toolkit's current user. Disposing the result ends both,
+Each `Begin…` call starts two things, Tenancy's user and the toolkit's current user. Disposing the result ends both,
 and the caller and the user from before are current again. The generator writes `TenancyAccessManager` closed over your ids
 ([Calls closed over your ids](your-module.md#calls-closed-over-your-ids)), so you write no id type. `AddTenancy`
 registers it per scope.
 
-| Call | Tenancy's caller | The toolkit's current user, `ICurrentUser` |
+| Call | Tenancy's user | The toolkit's current user, `ICurrentUser` |
 |---|---|---|
 | `access.BeginSystem()` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `BeginSystem("tenancy")` |
 | `access.BeginSystemIn(tenant, actingSeat, scope)` | Works inside the tenant. It holds every permission there and none elsewhere. | `BeginSystem(scope)`, `"tenancy"` by default |
@@ -209,7 +209,7 @@ shows what the work holds, how Tenancy records it, and which database role it ru
     `access.CurrentTenant.Require()` and refuses the caller with `access.system-only` unless `BySystem` is true.
   - Tenancy's system-only manager methods refuse every other caller with `access.system-only`. These are
     `TenantManager.ProvisionAsync`, `SuspendAsync`, `ReactivateAsync` and `CloseAsync`.
-- Code that runs without a started Tenancy caller is nobody to Tenancy. This holds where the toolkit's current user is
+- Code that runs without a started Tenancy user is nobody to Tenancy. This holds where the toolkit's current user is
   system work without a scope, and in a host that does not
   [require an explicit current user](../row-level-security.md#requiring-an-explicit-current-user). Tenancy's managers refuse a
   caller that is nobody with `tenancy.not-seated`.
@@ -262,7 +262,7 @@ public sealed class EndExpiredOrdersJob(IServiceScopeFactory scopes)
   ([With a context pool](../row-level-security.md#with-a-context-pool)). Tenancy's
   managers run on one connection.
 - **A read that belongs to no tenant.** Wrap a read of yours that belongs to no seat and no tenant in
-  `TenancyCallers.BeginNone()` when it runs in the middle of somebody's work. Then the surrounding tenant does not
+  `TenancyUsers.BeginNone()` when it runs in the middle of somebody's work. Then the surrounding tenant does not
   apply to that read.
 
 ### An explicit current user

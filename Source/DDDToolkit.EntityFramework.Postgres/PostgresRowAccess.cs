@@ -12,7 +12,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 
 /// <summary>
 /// Row access rules as the policies Postgres enforces: the rules' SQL with the columns filled in from the
-/// Entity Framework model, and the caller asked through <see cref="PostgresCallerFunctions"/>.
+/// Entity Framework model, and the caller asked through <see cref="PostgresCurrentUserFunctions"/>.
 /// <code>
 /// // A migration of your own, on a Postgres that is not Supabase's
 /// migrationBuilder.Sql(PostgresRowAccess.SetupScript());
@@ -104,14 +104,14 @@ public static partial class PostgresRowAccess
     private const string WrittenInThisTransactionSignature = "\"ddd\".written_in_this_transaction(xid)";
 
     /// <summary>
-    /// <c>"ddd".use_caller(role, claims, names, values)</c>: sets a caller's role, claims and settings for the
+    /// <c>"ddd".use_current_user(role, claims, names, values)</c>: sets a caller's role, claims and settings for the
     /// running transaction alone, which is how they travel where nothing may live on a session
     /// (<see cref="RowLevelSecurityScope.Transaction"/>). The interceptor calls it in front of a command that runs
     /// outside a transaction.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// It empties the four settings Supabase's caller functions read before the claims, as the interceptor's own
+    /// It empties the four settings Supabase's current user functions read before the claims, as the interceptor's own
     /// statement does, so a value a pooled server connection still carries cannot decide who a statement runs as.
     /// </para>
     /// <para>
@@ -120,7 +120,7 @@ public static partial class PostgresRowAccess
     /// alone, never by <c>PUBLIC</c> or a role a caller runs as: whoever could call it could say who they are.
     /// </para>
     /// </remarks>
-    private const string UseCallerBody =
+    private const string UseCurrentUserBody =
         "\n" +
         "BEGIN\n" +
         "    PERFORM pg_catalog.set_config('role', role_name, true);\n" +
@@ -134,12 +134,12 @@ public static partial class PostgresRowAccess
         "    END LOOP;\n" +
         "END\n";
 
-    /// <summary>What <see cref="UseCallerBody"/> is the body of, up to the body.</summary>
-    private const string UseCallerHeader =
-        "CREATE OR REPLACE PROCEDURE \"ddd\".use_caller(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS ";
+    /// <summary>What <see cref="UseCurrentUserBody"/> is the body of, up to the body.</summary>
+    private const string UseCurrentUserHeader =
+        "CREATE OR REPLACE PROCEDURE \"ddd\".use_current_user(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS ";
 
-    /// <summary>The signature <see cref="UseCallerBody"/> is found, revoked and granted by.</summary>
-    internal const string UseCallerSignature = "\"ddd\".use_caller(text, text, text[], text[])";
+    /// <summary>The signature <see cref="UseCurrentUserBody"/> is found, revoked and granted by.</summary>
+    internal const string UseCurrentUserSignature = "\"ddd\".use_current_user(text, text, text[], text[])";
 
     /// <summary>The commands an entity's table gets a policy for, in the order a script writes them.</summary>
     private static readonly string[] EntityCommands = ["SELECT", "INSERT", "UPDATE", "DELETE"];
@@ -160,18 +160,18 @@ public static partial class PostgresRowAccess
     /// <param name="context">The context whose model says which tables and columns the rules read.</param>
     /// <param name="rules">The rules; those of aggregates other contexts map are left out.</param>
     /// <param name="accessFunctions">The access functions the rules call; those of aggregates other contexts map are left out, and written by those.</param>
-    /// <param name="callerFunctions">How a policy asks about the caller; <see cref="PostgresCallerFunctions.Toolkit"/> when left out.</param>
+    /// <param name="currentUserFunctions">How a policy asks about the caller; <see cref="PostgresCurrentUserFunctions.Toolkit"/> when left out.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="rules"/> is null.</exception>
     /// <exception cref="InvalidOperationException">A rule names a role no policy can be for, such as <c>PUBLIC</c> or a token role nobody mapped.</exception>
     public static string Script(
         DbContext context,
         IEnumerable<RowAccessRule> rules,
         IEnumerable<RowAccessFunction>? accessFunctions = null,
-        PostgresCallerFunctions? callerFunctions = null)
-        => Script(context, rules, accessFunctions, new RowAccessExport { CallerFunctions = callerFunctions ?? PostgresCallerFunctions.Toolkit });
+        PostgresCurrentUserFunctions? currentUserFunctions = null)
+        => Script(context, rules, accessFunctions, new RowAccessExport { CurrentUserFunctions = currentUserFunctions ?? PostgresCurrentUserFunctions.Toolkit });
 
     /// <summary>
-    /// What this context's rules are now, written with <paramref name="export"/>'s caller functions and
+    /// What this context's rules are now, written with <paramref name="export"/>'s current user functions and
     /// roles: every policy an earlier script made on its tables dropped, and the policies of
     /// <paramref name="rules"/> that guard an aggregate it maps made again.
     /// </summary>
@@ -255,10 +255,10 @@ public static partial class PostgresRowAccess
     /// <summary>
     /// What row level security needs on a Postgres that is not Supabase's, where every project has it
     /// already: the roles a caller's queries run as, the roles of the mapped token roles among them, which the
-    /// application's login role may switch to, the <c>"ddd".caller_id()</c>, <c>"ddd".caller_role()</c> and
-    /// <c>"ddd".caller_claims()</c> functions policies ask about the caller,
+    /// application's login role may switch to, the <c>"ddd".current_user_id()</c>, <c>"ddd".current_user_role()</c> and
+    /// <c>"ddd".current_user_claims()</c> functions policies ask about the caller,
     /// <c>"ddd".written_in_this_transaction(xmin)</c>, which the policies of an aggregate's entities ask about its
-    /// root, and the procedure <c>"ddd".use_caller</c>, which sets a caller for one transaction and which the
+    /// root, and the procedure <c>"ddd".use_current_user</c>, which sets a caller for one transaction and which the
     /// login role alone may call. It can run again, so it can go in the first migration and stay there.
     /// </summary>
     /// <param name="options">The roles; PostgREST's, <c>anon</c> and <c>authenticated</c>, and <c>ddd_system_in</c>, when left out.</param>
@@ -296,15 +296,15 @@ public static partial class PostgresRowAccess
     /// The role that runs this owns the <c>ddd</c> schema, its functions and its procedure. A
     /// <see cref="Script(DbContext, IEnumerable{RowAccessRule}, IEnumerable{RowAccessFunction}?, RowAccessExport)">script</see>
     /// run later by another role, the application's, leaves them alone while they are as it needs them. When a
-    /// new version of the toolkit changes <c>"ddd".written_in_this_transaction</c> or <c>"ddd".use_caller</c>, such a
+    /// new version of the toolkit changes <c>"ddd".written_in_this_transaction</c> or <c>"ddd".use_current_user</c>, such a
     /// script cannot replace what it does not own: run this again first, as the role that ran it before.
     /// </para>
     /// <para>
-    /// <c>"ddd".use_caller</c> is taken from <c>PUBLIC</c> and given to <paramref name="loginRole"/>, or to the role
+    /// <c>"ddd".use_current_user</c> is taken from <c>PUBLIC</c> and given to <paramref name="loginRole"/>, or to the role
     /// running the script, together with the right to use the <c>ddd</c> schema. A login role that is neither, one
     /// made afterwards, needs both before it can run a context whose settings last one transaction
     /// (<see cref="RowLevelSecurityScope.Transaction"/>): <c>GRANT USAGE ON SCHEMA "ddd" TO</c> that role, and
-    /// <c>GRANT EXECUTE ON PROCEDURE "ddd".use_caller(text, text, text[], text[]) TO</c> it.
+    /// <c>GRANT EXECUTE ON PROCEDURE "ddd".use_current_user(text, text, text[], text[]) TO</c> it.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="loginRole"/> is empty, or a role in <paramref name="options"/> is empty or cannot be a policy's.</exception>
@@ -362,18 +362,18 @@ public static partial class PostgresRowAccess
             .Append("GRANT USAGE ON SCHEMA \"ddd\" TO ").Append(quoted).Append(';').Append('\n')
             .Append('\n')
             .Append("-- The claims of the caller's token, as the interceptor put them on the connection.").Append('\n')
-            .Append("CREATE OR REPLACE FUNCTION \"ddd\".caller_claims() RETURNS jsonb LANGUAGE sql STABLE AS $function$").Append('\n')
+            .Append("CREATE OR REPLACE FUNCTION \"ddd\".current_user_claims() RETURNS jsonb LANGUAGE sql STABLE AS $function$").Append('\n')
             .Append("    SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb").Append('\n')
             .Append("$function$;").Append('\n')
             .Append('\n')
             .Append("-- The user's id, or null when there is none or it is not a uuid: a rule about a user then matches nobody.").Append('\n')
-            .Append("CREATE OR REPLACE FUNCTION \"ddd\".caller_id() RETURNS uuid LANGUAGE sql STABLE AS $function$").Append('\n')
+            .Append("CREATE OR REPLACE FUNCTION \"ddd\".current_user_id() RETURNS uuid LANGUAGE sql STABLE AS $function$").Append('\n')
             .Append("    SELECT CASE WHEN sub ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN sub::uuid END").Append('\n')
-            .Append("    FROM (SELECT \"ddd\".caller_claims() ->> 'sub' AS sub) caller").Append('\n')
+            .Append("    FROM (SELECT \"ddd\".current_user_claims() ->> 'sub' AS sub) caller").Append('\n')
             .Append("$function$;").Append('\n')
             .Append('\n')
-            .Append("CREATE OR REPLACE FUNCTION \"ddd\".caller_role() RETURNS text LANGUAGE sql STABLE AS $function$").Append('\n')
-            .Append("    SELECT \"ddd\".caller_claims() ->> 'role'").Append('\n')
+            .Append("CREATE OR REPLACE FUNCTION \"ddd\".current_user_role() RETURNS text LANGUAGE sql STABLE AS $function$").Append('\n')
+            .Append("    SELECT \"ddd\".current_user_claims() ->> 'role'").Append('\n')
             .Append("$function$;").Append('\n')
             .Append('\n')
             .Append("-- Whether a row was written, inserted or updated, by the running transaction, savepoints included.").Append('\n')
@@ -383,10 +383,10 @@ public static partial class PostgresRowAccess
             .Append("-- A caller's role, claims and settings for the running transaction alone, which is how they travel through a").Append('\n')
             .Append("-- pooler that hands each transaction another server connection. Only the role the application logs in as may").Append('\n')
             .Append("-- call it: whoever could call it could say who they are.").Append('\n')
-            .Append(UseCallerHeader).Append("$procedure$").Append(UseCallerBody).Append("$procedure$;").Append('\n')
-            .Append("REVOKE ALL ON PROCEDURE ").Append(UseCallerSignature).Append(" FROM PUBLIC;").Append('\n')
+            .Append(UseCurrentUserHeader).Append("$procedure$").Append(UseCurrentUserBody).Append("$procedure$;").Append('\n')
+            .Append("REVOKE ALL ON PROCEDURE ").Append(UseCurrentUserSignature).Append(" FROM PUBLIC;").Append('\n')
             .Append("GRANT USAGE ON SCHEMA \"ddd\" TO ").Append(login).Append(';').Append('\n')
-            .Append("GRANT EXECUTE ON PROCEDURE ").Append(UseCallerSignature).Append(" TO ").Append(login).Append(';').Append('\n')
+            .Append("GRANT EXECUTE ON PROCEDURE ").Append(UseCurrentUserSignature).Append(" TO ").Append(login).Append(';').Append('\n')
             .ToString());
     }
 
@@ -415,7 +415,7 @@ public static partial class PostgresRowAccess
     /// Statements of a <c>DO</c> block that fail it when <paramref name="role"/>, the scoped system role or the
     /// role of a mapped token role, could void or spread the policies written for it: when it can log in or
     /// bypass row level security, is a superuser, has the privileges of a role that owns tables, or has its own
-    /// privileges reach one of <paramref name="callers"/>, the roles other callers run as; and, for the role of
+    /// privileges reach one of <paramref name="userRoles"/>, the roles other callers run as; and, for the role of
     /// a mapped token role, when it has the privileges of one of them itself.
     /// </summary>
     /// <remarks>
@@ -434,16 +434,16 @@ public static partial class PostgresRowAccess
     /// </para>
     /// </remarks>
     /// <param name="role">The role to hold to the policies written for it.</param>
-    /// <param name="callers">
+    /// <param name="userRoles">
     /// The roles that must not have its privileges: the user's and the anonymous caller's, and for the scoped
     /// system role every mapped token role as well.
     /// </param>
     /// <param name="given">What a caller's role granted <paramref name="role"/> would get, as the message says it.</param>
     /// <param name="bothWays">
-    /// Whether <paramref name="role"/> must not have the privileges of <paramref name="callers"/> either, as the
+    /// Whether <paramref name="role"/> must not have the privileges of <paramref name="userRoles"/> either, as the
     /// role of a mapped token role must not.
     /// </param>
-    private static string ConfinedRoleCheck(string role, IReadOnlyList<string> callers, string given = "get every policy written for it", bool bothWays = false)
+    private static string ConfinedRoleCheck(string role, IReadOnlyList<string> userRoles, string given = "get every policy written for it", bool bothWays = false)
     {
         var check = new StringBuilder()
             .Append("    IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = ").Append(Literal(role)).Append('\n')
@@ -457,22 +457,22 @@ public static partial class PostgresRowAccess
             .Append("        RAISE EXCEPTION USING MESSAGE = ").Append(Literal(
                 $"The role {role} has the privileges of a role that owns tables, and Postgres does not hold an owner to row level security. It must neither own a table nor be granted a role that does.")).Append(';').Append('\n')
             .Append("    END IF;").Append('\n')
-            .Append("    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles callers").Append('\n')
-            .Append("               WHERE scoped.rolname = ").Append(Literal(role)).Append(" AND callers.rolname IN (").Append(string.Join(", ", callers.Select(Literal))).Append(')').Append('\n')
-            .Append("                 AND pg_catalog.pg_has_role(callers.oid, scoped.oid, 'USAGE')) THEN").Append('\n')
+            .Append("    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles users").Append('\n')
+            .Append("               WHERE scoped.rolname = ").Append(Literal(role)).Append(" AND users.rolname IN (").Append(string.Join(", ", userRoles.Select(Literal))).Append(')').Append('\n')
+            .Append("                 AND pg_catalog.pg_has_role(users.oid, scoped.oid, 'USAGE')) THEN").Append('\n')
             .Append("        RAISE EXCEPTION USING MESSAGE = ").Append(Literal(
-                $"The role {role} is granted to {Alternatives(callers)}, so their callers would {given}. Grant it only to the role the application logs in as.")).Append(';').Append('\n')
+                $"The role {role} is granted to {Alternatives(userRoles)}, so their callers would {given}. Grant it only to the role the application logs in as.")).Append(';').Append('\n')
             .Append("    END IF;").Append('\n');
 
         if (bothWays)
         {
             // The arguments of pg_has_role the other way round: whether the role itself has what a caller's role has.
             check
-                .Append("    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles callers").Append('\n')
-                .Append("               WHERE scoped.rolname = ").Append(Literal(role)).Append(" AND callers.rolname IN (").Append(string.Join(", ", callers.Select(Literal))).Append(')').Append('\n')
-                .Append("                 AND pg_catalog.pg_has_role(scoped.oid, callers.oid, 'USAGE')) THEN").Append('\n')
+                .Append("    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles users").Append('\n')
+                .Append("               WHERE scoped.rolname = ").Append(Literal(role)).Append(" AND users.rolname IN (").Append(string.Join(", ", userRoles.Select(Literal))).Append(')').Append('\n')
+                .Append("                 AND pg_catalog.pg_has_role(scoped.oid, users.oid, 'USAGE')) THEN").Append('\n')
                 .Append("        RAISE EXCEPTION USING MESSAGE = ").Append(Literal(
-                    $"The role {role} has the privileges of {Alternatives(callers)}, so the holder of a token mapped to it would get every policy and every privilege written for those callers. Take that grant back: a mapped role has what is written for it and no more.")).Append(';').Append('\n')
+                    $"The role {role} has the privileges of {Alternatives(userRoles)}, so the holder of a token mapped to it would get every policy and every privilege written for those callers. Take that grant back: a mapped role has what is written for it and no more.")).Append(';').Append('\n')
                 .Append("    END IF;").Append('\n');
         }
 
@@ -764,12 +764,12 @@ public static partial class PostgresRowAccess
         DbContext context,
         IReadOnlyList<RowAccessRule> rules,
         IReadOnlyList<RowAccessFunction>? accessFunctions = null,
-        PostgresCallerFunctions? callerFunctions = null)
-        => CreateStatements(context, rules, accessFunctions, new RowAccessExport { CallerFunctions = callerFunctions ?? PostgresCallerFunctions.Toolkit });
+        PostgresCurrentUserFunctions? currentUserFunctions = null)
+        => CreateStatements(context, rules, accessFunctions, new RowAccessExport { CurrentUserFunctions = currentUserFunctions ?? PostgresCurrentUserFunctions.Toolkit });
 
     /// <summary>
     /// The statements that make this context's access functions, every rule's policies, and the policies of
-    /// the aggregates' entities, written with <paramref name="export"/>'s caller functions and roles, and what
+    /// the aggregates' entities, written with <paramref name="export"/>'s current user functions and roles, and what
     /// its contributions write for the context. <paramref name="rules"/> and <paramref name="accessFunctions"/>
     /// are those of aggregates this context maps; see <see cref="RulesOf"/> and <see cref="FunctionsOf"/>.
     /// </summary>
@@ -830,7 +830,7 @@ public static partial class PostgresRowAccess
     {
         var context = prepared.Context;
         var sql = context.GetService<ISqlGenerationHelper>();
-        var writing = new Writing(export.CallerFunctions, names, sql, export.Roles, export.ForceRowLevelSecurity);
+        var writing = new Writing(export.CurrentUserFunctions, names, sql, export.Roles, export.ForceRowLevelSecurity);
         var definitions = InDependencyOrder(context, [.. Definitions(prepared, writing, knowledge), .. LateDefinitions(prepared, late ?? [])]);
         var policies = ContributedPolicies(prepared, writing);
 
@@ -935,7 +935,7 @@ public static partial class PostgresRowAccess
     /// rule asks by its logical name lives, how Postgres quotes a name, and whether row level security is
     /// forced where it is turned on.
     /// </summary>
-    private sealed record Writing(PostgresCallerFunctions Callers, IReadOnlyDictionary<string, string> Names, ISqlGenerationHelper Sql, RowAccessRoleNames Roles, bool Force);
+    private sealed record Writing(PostgresCurrentUserFunctions CurrentUser, IReadOnlyDictionary<string, string> Names, ISqlGenerationHelper Sql, RowAccessRoleNames Roles, bool Force);
 
     /// <summary>
     /// <paramref name="condition"/>, about a row of <paramref name="root"/>'s table, narrowed to the rows of
@@ -1115,7 +1115,7 @@ public static partial class PostgresRowAccess
     /// toolkit's schema and <c>"ddd".written_in_this_transaction</c>, which the policies of an aggregate's
     /// entities ask, the scoped system role when a policy is for it, and the right to ask them for every
     /// role a policy names. It comes right after the drop in every script and every access file, so none
-    /// depends on another having run. It makes <c>"ddd".use_caller</c> as well, which the policies do not ask but
+    /// depends on another having run. It makes <c>"ddd".use_current_user</c> as well, which the policies do not ask but
     /// the interceptor calls where the caller's settings last one transaction, so a database that has the
     /// policies can be reached through a transaction pooler.
     /// </summary>
@@ -1127,10 +1127,10 @@ public static partial class PostgresRowAccess
     /// the application's own role after somebody else ran <see cref="SetupScript"/>.
     /// </para>
     /// <para>
-    /// <c>"ddd".use_caller</c> is taken from <c>PUBLIC</c>, which Postgres gives every new routine to, and stays
+    /// <c>"ddd".use_current_user</c> is taken from <c>PUBLIC</c>, which Postgres gives every new routine to, and stays
     /// with its owner, the role that ran the script that made it. A login role of its own gets it from two
     /// statements of the host's: <c>GRANT USAGE ON SCHEMA "ddd" TO</c> that role, and
-    /// <c>GRANT EXECUTE ON PROCEDURE "ddd".use_caller(text, text, text[], text[]) TO</c> it.
+    /// <c>GRANT EXECUTE ON PROCEDURE "ddd".use_current_user(text, text, text[], text[]) TO</c> it.
     /// </para>
     /// <para>
     /// The scoped system role is made without a login and without <c>BYPASSRLS</c>, and the script fails
@@ -1177,7 +1177,7 @@ public static partial class PostgresRowAccess
             .Append("DO $ddd$").Append('\n')
             .Append("DECLARE").Append('\n')
             .Append("    body constant text := $function$").Append(WrittenInThisTransactionBody).Append("$function$;").Append('\n')
-            .Append("    use_caller constant text := $procedure$").Append(UseCallerBody).Append("$procedure$;").Append('\n')
+            .Append("    use_current_user constant text := $procedure$").Append(UseCurrentUserBody).Append("$procedure$;").Append('\n')
             .Append("BEGIN").Append('\n')
             .Append("    IF pg_catalog.to_regnamespace('\"ddd\"') IS NULL THEN").Append('\n')
             .Append("        CREATE SCHEMA \"ddd\";").Append('\n')
@@ -1187,11 +1187,11 @@ public static partial class PostgresRowAccess
             .Append("        EXECUTE ").Append(Literal(WrittenInThisTransactionHeader)).Append(" || pg_catalog.quote_literal(body);").Append('\n')
             .Append("    END IF;").Append('\n')
             .Append("    IF NOT EXISTS (SELECT FROM pg_catalog.pg_proc").Append('\n')
-            .Append("                   WHERE oid = pg_catalog.to_regprocedure(").Append(Literal(UseCallerSignature)).Append(") AND prosrc = use_caller) THEN").Append('\n')
-            .Append("        EXECUTE ").Append(Literal(UseCallerHeader)).Append(" || pg_catalog.quote_literal(use_caller);").Append('\n')
+            .Append("                   WHERE oid = pg_catalog.to_regprocedure(").Append(Literal(UseCurrentUserSignature)).Append(") AND prosrc = use_current_user) THEN").Append('\n')
+            .Append("        EXECUTE ").Append(Literal(UseCurrentUserHeader)).Append(" || pg_catalog.quote_literal(use_current_user);").Append('\n')
             .Append("    END IF;").Append('\n')
-            .Append("    IF pg_catalog.has_function_privilege('public', ").Append(Literal(UseCallerSignature)).Append(", 'EXECUTE') THEN").Append('\n')
-            .Append("        REVOKE ALL ON PROCEDURE ").Append(UseCallerSignature).Append(" FROM PUBLIC;").Append('\n')
+            .Append("    IF pg_catalog.has_function_privilege('public', ").Append(Literal(UseCurrentUserSignature)).Append(", 'EXECUTE') THEN").Append('\n')
+            .Append("        REVOKE ALL ON PROCEDURE ").Append(UseCurrentUserSignature).Append(" FROM PUBLIC;").Append('\n')
             .Append("    END IF;").Append('\n');
 
         var tokenRoles = names.TokenDatabaseRoles;
@@ -2051,8 +2051,8 @@ public static partial class PostgresRowAccess
                 case "val" when parts.Length == 4:
                     var (aliased, aliasedTable) = Alias(parts[1], token);
                     return Stored(PropertyOf(aliased, aliasedTable, parts[2]), parts[3]);
-                case "caller" when parts.Length >= 2:
-                    return AboutTheCaller(parts, writing) ?? throw Unknown(token);
+                case "user" when parts.Length >= 2:
+                    return AboutTheCurrentUser(parts, writing) ?? throw Unknown(token);
                 case "exists" when parts.Length == 3:
                     ReadsTheRow = true;
                     return Exists(parts[1], parts[2]);
@@ -2235,26 +2235,26 @@ public static partial class PostgresRowAccess
     }
 
     /// <summary>
-    /// A <c>{caller:...}</c> place of a template, <paramref name="parts"/> split at <c>:</c>, as a condition asks
+    /// A <c>{user:...}</c> place of a template, <paramref name="parts"/> split at <c>:</c>, as a condition asks
     /// it: <c>(SELECT auth.uid())</c> for <c>uid</c>, and likewise <c>signedin</c>, <c>role</c>, <c>claims</c>
     /// and <c>claim:path</c>; null for anything else.
     /// </summary>
-    private static string? AboutTheCaller(string[] parts, Writing writing)
+    private static string? AboutTheCurrentUser(string[] parts, Writing writing)
         => parts[1] switch
         {
-            "uid" when parts.Length == 2 => $"(SELECT {writing.Callers.UserId})",
-            "signedin" when parts.Length == 2 => $"((SELECT {writing.Callers.UserId}) IS NOT NULL)",
-            "role" when parts.Length == 2 => $"(SELECT {writing.Callers.Role})",
-            "claims" when parts.Length == 2 => $"(SELECT {writing.Callers.Claims})",
+            "uid" when parts.Length == 2 => $"(SELECT {writing.CurrentUser.UserId})",
+            "signedin" when parts.Length == 2 => $"((SELECT {writing.CurrentUser.UserId}) IS NOT NULL)",
+            "role" when parts.Length == 2 => $"(SELECT {writing.CurrentUser.Role})",
+            "claims" when parts.Length == 2 => $"(SELECT {writing.CurrentUser.Claims})",
             "claim" when parts.Length == 3 => Claim(parts[2], writing),
             _ => null,
         };
 
-    /// <summary><c>"ddd".caller_claims() -&gt;&gt; 'email'</c> for a claim, <c>"ddd".caller_claims() #&gt;&gt; '{app_metadata,role}'</c> for a path into one.</summary>
+    /// <summary><c>"ddd".current_user_claims() -&gt;&gt; 'email'</c> for a claim, <c>"ddd".current_user_claims() #&gt;&gt; '{app_metadata,role}'</c> for a path into one.</summary>
     private static string Claim(string path, Writing writing)
         => path.Contains('.', StringComparison.Ordinal)
-            ? $"(SELECT {writing.Callers.Claims} #>> {Literal("{" + path.Replace('.', ',') + "}")})"
-            : $"(SELECT {writing.Callers.Claims} ->> {Literal(path)})";
+            ? $"(SELECT {writing.CurrentUser.Claims} #>> {Literal("{" + path.Replace('.', ',') + "}")})"
+            : $"(SELECT {writing.CurrentUser.Claims} ->> {Literal(path)})";
 
     /// <summary>
     /// The name a function <paramref name="what"/> asks has in the database: a name with its schema as it is,

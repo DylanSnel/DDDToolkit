@@ -84,7 +84,7 @@ public sealed class SampleWithoutDatabaseTests
             "entity-framework.toolkit-wired",
             "entity-framework.owners-mapped",
             "supabase.roles-match-access-files",
-            "postgres.login-role-may-switch-to-callers",
+            "postgres.login-role-may-switch-to-user-roles",
             "supabase.migrations-applied",
             "postgres.login-role-owns-nothing",
             "postgres.definer-owners-bypass",

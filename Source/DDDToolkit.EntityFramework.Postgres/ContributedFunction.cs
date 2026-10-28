@@ -6,7 +6,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// so its body names every table and function with its schema:
 /// <code>
 /// new ContributedFunction("entries_i_wrote", "", "SETOF uuid",
-///     $"SELECT {RowAccessModel.Column(entries, "Id")} FROM {RowAccessModel.Table(entries)} WHERE {RowAccessModel.Column(entries, "WrittenBy")} = {{caller:uid}}",
+///     $"SELECT {RowAccessModel.Column(entries, "Id")} FROM {RowAccessModel.Table(entries)} WHERE {RowAccessModel.Column(entries, "WrittenBy")} = {{user:uid}}",
 ///     SecurityDefiner: true, GrantTo: [RowAccessRoles.User])
 /// </code>
 /// </summary>
@@ -41,8 +41,8 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </param>
 /// <param name="Body">
 /// Its body, one SQL statement, which may ask functions by <c>{fn:owner/name}</c> and the caller by
-/// <c>{caller:uid}</c>, <c>{caller:role}</c>, <c>{caller:claims}</c>, <c>{caller:signedin}</c> and
-/// <c>{caller:claim:path}</c>; <c>{{</c> and <c>}}</c> are braces.
+/// <c>{user:uid}</c>, <c>{user:role}</c>, <c>{user:claims}</c>, <c>{user:signedin}</c> and
+/// <c>{user:claim:path}</c>; <c>{{</c> and <c>}}</c> are braces.
 /// </param>
 /// <param name="SecurityDefiner">
 /// Whether it runs as its owner, the role that ran the migrations, rather than as the caller, which lets it

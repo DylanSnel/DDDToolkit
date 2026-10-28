@@ -4,10 +4,10 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 public static class TenancyRowLevelSecurity
 {
     /// <summary>
-    /// The setting the tenant of the current Tenancy caller travels in, next to the caller's role and claims and
+    /// The setting the tenant of the current Tenancy user travels in, next to the caller's role and claims and
     /// in the same statement: the value of its id, written with the invariant culture (a <see cref="Guid"/> as
     /// <c>D</c>), or <c>''</c> when the caller acts in no tenant. SQL reads it with
-    /// <c>current_setting('tenancy.caller_tenant', true)</c>.
+    /// <c>current_setting('tenancy.current_tenant', true)</c>.
     /// <para>
     /// It is the application's word, as every setting is: any statement on the application's connection can set
     /// it. SQL that reads it for a signed-in user should find the seat from the verified identity and this
@@ -15,5 +15,5 @@ public static class TenancyRowLevelSecurity
     /// application begins on purpose, the scoped system work's, can take it as given.
     /// </para>
     /// </summary>
-    public const string TenantSetting = "tenancy.caller_tenant";
+    public const string TenantSetting = "tenancy.current_tenant";
 }

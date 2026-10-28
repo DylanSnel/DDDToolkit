@@ -22,7 +22,7 @@ public static class AccessCheckServiceCollectionExtensions
     /// calling and nothing else work in every module, with no check added:
     /// <see cref="AccessRequirement.AllowAnonymous"/>, <see cref="AccessRequirement.SignedIn"/>, and
     /// <see cref="AccessRequirement.Own{TValue}"/> for a type something says the caller's own of
-    /// (<see cref="AddCallersOwn{TValue, TCallersOwn}"/>), and <see cref="AccessRequirement.OwnerOf{TId}"/> for an aggregate
+    /// (<see cref="AddOwnedByCurrentUser{TValue, THandle}"/>), and <see cref="AccessRequirement.OwnerOf{TId}"/> for an aggregate
     /// whose owner something reads (<see cref="IAggregateOwners{TId}"/>, which the Entity Framework package registers for
     /// every id). The set itself decides what combines their cases, and every
     /// other, <see cref="AccessRequirement.All"/> and <see cref="AccessRequirement.Any"/>. Who is calling
@@ -101,7 +101,7 @@ public static class AccessCheckServiceCollectionExtensions
     /// (<see cref="AccessRequirement.Own{TValue}"/>, <see cref="OrOwnAttribute"/>, <see cref="OwnAttribute"/>): the
     /// handle an application writes for a kind of its own, its own user id say.
     /// <code>
-    /// services.AddCallersOwn&lt;UserId, CallersUser&gt;();
+    /// services.AddOwnedByCurrentUser&lt;UserId, CurrentUserId&gt;();
     /// </code>
     /// </summary>
     /// <remarks>
@@ -112,15 +112,15 @@ public static class AccessCheckServiceCollectionExtensions
     /// per scope, so a handle may take what the scope knows of its caller.
     /// </remarks>
     /// <typeparam name="TValue">What a request names as the caller's own.</typeparam>
-    /// <typeparam name="TCallersOwn">The handle, made by the container once per scope.</typeparam>
+    /// <typeparam name="THandle">The handle, made by the container once per scope.</typeparam>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
-    public static IServiceCollection AddCallersOwn<TValue, TCallersOwn>(this IServiceCollection services)
+    public static IServiceCollection AddOwnedByCurrentUser<TValue, THandle>(this IServiceCollection services)
         where TValue : struct, IEquatable<TValue>
-        where TCallersOwn : class, ICallersOwn<TValue>
+        where THandle : class, IOwnedByCurrentUser<TValue>
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        return services.Replace(ServiceDescriptor.Scoped<ICallersOwn<TValue>, TCallersOwn>());
+        return services.Replace(ServiceDescriptor.Scoped<IOwnedByCurrentUser<TValue>, THandle>());
     }
 }
 

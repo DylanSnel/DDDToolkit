@@ -23,7 +23,7 @@ public sealed record SmokeHive([Own] HiveId Hive) : IHivesRequest;
 /// connection that runs as the caller, so the apiary's policies decide whether the row is there for the caller at all.
 /// A hive the caller may not see is not found, one it sees and keeps not is somebody else's.
 /// </summary>
-public sealed class AggregateOwnerPostgresTests(ExplicitCallersPostgres postgres)
+public sealed class AggregateOwnerPostgresTests(ExplicitCurrentUserPostgres postgres)
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 

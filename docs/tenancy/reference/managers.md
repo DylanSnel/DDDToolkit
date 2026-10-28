@@ -98,7 +98,7 @@ Provisions a tenant, in one save: the tenant, its organization with the root, a 
 
 The roles are named as the catalogue names its starter roles, or, with a language and an [`IStarterRoleTexts`](catalogue.md#istarterroletexts) registered, in that language. The role of [`TenancyStarterRoles.DefaultAdministrators`](catalogue.md#defaultadministrators), for an application that declares no administrators' starter role, is named in that language by the application's texts, or else by the package's own, in English or Dutch. The fields the application added to its tenant, unit and seat classes are set by the command's callbacks, before the tenant is activated and in the same save.
 
-Only system work outside any tenant provisions one, and it does not do so with that power: once it knows the new tenant's id, everything else, the check that the slug is free and the save included, runs as system work inside the new tenant ([`TenancyWork.BeginSystemIn<TTenantId, TSeatId>`](callers.md#beginsysteminttenantid-tseatid-string-1)), so it writes that tenant's rows and nothing else. On a database that keeps tenants apart by itself, such as Postgres with row level security, the slug check then sees no other tenant, and the unique index on the slug is what refuses one that is taken.
+Only system work outside any tenant provisions one, and it does not do so with that power: once it knows the new tenant's id, everything else, the check that the slug is free and the save included, runs as system work inside the new tenant ([`TenancyWork.BeginSystemIn<TTenantId, TSeatId>`](access.md#beginsysteminttenantid-tseatid-string-1)), so it writes that tenant's rows and nothing else. On a database that keeps tenants apart by itself, such as Postgres with row level security, the slug check then sees no other tenant, and the unique index on the slug is what refuses one that is taken.
 
 The organization, the first seat and the roles belong to the tenant, and are read through the other managers by a request that names the new tenant. Imports and seeding that need fixed ids pass them in the command.
 
@@ -260,7 +260,7 @@ public Task<TenantPage> ListAsync(string? after, int size, CancellationToken can
 
 A page of the tenants of the application, for its operators, by slug: those after the last tenant of the page before, or the first ones. Each comes with its name and how many of its seats are in use. It reads, and changes nothing.
 
-Only an operator asks: a signed-in user whose token carries one of [`TenancyOptions.OperatorTokenRoles`](#operatortokenroles). An operator holds no seat and acts in no tenant, so this is the one read that asks the toolkit's current user rather than the Tenancy caller. It reads as that caller, never as the system: on a database that keeps tenants apart by itself, such as Postgres with row level security, the operator's own database role and its policies decide what it reads, and a host that mapped no such role reads nothing.
+Only an operator asks: a signed-in user whose token carries one of [`TenancyOptions.OperatorTokenRoles`](#operatortokenroles). An operator holds no seat and acts in no tenant, so this is the one read that asks the toolkit's current user rather than the Tenancy user. It reads as that caller, never as the system: on a database that keeps tenants apart by itself, such as Postgres with row level security, the operator's own database role and its policies decide what it reads, and a host that mapped no such role reads nothing.
 
 The application's own work that has to visit every tenant, a sweep say, does not go through here: it asks which tenants there are in a scope of its own, `access.TenantsToSweepAsync(scope)`, and then works in each.
 
@@ -2933,7 +2933,7 @@ How a new id is made is no option: each id says it itself, with its `Create()`, 
 | Member | Summary |
 |---|---|
 | `ApplicationCatalogue? Catalogue { get; set; }` | What the application adds to the catalogue: starter roles, permissions of its own and marks on permissions that manage access. Left unset, it adds none: the permissions are Tenancy's and what the modules contribute, and every tenant starts with the default administrators' role ([`TenancyStarterRoles.DefaultAdministrators`](catalogue.md#defaultadministrators)). |
-| `TenantSelectionOptions TenantSelection { get; }` | Which signed-in users may hold a seat, by the role their token carries: those with `authenticated` unless the application lists others in [`TenantSelectionOptions.SeatedTokenRoles`](callers.md#tenantselectionoptions). |
+| `TenantSelectionOptions TenantSelection { get; }` | Which signed-in users may hold a seat, by the role their token carries: those with `authenticated` unless the application lists others in [`TenantSelectionOptions.SeatedTokenRoles`](access.md#tenantselectionoptions). |
 | [`OperatorTokenRoles`](#operatortokenroles) | The token roles whose users are operators of the application: staff who look across tenants, by the role their token carries (`ICurrentUser.Role`, as the host's token role map spells it). |
 | [`IsOperator(CurrentUserSnapshot?)`](#isoperatorcurrentusersnapshot) | Whether `user` is one of the application's operators: a signed-in user whose token carries one of [`OperatorTokenRoles`](#operatortokenroles). |
 
@@ -2949,7 +2949,7 @@ The token roles whose users are operators of the application: staff who look acr
 options.OperatorTokenRoles.Add("operator");
 ```
 
-An operator holds no seat. Its token role is never one of [`TenantSelectionOptions.SeatedTokenRoles`](callers.md#tenantselectionoptions), so tenant selection answers nobody for it whatever tenant the request names, keeping that tenant, and registration refuses a role that is on both lists. An operator reads: the tenants, through `TenantManager`, and on Postgres whatever the policies of its own database role let it read. It changes nothing as itself. A command marked [`OperatorAttribute`](callers.md#operatorattribute) runs as operator work, which is system work that names it.
+An operator holds no seat. Its token role is never one of [`TenantSelectionOptions.SeatedTokenRoles`](access.md#tenantselectionoptions), so tenant selection answers nobody for it whatever tenant the request names, keeping that tenant, and registration refuses a role that is on both lists. An operator reads: the tenants, through `TenantManager`, and on Postgres whatever the policies of its own database role let it read. It changes nothing as itself. A command marked [`OperatorAttribute`](access.md#operatorattribute) runs as operator work, which is system work that names it.
 
 #### `IsOperator(CurrentUserSnapshot?)`
 
@@ -2957,11 +2957,11 @@ An operator holds no seat. Its token role is never one of [`TenantSelectionOptio
 public bool IsOperator(CurrentUserSnapshot? user)
 ```
 
-Whether `user` is one of the application's operators: a signed-in user whose token carries one of [`OperatorTokenRoles`](#operatortokenroles). The one place that says so: `TenantManager.ListAsync` and the check of [`OperatorAttribute`](callers.md#operatorattribute) both ask here, so they mean the same caller by it. System work is never one, whoever it is recorded as, and neither is anyone without an identity.
+Whether `user` is one of the application's operators: a signed-in user whose token carries one of [`OperatorTokenRoles`](#operatortokenroles). The one place that says so: `TenantManager.ListAsync` and the check of [`OperatorAttribute`](access.md#operatorattribute) both ask here, so they mean the same caller by it. System work is never one, whoever it is recorded as, and neither is anyone without an identity.
 
 **Parameters**
 
-- `user`: Who is calling, as the toolkit's current user answers: the user of the request, not the Tenancy caller.
+- `user`: Who is calling, as the toolkit's current user answers: the user of the request, not the Tenancy user.
 
 ### `TenancyServiceCollectionExtensions`
 
@@ -2977,7 +2977,7 @@ Registration of Tenancy's storage-agnostic parts. The storage package registers 
 |---|---|
 | [`AddTenancyCore(IServiceCollection, Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>?)`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) | Registers the catalogue, the access manager, tenant selection and the managers, everything except the store and the seat directory. |
 | [`AddTenancyInvitationsCore(IServiceCollection, Action<TenancyInvitationOptions<TInvitationId>>?)`](#addtenancyinvitationscoreiservicecollection-actiontenancyinvitationoptionstinvitationid) | Registers the invitation manager, closed over the application's invitation class, for an application that invites people into a tenant: everything of invitations except their store, which the storage package registers; that package calls this itself. |
-| [`AddTenancyOperatorAccess(IServiceCollection)`](#addtenancyoperatoraccessiservicecollection) | Registers the check of Tenancy's operator cases for the requests of `TRequests`: [`TenancyRequirement.Operator`](callers.md#tenancyrequirementoperator) and [`TenancyRequirement.OperatorIn<TTenantId>`](callers.md#tenancyrequirementoperatorinttenantid), which a request declares with [`OperatorAttribute`](callers.md#operatorattribute). |
+| [`AddTenancyOperatorAccess(IServiceCollection)`](#addtenancyoperatoraccessiservicecollection) | Registers the check of Tenancy's operator cases for the requests of `TRequests`: [`TenancyRequirement.Operator`](access.md#tenancyrequirementoperator) and [`TenancyRequirement.OperatorIn<TTenantId>`](access.md#tenancyrequirementoperatorinttenantid), which a request declares with [`OperatorAttribute`](access.md#operatorattribute). |
 | [`AddTenancyPermissions(IServiceCollection, IEnumerable<Permission>)`](#addtenancypermissionsiservicecollection-ienumerablepermission) | Adds permissions to the catalogue by hand. |
 | [`SyncStarterRoles(IServiceCollection)`](#syncstarterrolesiservicecollection) | Brings every tenant's roles up to the starter roles they were made from, in the background, once the host has started: after its start-up checks, when it runs them, and after every hosted service has started. |
 
@@ -3001,9 +3001,9 @@ public static IServiceCollection AddTenancyCore<TTenant, TTenantId, TOrganizatio
 Registers the catalogue, the access manager, tenant selection and the managers, everything except the store and the seat directory.
 
 - The catalogue is built once, from [`TenancyOptions.Catalogue`](#tenancyoptionsttenantid-tseatid-tunitid-troleid), or from none when it is not set, and every [`PermissionContribution`](catalogue.md#permissioncontribution), the first time it is asked for; resolve it at start-up to have a catalogue that does not hold together stop the application there.
-- The access manager, [`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](callers.md#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid), selection and the managers are made per scope. The storage package's `AddTenancy` registers the application's own `TenancyAccessManager`, `TenantManager`, `OrganizationManager`, `SeatManager` and `RoleManager` beside them. Selection is registered without its id types as well, [`ITenantSelection`](callers.md#itenantselection), the same instance, unless a host registered its own before: that one stays.
+- The access manager, [`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](access.md#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid), selection and the managers are made per scope. The storage package's `AddTenancy` registers the application's own `TenancyAccessManager`, `TenantManager`, `OrganizationManager`, `SeatManager` and `RoleManager` beside them. Selection is registered without its id types as well, [`ITenantSelection`](access.md#itenantselection), the same instance, unless a host registered its own before: that one stays.
 - The toolkit's `ICurrentUser` a host registered before stays; otherwise `CurrentUser` is registered.
-- What the caller's own seat is, for a request about it (`[OrOwn] SeatId Seat`, `TenancyAccess.Own(seat)`): the caller's seat in the tenant, unless a host registered its own before with `AddCallersOwn`.
+- What the caller's own seat is, for a request about it (`[OrOwn] SeatId Seat`, `TenancyAccess.Own(seat)`): the caller's seat in the tenant, unless a host registered its own before with `AddOwnedByCurrentUser`.
 - A `TimeProvider` registered before stays; otherwise the system clock is used.
 - A new id is made by the id itself, `TTenantId.Create()`, which every id of the application's classes has: the generator writes it for an id over a `Guid`, and DDD00067 asks for it on any other.
 
@@ -3057,7 +3057,7 @@ public static IServiceCollection AddTenancyOperatorAccess<TTenantId, TSeatId, TU
     where TRequests : class, IRequireAccess
 ```
 
-Registers the check of Tenancy's operator cases for the requests of `TRequests`: [`TenancyRequirement.Operator`](callers.md#tenancyrequirementoperator) and [`TenancyRequirement.OperatorIn<TTenantId>`](callers.md#tenancyrequirementoperatorinttenantid), which a request declares with [`OperatorAttribute`](callers.md#operatorattribute). It refuses every caller who is no operator, and runs a command an operator sends as operator work. The storage package's `AddTenancyAccess` calls it beside the check of Tenancy's other cases, so an application calls that one. Adding it twice adds it once.
+Registers the check of Tenancy's operator cases for the requests of `TRequests`: [`TenancyRequirement.Operator`](access.md#tenancyrequirementoperator) and [`TenancyRequirement.OperatorIn<TTenantId>`](access.md#tenancyrequirementoperatorinttenantid), which a request declares with [`OperatorAttribute`](access.md#operatorattribute). It refuses every caller who is no operator, and runs a command an operator sends as operator work. The storage package's `AddTenancyAccess` calls it beside the check of Tenancy's other cases, so an application calls that one. Adding it twice adds it once.
 
 **Parameters**
 
@@ -3173,7 +3173,7 @@ Registers Tenancy, stored with Entity Framework.
 |---|---|
 | [`AddTenancy(IServiceCollection, Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>?)`](#addtenancyiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) | Registers Tenancy over `TContext`, the context whose model calls `AddTenancy`: everything [`TenancyServiceCollectionExtensions.AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) registers, the store the managers load and save through, the seat directory tenant selection asks, the save interceptor, brought to every context `UseDDDToolkit` wires as Tenancy's part ([`TenancySaveInterceptor.PartName`](entity-framework.md#tenancysaveinterceptor)), the query executor, and what an event log asks: who acted, as Tenancy knows the caller ([`TenancyActedByAccessor`](entity-framework.md#tenancyactedbyaccessor), put around the accessor registered before this call, or around the toolkit's default), and the tenant of each row of the log `AddTenancyEventLogTable` maps. |
 | [`AddTenancyInvitations(IServiceCollection, Action<TenancyInvitationOptions<TInvitationId>>?)`](#addtenancyinvitationsiservicecollection-actiontenancyinvitationoptionstinvitationid) | Registers invitations over `TContext`, the context whose model calls `AddTenancyInvitations`, for an application that invites people into a tenant: the invitation manager, `TInvitationManager`, the application's `InvitationManager`, and the store it loads and keeps invitations through. |
-| [`AddTenancyAccess(IServiceCollection)`](#addtenancyaccessiservicecollection) | Adds Tenancy's access check to the checks the requests of one module are held to (`AccessChecks<TRequests>`): what decides the cases of [`TenancyRequirement`](callers.md#tenancyrequirement) a request of that module declares, before its handler runs. |
+| [`AddTenancyAccess(IServiceCollection)`](#addtenancyaccessiservicecollection) | Adds Tenancy's access check to the checks the requests of one module are held to (`AccessChecks<TRequests>`): what decides the cases of [`TenancyRequirement`](access.md#tenancyrequirement) a request of that module declares, before its handler runs. |
 
 #### `AddTenancy(IServiceCollection, Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>?)`
 
@@ -3212,7 +3212,7 @@ Every option has a default, so `services.AddTenancy<TenancyContext>()` is enough
 
 `AddTenancy<TenancyContext>` is generated into the project that declares the classes, closed over them (`TemplateRegistrationAttribute`), or into a project of the same `[assembly: Module]` that declares none, such as the module's infrastructure project next to its domain project. It calls this method with the classes and ids filled in; the context is still the caller's to name. This method can be called as well, with all fifteen.
 
-It registers the access manager per scope: `TAccessManager`, the application's `TenancyAccessManager`, which the generator writes into the project that declares the classes and fills in here, or the package's class itself where a call names it; and the package's [`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](callers.md#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid) it derives from. It registers the read of the tenants a round of system work visits over the context as well, which the access manager asks.
+It registers the access manager per scope: `TAccessManager`, the application's `TenancyAccessManager`, which the generator writes into the project that declares the classes and fills in here, or the package's class itself where a call names it; and the package's [`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](access.md#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid) it derives from. It registers the read of the tenants a round of system work visits over the context as well, which the access manager asks.
 
 It registers the managers per scope the same way: `TTenantManager`, `TOrganizationManager`, `TSeatManager` and `TRoleManager`, the application's `TenantManager`, `OrganizationManager`, `SeatManager` and `RoleManager`, and the package's classes they derive from.
 
@@ -3285,13 +3285,13 @@ public static IServiceCollection AddTenancyAccess<TTenantId, TSeatId, TUnitId, T
     where TContext : DbContext
 ```
 
-Adds Tenancy's access check to the checks the requests of one module are held to (`AccessChecks<TRequests>`): what decides the cases of [`TenancyRequirement`](callers.md#tenancyrequirement) a request of that module declares, before its handler runs.
+Adds Tenancy's access check to the checks the requests of one module are held to (`AccessChecks<TRequests>`): what decides the cases of [`TenancyRequirement`](access.md#tenancyrequirement) a request of that module declares, before its handler runs.
 
 ```csharp
 services.AddTenancyAccess<IBillingRequest, BillingContext>();
 ```
 
-A module calls it for its own request interface and its own context, once, next to the checks for the cases only it has. The check asks a permission for the whole tenant over `TContext`, so that is Tenancy's own context or one that maps Tenancy's read model (`AddTenancyReadModel`, or `AddTenancyReadFunctions` where the database keeps the rights), and so is a permission at a unit ([`TenancyRequirement.AtUnit<TUnitId>`](callers.md#tenancyrequirementatunittunitid), closed over `TUnitId`); a module whose requests declare neither is never read for, whatever its context maps. The statement runs on a context of its own where the application registered a factory for the context (`IDbContextFactory<TContext>`), a pooled one say, and on the scope's own context otherwise.
+A module calls it for its own request interface and its own context, once, next to the checks for the cases only it has. The check asks a permission for the whole tenant over `TContext`, so that is Tenancy's own context or one that maps Tenancy's read model (`AddTenancyReadModel`, or `AddTenancyReadFunctions` where the database keeps the rights), and so is a permission at a unit ([`TenancyRequirement.AtUnit<TUnitId>`](access.md#tenancyrequirementatunittunitid), closed over `TUnitId`); a module whose requests declare neither is never read for, whatever its context maps. The statement runs on a context of its own where the application registered a factory for the context (`IDbContextFactory<TContext>`), a pooled one say, and on the scope's own context otherwise.
 
 The check is free of any dispatcher, as the package is: whatever calls `AccessChecks.RequireAsync` in front of the module's handlers holds the requests to it. In an application that uses the Mediator library that is the pipeline behavior the generator writes for an interface marked `[AccessRequests]`.
 
@@ -3411,7 +3411,7 @@ Registers what Tenancy needs on Postgres with row level security.
 
 | Member | Summary |
 |---|---|
-| [`AddTenancyPostgres(IServiceCollection)`](#addtenancypostgresiservicecollection) | Sets [`TenancyRowLevelSecurity.TenantSetting`](postgres.md#tenantsetting) to the current Tenancy caller's tenant whenever a context under row level security connects, next to the caller's role and claims and in the same statement; turns the last administrator the trigger keeps at commit, which no index states, into the refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the manager's own check, is refused by its unique index on any database, with no help from here); requires an explicit current user (`CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser`), so work nobody said anything about fails rather than running as the login role, past every policy; and leaves the rights to the database ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), whose trigger writes them and whose policies let a seat read only its own, so the save writes none, the store asks the database's functions about other seats, and Tenancy's few reads across tenants ask its functions as scoped system work in no tenant, rather than run as the application itself, past the policies. |
+| [`AddTenancyPostgres(IServiceCollection)`](#addtenancypostgresiservicecollection) | Sets [`TenancyRowLevelSecurity.TenantSetting`](postgres.md#tenantsetting) to the current Tenancy user's tenant whenever a context under row level security connects, next to the caller's role and claims and in the same statement; turns the last administrator the trigger keeps at commit, which no index states, into the refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the manager's own check, is refused by its unique index on any database, with no help from here); requires an explicit current user (`CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser`), so work nobody said anything about fails rather than running as the login role, past every policy; and leaves the rights to the database ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), whose trigger writes them and whose policies let a seat read only its own, so the save writes none, the store asks the database's functions about other seats, and Tenancy's few reads across tenants ask its functions as scoped system work in no tenant, rather than run as the application itself, past the policies. |
 
 #### `AddTenancyPostgres(IServiceCollection)`
 
@@ -3419,7 +3419,7 @@ Registers what Tenancy needs on Postgres with row level security.
 public static IServiceCollection AddTenancyPostgres(this IServiceCollection services)
 ```
 
-Sets [`TenancyRowLevelSecurity.TenantSetting`](postgres.md#tenantsetting) to the current Tenancy caller's tenant whenever a context under row level security connects, next to the caller's role and claims and in the same statement; turns the last administrator the trigger keeps at commit, which no index states, into the refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the manager's own check, is refused by its unique index on any database, with no help from here); requires an explicit current user (`CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser`), so work nobody said anything about fails rather than running as the login role, past every policy; and leaves the rights to the database ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), whose trigger writes them and whose policies let a seat read only its own, so the save writes none, the store asks the database's functions about other seats, and Tenancy's few reads across tenants ask its functions as scoped system work in no tenant, rather than run as the application itself, past the policies. Call it next to `AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity`:
+Sets [`TenancyRowLevelSecurity.TenantSetting`](postgres.md#tenantsetting) to the current Tenancy user's tenant whenever a context under row level security connects, next to the caller's role and claims and in the same statement; turns the last administrator the trigger keeps at commit, which no index states, into the refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the manager's own check, is refused by its unique index on any database, with no help from here); requires an explicit current user (`CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser`), so work nobody said anything about fails rather than running as the login role, past every policy; and leaves the rights to the database ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), whose trigger writes them and whose policies let a seat read only its own, so the save writes none, the store asks the database's functions about other seats, and Tenancy's few reads across tenants ask its functions as scoped system work in no tenant, rather than run as the application itself, past the policies. Call it next to `AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity`:
 
 ```csharp
 builder.Services.AddSupabaseRowLevelSecurity();

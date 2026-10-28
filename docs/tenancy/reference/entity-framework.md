@@ -50,7 +50,7 @@ public sealed class OfTenantConvention : IModelFinalizingConvention, IConvention
 
 Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
 
-Keeps every class whose tenant is marked [`OfTenantAttribute`](#oftenantattribute) to the current Tenancy caller's tenant, as [`TenancyModelBuilderExtensions.ScopeToTenant<TEntity, TTenantId>`](#scopetotenantentitytypebuildertentity-expressionfunctentity-ttenantid) keeps a class it is called on: the tenant filter on its reads, and Tenancy's save check on its writes. A context needs no line for it:
+Keeps every class whose tenant is marked [`OfTenantAttribute`](#oftenantattribute) to the current Tenancy user's tenant, as [`TenancyModelBuilderExtensions.ScopeToTenant<TEntity, TTenantId>`](#scopetotenantentitytypebuildertentity-expressionfunctentity-ttenantid) keeps a class it is called on: the tenant filter on its reads, and Tenancy's save check on its writes. A context needs no line for it:
 
 ```csharp
 [AggregateRoot<ProjectId>]
@@ -149,7 +149,7 @@ Maps Tenancy into an Entity Framework model: its tables into the context the app
 | [`AddTenancyInvitations(ModelBuilder, TenancyTableNames?)`](#addtenancyinvitationsmodelbuilder-tenancytablenames) | Maps invitations into the context that maps Tenancy's tables, for an application that invites people into a tenant: the invitations, closed over the application's invitation class, and next to them the digests of their tokens, in a table of its own. |
 | [`AddTenancyReadModel(ModelBuilder, string?, TenancyTableNames?)`](#addtenancyreadmodelmodelbuilder-string-tenancytablenames) | Maps Tenancy's read model into a context that is not Tenancy's own, so its queries can ask Tenancy inside them: `db.Tenancy().UnitsWhereIHold(permission)` becomes a subquery of the module's own query, one statement and one round trip. |
 | [`AddTenancyReadFunctions(ModelBuilder, string?)`](#addtenancyreadfunctionsmodelbuilder-string) | Maps Tenancy's read model into a context that is not Tenancy's own as Tenancy's read functions, which a package for one database writes into it (`DDDToolkit.Supporting.Tenancy.Postgres` does): the six rows the access questions read, each from the function of its name ([`TenancyFunctionNames`](#tenancyfunctionnames)) in `schema`, under the column names that function answers. |
-| [`ScopeToTenant(EntityTypeBuilder<TEntity>, Expression<Func<TEntity, TTenantId>>)`](#scopetotenantentitytypebuildertentity-expressionfunctentity-ttenantid) | Keeps an entity of any module to the current Tenancy caller's tenant. |
+| [`ScopeToTenant(EntityTypeBuilder<TEntity>, Expression<Func<TEntity, TTenantId>>)`](#scopetotenantentitytypebuildertentity-expressionfunctentity-ttenantid) | Keeps an entity of any module to the current Tenancy user's tenant. |
 
 #### `AddTenancy(ModelBuilder, TenancyTableNames?, DatabaseFacade?)`
 
@@ -333,7 +333,7 @@ public static EntityTypeBuilder<TEntity> ScopeToTenant<TEntity, TTenantId>(
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
 ```
 
-Keeps an entity of any module to the current Tenancy caller's tenant. It adds the tenant filter, a named query filter that sits next to the entity's other named filters rather than replacing them, and marks the entity for Tenancy's save check, which `UseDDDToolkit` adds: a row of another tenant is refused before anything is written, whoever loaded or made it.
+Keeps an entity of any module to the current Tenancy user's tenant. It adds the tenant filter, a named query filter that sits next to the entity's other named filters rather than replacing them, and marks the entity for Tenancy's save check, which `UseDDDToolkit` adds: a row of another tenant is refused before anything is written, whoever loaded or made it.
 
 The tenant of a row is fixed once the row is there (`IsFixedAfterInsert`): a save that changed it is refused, by the save check first, and where privileges are written from the policies its column is left out of `UPDATE`.
 
@@ -587,13 +587,13 @@ public static class TenancyQueryFilter
 
 Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
 
-The query filter that keeps every read of a tenant's rows to the current Tenancy caller's tenant. It matches the rows of the tenant a seat or system work in a tenant acts in, and nothing for nobody and for system work outside any tenant.
+The query filter that keeps every read of a tenant's rows to the current Tenancy user's tenant. It matches the rows of the tenant a seat or system work in a tenant acts in, and nothing for nobody and for system work outside any tenant.
 
 It is a named filter, so an application's own filter on the same entity, a soft delete say, is another named filter and both apply. A read that must look across tenants for the application, as finding a person's seats does, skips it by name with `IgnoreQueryFilters([TenancyQueryFilter.Name])`, which leaves every other filter in place. Tenancy's own bookkeeping, the rows a save writes and the checks that stand in for a unique index, skips every filter: it must see each row the database holds.
 
 | Member | Summary |
 |---|---|
-| `Name = "tenancy.caller-tenant"` | The filter's name, for `IgnoreQueryFilters`. |
+| `Name = "tenancy.current-tenant"` | The filter's name, for `IgnoreQueryFilters`. |
 
 ### `TenancyTable`
 
@@ -675,9 +675,9 @@ Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
 public abstract class TenancySaveInterceptor : SaveChangesInterceptor
 ```
 
-Tenancy's part of every save, in Tenancy's own context and in every context with an entity kept to a tenant: the save check. Every row the save adds, changes or deletes that belongs to a tenant must belong to the current Tenancy caller's, so a handler that loaded or made the wrong row cannot write it.
+Tenancy's part of every save, in Tenancy's own context and in every context with an entity kept to a tenant: the save check. Every row the save adds, changes or deletes that belongs to a tenant must belong to the current Tenancy user's, so a handler that loaded or made the wrong row cannot write it.
 
-| Caller | What the check does |
+| Tenancy user | What the check does |
 |---|---|
 | A seat, or system work in a tenant | Refuses a row of another tenant with `tenancy.other-tenant`. |
 | Nobody | Refuses every such row with `tenancy.not-seated`. |
@@ -685,7 +685,7 @@ Tenancy's part of every save, in Tenancy's own context and in every context with
 
 Rows of owned types (units, placements, grants) are checked through the aggregate that owns them, and rows of a derived type as rows of the type at the root of its hierarchy, which is the one kept to a tenant. The check also refuses, on the first save, a model in which an entity type kept to a tenant has lost the tenant filter.
 
-Once the check has let the save through, it fills in who changed each row of an entity type that keeps it ([`TenancyAttribution.RecordsWhoChanged<T, TSeatId>`](#recordswhochangedentitytypebuildert)): the actor of the Tenancy caller the save runs as, on a new row as who wrote it first and who changed it last, on a changed row as who changed it last.
+Once the check has let the save through, it fills in who changed each row of an entity type that keeps it ([`TenancyAttribution.RecordsWhoChanged<T, TSeatId>`](#recordswhochangedentitytypebuildert)): the actor of the Tenancy user the save runs as, on a new row as who wrote it first and who changed it last, on a changed row as who changed it last.
 
 In Tenancy's own context it then writes, in the same save, what the access questions read: the closure of every organization whose tree changed and the rights of every seat the save reaches, a role's holders included. The rights the managers check are therefore never behind the aggregates they were saved with. Where the database keeps the rights itself ([`TenancyStoreOptions.DatabaseKeepsRights`](#tenancystoreoptions)), it writes them, in the same transaction, and the save writes the closure alone.
 
@@ -885,14 +885,14 @@ The next three answer a seat what it may learn of other seats' rights, the one a
 
 | Member | Summary |
 |---|---|
-| `CallerPermissions = "caller_permissions"` | The rights the caller may read, as rows of [`SeatRight<TTenantId, TSeatId, TUnitId, TRoleId>`](queries.md#seatrightttenantid-tseatid-tunitid-troleid): `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"` and `"EndsAt"`. |
+| `CurrentPermissions = "current_permissions"` | The rights the caller may read, as rows of [`SeatRight<TTenantId, TSeatId, TUnitId, TRoleId>`](queries.md#seatrightttenantid-tseatid-tunitid-troleid): `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"` and `"EndsAt"`. |
 | `TenantUnitPaths = "tenant_unit_paths"` | The closure of the organization's tree, as rows of [`OrganizationUnitPath<TTenantId, TUnitId>`](queries.md#organizationunitpathttenantid-tunitid): `"TenantId"`, `"AncestorId"`, `"DescendantId"` and `"Distance"`. |
 | `TenantUnits = "tenant_units"` | The units, as rows of [`OrganizationUnitRow<TTenantId, TUnitId>`](queries.md#organizationunitrowttenantid-tunitid): `"Id"`, `"TenantId"`, `"ParentId"` and `"Status"`; never the name, nor a column the application added. |
 | `TenantRoles = "tenant_roles_with_starter_roles"` | The roles, as rows of [`RoleRow<TTenantId, TRoleId>`](queries.md#rolerowttenantid-troleid): `"Id"`, `"TenantId"`, `"FromStarterRole"`, `"Status"` and `"Permissions"`, an array of text however the roles' table stores them; never the name. |
 | `TenantPlacements = "tenant_placements"` | Where seats are placed, as rows of [`PlacementRow<TSeatId, TUnitId>`](queries.md#placementrowtseatid-tunitid): `"SeatId"`, `"UnitId"` and `"IsPrimary"`, with the seat's `"TenantId"`, which the row is kept to its tenant by. |
 | `TenantSeats = "tenant_seats"` | The seats, as rows of [`SeatRow<TTenantId, TSeatId>`](queries.md#seatrowttenantid-tseatid): `"Id"`, `"TenantId"` and `"Status"`; never the identity, nor a field the application adds to its seat class. |
 | `TenantAdministrators = "tenant_administrators"` | The tenant's administrators, as rows of `"SeatId"` and `"RoleId"`: no parameters. Answered to a seat that may read the grants at the root: one that manages grants, seats or units there, or roles for the whole tenant. |
-| `PermissionsAMoveChanges = "permissions_a_move_changes"` | The rights a move of a unit changes, as rows of `"UnitId"`, `"Permission"`, `"EndsAt"`, `"Parent"` and `"OfCaller"`: its parameters are the unit's parent and the parent it would get. Answered to a seat that manages units at both: its own rights, and another seat's only where it reaches one parent and not the other, which is where the move changes it. |
+| `PermissionsAUnitMoveChanges = "permissions_a_unit_move_changes"` | The rights a move of a unit changes, as rows of `"UnitId"`, `"Permission"`, `"EndsAt"`, `"Parent"` and `"OfCurrentSeat"`: its parameters are the unit's parent and the parent it would get. Answered to a seat that manages units at both: its own rights, and another seat's only where it reaches one parent and not the other, which is where the move changes it. |
 | `SeatsHoldingPermissionAt = "seats_holding_permission_at"` | The seats that hold a permission at a unit, as rows of `"SeatId"`: its parameters are the permission and the unit. A seat is answered each holder whose grant there it may read: itself, and any other seat at a unit where it manages grants, seats or units, or anywhere when it manages roles for the whole tenant. |
 | `UnitsNamed = "units_named"` | What units of the caller's tenant are called, as rows of `"Id"`, `"Name"`, `"Path"` and `"Depth"`: its parameter is the array of the units asked about. The name and path of each of those that is the tenant's, and nothing more of it, whatever the seat reads of the organization: a seat on a project at a unit it is not placed under, or one an application's restrictive rule keeps out of the units, still reads what that unit is called. |
 | `TenantNamesOfIdentity = "identity_tenant_names"` | What the tenants the caller's identity has a seat in are called, whatever the status of the seat or of the tenant, as rows of `"Id"`, `"Slug"` and `"Name"`: no parameters. The tenant picker reads the names through it, before a tenant is chosen, so it names every tenant by its organization's name whatever an application's restrictive rule on the organization lets the caller read of it; it answers nothing more of one. |
@@ -911,9 +911,9 @@ Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
 public sealed class TenancyActedByAccessor : IActedByAccessor
 ```
 
-Tells a record that keeps who acted, an event log for one, what Tenancy knows of the caller: a seat as the seat, an operator by its verified identity, the application's own work as the system with its scope, and a link's token as the seat it stands for ([`TenancyCaller.Actor`](callers.md#tenancycallerttenantid-tseatid)). Where there is no Tenancy caller, or the caller is nobody, the accessor it wraps answers from the toolkit's current user.
+Tells a record that keeps who acted, an event log for one, what Tenancy knows of the caller: a seat as the seat, an operator by its verified identity, the application's own work as the system with its scope, and a link's token as the seat it stands for ([`TenancyUser.Actor`](access.md#tenancyuserttenantid-tseatid)). Where there is no Tenancy user, or the caller is nobody, the accessor it wraps answers from the toolkit's current user.
 
-`AddTenancy` puts it around the accessor that was registered before it, or around the toolkit's default. It is a singleton that reads the ambient Tenancy caller each time it is asked, keeps nothing between two answers and takes no scoped service, so it serves a context taken from a pool as it serves any other.
+`AddTenancy` puts it around the accessor that was registered before it, or around the toolkit's default. It is a singleton that reads the ambient Tenancy user each time it is asked, keeps nothing between two answers and takes no scoped service, so it serves a context taken from a pool as it serves any other.
 
 | Member | Summary |
 |---|---|
@@ -955,14 +955,14 @@ Who wrote a row first and who changed it last, kept on the row itself: six colum
 | Member | Summary |
 |---|---|
 | `CreatedBySeat = "CreatedBySeat"` | The seat that wrote the row first, when a seat did. |
-| `CreatedByKind = "CreatedByKind"` | What kind of actor wrote the row first: one of [`TenancyActorKinds`](callers.md#tenancyactorkinds). |
+| `CreatedByKind = "CreatedByKind"` | What kind of actor wrote the row first: one of [`TenancyActorKinds`](access.md#tenancyactorkinds). |
 | `CreatedByIdentity = "CreatedByIdentity"` | The verified identity of the operator the row was first written for, when it was one. |
 | `ChangedBySeat = "ChangedBySeat"` | The seat that changed the row last, when a seat did. |
-| `ChangedByKind = "ChangedByKind"` | What kind of actor changed the row last: one of [`TenancyActorKinds`](callers.md#tenancyactorkinds). |
+| `ChangedByKind = "ChangedByKind"` | What kind of actor changed the row last: one of [`TenancyActorKinds`](access.md#tenancyactorkinds). |
 | `ChangedByIdentity = "ChangedByIdentity"` | The verified identity of the operator the row was last changed for, when it was one. |
 | `KindLength = 32` | The longest kind a column holds. |
 | `static IReadOnlyList<string> Columns { get; }` | The six columns, in one order for everything that reads them by position: who wrote the row first as seat, kind and identity, then who changed it last as seat, kind and identity. |
-| [`RecordsWhoChanged(EntityTypeBuilder<T>)`](#recordswhochangedentitytypebuildert) | Adds six shadow columns to an entity that is kept to a tenant, and has every save fill them in: who wrote the row first and who changed it last, each as a kind ([`TenancyActorKinds`](callers.md#tenancyactorkinds)), a seat when a seat did it, and an operator's verified identity when it was done for an operator. |
+| [`RecordsWhoChanged(EntityTypeBuilder<T>)`](#recordswhochangedentitytypebuildert) | Adds six shadow columns to an entity that is kept to a tenant, and has every save fill them in: who wrote the row first and who changed it last, each as a kind ([`TenancyActorKinds`](access.md#tenancyactorkinds)), a seat when a seat did it, and an operator's verified identity when it was done for an operator. |
 
 #### `RecordsWhoChanged(EntityTypeBuilder<T>)`
 
@@ -972,7 +972,7 @@ public static EntityTypeBuilder<T> RecordsWhoChanged<T, TSeatId>(this EntityType
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Adds six shadow columns to an entity that is kept to a tenant, and has every save fill them in: who wrote the row first and who changed it last, each as a kind ([`TenancyActorKinds`](callers.md#tenancyactorkinds)), a seat when a seat did it, and an operator's verified identity when it was done for an operator. The application's own work leaves a kind and neither id.
+Adds six shadow columns to an entity that is kept to a tenant, and has every save fill them in: who wrote the row first and who changed it last, each as a kind ([`TenancyActorKinds`](access.md#tenancyactorkinds)), a seat when a seat did it, and an operator's verified identity when it was done for an operator. The application's own work leaves a kind and neither id.
 
 ```csharp
 modelBuilder.Entity<Project>(project =>
@@ -982,7 +982,7 @@ modelBuilder.Entity<Project>(project =>
 });
 ```
 
-Tenancy's save interceptor, which `UseDDDToolkit` adds, fills them from the Tenancy caller of the save ([`TenancyCaller.Actor`](callers.md#tenancycallerttenantid-tseatid)): both sets for a new row, and the last three for a row that changes. A row whose own columns did not change, because only a row of one of its entities in another table did, keeps who changed it last; an aggregate with a version changes its row with every change of its parts. The first three are fixed once the row is there: Entity Framework refuses a save that changes one, and the privileges an export writes leave them out of `UPDATE`.
+Tenancy's save interceptor, which `UseDDDToolkit` adds, fills them from the Tenancy user of the save ([`TenancyUser.Actor`](access.md#tenancyuserttenantid-tseatid)): both sets for a new row, and the last three for a row that changes. A row whose own columns did not change, because only a row of one of its entities in another table did, keeps who changed it last; an aggregate with a version changes its row with every change of its parts. The first three are fixed once the row is there: Entity Framework refuses a save that changes one, and the privileges an export writes leave them out of `UPDATE`.
 
 They are ids, never a name: what a seat is shown by is the application's, which Tenancy's managers answer by id. They are shadow properties, so the entity's class does not change; read one with `EF.Property<SeatId?>(row, TenancyAttribution.ChangedBySeat)`. Adding them to a table that exists is a migration of your own, as any change to the model is.
 
@@ -1104,7 +1104,7 @@ options.UseOutbox<TenancyContext>(outbox => outbox
     .KeepEventLog(log => log.AddTenancyEventLog()));
 ```
 
-Every row says which tenant its event is about, taken from the event itself, which every event of Tenancy's carries, and who acted, from the Tenancy caller of the save: a seat, an operator, the system or a token ([`TenancyActedByAccessor`](#tenancyactedbyaccessor)). An event of the application's own that names no tenant gets the tenant the save runs in. The payload is the event as the outbox stores it: ids, permissions and dates, who made the change, and never what a tenant, a unit, a seat or a role is called. [`TenancyEventLogExtensions.AddTenancyEventLog<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancyeventlogeventlogoptions) chooses the events that change access.
+Every row says which tenant its event is about, taken from the event itself, which every event of Tenancy's carries, and who acted, from the Tenancy user of the save: a seat, an operator, the system or a token ([`TenancyActedByAccessor`](#tenancyactedbyaccessor)). An event of the application's own that names no tenant gets the tenant the save runs in. The payload is the event as the outbox stores it: ids, permissions and dates, who made the change, and never what a tenant, a unit, a seat or a role is called. [`TenancyEventLogExtensions.AddTenancyEventLog<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancyeventlogeventlogoptions) chooses the events that change access.
 
 The rows are not kept to the caller's tenant by a query filter, since the toolkit's retention reads the table whole: code that reads the history names the tenant itself, and asks `tenancy.history.view` for the whole tenant first. On Postgres, `DDDToolkit.Supporting.Tenancy.Postgres` writes the table's policies: a seat adds rows about itself in its tenant and reads its tenant's with that permission, and system work adds and reads its tenant's. It writes them with those of Tenancy's own tables, so the log belongs in the context that maps them: an export refuses it in any other, where it would be left without a policy.
 

@@ -51,7 +51,7 @@ builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMed
 
 builder.Services.AddSupabaseRowLevelSecurity();
 //   Services:   postgres.row-level-security-wired
-//   Login:      supabase.roles-match-access-files, postgres.login-role-may-switch-to-callers
+//   Login:      supabase.roles-match-access-files, postgres.login-role-may-switch-to-user-roles
 //   Database:   postgres.login-role-owns-nothing, postgres.definer-owners-bypass
 
 // in a module: its context, marked [SupabaseMigrations]
@@ -141,9 +141,9 @@ confirms. The entries are grouped by stage.
 
 - **`supabase.roles-match-access-files`** (`SupabaseRowAccessChecks.RolesMatchAccessFilesCheck`), from
   `AddSupabaseRowLevelSecurity`. The roles that each context on Postgres switches to for its callers are the roles
-  that the newest applied access file was written for. Runs before `postgres.login-role-may-switch-to-callers`
-  ([Custom roles and caller functions](supabase.md#custom-roles-and-caller-functions)).
-- **`postgres.login-role-may-switch-to-callers`** (`PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck`),
+  that the newest applied access file was written for. Runs before `postgres.login-role-may-switch-to-user-roles`
+  ([Custom roles and current user functions](supabase.md#custom-roles-and-current-user-functions)).
+- **`postgres.login-role-may-switch-to-user-roles`** (`PostgresRowAccessChecks.LoginRoleMaySwitchToUserRolesCheck`),
   from `AddPostgresRowLevelSecurity` and `AddSupabaseRowLevelSecurity`. The login role may switch to every caller
   role of every context on Postgres, including the scoped system role where it exists
   ([A login that owns nothing](row-level-security.md#a-login-that-owns-nothing)).
@@ -268,7 +268,7 @@ public sealed class PostgresStartupCheck(IServiceProvider services) : IHostedSer
             foreach (var contextType in EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider))
             {
                 var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
-                await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, cancellationToken);
+                await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync(context, cancellationToken);
             }
         }
 

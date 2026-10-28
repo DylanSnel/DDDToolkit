@@ -43,7 +43,7 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
         // Two notes, written as their owners.
         foreach (var (owner, text) in new[] { (Alice, "Alice's"), (Bob, "Bob's") })
         {
-            await using var context = database.CreateContext(new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(owner)) });
+            await using var context = database.CreateContext(new UserOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(owner)) });
             context.Notes.Add(new PrivateNote { Id = Guid.CreateVersion7(), Text = text });
             await context.SaveChangesAsync(Cancellation);
         }

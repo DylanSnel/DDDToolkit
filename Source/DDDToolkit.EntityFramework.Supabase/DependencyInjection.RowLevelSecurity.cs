@@ -61,7 +61,7 @@ public static partial class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
 
         // Not inlined, so the calling assembly is the one whose code asked, the host's, and not this one.
-        var recorded = SupabaseCallerRoles.RecordedFor(Assembly.GetCallingAssembly(), services);
+        var recorded = SupabaseUserRoles.RecordedFor(Assembly.GetCallingAssembly(), services);
         services.AddPostgresRowLevelSecurity(options => WithSupabaseRoles(options, recorded, configure));
         SupabaseRowAccessChecks.AddStartupChecks(services);
         return services;
@@ -83,7 +83,7 @@ public static partial class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var recorded = SupabaseCallerRoles.RecordedFor(Assembly.GetCallingAssembly(), services);
+        var recorded = SupabaseUserRoles.RecordedFor(Assembly.GetCallingAssembly(), services);
         services.AddPostgresRowLevelSecurity<TSource>(options => WithSupabaseRoles(options, recorded, configure));
         SupabaseRowAccessChecks.AddStartupChecks(services);
         return services;
@@ -102,7 +102,7 @@ public static partial class DependencyInjection
     public static DbContextOptionsBuilder UseSupabaseRowLevelSecurity(this DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
         => optionsBuilder.UsePostgresRowLevelSecurity(serviceProvider);
 
-    private static void WithSupabaseRoles(PostgresRowLevelSecurityOptions options, SupabaseCallerRoles recorded, Action<PostgresRowLevelSecurityOptions>? configure)
+    private static void WithSupabaseRoles(PostgresRowLevelSecurityOptions options, SupabaseUserRoles recorded, Action<PostgresRowLevelSecurityOptions>? configure)
     {
         // Named here rather than left to Postgres's defaults, which only happen to be the same for a user and an
         // anonymous caller and differ for system work: the roles the export writes the policies for unless the

@@ -116,7 +116,7 @@ public sealed class OfTenantTests
             await gadgets.SaveChangesAsync(Cancellation);
         }
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat)))
         {
             gadgets.Add(new Gadget { Id = Guid.NewGuid(), TenantId = harbor.Tenant, Name = "harbor's" });
             await gadgets.SaveChangesAsync(Cancellation);
@@ -141,7 +141,7 @@ public sealed class OfTenantTests
         var gadgets = scope.ServiceProvider.GetRequiredService<GadgetContextWithoutConventions>();
         gadgets.GetService<IRelationalDatabaseCreator>().CreateTables();
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(new TenantId(71), SeatId.CreateSequential())))
+        using (TenancyUsers.Begin(HostUser.InSeat(new TenantId(71), SeatId.CreateSequential())))
         {
             gadgets.Add(new Gadget { Id = Guid.NewGuid(), TenantId = new TenantId(72), Name = "unchecked" });
             await FluentActions.Awaiting(() => gadgets.SaveChangesAsync(Cancellation)).Should().ThrowAsync<InvalidOperationException>().WithMessage(

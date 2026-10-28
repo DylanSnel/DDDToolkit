@@ -17,7 +17,7 @@ public interface ISeatDirectory<TTenantId, TSeatId>
     /// <param name="identity">The verified identity, the subject of the caller's token.</param>
     /// <param name="tenantSlug">The tenant's slug, trimmed and lowercased.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    Task<SeatOfCaller<TTenantId, TSeatId>?> FindAsync(Guid identity, string tenantSlug, CancellationToken cancellationToken);
+    Task<SeatOfUser<TTenantId, TSeatId>?> FindAsync(Guid identity, string tenantSlug, CancellationToken cancellationToken);
 
     /// <summary>
     /// The tenant with this slug, in any status, or <see langword="null"/> when there is none. Tenant selection asks it for

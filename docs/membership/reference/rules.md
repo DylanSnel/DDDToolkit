@@ -762,7 +762,7 @@ Rules say none, usually: who a member is follows from what a member is known by,
 | Member | Summary |
 |---|---|
 | [`Inferred`](#inferred) | Who a member is follows from what it is known by, the member id of `[Member<TId, TMemberId, TRoleId, TResource>]`: the default, which rules that say no other source have. |
-| `static MemberSource CallerId { get; }` | The caller's user id, the `sub` of its token: for members that are users, known by an id over a `Guid`. What [`Inferred`](#inferred) takes for such an id, said outright. |
+| `static MemberSource CurrentUserId { get; }` | The caller's user id, the `sub` of its token: for members that are users, known by an id over a `Guid`. What [`Inferred`](#inferred) takes for such an id, said outright. |
 | `MemberSourceKind Kind { get; }` | Which fact about the caller it is. |
 | `string? ClaimPath { get; }` | The claim's path for [`MemberSourceKind.Claim`](#membersourcekind); `null` for every other kind. |
 | `DatabaseFunction? Function { get; }` | For [`MemberSourceKind.Resolved`](#membersourcekind), the function that answers the caller's member id in the database, or `null` when the rules name none; `null` for every other kind. |
@@ -777,8 +777,8 @@ public static MemberSource Inferred { get; }
 
 Who a member is follows from what it is known by, the member id of `[Member<TId, TMemberId, TRoleId, TResource>]`: the default, which rules that say no other source have.
 
-- The seat id of a package that keeps an organization's seats: the caller's seat. Such a package answers it, in C# through the `ICallerMember` its join with this package registers for the resource, and in the database through the function its contribution names for its seat id, where the context that maps the resource maps that package's read model.
-- An id over a `Guid` otherwise: the caller's user id, the `sub` of its token, as [`CallerId`](#membersource).
+- The seat id of a package that keeps an organization's seats: the caller's seat. Such a package answers it, in C# through the `ICurrentMember` its join with this package registers for the resource, and in the database through the function its contribution names for its seat id, where the context that maps the resource maps that package's read model.
+- An id over a `Guid` otherwise: the caller's user id, the `sub` of its token, as [`CurrentUserId`](#membersource).
 
 A member known by anything else is a member the application says: [`Claim`](#claimstring) for a claim of the token, [`Resolved`](#resolveddatabasefunction) for what it resolves itself.
 
@@ -806,7 +806,7 @@ public static MemberSource Resolved(DatabaseFunction? function = null)
 
 An id the application resolves for the caller: for members that are not the caller itself but something the application gives its callers, such as the place somebody has in an organization, which a token does not carry and which stops counting when the organization says so.
 
-In C# the application answers it, through an [`ICallerMember<TResourceId, TMemberId>`](#icallermembertresourceid-tmemberid) it registers with the resource; a resource registered without one is refused, so a member is never silently read from the caller's own id. In a database that answers the questions itself, a function of the application's answers it, named here.
+In C# the application answers it, through an [`ICurrentMember<TResourceId, TMemberId>`](#icurrentmembertresourceid-tmemberid) it registers with the resource; a resource registered without one is refused, so a member is never silently read from the caller's own id. In a database that answers the questions itself, a function of the application's answers it, named here.
 
 **Parameters**
 
@@ -823,14 +823,14 @@ The kinds of [`MemberSource`](#membersource).
 | Member | Summary |
 |---|---|
 | `Inferred = 0` | Who a member is follows from what it is known by: [`MemberSource.Inferred`](#inferred). |
-| `CallerId = 1` | The caller's user id: [`MemberSource.CallerId`](#membersource). |
+| `CurrentUserId = 1` | The caller's user id: [`MemberSource.CurrentUserId`](#membersource). |
 | `Claim = 2` | A claim of the caller's token: [`MemberSource.Claim`](#claimstring). |
 | `Resolved = 3` | An id the application resolves for the caller: [`MemberSource.Resolved`](#resolveddatabasefunction). |
 
-### `ICallerMember<TResourceId, TMemberId>`
+### `ICurrentMember<TResourceId, TMemberId>`
 
 ```csharp
-public interface ICallerMember<TResourceId, TMemberId>
+public interface ICurrentMember<TResourceId, TMemberId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
 ```

@@ -271,13 +271,13 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
                     TenancyFunctionSql.Select(
                         context,
                         schema: null,
-                        TenancyFunctionNames.PermissionsAMoveChanges,
+                        TenancyFunctionNames.PermissionsAUnitMoveChanges,
                         parameters: 2,
                         nameof(MoveReach<TUnitId>.UnitId),
                         nameof(MoveReach<TUnitId>.Permission),
                         nameof(MoveReach<TUnitId>.EndsAt),
                         nameof(MoveReach<TUnitId>.Parent),
-                        nameof(MoveReach<TUnitId>.OfCaller)),
+                        nameof(MoveReach<TUnitId>.OfCurrentSeat)),
                     TenancyFunctionSql.Stored(context, parent),
                     TenancyFunctionSql.Stored(context, newParent))
                 .ToListAsync(cancellationToken)
@@ -390,7 +390,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     private async Task<bool> DatabaseSeesTheSeatAsync(CancellationToken cancellationToken)
     {
         var seen = await context.Database
-            .SqlQueryRaw<bool>(TenancyFunctionSql.Answers(context, schema: null, TenancyFunctionSql.CallerSeat))
+            .SqlQueryRaw<bool>(TenancyFunctionSql.Answers(context, schema: null, TenancyFunctionSql.CurrentSeat))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return seen is [true];
@@ -404,7 +404,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     private bool AsksTheDatabase
         => options.Value.DatabaseKeepsRights
            && context.Database.IsRelational()
-           && TenancyCallers.Current<TTenantId, TSeatId>().Kind == TenancyCallerKind.Seat;
+           && TenancyUsers.Current<TTenantId, TSeatId>().Kind == TenancyUserKind.Seat;
 
     /// <inheritdoc />
     public void Add(TTenant tenant) => context.Add(tenant);

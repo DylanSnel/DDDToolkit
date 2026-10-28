@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Ui.Api;
 /// </remarks>
 /// <param name="Method">The HTTP method.</param>
 /// <param name="Path">The path and query, as sent.</param>
-/// <param name="Caller">Whose token the call carried: the session's person, a preset's person, or <c>anonymous</c>.</param>
+/// <param name="CalledAs">Whose token the call carried: the session's person, a preset's person, or <c>anonymous</c>.</param>
 /// <param name="Tenant">The slug the <c>Tenant</c> header carried, or <see langword="null"/> when none was sent.</param>
 /// <param name="Status">The status, or 0 when the API did not answer at all.</param>
 /// <param name="Problem">The problem the API answered with, or why there is no answer; <see langword="null"/> on success.</param>
@@ -19,7 +19,7 @@ namespace Examples.Tenancy.Ui.Api;
 public record ApiOutcome(
     string Method,
     string Path,
-    string Caller,
+    string CalledAs,
     string? Tenant,
     int Status,
     ApiProblem? Problem,
@@ -46,11 +46,11 @@ public record ApiOutcome(
 public sealed record ApiOutcome<T>(
     string Method,
     string Path,
-    string Caller,
+    string CalledAs,
     string? Tenant,
     int Status,
     T? Value,
     ApiProblem? Problem,
     string RawBody,
     TimeSpan Elapsed)
-    : ApiOutcome(Method, Path, Caller, Tenant, Status, Problem, RawBody, Elapsed);
+    : ApiOutcome(Method, Path, CalledAs, Tenant, Status, Problem, RawBody, Elapsed);

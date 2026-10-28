@@ -142,7 +142,7 @@ public class SeatManagerTests
         var newcomer = await harness.SeatAt("Di", harness.Harbor.Root);
         var administrators = harness.RoleFromStarterRole(HostCatalogue.AdministratorStarterRole);
 
-        await harness.Run(harness.SystemCaller(actingSeat: harness.Administrator),
+        await harness.Run(harness.SystemUser(actingSeat: harness.Administrator),
             h => h.Seats.GrantAsync(newcomer, administrators, harness.Harbor.Root, null, "second pair of hands", default));
 
         harness.Store.Calls.Should().NotContain(["Reads", "Queries"], "system work in a tenant asks nothing about its own permissions");
@@ -289,7 +289,7 @@ public class SeatManagerTests
         await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => harness.As(harness.Administrator, h => h.Seats.AddAsync(identity, default)));
         await Refused.WithCodeAsync(TenancyRefusals.IdentityRequired, () => harness.As(harness.Administrator, h => h.Seats.AddAsync(Guid.Empty, default)));
 
-        var elsewhere = (await harness.Run(HostCaller.SystemIn(other.Tenant.Id), h => h.Seats.AddAsync(identity, default))).Id;
+        var elsewhere = (await harness.Run(HostUser.SystemIn(other.Tenant.Id), h => h.Seats.AddAsync(identity, default))).Id;
 
         harness.Store.Seat(elsewhere).TenantId.Should().Be(other.Tenant.Id, "one seat per tenant, and a person may sit in several tenants");
         harness.Store.SeatsIn(harness.Tenant).Count(seat => seat.Identity == identity).Should().Be(1);
@@ -811,7 +811,7 @@ public class SeatManagerTests
         var harness = Harness.OfHarbor();
         var bert = await harness.SeatAt("Bert", harness.Harbor.North);
 
-        await harness.Run(harness.SystemCaller(actingSeat: bert),
+        await harness.Run(harness.SystemUser(actingSeat: bert),
             h => h.Seats.GrantAsync(bert, harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole), harness.Harbor.North, null, null, default));
 
         var grant = harness.Store.Seat(bert).Placements.Single().Grants.Single();

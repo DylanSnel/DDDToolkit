@@ -17,7 +17,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// and under a login role that holds nothing, where the bookkeeping role does the deleting. The system clock
 /// throughout, because the guard reads the database's.
 /// </summary>
-public sealed class EventLogRetentionTests(ExplicitCallersPostgres postgres) : IDisposable
+public sealed class EventLogRetentionTests(ExplicitCurrentUserPostgres postgres) : IDisposable
 {
     private static readonly TimeSpan KeepFor = LoggedApiaryContext.KeepFor;
 

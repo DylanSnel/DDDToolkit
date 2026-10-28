@@ -71,7 +71,7 @@ public static partial class OwnersHaveTheirPallets
 
 /// <summary>Whoever signed in reads every pallet, so a pallet somebody may not change is still one they see.</summary>
 [RowAccess<Pallet>(RowOperations.Read)]
-public static partial class SignedInCallersReadEveryPallet
+public static partial class SignedInUsersReadEveryPallet
 {
     public static bool Allows(Pallet pallet, ICurrentUser user) => user.IsAuthenticated;
 }
@@ -81,7 +81,7 @@ public static class PalletRules
 {
     public static readonly RowAccessRule Owners = RowAccessRule.For<Pallet>("Owners have their pallets", RowOperations.All, OwnersHaveTheirPallets.RowAccessSql);
 
-    public static readonly RowAccessRule SignedIn = RowAccessRule.For<Pallet>("Signed in callers read every pallet", RowOperations.Read, SignedInCallersReadEveryPallet.RowAccessSql);
+    public static readonly RowAccessRule SignedIn = RowAccessRule.For<Pallet>("Signed in callers read every pallet", RowOperations.Read, SignedInUsersReadEveryPallet.RowAccessSql);
 }
 
 /// <summary>

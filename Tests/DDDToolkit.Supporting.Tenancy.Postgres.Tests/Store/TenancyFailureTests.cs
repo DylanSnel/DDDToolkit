@@ -50,7 +50,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         // Past the aggregate, which never makes one: a second root of Harbor, written by Tenancy's own system work,
         // which the policies let write the tree.
         PostgresException refused;
-        await using (var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
+        await using (var system = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
         {
             refused = (await FluentActions.Awaiting(() => system.ExecuteAsync(
                     "INSERT INTO tenancy.\"OrganizationUnits\" (\"Id\", \"TenantId\", \"ParentId\", \"Name\", \"Status\") VALUES (gen_random_uuid(), 1, NULL, 'Second', 'Active')",
@@ -135,7 +135,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         retitling.Which.Code.Should().Be(ToolkitRefusals.Refused);
         retitling.Which.InnerException.Should().BeOfType<ConcurrencyConflictException>();
 
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Seats\" WHERE \"DisplayName\" = 'Zed' OR \"JobTitle\" = 'Foreman'", Cancellation))
             .Should().Be(0, "nothing was written");
         (await owner.ScalarAsync<long>(
@@ -161,7 +161,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
                 var store = scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
                 var seth = (await store.FindSeatAsync(Seth.Seat, Cancellation))!;
 
-                await using (var other = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
+                await using (var other = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
                 {
                     (await other.ExecuteAsync("UPDATE tenancy.\"SeatPlacements\" SET \"IsPrimary\" = false WHERE \"SeatId\" = $1 AND \"UnitId\" = $2", Cancellation, Seth.Seat.Value, North.Value))
                         .Should().Be(1);
@@ -229,7 +229,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
 
         failure.Which.Should().NotBeAssignableTo<RefusalException>();
         failure.Which.ToString().Should().Contain("tenancy_rights_backed_by_grants");
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Oli.Seat.Value, HarborRoles.Watcher.Value))
             .Should().Be(0, "the transaction was rolled back");
     }

@@ -10,7 +10,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 public sealed record DepotPerson(string Name, Guid User, PorterId? Porter, bool Active)
 {
     /// <summary>The caller: a signed-in user, with nothing of the depot in its token.</summary>
-    public CurrentUserSnapshot Caller => TestCallers.User(new UserId(User));
+    public CurrentUserSnapshot Caller => TestUsers.User(new UserId(User));
 
     /// <summary>The porter the depot counts the user as, or nobody.</summary>
     public PorterId? Member => Active ? Porter : null;

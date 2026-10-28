@@ -70,7 +70,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         {
             command.Caller!.Kind.Should().Be(CurrentUserKind.SystemIn, "provisioning narrows itself to the tenant it makes");
             command.Caller.SystemScope.Should().Be(TenancyWork.SystemScope);
-            command.TenancyCaller.Should().Be(HostCaller.SystemIn(Estuary), command.Text);
+            command.TenancyUser.Should().Be(HostUser.SystemIn(Estuary), command.Text);
         }
 
         recorder.Sent.Should().Contain(command => command.Text.Contains("INSERT INTO tenancy." + names.Shown("Tenants"), StringComparison.Ordinal));
@@ -125,7 +125,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         // The role is a copy of its starter role, and the database wrote the first administrator's rights from the role: the
         // permissions the starter role lists, at the root, and no permission to work with widgets, though each of those is live.
         provisioned.AdministratorRole.Should().Be(provisioned.RolesByStarterRole[TreeAdministrators]);
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ListAsync<string>("SELECT pg_catalog.unnest(\"Permissions\") FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, provisioned.AdministratorRole.Value))
                 .Should().BeEquivalentTo(Listed);
@@ -148,7 +148,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         }
 
         // What the database answers the administrator is what the starter role lists.
-        await using (var asDan = await AsCaller.PersonAsync(database, dan, Estuary, Cancellation))
+        await using (var asDan = await AsUser.PersonAsync(database, dan, Estuary, Cancellation))
         {
             foreach (var permission in Listed)
             {
@@ -162,7 +162,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         }
 
         string[] given = [TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage, .. Widgets];
-        await using var after = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var after = await AsUser.OwnerAsync(database, Cancellation);
         (await after.ListAsync<string>("SELECT DISTINCT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, fay.Value))
             .Should().BeEquivalentTo(given, "the two roles' permissions reached the seat they were given to");
     }
@@ -179,7 +179,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         string.Concat(TenancyPostgres.AccessScripts(catalogue, names: names)).Should().Contain("WHEN 'administrator' THEN ARRAY[");
         await using var services = await ServicesWithAsync(database, noStarterRoles);
 
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ScalarAsync<string[]>("SELECT tenancy.starter_role_permissions($1)", Cancellation, TenancyStarterRoles.DefaultAdministratorsKey))
                 .Should().Equal(catalogue.LivePermissions, "the default administrators' starter role holds every live permission, as one that lists none does");
@@ -193,7 +193,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         // The tenant's one role is a copy of the default starter role, and the database wrote the first seat's rights from it:
         // every live permission, at the root.
         provisioned.RolesByStarterRole.Keys.Should().Equal(TenancyStarterRoles.DefaultAdministratorsKey);
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ListAsync<string>("SELECT \"Name\" || ' ' || \"FromStarterRole\" FROM tenancy.\"Roles\" WHERE \"TenantId\" = $1", Cancellation, Estuary.Value))
                 .Should().Equal("Administrator administrator");
@@ -203,7 +203,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
 
         // Under the policies the first seat is an administrator: it holds every permission for the whole tenant, and gives a
         // role that manages access.
-        await using (var asDan = await AsCaller.PersonAsync(database, dan, Estuary, Cancellation))
+        await using (var asDan = await AsUser.PersonAsync(database, dan, Estuary, Cancellation))
         {
             foreach (var permission in catalogue.LivePermissions)
             {
@@ -226,7 +226,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         await using var services = await ListingServicesAsync(database);
 
         // What a copy of each administrators' starter role holds, the database says as the catalogue does.
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ScalarAsync<string[]>("SELECT tenancy.starter_role_permissions($1)", Cancellation, TreeAdministrators)).Should().Equal(Listed);
             (await owner.ScalarAsync<string[]>("SELECT tenancy.starter_role_permissions($1)", Cancellation, HostCatalogue.AdministratorStarterRole))
@@ -252,7 +252,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         await services.BySeat(fayIdentity, Estuary, fay, scoped => scoped.Tenants().ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, Cancellation));
 
         // A role holding every live permission under that starter role's name is no copy of it, and is refused her.
-        await using (var asFay = await AsCaller.PersonAsync(database, fayIdentity, Estuary, Cancellation))
+        await using (var asFay = await AsUser.PersonAsync(database, fayIdentity, Estuary, Cancellation))
         {
             var everyLivePermission = () => asFay.AttemptAsync(
                 """
@@ -268,7 +268,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
 
         // The tenant has the role now, with the permissions its starter role lists. No grant changed: the first administrator keeps
         // the flat tenant's role, with every live permission, and the new role is nobody's until someone gives it.
-        await using var after = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var after = await AsUser.OwnerAsync(database, Cancellation);
         (await after.ListAsync<string>(
                 "SELECT pg_catalog.unnest(\"Permissions\") FROM tenancy.\"Roles\" WHERE \"TenantId\" = $1 AND \"FromStarterRole\" = $2", Cancellation, Estuary.Value, TreeAdministrators))
             .Should().BeEquivalentTo(Listed);
@@ -400,7 +400,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
     /// <summary>How many rows each tenant has in each of Tenancy's tables, as the owner counts them.</summary>
     private static async Task<Dictionary<(string Table, long Tenant), long>> RowsByTenantAsync(TestDatabase database)
     {
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         var rows = new Dictionary<(string Table, long Tenant), long>();
         foreach (var (table, tenant) in new[]
                  {

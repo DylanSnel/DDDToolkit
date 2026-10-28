@@ -106,7 +106,7 @@ modelBuilder.Entity<Project>(project =>
 ```
 
 `RecordsWhoChanged` adds six shadow columns ([`TenancyAttribution`](reference/entity-framework.md#tenancyattribution)).
-Every save fills them from the Tenancy caller. A new row gets all six. A changed row gets the three `ChangedBy…`
+Every save fills them from the Tenancy user. A new row gets all six. A changed row gets the three `ChangedBy…`
 columns.
 
 | Who acted | `…ByKind` | `…BySeat` | `…ByIdentity` |

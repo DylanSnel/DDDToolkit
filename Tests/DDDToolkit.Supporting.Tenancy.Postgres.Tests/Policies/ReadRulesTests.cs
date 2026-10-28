@@ -44,7 +44,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
 
         tenancy.Should().Contain(
             "CREATE POLICY \"Members and the person read seats (select) for authenticated\" ON \"tenancy\".\"Seats\" FOR SELECT TO authenticated\n" +
-            "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()) OR \"Identity\" = (SELECT \"ddd\".caller_id()));");
+            "    USING (\"TenantId\" = (SELECT \"tenancy\".current_tenant()) OR \"Identity\" = (SELECT \"ddd\".current_user_id()));");
         tenancy.Should().Contain("CREATE POLICY \"Seat managers read invitations (select) for authenticated\" ON \"tenancy\".\"Invitations\" FOR SELECT TO authenticated\n");
         tenancy.Should().NotContain("in place of", "nothing changes for an application that writes no read rule");
     }
@@ -61,9 +61,9 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         tenancy.Should().Contain(
             ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
             "CREATE POLICY \"Seats (select) for authenticated\" ON \"tenancy\".\"Seats\" FOR SELECT TO authenticated\n" +
-            "    USING ((\"Identity\" = (SELECT \"ddd\".caller_id()) OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) " +
+            "    USING ((\"Identity\" = (SELECT \"ddd\".current_user_id()) OR ((\"TenantId\" = (SELECT \"tenancy\".current_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) " +
             "OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.units.manage')) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.roles.manage')))))" +
-            " OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"Id\" = (SELECT \"tenancy\".caller_seat()))));",
+            " OR ((\"TenantId\" = (SELECT \"tenancy\".current_tenant())) AND (\"Id\" = (SELECT \"tenancy\".current_seat()))));",
             "a person's own seats and the managers' read stay, and the rule decides the rest, in the calling seat's tenant");
         tenancy.Should().NotContain("\"Members and the person read seats (select) for authenticated\"", "the default itself is gone");
         tenancy.Should().NotContain("ON \"tenancy\".\"Seats\" FOR SELECT TO anon", "a rule without To is for the signed-in users the default is for, and anonymous callers still read no seat");
@@ -107,7 +107,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         }
 
         // A module reads the seats as the caller: the rule decides what it reads too.
-        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        await using (var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.tenant_seats() WHERE \"TenantId\" = 1", Cancellation)).Should().Equal(Oli.Seat.Value);
         }
@@ -150,7 +150,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         // is no such question: it reads the seats as its caller, and the test above shows the rule deciding it.
         string[] questions =
         [
-            "SELECT coalesce(tenancy.caller_seat()::text, '') || ' ' || coalesce(tenancy.caller_tenant()::text, '')",
+            "SELECT coalesce(tenancy.current_seat()::text, '') || ' ' || coalesce(tenancy.current_tenant()::text, '')",
             "SELECT coalesce(string_agg(u::text, ',' ORDER BY u::text), '') FROM tenancy.units_where_i_hold_permission('widget.read') u",
             "SELECT coalesce(string_agg(u::text, ',' ORDER BY u::text), '') FROM tenancy.readable_units() u",
             "SELECT coalesce(string_agg(r::text, ',' ORDER BY r::text), '') FROM tenancy.roles_with_permission('widget.read') r",
@@ -177,7 +177,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         (await SeatsReadByAsync(database, Oli, Harbor)).Should().BeEquivalentTo([Oli.Seat.Value, Seth.Seat.Value, OliInOrchard.Value]);
         (await SeatsReadByAsync(database, Eve, Harbor)).Should().BeEquivalentTo([Eve.Seat.Value, Sue.Seat.Value]);
 
-        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        await using (var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ListAsync<Guid>("SELECT s FROM tenancy.seats_in_my_units() s ORDER BY 1", Cancellation)).Should().BeEquivalentTo([Oli.Seat.Value, Seth.Seat.Value]);
         }
@@ -185,12 +185,12 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         // A unit a seat belongs to is one it is placed at, or one below it: Hiro, placed at North, finds the people of
         // North Pier below it too, and Ada, placed at the root, every placed seat of the tenant, as every seat of a flat
         // tenant would.
-        await using (var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
+        await using (var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
         {
             (await hiro.ListAsync<Guid>("SELECT s FROM tenancy.seats_in_my_units() s", Cancellation)).Should().BeEquivalentTo([Hiro.Seat.Value, Seth.Seat.Value, Oli.Seat.Value]);
         }
 
-        await using var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation);
+        await using var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation);
         (await ada.ListAsync<Guid>("SELECT s FROM tenancy.seats_in_my_units() s", Cancellation))
             .Should().BeEquivalentTo([Ada.Seat.Value, Hiro.Seat.Value, Seth.Seat.Value, Oli.Seat.Value, Sue.Seat.Value, Eve.Seat.Value]);
     }
@@ -221,7 +221,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         (await InvitationsReadByAsync(widened, Oli)).Should().Be(0);
 
         // What a seat writes stays Tenancy's: Hiro reads it, and cancels nothing.
-        await using var hiro = await AsCaller.PersonAsync(widened, Hiro.Identity, Harbor, Cancellation);
+        await using var hiro = await AsUser.PersonAsync(widened, Hiro.Identity, Harbor, Cancellation);
         (await hiro.ExecuteAsync("UPDATE tenancy.\"Invitations\" SET \"State\" = 'Cancelled'", Cancellation)).Should().Be(0);
     }
 
@@ -253,21 +253,21 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
     /// <summary>The ids of the seats <paramref name="person"/> reads, with the connection naming <paramref name="tenant"/>.</summary>
     private static async Task<List<Guid>> SeatsReadByAsync(TestDatabase database, Person person, TenantId tenant)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant, Cancellation);
         return await caller.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"Seats\"", Cancellation);
     }
 
     /// <summary>How many invitations <paramref name="person"/> reads in Harbor.</summary>
     private static async Task<long> InvitationsReadByAsync(TestDatabase database, Person person)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, Harbor, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, Harbor, Cancellation);
         return await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Invitations\"", Cancellation);
     }
 
     /// <summary>What each of <paramref name="questions"/> answers <paramref name="person"/> in <paramref name="tenant"/>.</summary>
     private static async Task<List<string>> AnswersAsync(TestDatabase database, Person person, TenantId tenant, IEnumerable<string> questions)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant, Cancellation);
         var answers = new List<string>();
         foreach (var question in questions)
         {
@@ -283,7 +283,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
 public static partial class MembersReadOnlyThemselves
 {
     /// <summary>Whether <paramref name="seat"/> is the calling seat.</summary>
-    public static bool Allows(HostSeat seat, ICurrentUser user) => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>();
+    public static bool Allows(HostSeat seat, ICurrentUser user) => seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>();
 }
 
 /// <summary>A member reads the people of its own part of the tree: the seats placed at a unit it is placed at, or below one.</summary>

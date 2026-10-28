@@ -739,7 +739,7 @@ Tenancy's with `[OrOwn]` on the seat id (either way the caller is in the tenant)
 request derives from carries already. Take it off. Not reported: `[SignedIn]` beside `[RequiresPermission]` (it keeps system
 work out), with or without `[OrOwn]`, and `[InTenant]` beside a permission with `[OrOwn]` on a `Guid`. A package says what its
 requirement implies with `Implies` on its mark, and what its caller's own implies with `Implies` on
-`[assembly: CallersOwn]`. Also reported: a sealed request's own attributes that say exactly what its module's default
+`[assembly: OwnedByCurrentUser]`. Also reported: a sealed request's own attributes that say exactly what its module's default
 says (`[InTenant]` on a request of an `[AccessRequests, InTenant]` module); take them off, the request takes the
 default. Not on a request another derives from, which holds to them beside its own.
 
@@ -758,8 +758,8 @@ primary constructor parameter or a private property: mark a property with a publ
 
 Error, at `[OrOwn]` or `[Own]`: nothing says what the caller's own value of the member's type is, or the member may be
 null. A `Guid` is the caller's verified identity (the core), the application's seat id the caller's seat (Tenancy).
-For a type of the application's own, write a small `ICallersOwn<T>` beside the requests (`T? Find(ICurrentUser user)`,
-public where another project declares it) and register it in the host, `services.AddCallersOwn<T, TCallersOwn>()`.
+For a type of the application's own, write a small `IOwnedByCurrentUser<T>` beside the requests (`T? Find(ICurrentUser user)`,
+public where another project declares it) and register it in the host, `services.AddOwnedByCurrentUser<T, THandle>()`.
 A nullable member: compute the requirement as `RequiredAccess`. A `string`, a class or an enum never has an own (the
 case compares a struct that is `IEquatable` of itself): mark the member that names the caller's id instead. The id of
 an aggregate root that marks its owner `[Owner]` is not reported: `[Own]`/`[OrOwn]` on it is about the owner, and
@@ -778,8 +778,8 @@ two aggregate roots that each mark an owner; give each aggregate an id of its ow
 Error, at `[Owner]` or at the request's `[Own]`/`[OrOwn]`: the owner's type has no own. At the property: a `string`,
 a class or an enum can never be compared; mark the property that names the owner's id (a `Guid`, the seat id, or an
 id of the application's own). At the request: nothing the requests' project sees says what the caller's own of the
-owner's type is; write a small `ICallersOwn<T>` beside the requests and register it,
-`services.AddCallersOwn<T, TCallersOwn>()`. A nullable owner is fine: a row whose owner is null is nobody's.
+owner's type is; write a small `IOwnedByCurrentUser<T>` beside the requests and register it,
+`services.AddOwnedByCurrentUser<T, THandle>()`. A nullable owner is fine: a row whose owner is null is nobody's.
 
 ## DDD00089
 
@@ -874,9 +874,9 @@ invitation read tenants and invitations. Move the rule to one of those, or leave
 
 ## DDD00101
 
-Error, at `TenancyRowAccess.CallerSeat<T>()` where `T` is not the class declared with `[SeatAggregate]`: the function
-answers a row of Tenancy's seats table. Name the seat class, `CallerSeat<Seat>().Kind`. For the seat's id alone, in a
-module whose context does not map the seats, use `TenancyRowAccess.CallerSeatId<SeatId>()`.
+Error, at `TenancyRowAccess.CurrentSeat<T>()` where `T` is not the class declared with `[SeatAggregate]`: the function
+answers a row of Tenancy's seats table. Name the seat class, `CurrentSeat<Seat>().Kind`. For the seat's id alone, in a
+module whose context does not map the seats, use `TenancyRowAccess.CurrentSeatId<SeatId>()`.
 
 ## DDD00102
 

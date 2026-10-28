@@ -4,18 +4,18 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// The access queries over one read source, for one caller at one moment.
+/// The access queries over one read source, for one user at one moment.
 /// <para>
 /// Every query is plain LINQ over the source's sets, so a storage can translate it: ids are compared with
 /// <c>Equals</c>, an empty answer is the source's own set filtered to nothing, and every set that has a
-/// tenant is kept to the caller's tenant here too, next to whatever filter the storage applies.
+/// tenant is kept to the user's tenant here too, next to whatever filter the storage applies.
 /// </para>
 /// </summary>
 internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
     IQueryExecutor executor,
     TenancyCatalogue catalogue,
-    TenancyCaller<TTenantId, TSeatId> caller,
+    TenancyUser<TTenantId, TSeatId> user,
     DateTimeOffset now)
     : ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
@@ -26,18 +26,18 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     public IQueryable<TUnitId> UnitsWhereIHold(string permission)
     {
         var kind = Kind();
-        if (!Askable(permission) || kind == TenancyCallerKind.Nobody)
+        if (!Askable(permission) || kind == TenancyUserKind.Nobody)
         {
             return NoUnits();
         }
 
-        var tenant = caller.Tenant!.Value;
-        if (kind == TenancyCallerKind.SystemInTenant)
+        var tenant = user.Tenant!.Value;
+        if (kind == TenancyUserKind.SystemInTenant)
         {
             return source.Units.Where(unit => unit.TenantId.Equals(tenant)).Select(unit => unit.Id);
         }
 
-        var seat = caller.Seat!.Value;
+        var seat = user.Seat!.Value;
         var moment = now;
         return (from right in source.SeatRights
                 where right.TenantId.Equals(tenant) && right.SeatId.Equals(seat) && right.Permission == permission
@@ -51,15 +51,15 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     {
         var kind = Kind();
         var asked = LiveAmong(permissions);
-        if (asked.Length == 0 || kind == TenancyCallerKind.Nobody)
+        if (asked.Length == 0 || kind == TenancyUserKind.Nobody)
         {
             return source.Units.Where(_ => false).Select(unit => new UnitPermission<TUnitId> { Unit = unit.Id, Permission = string.Empty });
         }
 
         // A pair is made by setting its members, which a storage reads back as columns: a query composed over
         // the pairs, one that keeps a unit's or picks out the permissions, stays one statement.
-        var tenant = caller.Tenant!.Value;
-        if (kind == TenancyCallerKind.SystemInTenant)
+        var tenant = user.Tenant!.Value;
+        if (kind == TenancyUserKind.SystemInTenant)
         {
             // Every permission, at every unit of its tenant.
             return ForEach(asked, permission => source.Units
@@ -67,7 +67,7 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
                 .Select(unit => new UnitPermission<TUnitId> { Unit = unit.Id, Permission = permission }));
         }
 
-        var seat = caller.Seat!.Value;
+        var seat = user.Seat!.Value;
         var moment = now;
         return (from right in source.SeatRights
                 where right.TenantId.Equals(tenant) && right.SeatId.Equals(seat) && asked.Contains(right.Permission)
@@ -80,18 +80,18 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     public IQueryable<TUnitId> ReadableUnits()
     {
         var kind = Kind();
-        if (kind == TenancyCallerKind.Nobody)
+        if (kind == TenancyUserKind.Nobody)
         {
             return NoUnits();
         }
 
-        var tenant = caller.Tenant!.Value;
-        if (kind == TenancyCallerKind.SystemInTenant)
+        var tenant = user.Tenant!.Value;
+        if (kind == TenancyUserKind.SystemInTenant)
         {
             return source.Units.Where(unit => unit.TenantId.Equals(tenant)).Select(unit => unit.Id);
         }
 
-        var seat = caller.Seat!.Value;
+        var seat = user.Seat!.Value;
         return (from placement in source.Placements
                 where placement.SeatId.Equals(seat)
                 join path in source.UnitPaths on placement.UnitId equals path.AncestorId
@@ -102,12 +102,12 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     public IQueryable<TRoleId> RolesWithPermission(string permission)
     {
         var kind = Kind();
-        if (!Askable(permission) || kind == TenancyCallerKind.Nobody)
+        if (!Askable(permission) || kind == TenancyUserKind.Nobody)
         {
             return source.Roles.Where(_ => false).Select(role => role.Id);
         }
 
-        var tenant = caller.Tenant!.Value;
+        var tenant = user.Tenant!.Value;
         return source.Roles
             .Where(role => role.TenantId.Equals(tenant) && role.Status == RoleStatus.Active && role.Permissions.Contains(permission))
             .Select(role => role.Id);
@@ -115,12 +115,12 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
 
     public IQueryable<TUnitId> UnitsUnder(TUnitId unit)
     {
-        if (Kind() == TenancyCallerKind.Nobody)
+        if (Kind() == TenancyUserKind.Nobody)
         {
             return NoUnits();
         }
 
-        var tenant = caller.Tenant!.Value;
+        var tenant = user.Tenant!.Value;
         return source.UnitPaths
             .Where(path => path.TenantId.Equals(tenant) && path.AncestorId.Equals(unit))
             .Select(path => path.DescendantId);
@@ -130,14 +130,14 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     {
         var kind = Kind();
         var asked = LiveAmong(permissions);
-        if (asked.Length == 0 || kind == TenancyCallerKind.Nobody)
+        if (asked.Length == 0 || kind == TenancyUserKind.Nobody)
         {
             return source.Roles.Where(_ => false).Select(role => new RoleWithPermission<TRoleId> { Role = role.Id, Permission = string.Empty });
         }
 
         // The roles that grant a permission, for each permission: a role's permissions are one column, which not every storage can
         // open into rows, while every one can ask whether a permission is among them.
-        var tenant = caller.Tenant!.Value;
+        var tenant = user.Tenant!.Value;
         return ForEach(asked, permission => source.Roles
             .Where(role => role.TenantId.Equals(tenant) && role.Status == RoleStatus.Active && role.Permissions.Contains(permission))
             .Select(role => new RoleWithPermission<TRoleId> { Role = role.Id, Permission = permission }));
@@ -146,12 +146,12 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     public IQueryable<string> PermissionsIHoldAt(TUnitId unit)
     {
         var kind = Kind();
-        if (kind == TenancyCallerKind.Nobody)
+        if (kind == TenancyUserKind.Nobody)
         {
             return source.SeatRights.Where(_ => false).Select(right => right.Permission);
         }
 
-        if (kind == TenancyCallerKind.SystemInTenant)
+        if (kind == TenancyUserKind.SystemInTenant)
         {
             return catalogue.LivePermissions.AsQueryable();
         }
@@ -159,8 +159,8 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
         // The stored rights are written again when a seat or a role changes, not when the catalogue does, so a
         // permission retired since keeps its rows until then. It holds nowhere, so the live permissions are passed in: a
         // parameter list, which a storage translates as one.
-        var tenant = caller.Tenant!.Value;
-        var seat = caller.Seat!.Value;
+        var tenant = user.Tenant!.Value;
+        var seat = user.Seat!.Value;
         var moment = now;
         var live = catalogue.LivePermissions.ToArray();
         return (from right in source.SeatRights
@@ -175,17 +175,17 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     public IQueryable<TSeatId> SeatsHoldingPermissionAt(string permission, TUnitId unit)
     {
         var kind = Kind();
-        if (!Askable(permission) || kind == TenancyCallerKind.Nobody)
+        if (!Askable(permission) || kind == TenancyUserKind.Nobody)
         {
             return source.Seats.Where(_ => false).Select(seat => seat.Id);
         }
 
-        var tenant = caller.Tenant!.Value;
+        var tenant = user.Tenant!.Value;
         var moment = now;
         var rights = source.SeatRights.Where(right => right.TenantId.Equals(tenant) && right.Permission == permission
                                                       && right.StartsAt <= moment && (right.EndsAt == null || right.EndsAt > moment));
 
-        if (kind == TenancyCallerKind.Seat)
+        if (kind == TenancyUserKind.Seat)
         {
             // A source that shows a seat only its own rights answers for the other seats itself, by the same rule.
             if (source.SeatsHoldingPermissionAt(permission, unit) is { } answered)
@@ -197,7 +197,7 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
             // it manages grants, seats or units, held there or above it, or anywhere once it manages roles for the
             // whole tenant. A permission reads only where it applies, so a seat that manages one part of the tree learns
             // nothing of the grants above it or beside it. It always learns about itself.
-            var me = caller.Seat!.Value;
+            var me = user.Seat!.Value;
             var mine = source.SeatRights.Where(right => right.TenantId.Equals(tenant) && right.SeatId.Equals(me)
                                                         && right.StartsAt <= moment && (right.EndsAt == null || right.EndsAt > moment));
             var managed = from right in mine
@@ -225,52 +225,52 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
 
     public IQueryable<OrganizationUnitRow<TTenantId, TUnitId>> Units()
     {
-        if (Kind() == TenancyCallerKind.Nobody)
+        if (Kind() == TenancyUserKind.Nobody)
         {
             return source.Units.Where(_ => false);
         }
 
-        var tenant = caller.Tenant!.Value;
+        var tenant = user.Tenant!.Value;
         return source.Units.Where(unit => unit.TenantId.Equals(tenant));
     }
 
     public IQueryable<RoleRow<TTenantId, TRoleId>> Roles()
     {
-        if (Kind() == TenancyCallerKind.Nobody)
+        if (Kind() == TenancyUserKind.Nobody)
         {
             return source.Roles.Where(_ => false);
         }
 
-        var tenant = caller.Tenant!.Value;
+        var tenant = user.Tenant!.Value;
         return source.Roles.Where(role => role.TenantId.Equals(tenant));
     }
 
     public IQueryable<SeatRow<TTenantId, TSeatId>> Seats()
     {
-        if (Kind() == TenancyCallerKind.Nobody)
+        if (Kind() == TenancyUserKind.Nobody)
         {
             return source.Seats.Where(_ => false);
         }
 
-        var tenant = caller.Tenant!.Value;
+        var tenant = user.Tenant!.Value;
         return source.Seats.Where(seat => seat.TenantId.Equals(tenant));
     }
 
     public Task<bool> HoldsAtTenantAsync(string permission, CancellationToken cancellationToken)
     {
         var kind = Kind();
-        if (!Askable(permission) || kind == TenancyCallerKind.Nobody)
+        if (!Askable(permission) || kind == TenancyUserKind.Nobody)
         {
             return Task.FromResult(false);
         }
 
-        if (kind == TenancyCallerKind.SystemInTenant)
+        if (kind == TenancyUserKind.SystemInTenant)
         {
             return Task.FromResult(true);
         }
 
-        var tenant = caller.Tenant!.Value;
-        var seat = caller.Seat!.Value;
+        var tenant = user.Tenant!.Value;
+        var seat = user.Seat!.Value;
         var moment = now;
         var atRoot = from right in source.SeatRights
                      where right.TenantId.Equals(tenant) && right.SeatId.Equals(seat) && right.Permission == permission
@@ -285,28 +285,28 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     public Task<bool> HoldsAtAsync(string permission, TUnitId unit, CancellationToken cancellationToken)
     {
         var kind = Kind();
-        if (!Askable(permission) || kind == TenancyCallerKind.Nobody)
+        if (!Askable(permission) || kind == TenancyUserKind.Nobody)
         {
             return Task.FromResult(false);
         }
 
-        if (kind == TenancyCallerKind.SystemInTenant)
+        if (kind == TenancyUserKind.SystemInTenant)
         {
             // Every permission, but only at a unit of its own tenant.
-            var tenant = caller.Tenant!.Value;
+            var tenant = user.Tenant!.Value;
             return executor.AnyAsync(source.Units.Where(row => row.TenantId.Equals(tenant) && row.Id.Equals(unit)), cancellationToken);
         }
 
         return executor.AnyAsync(UnitsWhereIHold(permission).Where(held => held.Equals(unit)), cancellationToken);
     }
 
-    /// <summary>The caller's kind; system work outside any tenant has nothing to ask about here.</summary>
-    private TenancyCallerKind Kind()
-        => caller.Kind == TenancyCallerKind.System
+    /// <summary>The user's kind; system work outside any tenant has nothing to ask about here.</summary>
+    private TenancyUserKind Kind()
+        => user.Kind == TenancyUserKind.System
             ? throw new InvalidOperationException(
                 "System work outside any tenant asks Tenancy nothing: it holds nothing in any tenant. "
                 + SystemWorkAdvice.BeginInATenant("for work inside one"))
-            : caller.Kind;
+            : user.Kind;
 
     /// <summary>
     /// Checks that code asks about a permission the catalogue knows, and answers whether it can hold anywhere: a

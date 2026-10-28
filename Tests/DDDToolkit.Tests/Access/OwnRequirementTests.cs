@@ -9,7 +9,7 @@ namespace DDDToolkit.Tests.Access;
 /// <summary>
 /// A request about the caller's own: <see cref="AccessRequirement.Own{TValue}"/> names a value, and the core's check
 /// compares it at the door with the caller's own value of that type, which whoever knows says with an
-/// <see cref="ICallersOwn{TValue}"/>: the core for a <see cref="Guid"/>, the caller's verified identity, and the
+/// <see cref="IOwnedByCurrentUser{TValue}"/>: the core for a <see cref="Guid"/>, the caller's verified identity, and the
 /// application, with a small handle it registers, for a kind of its own.
 /// </summary>
 public class OwnRequirementTests
@@ -27,13 +27,13 @@ public class OwnRequirementTests
     public readonly record struct UserId(Guid Value);
 
     /// <summary>The application's handle: the caller's own user id is the one over the id its token names.</summary>
-    public sealed class CallersUser : ICallersOwn<UserId>
+    public sealed class CurrentUserId : IOwnedByCurrentUser<UserId>
     {
         public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
     }
 
     /// <summary>A handle that knows no caller: what a host registers to say that nobody's own a Guid is.</summary>
-    public sealed class NobodysGuid : ICallersOwn<Guid>
+    public sealed class NobodysGuid : IOwnedByCurrentUser<Guid>
     {
         public Guid? Find(ICurrentUser user) => null;
     }
@@ -103,7 +103,7 @@ public class OwnRequirementTests
     [Fact]
     public async Task A_kind_of_the_application_s_own_is_the_caller_s_own_where_its_handle_says_so()
     {
-        using var provider = Provider(CurrentUserSnapshot.User(Ann), services => services.AddCallersOwn<UserId, CallersUser>());
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), services => services.AddOwnedByCurrentUser<UserId, CurrentUserId>());
         using var scope = provider.CreateScope();
 
         Checks(scope).Decides(AccessRequirement.Own(new UserId(Ann))).Should().BeTrue();
@@ -120,20 +120,20 @@ public class OwnRequirementTests
         Checks(scope).Decides(AccessRequirement.Own(new UserId(Ann))).Should().BeFalse("a requirement nothing checks lets nobody through, the caller's own included");
         (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new EditProfile(AccessRequirement.Own(new UserId(Ann))), Cancellation).AsTask())
                 .Should().ThrowAsync<InvalidOperationException>())
-            .WithMessage("*declares 'AccessRequirement.Owned<OwnRequirementTests.UserId>'*services.AddCallersOwn<TValue, TCallersOwn>()*");
+            .WithMessage("*declares 'AccessRequirement.Owned<OwnRequirementTests.UserId>'*services.AddOwnedByCurrentUser<TValue, THandle>()*");
     }
 
     [Fact]
     public async Task A_host_s_handle_takes_the_place_of_the_core_s_and_of_one_registered_before()
     {
-        using var provider = Provider(CurrentUserSnapshot.User(Ann), services => services.AddCallersOwn<Guid, NobodysGuid>());
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), services => services.AddOwnedByCurrentUser<Guid, NobodysGuid>());
         using var scope = provider.CreateScope();
 
         (await RefusedAsync(scope, AccessRequirement.Own(Ann))).Code.Should().Be(ToolkitRefusals.NotOwn, "the host said nobody's own a Guid is");
 
         var services = new ServiceCollection();
-        services.AddCallersOwn<UserId, CallersUser>().AddCallersOwn<UserId, CallersUser>();
-        services.Where(descriptor => descriptor.ServiceType == typeof(ICallersOwn<UserId>)).Should().ContainSingle("one handle per type, the later in the place of the earlier")
+        services.AddOwnedByCurrentUser<UserId, CurrentUserId>().AddOwnedByCurrentUser<UserId, CurrentUserId>();
+        services.Where(descriptor => descriptor.ServiceType == typeof(IOwnedByCurrentUser<UserId>)).Should().ContainSingle("one handle per type, the later in the place of the earlier")
             .Which.Lifetime.Should().Be(ServiceLifetime.Scoped);
     }
 

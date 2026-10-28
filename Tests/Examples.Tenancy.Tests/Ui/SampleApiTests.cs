@@ -44,7 +44,7 @@ public sealed class SampleApiTests
         outcome.RawBody.Should().Be(body);
         outcome.Method.Should().Be("POST");
         outcome.Path.Should().Be($"/projects/{ProjectId}/close");
-        outcome.Caller.Should().Be("rhea");
+        outcome.CalledAs.Should().Be("rhea");
         outcome.Tenant.Should().Be("harbor");
 
         outcome.Problem.Should().NotBeNull();

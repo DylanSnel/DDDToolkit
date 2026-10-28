@@ -164,7 +164,7 @@ public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) :
 
 - **Cost.** `AtTenant` and `AtUnit` each run one SQL statement. The other cases read nothing from the database,
   except `[Operator(Tenant = OperatorTenant.FromRequest)]`, whose tenant selection looks up the slug.
-  [Requirements](reference/callers.md#requirements) lists every case in full.
+  [Requirements](reference/access.md#requirements) lists every case in full.
 - **Level.** A permission's level is declared once, on its constant, with `[AtTenant]` or `[AtUnit]`
   ([Declaring a module's permissions](roles-and-permissions.md#declaring-a-modules-permissions)).
 - **`[AtUnit]`** marks the unit of a command that acts at a unit it names. Two kinds of command need it. The first
@@ -180,7 +180,7 @@ public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) :
 - **The module's default.** `[AccessRequests, InTenant]` on the module's interface makes every request that states
   nothing require a caller in the tenant ([A module's default](../access-requirements.md#a-modules-default)).
 - **The caller's seat.** The check compares the named seat with the caller's seat in the request's tenant.
-  `AddTenancy` registers `ICallersOwn<TSeatId>`, which finds that seat from the caller's verified identity. The check
+  `AddTenancy` registers `IOwnedByCurrentUser<TSeatId>`, which finds that seat from the caller's verified identity. The check
   never reads the caller's seat from the request. Example: the sample's `RenameSeat` lets a seat rename itself, and
   lets a caller with `tenancy.seats.manage` for the whole tenant rename any seat.
 - `[OrOwn]` together with `[AtUnit]` is [DDD00085](../diagnostics.md#ddd00085). With both, a caller could send a

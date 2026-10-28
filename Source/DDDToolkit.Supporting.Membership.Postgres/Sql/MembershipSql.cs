@@ -18,7 +18,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// What the rules have the application answer, who the caller is as a member, which roles give a permission, where
 /// the caller holds a permission above, is asked of functions by their logical names: those the rules name, or those
 /// another package's contribution answers for the type of the member or of the place
-/// (<see cref="ICallerFunctions"/>), an organization package's for its seat and its unit. Nothing here refers to whatever defines
+/// (<see cref="ICurrentUserFunctions"/>), an organization package's for its seat and its unit. Nothing here refers to whatever defines
 /// them, and the script that these functions are written into refuses a name nothing defines.
 /// </para>
 /// <para>
@@ -34,7 +34,7 @@ internal static class MembershipSql
     /// that still holds what an earlier version of the package wrote is found by the start-up check, although
     /// its rules have not changed. Change the SQL, and change this: a test keeps the two together.
     /// </summary>
-    internal const string SqlForm = "8";
+    internal const string SqlForm = "9";
 
     /// <summary>What the line of each function's body that names the roles that may execute it starts with.</summary>
     internal const string ExecutedBy = "-- Executed by: ";
@@ -246,8 +246,8 @@ internal static class MembershipSql
             " AND ",
             toMember.Properties.Select((property, index) => "h." + Column(held, property.Name) + " = m." + Column(members, toMember.PrincipalKey.Properties[index].Name)));
 
-        var caller = Caller(rules, mapping, written.Members);
-        var memberNow = "m." + Column(members, nameof(MemberEntity<,,>.MemberId)) + " = " + caller + " AND " + Now(members, "m");
+        var currentMember = CurrentMember(rules, mapping, written.Members);
+        var memberNow = "m." + Column(members, nameof(MemberEntity<,,>.MemberId)) + " = " + currentMember + " AND " + Now(members, "m");
         var marker = Marker(rules, mapping, written.SystemInRole) + "\n" + ExecutedBy + string.Join(", ", written.Executors);
         var returns = "SETOF " + RowAccessModel.ColumnType(resource, id.Name);
         string Own(string name) => Asked(owner + "/" + name);
@@ -266,7 +266,7 @@ internal static class MembershipSql
         // role scoped work runs as, and one of those scopes. Nobody else's token says that role.
         var ownWork = rules.SystemScopes.Count == 0
             ? null
-            : $"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE {{caller:role}} = {Text(written.SystemInRole)} AND {{caller:claim:scope}} IN ({string.Join(", ", rules.SystemScopes.Select(Text))})";
+            : $"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE {{user:role}} = {Text(written.SystemInRole)} AND {{user:claim:scope}} IN ({string.Join(", ", rules.SystemScopes.Select(Text))})";
 
         // Every body is put together line by line, with the line ending said here: a function is the same text
         // whichever machine wrote the access file, and whatever line endings this file was checked out with.
@@ -296,7 +296,7 @@ internal static class MembershipSql
             marker,
             $"SELECT joined.id FROM {Own(rules.Functions.AsMember)}() AS joined(id)",
             "UNION",
-            $"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE r.{Column(resource, mapping.Owner.Name)} = {caller}",
+            $"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE r.{Column(resource, mapping.Owner.Name)} = {currentMember}",
         ];
         if (above is not null && rules.EveryMemberPermission is { } seenWith)
         {
@@ -326,7 +326,7 @@ internal static class MembershipSql
         if (rules.OwnerPermissions.Count > 0)
         {
             heldOn.Add("UNION");
-            heldOn.Add($"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE $1 IN ({string.Join(", ", rules.OwnerPermissions.Select(Text))}) AND r.{Column(resource, mapping.Owner.Name)} = {caller}");
+            heldOn.Add($"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE $1 IN ({string.Join(", ", rules.OwnerPermissions.Select(Text))}) AND r.{Column(resource, mapping.Owner.Name)} = {currentMember}");
         }
 
         if (above is not null)
@@ -748,23 +748,23 @@ internal static class MembershipSql
     /// or what the application's function answers, compared with the column that holds who a member is.
     /// </summary>
     /// <exception cref="InvalidOperationException">The column does not store what the source answers, or the rules name no function.</exception>
-    private static string Caller(MembershipRules rules, MemberMapping mapping, MemberSource members)
+    private static string CurrentMember(MembershipRules rules, MemberMapping mapping, MemberSource members)
     {
         var stored = RowAccessModel.ColumnType(mapping.Members, nameof(MemberEntity<,,>.MemberId)).Trim();
         var what = mapping.Resource.DisplayName();
 
         switch (members.Kind)
         {
-            case MemberSourceKind.CallerId:
+            case MemberSourceKind.CurrentUserId:
                 return string.Equals(stored, "uuid", StringComparison.OrdinalIgnoreCase)
-                    ? "{caller:uid}"
+                    ? "{user:uid}"
                     : throw new InvalidOperationException(
-                        "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CallerId, a uuid, and the members of " + what + " are stored as " + stored
+                        "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CurrentUserId, a uuid, and the members of " + what + " are stored as " + stored
                         + ". Known by an id over a Guid, a member is stored as uuid.");
 
             case MemberSourceKind.Claim:
                 return IsText(stored)
-                    ? "{caller:claim:" + members.ClaimPath + "}"
+                    ? "{user:claim:" + members.ClaimPath + "}"
                     : throw new InvalidOperationException(
                         "The rules '" + rules.Name + "' take the caller's member id from the claim '" + members.ClaimPath + "', a text, and the members of " + what + " are stored as " + stored
                         + ". Known by an id over a text, a member is stored as text or character varying.");
@@ -775,7 +775,7 @@ internal static class MembershipSql
                     ? "(SELECT " + Asked(function) + "())"
                     : throw new InvalidOperationException(
                         "The rules '" + rules.Name + "' have the application resolve who the caller is as a member of " + what + ", and name no function that answers it in the database. "
-                        + "Name it, the organization package's caller_seat say, or a DatabaseFunction of the application's: a function without parameters that answers the caller's member id, as the members are stored, or NULL.");
+                        + "Name it, the organization package's current_seat say, or a DatabaseFunction of the application's: a function without parameters that answers the caller's member id, as the members are stored, or NULL.");
         }
     }
 

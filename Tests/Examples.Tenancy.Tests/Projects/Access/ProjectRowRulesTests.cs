@@ -48,7 +48,7 @@ public sealed class ProjectRowRulesTests
     [Fact]
     public void A_seat_reads_its_tenant_s_project_roles_and_only_who_manages_roles_changes_them()
     {
-        SeatsReadTheProjectRolesOfTheirTenant.RowAccessSql.Should().Be("({col:TenantId} = (SELECT {fn:tenancy/caller_tenant}()))");
+        SeatsReadTheProjectRolesOfTheirTenant.RowAccessSql.Should().Be("({col:TenantId} = (SELECT {fn:tenancy/current_tenant}()))");
         // One question and nothing else: the tenant of the row is Tenancy's own policy on the table to keep.
         RoleManagersChangeTheProjectRoles.RowAccessSql.Should().Be("(SELECT {fn:tenancy/holds_at_tenant}('tenancy.roles.manage'))");
     }

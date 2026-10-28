@@ -155,8 +155,8 @@ public sealed class MembersThroughTheDatabaseTests
 
         // And the access questions follow the row: every permission of the document is Hal's now, and what Ada held as
         // its owner she holds no more.
-        (await filing.DocumentsAsync(TestCallers.User(data.Hal), access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation)))!.Via.Should().Be(MemberVia.Members);
-        (await filing.DocumentsAsync(TestCallers.User(data.Ada), access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation)))!.Via.Should().BeNull();
+        (await filing.DocumentsAsync(TestUsers.User(data.Hal), access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation)))!.Via.Should().Be(MemberVia.Members);
+        (await filing.DocumentsAsync(TestUsers.User(data.Ada), access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation)))!.Via.Should().BeNull();
     }
 
     [Fact]

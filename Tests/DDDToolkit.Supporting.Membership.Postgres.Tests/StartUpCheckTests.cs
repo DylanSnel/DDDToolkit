@@ -27,10 +27,10 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         (await CheckAsync(filing)).Should().BeEmpty();
 
         // And for a host whose contexts run as the caller, whoever is calling when it starts: the check asks as the application itself.
-        using var asCaller = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true, seed: false);
+        using var asUser = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true, seed: false);
         using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
-            await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(asCaller.Services.Provider, Cancellation);
+            await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(asUser.Services.Provider, Cancellation);
         }
     }
 
@@ -40,7 +40,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         // A host that requires every flow of work to say its caller, whose contexts run as that caller. At
         // start-up nobody is calling.
         using var filing = await PostgresFiling.CreateAsync(
-            postgres, FilingPostgres.Template.Secured, asCaller: true, seed: false, configure: services => services.RequireExplicitCurrentUser());
+            postgres, FilingPostgres.Template.Secured, asUser: true, seed: false, configure: services => services.RequireExplicitCurrentUser());
 
         // With nobody calling, a context of this host cannot ask the database anything.
         await FluentActions.Awaiting(async () =>

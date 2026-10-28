@@ -135,7 +135,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         rented.Should().HaveCount(60);
         rented.Distinct().Count().Should().BeLessThan(rented.Count, "the pool handed contexts out again");
         recorder.Sent.Should().HaveCount(60, "each read is one statement, the question inside it")
-            .And.OnlyContain(command => command.Text.Contains("tenancy." + TenancyFunctionNames.CallerPermissions + "()", StringComparison.Ordinal) && command.Caller!.Kind == CurrentUserKind.User);
+            .And.OnlyContain(command => command.Text.Contains("tenancy." + TenancyFunctionNames.CurrentPermissions + "()", StringComparison.Ordinal) && command.Caller!.Kind == CurrentUserKind.User);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
             rented.Add(scoped.TenancyContext());
             var reaches = await scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().RightsAMoveChangesAsync(
                 Harbor, seat, North, NorthPier, scoped.GetRequiredService<Catalogue.TenancyCatalogue>().AccessManagingPermissions, DateTimeOffset.UtcNow, Cancellation);
-            return reaches.Count(reach => reach.OfCaller);
+            return reaches.Count(reach => reach.OfCurrentSeat);
         }
 
         var catalogue = services.Provider.GetRequiredService<Catalogue.TenancyCatalogue>();
@@ -225,7 +225,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         rented.Distinct().Should().ContainSingle("each request was handed the context the one before gave back");
 
         // Each save stored its events with what it changed, in the same transaction.
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>(
                 "SELECT \"EventName\" FROM ddd.\"OutboxMessages\" WHERE \"AggregateId\" ILIKE $1 ORDER BY \"CreatedAt\", \"EventName\"",
                 Cancellation,
@@ -326,7 +326,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
 
         rented.Distinct().Should().ContainSingle("the second request was handed the context the first gave back");
 
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>("SELECT \"DisplayName\" FROM tenancy.\"Seats\" WHERE \"Id\" = ANY ($1) ORDER BY 1", Cancellation, new[] { Oli.Seat.Value, OliInOrchard.Value }))
             .Should().Equal("Oli", "Oliver");
         (await owner.ListAsync<string>("SELECT \"AggregateId\" FROM ddd.\"OutboxMessages\" WHERE \"EventName\" = $1", Cancellation, "tenancy.seat-suspended"))

@@ -410,7 +410,7 @@ public sealed class UseCaseTests : IDisposable
         var dutch = CultureInfo.GetCultureInfo("nl");
         using var services = new TestServices(configure: registered => registered.AddSingleton<IStarterRoleTexts>(new DutchStarterRoles()));
 
-        var polder = await services.RunAsync(HostCaller.System, scoped => scoped.Tenants().ProvisionWithIdsAsync(
+        var polder = await services.RunAsync(HostUser.System, scoped => scoped.Tenants().ProvisionWithIdsAsync(
             scoped.GetRequiredService<TenancyCatalogue>(),
             new TenantToProvision(
                 "polder", "Polder Werken", TenantShape.Flat, "Polder", Guid.NewGuid(),
@@ -438,7 +438,7 @@ public sealed class UseCaseTests : IDisposable
             scoped.Roles().CreateAsync("afdelingshoofd", "Made by hand", [HostCatalogue.WidgetRead], TestContext.Current.CancellationToken)));
 
         // A callback that throws leaves no row behind, so the slug is free for the next attempt.
-        await FluentActions.Awaiting(() => services.RunAsync(HostCaller.System, scoped => scoped.Tenants().ProvisionAsync(
+        await FluentActions.Awaiting(() => services.RunAsync(HostUser.System, scoped => scoped.Tenants().ProvisionAsync(
                 new TenantToProvision(
                     "molen", "Molen Werken", TenantShape.Flat, "Molen", Guid.NewGuid(),
                     ConfigureTenant: _ => throw new InvalidOperationException("no such plan")),

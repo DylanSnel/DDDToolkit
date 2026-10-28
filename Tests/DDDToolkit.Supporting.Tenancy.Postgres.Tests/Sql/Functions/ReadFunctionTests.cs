@@ -32,7 +32,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
     /// <summary>The functions, with the columns each answers and their types, as Postgres says them.</summary>
     private static readonly Dictionary<string, string> Answered = new(StringComparer.Ordinal)
     {
-        [TenancyFunctionNames.CallerPermissions] = "TABLE(\"TenantId\" bigint, \"SeatId\" uuid, \"UnitId\" uuid, \"RoleId\" uuid, \"Permission\" text, \"StartsAt\" timestamp with time zone, \"EndsAt\" timestamp with time zone)",
+        [TenancyFunctionNames.CurrentPermissions] = "TABLE(\"TenantId\" bigint, \"SeatId\" uuid, \"UnitId\" uuid, \"RoleId\" uuid, \"Permission\" text, \"StartsAt\" timestamp with time zone, \"EndsAt\" timestamp with time zone)",
         [TenancyFunctionNames.TenantPlacements] = "TABLE(\"SeatId\" uuid, \"UnitId\" uuid, \"IsPrimary\" boolean, \"TenantId\" bigint)",
         [TenancyFunctionNames.TenantRoles] = "TABLE(\"Id\" uuid, \"TenantId\" bigint, \"FromStarterRole\" text, \"Status\" text, \"Permissions\" text[])",
         [TenancyFunctionNames.TenantSeats] = "TABLE(\"Id\" uuid, \"TenantId\" bigint, \"Status\" text)",
@@ -59,7 +59,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
     /// <summary>The functions, each with the table of Tenancy's whose rows it answers, by its default name.</summary>
     private static readonly (string Function, string Table)[] Reads =
     [
-        (TenancyFunctionNames.CallerPermissions, "SeatRights"), (TenancyFunctionNames.TenantUnitPaths, "OrganizationUnitPaths"),
+        (TenancyFunctionNames.CurrentPermissions, "SeatRights"), (TenancyFunctionNames.TenantUnitPaths, "OrganizationUnitPaths"),
         (TenancyFunctionNames.TenantUnits, "OrganizationUnits"), (TenancyFunctionNames.TenantRoles, "Roles"),
         (TenancyFunctionNames.TenantPlacements, "SeatPlacements"), (TenancyFunctionNames.TenantSeats, "Seats"),
     ];
@@ -141,7 +141,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using var services = new TenancyServices(database);
-        await using var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
+        await using var seth = await AsUser.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
 
         // The seeded tables are a few rows each, which Postgres reads whole whatever indexes they have. With that
         // made the last resort, the plan shows whether an index can serve the question at all.
@@ -153,7 +153,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
             var widgets = scoped.Widgets();
             var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             await using var asked = widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).Select(widget => widget.Name).CreateDbCommand();
-            asked.CommandText.Should().Contain("tenancy.caller_permissions()").And.Contain("tenancy.tenant_unit_paths()");
+            asked.CommandText.Should().Contain("tenancy.current_permissions()").And.Contain("tenancy.tenant_unit_paths()");
             return await seth.PlanAsync(asked, Cancellation);
         });
 
@@ -174,8 +174,8 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
 
         // The tables' policies came with them: whose rights these are, and which tenant's tree, is asked of the caller
         // once for the statement.
-        QueryPlans.InitPlansCalling(plan, "tenancy.caller_seat(").Should().NotBeEmpty("a seat reads its own rights");
-        QueryPlans.InitPlansCalling(plan, "tenancy.caller_tenant(").Should().NotBeEmpty("and its tenant's tree");
+        QueryPlans.InitPlansCalling(plan, "tenancy.current_seat(").Should().NotBeEmpty("a seat reads its own rights");
+        QueryPlans.InitPlansCalling(plan, "tenancy.current_tenant(").Should().NotBeEmpty("and its tenant's tree");
 
         // The question above reads two of the six. Each of them is folded: asked on its own, with what it turns a
         // status or a text into, none is a step of the plan, which reads the function's table in its place.
@@ -203,12 +203,12 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
             configure: collection => collection.AddSingleton<TimeProvider>(new StoppedClock(now)),
             rowLevelSecurity: false,
             databaseKeepsRights: false);
-        HostCaller caller;
+        HostUser caller;
         List<string> csharp;
         await using (var scope = unheld.Scope())
         {
             caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(identity), slug, Cancellation);
-            using (TenancyCallers.Begin(caller))
+            using (TenancyUsers.Begin(caller))
             {
                 csharp = await AnswersAsync(scope.ServiceProvider, scope.ServiceProvider.TenancyContext(), permissions);
             }
@@ -220,7 +220,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         List<string> functions;
         List<string> own;
         using (TestUser.BeginAs(identity))
-        using (TenancyCallers.Begin(caller))
+        using (TenancyUsers.Begin(caller))
         {
             functions = await services.InScopeAsync(scoped => AnswersAsync(scoped, scoped.Widgets(), permissions));
             own = await services.InScopeAsync(scoped => AnswersAsync(scoped, scoped.TenancyContext(), permissions));
@@ -231,7 +231,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
 
         // Answers known beforehand, so that three empty answers do not pass for agreement.
         functions.Single(line => line.StartsWith("Seats: ", StringComparison.Ordinal)).Split(", ").Should().HaveCount(
-            caller.Kind != TenancyCallerKind.Seat ? 1 : caller.Tenant == Harbor ? 6 : 2,
+            caller.Kind != TenancyUserKind.Seat ? 1 : caller.Tenant == Harbor ? 6 : 2,
             "a seat reads the seats of its tenant, and nobody else any");
         if (who == "Seth in harbor")
         {
@@ -244,7 +244,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
     public async Task The_read_functions_answer_under_the_names_the_modules_model_reads()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
 
         // What each function answers, as the catalog has it: the read row's properties, with types of the functions' own.
         (await owner.ListAsync<string>(
@@ -300,7 +300,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         var (yard, shed) = (Guid.NewGuid(), Guid.NewGuid());
         var (amy, bert, cy) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var (keeper, lookout) = (Guid.NewGuid(), Guid.NewGuid());
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             await owner.ExecuteAsync(
                 $"""
@@ -319,7 +319,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
             await owner.CommitAsync(Cancellation);
         }
 
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_seats()", Cancellation))
                 .Should().BeEquivalentTo($"{amy} Active", $"{bert} Suspended", $"{cy} Deactivated");
@@ -348,7 +348,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
     [Fact]
     public async Task The_read_functions_give_system_in_its_whole_tenant_and_a_seat_only_its_own_rights()
     {
-        const string SeatsWithRights = "SELECT DISTINCT \"SeatId\" FROM tenancy.caller_permissions()";
+        const string SeatsWithRights = "SELECT DISTINCT \"SeatId\" FROM tenancy.current_permissions()";
         const string SeatsAnswered = "SELECT \"Id\"::text || ' in ' || \"TenantId\" FROM tenancy.tenant_seats()";
         static string In(SeatId seat, TenantId tenant) => seat.Value + " in " + tenant.Value;
         string[] harborSeats = [.. new[] { Ada, Eve, Hiro, Oli, Seth, Sue }.Select(person => In(person.Seat, Harbor))];
@@ -357,7 +357,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         // The functions have no condition of their own: the tables' owner, whom no policy holds, is answered every row.
         List<Guid> holdingInHarbor;
         long rightsInHarbor;
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             foreach (var (function, table) in Reads)
             {
@@ -372,10 +372,10 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
 
         // Oli operates widgets at North Pier and manages nothing. Of the rights he is answered his own three; of the
         // rest, his tenant's, and his own seat in another tenant, which is his to read wherever he signs in.
-        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        await using (var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ListAsync<Guid>(SeatsWithRights, Cancellation)).Should().Equal(Oli.Seat.Value);
-            (await oli.ListAsync<string>("SELECT \"Permission\" FROM tenancy.caller_permissions() ORDER BY 1", Cancellation)).Should().Equal("widget.change", "widget.create", "widget.read");
+            (await oli.ListAsync<string>("SELECT \"Permission\" FROM tenancy.current_permissions() ORDER BY 1", Cancellation)).Should().Equal("widget.change", "widget.create", "widget.read");
             (await oli.ListAsync<Guid>("SELECT u.\"Id\" FROM tenancy.tenant_units() u", Cancellation)).Should().BeEquivalentTo([HarborRoot.Value, North.Value, NorthPier.Value, South.Value]);
             (await oli.ListAsync<long>("SELECT DISTINCT \"TenantId\" FROM tenancy.tenant_unit_paths()", Cancellation)).Should().Equal(Harbor.Value);
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.tenant_unit_paths()", Cancellation)).Should().Be(8, "each unit with itself, three below the root, and North Pier below North");
@@ -387,15 +387,15 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         }
 
         // Ada administers Harbor, and is answered her own rights all the same: every live permission, at the root.
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ListAsync<Guid>(SeatsWithRights, Cancellation)).Should().Equal(Ada.Seat.Value);
-            (await ada.ScalarAsync<long>("SELECT count(*) FROM tenancy.caller_permissions()", Cancellation)).Should().Be(TenancyPostgres.Catalogue.LivePermissions.Count);
+            (await ada.ScalarAsync<long>("SELECT count(*) FROM tenancy.current_permissions()", Cancellation)).Should().Be(TenancyPostgres.Catalogue.LivePermissions.Count);
             (await ada.ListAsync<string>(SeatsAnswered, Cancellation)).Should().BeEquivalentTo(harborSeats);
         }
 
         // In a tenant where she has no seat she is answered nothing of it, and of the seats only her own.
-        await using (var elsewhere = await AsCaller.PersonAsync(database, Ada.Identity, Orchard, Cancellation))
+        await using (var elsewhere = await AsUser.PersonAsync(database, Ada.Identity, Orchard, Cancellation))
         {
             foreach (var function in Answered.Keys.Where(function => function != TenancyFunctionNames.TenantSeats))
             {
@@ -408,16 +408,16 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         // System work in a tenant, of any module, is answered every right of that tenant and nothing of another.
         foreach (var scope in new[] { TenancyWork.SystemScope, "widgets" })
         {
-            await using var system = await AsCaller.SystemInAsync(database, Harbor, scope, Cancellation);
+            await using var system = await AsUser.SystemInAsync(database, Harbor, scope, Cancellation);
             (await system.ListAsync<Guid>(SeatsWithRights, Cancellation)).Should().BeEquivalentTo(holdingInHarbor);
-            (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.caller_permissions()", Cancellation)).Should().Be(rightsInHarbor);
-            (await system.ListAsync<long>("SELECT DISTINCT \"TenantId\" FROM tenancy.caller_permissions()", Cancellation)).Should().Equal(Harbor.Value);
+            (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.current_permissions()", Cancellation)).Should().Be(rightsInHarbor);
+            (await system.ListAsync<long>("SELECT DISTINCT \"TenantId\" FROM tenancy.current_permissions()", Cancellation)).Should().Equal(Harbor.Value);
             (await system.ListAsync<string>(SeatsAnswered, Cancellation)).Should().BeEquivalentTo(harborSeats);
             (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.tenant_unit_paths()", Cancellation)).Should().Be(8);
         }
 
         // And outside any tenant, nothing at all.
-        await using (var nowhere = await AsCaller.SystemInAsync(database, tenant: null, TenancyWork.SystemScope, Cancellation))
+        await using (var nowhere = await AsUser.SystemInAsync(database, tenant: null, TenancyWork.SystemScope, Cancellation))
         {
             foreach (var function in Answered.Keys)
             {
@@ -443,7 +443,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
 
         // The tables' owner, whom no policy holds, asks for what a seat, a unit and a role are called: the functions
         // have no such column, for anyone. The tables themselves still have them, for the directory to read.
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (string Function, string Column)[] shown =
         [
             (TenancyFunctionNames.TenantSeats, "DisplayName"), (TenancyFunctionNames.TenantSeats, "Identity"),
@@ -467,7 +467,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
-        await using (var anonymous = await AsCaller.AnonymousAsync(database, Cancellation))
+        await using (var anonymous = await AsUser.AnonymousAsync(database, Cancellation))
         {
             foreach (var function in Answered.Keys)
             {
@@ -479,7 +479,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         }
 
         // They are the signed-in user's and system work's in a tenant, and no other role's, every role at once included.
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>(
                 """
                 SELECT p.proname || ' ' || pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')

@@ -105,34 +105,34 @@ public sealed class SupabaseMigrationBuildTests : IDisposable
     [InlineData("anonymous=guest|token:analyst=guest", null, "error : SupabaseRowAccessRoles has a token role it cannot map. The token role 'analyst' is mapped to 'guest'. That is the role of callers who did not sign in: a rule for them would hold for the holders of this token role as well, with their identity. Map it to a role of its own.")]
     [InlineData("token:analyst=ddd_system_in", null, "error : SupabaseRowAccessRoles has a token role it cannot map. The token role 'analyst' is mapped to 'ddd_system_in'. That is the scoped system role, which only the application's own work runs as: its policies would let the holder of a token do that work.")]
     [InlineData("token:analyst=PUBLIC", null, "error : SupabaseRowAccessRoles has a token role it cannot map. The token role 'analyst' is mapped to 'PUBLIC'. PUBLIC is every role there is, the application's own and the system's included, and no policy is ever for it.")]
-    [InlineData(null, "uid=auth.uid()|jwt=auth.jwt()", "error : SupabaseCallerFunctions has the key 'jwt', which it does not know. It takes uid, role and claims, each at most once and separated by '|', as in uid=auth.uid()|role=auth.role()|claims=auth.jwt().")]
-    [InlineData(null, "uid=auth.uid()) OR (true", "error : SupabaseCallerFunctions has 'uid=auth.uid()) OR (true', which is not a function called without arguments. Each value is one, with its schema or without, such as auth.uid(), and the policies call it as it is written.")]
-    [InlineData(null, "claims=coalesce(auth.jwt(), '{}') || x", "error : SupabaseCallerFunctions has 'x', which is not a key=value pair. It takes uid, role and claims, each at most once and separated by '|', as in uid=auth.uid()|role=auth.role()|claims=auth.jwt().")]
-    public void A_malformed_roles_variable_is_an_error_line_and_exit_code_2(string? roles, string? callerFunctions, string error)
+    [InlineData(null, "uid=auth.uid()|jwt=auth.jwt()", "error : SupabaseCurrentUserFunctions has the key 'jwt', which it does not know. It takes uid, role and claims, each at most once and separated by '|', as in uid=auth.uid()|role=auth.role()|claims=auth.jwt().")]
+    [InlineData(null, "uid=auth.uid()) OR (true", "error : SupabaseCurrentUserFunctions has 'uid=auth.uid()) OR (true', which is not a function called without arguments. Each value is one, with its schema or without, such as auth.uid(), and the policies call it as it is written.")]
+    [InlineData(null, "claims=coalesce(auth.jwt(), '{}') || x", "error : SupabaseCurrentUserFunctions has 'x', which is not a key=value pair. It takes uid, role and claims, each at most once and separated by '|', as in uid=auth.uid()|role=auth.role()|claims=auth.jwt().")]
+    public void A_malformed_roles_variable_is_an_error_line_and_exit_code_2(string? roles, string? currentUserFunctions, string error)
     {
         Directory.CreateDirectory(Path.Combine(_project, "src", "Host"));
         using var output = new StringWriter();
 
-        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], [], [], directory: null, start: Path.Combine(_project, "src", "Host"), roles, callerFunctions, output);
+        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], [], [], directory: null, start: Path.Combine(_project, "src", "Host"), roles, currentUserFunctions, output);
 
         exitCode.Should().Be(2, "the export could not run as the project asked");
         output.ToString().TrimEnd().Should().Be(error, "the whole line is what the build shows");
-        Directory.Exists(Migrations).Should().BeFalse("nothing is written with roles or caller functions the project did not mean");
+        Directory.Exists(Migrations).Should().BeFalse("nothing is written with roles or current user functions the project did not mean");
     }
 
     [Fact]
     public void Unset_roles_and_caller_functions_are_the_defaults_and_each_pair_is_optional()
     {
         Directory.CreateDirectory(Path.Combine(_project, "src", "Host"));
-        var rule = RowAccessRule.For<SupabaseShelf>("Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {caller:claim:shelf})");
+        var rule = RowAccessRule.For<SupabaseShelf>("Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {user:claim:shelf})");
         using var output = new StringWriter();
 
-        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], [rule], [], directory: null, start: Path.Combine(_project, "src", "Host"), roles: "anonymous=guest", callerFunctions: " ", output);
+        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], [rule], [], directory: null, start: Path.Combine(_project, "src", "Host"), roles: "anonymous=guest", currentUserFunctions: " ", output);
 
         exitCode.Should().Be(0, output.ToString());
         var sql = File.ReadAllText(Directory.GetFiles(Migrations, "*_access.*").Single());
         sql.Should().Contain("FOR SELECT TO guest\n").And.Contain("FOR SELECT TO authenticated\n", "a pair left out keeps its default");
-        sql.Should().Contain("(SELECT auth.jwt() ->> 'shelf')", "white space is no caller functions at all, so Supabase's");
+        sql.Should().Contain("(SELECT auth.jwt() ->> 'shelf')", "white space is no current user functions at all, so Supabase's");
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class SupabaseMigrationBuildTests : IDisposable
         // Without the pair, the rule is for a role no query runs as, and nothing is written.
         using (var refused = new StringWriter())
         {
-            SupabaseMigrationBuild.Run("Write", [Shelves], [analysts], [], directory: null, start: Path.Combine(_project, "src", "Host"), roles: null, callerFunctions: null, refused)
+            SupabaseMigrationBuild.Run("Write", [Shelves], [analysts], [], directory: null, start: Path.Combine(_project, "src", "Host"), roles: null, currentUserFunctions: null, refused)
                 .Should().Be(2);
             refused.ToString().Should().Contain("error : The Supabase migrations could not be exported: The rule 'Analysts read every shelf' is for '@token:analyst', which no policy can be for.")
                 .And.Contain("add 'token:analyst=<role>' to SupabaseRowAccessRoles");
@@ -155,14 +155,14 @@ public sealed class SupabaseMigrationBuildTests : IDisposable
         using var output = new StringWriter();
         var exitCode = SupabaseMigrationBuild.Run(
             "Write", [Shelves], [analysts, examiners], [], directory: null, start: Path.Combine(_project, "src", "Host"),
-            roles: "user=members | Token: analyst = shelf_analyst | token:Analyst=shelf_examiner", callerFunctions: null, output);
+            roles: "user=members | Token: analyst = shelf_analyst | token:Analyst=shelf_examiner", currentUserFunctions: null, output);
 
         exitCode.Should().Be(0, output.ToString());
         var sql = File.ReadAllText(Directory.GetFiles(Migrations, "*_access.*").Single());
         sql.Should().Contain("CREATE POLICY \"Analysts read every shelf (select) for shelf_analyst\"").And.Contain("FOR SELECT TO shelf_analyst\n");
         sql.Should().Contain("FOR SELECT TO shelf_examiner\n", "two token roles that differ in case are two token roles");
         sql.Should().Contain("            CREATE ROLE shelf_analyst NOLOGIN NOINHERIT;\n", "the access file makes the role, as it makes the scoped system role")
-            .And.Contain("callers.rolname IN ('members', 'anon')", "and holds it apart from the roles the property configured");
+            .And.Contain("users.rolname IN ('members', 'anon')", "and holds it apart from the roles the property configured");
         sql.Should().NotContain("@token");
     }
 

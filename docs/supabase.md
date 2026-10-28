@@ -670,7 +670,7 @@ module's rules write for `RowAccessRoles.SystemIn`.
 A host that logs in as `postgres` can run its background work as that owner, outside the policies. It sets this once
 in its project file. If the export runs in a separate project, set it in the exporter's project file too. The build
 also passes the value to `AddSupabaseRowLevelSecurity`
-([Custom roles and caller functions](#custom-roles-and-caller-functions)):
+([Custom roles and current user functions](#custom-roles-and-current-user-functions)):
 
 ```xml
 <SupabaseRowAccessRoles>system=none</SupabaseRowAccessRoles>
@@ -871,12 +871,12 @@ transaction scope refuses. On Supabase, the transaction scope needs:
 
 - **`No Reset On Close=true` and `Max Auto Prepare=0`** in the connection string. The pooler has no session that a
   reset or a prepared statement could belong to.
-- **The procedure `ddd.use_caller`.** Every exported access file makes it, so a project with its access files applied
+- **The procedure `ddd.use_current_user`.** Every exported access file makes it, so a project with its access files applied
   has it. An application that logs in as its own role, and not as the role that applied the migrations, needs these
   two grants in a migration you write by hand: `grant usage on schema ddd to shop_app;` and
-  `grant execute on procedure ddd.use_caller(text, text, text[], text[]) to shop_app;`. The file that
+  `grant execute on procedure ddd.use_current_user(text, text, text[], text[]) to shop_app;`. The file that
   [`SupabaseLoginRole`](#the-role-the-application-logs-in-as) writes grants roles and no privileges, so you write
-  these two grants. `EnsureLoginRoleMaySwitchToCallersAsync` reports at start-up when they are missing.
+  these two grants. `EnsureLoginRoleMaySwitchToUserRolesAsync` reports at start-up when they are missing.
 - **Migrations through the session pooler, or directly.** The Supabase CLI applies the exported files over its own
   connection, which is neither the application's connection nor the transaction pooler's.
 
@@ -977,7 +977,7 @@ If the application logs in as its own role, and that is not the role that applie
 to that role in a migration you write. A project that names the login role with `SupabaseLoginRole` does not need
 this. The build writes the migration with the grant
 ([The role the application logs in as](#the-role-the-application-logs-in-as)). The start-up check
-`EnsureLoginRoleMaySwitchToCallersAsync` requires the grant wherever `ddd_system_in` exists:
+`EnsureLoginRoleMaySwitchToUserRolesAsync` requires the grant wherever `ddd_system_in` exists:
 
 ```sql
 grant ddd_system_in to app;   -- app: the role the application logs in as
@@ -1067,7 +1067,7 @@ contribution:
 
 A module whose only row access is a contribution also gets an access file, and its migrations start with the drop.
 
-#### Custom roles and caller functions
+#### Custom roles and current user functions
 
 The policies are written for one database role per kind of caller, and they use `auth.uid()`, `auth.role()` and
 `auth.jwt()`. Each has a default, and most projects change none of them:
@@ -1080,21 +1080,21 @@ The policies are written for one database role per kind of caller, and they use 
 | `system` | system work outside a request: the toolkit's bookkeeping | `ddd_system` |
 | `token:<role>` | a signed-in user whose token carries that role | none mapped |
 
-A project with other roles or caller functions sets them once, in the project file that turns the export on. The
+A project with other roles or current user functions sets them once, in the project file that turns the export on. The
 export runs before the application's `Main`, so the application's configuration never reaches the export. These two
 properties do. Here they are with every default written out:
 
 ```xml
 <PropertyGroup>
   <SupabaseRowAccessRoles>user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system</SupabaseRowAccessRoles>
-  <SupabaseCallerFunctions>uid=auth.uid()|role=auth.role()|claims=auth.jwt()</SupabaseCallerFunctions>
+  <SupabaseCurrentUserFunctions>uid=auth.uid()|role=auth.role()|claims=auth.jwt()</SupabaseCurrentUserFunctions>
 </PropertyGroup>
 ```
 
 - Each property is a list of `key=value` pairs. Each pair is optional, and a key you leave out keeps its default.
 - Separate the pairs with `|`. The build passes them to the export in a list that MSBuild splits at every `;`. So a
   `;` in either property fails the build with a message that says to use `|`, and no value can contain a `|`.
-- Each caller function is a function called without arguments, with or without its schema, such as `auth.uid()`. A
+- Each current user function is a function called without arguments, with or without its schema, such as `auth.uid()`. A
   policy writes it into its condition as it is.
 
 The export fails with an `error :` line that names the property for:
@@ -1102,10 +1102,10 @@ The export fails with an `error :` line that names the property for:
 - an unknown or repeated key;
 - a pair without a value;
 - a role that no policy can be for, such as `PUBLIC`;
-- a caller function that is not such a call.
+- a current user function that is not such a call.
 
 When you export [by hand](#exporting-by-hand), the same two settings are `SupabaseMigrationOptions.Roles` and
-`SupabaseMigrationOptions.CallerFunctions`. The roles there start from `SupabaseRowLevelSecurity.DefaultRoles`, the
+`SupabaseMigrationOptions.CurrentUserFunctions`. The roles there start from `SupabaseRowLevelSecurity.DefaultRoles`, the
 table above.
 
 **The roles the policies are for are the roles the application switches to.** The project file is the one place
@@ -1449,7 +1449,7 @@ A `;` fails the build, as in the other properties. When the property is unset, n
 file stays as it was. By hand, the setting is `SupabaseMigrationOptions.LoginRole`. `Export` and `Compare` of the
 sources write and compare its file after every module's files.
 
-**At start-up**, `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync` checks that the role the
+**At start-up**, `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync` checks that the role the
 application logged in as may switch to every role its options name. That is what the file grants.
 
 - It checks the scoped system role, `ddd_system_in`, only where that role exists. The access files make it, but where
@@ -1461,7 +1461,7 @@ application logged in as may switch to every role its options name. That is what
 
 The [start-up checks](startup-checks.md) run these checks once per registered context, in that order, with one call.
 `AddSupabaseRowLevelSecurity` brings `supabase.roles-match-access-files` and
-`postgres.login-role-may-switch-to-callers`. They run in that order, in the stage before the migrations' stage.
+`postgres.login-role-may-switch-to-user-roles`. They run in that order, in the stage before the migrations' stage.
 
 ```csharp
 builder.Services.AddSupabaseRowLevelSecurity();
@@ -1480,7 +1480,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     {
         var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
         await SupabaseRowAccessChecks.EnsureRolesMatchAccessFilesAsync(context, CancellationToken.None);
-        await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, CancellationToken.None);
+        await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync(context, CancellationToken.None);
     }
 }
 

@@ -57,7 +57,7 @@ public static partial class SeatsReadTheCoursesTheySee
 public static partial class SeatsReadTheRolesOfCoursesOfTheirCollege
 {
     /// <summary>Whether <paramref name="role"/> is one of the calling seat's college.</summary>
-    public static bool Allows(CourseRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CallerTenant<TenantId>();
+    public static bool Allows(CourseRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CurrentTenant<TenantId>();
 }
 
 /// <summary>

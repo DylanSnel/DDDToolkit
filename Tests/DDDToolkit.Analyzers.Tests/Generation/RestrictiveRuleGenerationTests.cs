@@ -54,8 +54,8 @@ public class RestrictiveRuleGenerationTests
         [AccessFunctions]
         public static partial class ShopQuestions
         {
-            [AccessRow("caller_person")]
-            public static partial TPerson CallerPerson<TPerson>() where TPerson : class;
+            [AccessRow("current_person")]
+            public static partial TPerson CurrentPerson<TPerson>() where TPerson : class;
         }
 
 
@@ -114,19 +114,19 @@ public class RestrictiveRuleGenerationTests
 
     [Fact]
     public void A_property_of_a_row_question_is_a_column_of_its_row_asked_once_per_statement()
-        => RuleSqlOf("ShopQuestions.CallerPerson<Person>().Kind == PersonKind.Staff")
-            .Should().Be("{restrictive}({row:shop/caller_person:0:Shop.Person:q1}{col:q1:Kind}{/row} = {rowval:Shop.Person:Kind:1})");
+        => RuleSqlOf("ShopQuestions.CurrentPerson<Person>().Kind == PersonKind.Staff")
+            .Should().Be("{restrictive}({row:shop/current_person:0:Shop.Person:q1}{col:q1:Kind}{/row} = {rowval:Shop.Person:Kind:1})");
 
     [Fact]
     public void An_enum_constant_on_the_left_is_written_as_the_rows_column_stores_it_too()
-        => RuleSqlOf("PersonKind.Staff != ShopQuestions.CallerPerson<Person>().Kind")
-            .Should().Be("{restrictive}({rowval:Shop.Person:Kind:1} <> {row:shop/caller_person:0:Shop.Person:q1}{col:q1:Kind}{/row})");
+        => RuleSqlOf("PersonKind.Staff != ShopQuestions.CurrentPerson<Person>().Kind")
+            .Should().Be("{restrictive}({rowval:Shop.Person:Kind:1} <> {row:shop/current_person:0:Shop.Person:q1}{col:q1:Kind}{/row})");
 
     [Fact]
     public void Each_property_read_is_an_answer_of_its_own_and_a_comparison_with_the_rule_row_is_sqls_own()
-        => RuleSqlOf("ShopQuestions.CallerPerson<Person>().Team == order.Team && ShopQuestions.CallerPerson<Person>().Kind == PersonKind.Staff")
+        => RuleSqlOf("ShopQuestions.CurrentPerson<Person>().Team == order.Team && ShopQuestions.CurrentPerson<Person>().Kind == PersonKind.Staff")
             .Should().Be(
-                "{restrictive}(({row:shop/caller_person:0:Shop.Person:q1}{col:q1:Team}{/row} = {col:Team}) AND ({row:shop/caller_person:0:Shop.Person:q2}{col:q2:Kind}{/row} = {rowval:Shop.Person:Kind:1}))");
+                "{restrictive}(({row:shop/current_person:0:Shop.Person:q1}{col:q1:Team}{/row} = {col:Team}) AND ({row:shop/current_person:0:Shop.Person:q2}{col:q2:Kind}{/row} = {rowval:Shop.Person:Kind:1}))");
 
     [Fact]
     public void A_row_question_gets_a_body_that_throws()
@@ -134,17 +134,17 @@ public class RestrictiveRuleGenerationTests
         var result = Run("");
 
         result.ShouldCompile();
-        result.ShouldContain("ShopQuestions.AccessFunctions", "public static partial TPerson CallerPerson<TPerson>() where TPerson : class => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop/caller_person\");");
+        result.ShouldContain("ShopQuestions.AccessFunctions", "public static partial TPerson CurrentPerson<TPerson>() where TPerson : class => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop/current_person\");");
     }
 
     [Theory]
-    [InlineData("public static partial int CallerNumber();", "to return the class a table is mapped to")]
-    [InlineData("public static partial Person CallerAt(string place);", "no parameters")]
+    [InlineData("public static partial int CurrentNumber();", "to return the class a table is mapped to")]
+    [InlineData("public static partial Person CurrentAt(string place);", "no parameters")]
     public void A_row_question_of_another_shape_is_DDD00038(string declared, string expected)
     {
-        var result = GeneratorTestHost.Create(Shop.Replace("public static partial TPerson CallerPerson<TPerson>() where TPerson : class;", declared, StringComparison.Ordinal)).RunCore();
+        var result = GeneratorTestHost.Create(Shop.Replace("public static partial TPerson CurrentPerson<TPerson>() where TPerson : class;", declared, StringComparison.Ordinal)).RunCore();
 
-        result.ShouldHaveDiagnostic("DDD00038", at: declared.Contains("CallerNumber", StringComparison.Ordinal) ? "CallerNumber" : "CallerAt")
+        result.ShouldHaveDiagnostic("DDD00038", at: declared.Contains("CurrentNumber", StringComparison.Ordinal) ? "CurrentNumber" : "CurrentAt")
             .GetMessage().Should().Contain(expected);
     }
 }

@@ -8,7 +8,7 @@ namespace DDDToolkit.EntityFramework.Tests.Infrastructure;
 
 /// <summary>
 /// A plain Postgres with the help desk on it, set up the way an application off Supabase sets itself up:
-/// <see cref="PostgresRowAccess.SetupScript"/> for the roles and the caller functions, the schema from the
+/// <see cref="PostgresRowAccess.SetupScript"/> for the roles and the current user functions, the schema from the
 /// model, owned by the application's login role, and the desk's rules as policies from
 /// <see cref="PostgresRowAccess.Script"/>. Nothing of Supabase's is there.
 /// </summary>

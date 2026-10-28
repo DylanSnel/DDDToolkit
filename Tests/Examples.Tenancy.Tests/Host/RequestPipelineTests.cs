@@ -28,7 +28,7 @@ namespace Examples.Tenancy.Tests.Host;
 /// </summary>
 /// <remarks>
 /// The requests are sent the way anything but a route sends them: from a scope of the host's services, as the
-/// callers the test begins, which are the two a request has (<see cref="SampleCallers"/>). What the routes answer
+/// callers the test begins, which are the two a request has (<see cref="SampleUsers"/>). What the routes answer
 /// is the scenario tests' to prove.
 /// </remarks>
 [Trait("Category", "Samples")]
@@ -907,7 +907,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         public async ValueTask<Unit> Handle(ChangeProjectName message, MessageHandlerDelegate<ChangeProjectName, Unit> next, CancellationToken cancellationToken)
         {
-            using (SampleCallers.BeginSeatOf(DemoPeople.Leo, DemoData.Harbor))
+            using (SampleUsers.BeginSeatOf(DemoPeople.Leo, DemoData.Harbor))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<CrewMemberManager>().TakeRoleAsync(message.Id, From, Role, cancellationToken);
@@ -968,7 +968,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         public async ValueTask<Unit> Handle(ChangeProjectName message, MessageHandlerDelegate<ChangeProjectName, Unit> next, CancellationToken cancellationToken)
         {
-            using (SampleCallers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
+            using (SampleUsers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<ISender>().Send(new SetProjectRolePermissions(Role, [ProjectPermissionNames.View]), cancellationToken);
@@ -1096,7 +1096,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     {
         public async ValueTask<InspectionId> Handle(RecordInspection message, MessageHandlerDelegate<RecordInspection, InspectionId> next, CancellationToken cancellationToken)
         {
-            using (SampleCallers.BeginSeatOf(DemoPeople.Rhea, DemoData.Harbor))
+            using (SampleUsers.BeginSeatOf(DemoPeople.Rhea, DemoData.Harbor))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<ISender>().Send(new CloseProject(message.Project), cancellationToken);
@@ -1422,5 +1422,5 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     }
 
     /// <summary>Begins the callers of a request of <paramref name="person"/> in harbor: the signed-in user, and their seat there.</summary>
-    private static IDisposable AsSeatOf(DemoPerson person) => SampleCallers.BeginSeatOf(person, Harbor);
+    private static IDisposable AsSeatOf(DemoPerson person) => SampleUsers.BeginSeatOf(person, Harbor);
 }

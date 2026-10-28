@@ -170,7 +170,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var stored = _services.Database.CountRows("OutboxMessages");
 
         await using (var scope = _services.Scope())
-        using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat)))
         {
             var tenancy = scope.ServiceProvider.TenancyContext();
             await using var transaction = await tenancy.Database.BeginTransactionAsync(Cancellation);
@@ -265,7 +265,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var tenancy = scope.ServiceProvider.TenancyContext();
 
         // An event of the application's own, raised in Tenancy's context, which names no tenant.
-        using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat)))
         {
             var row = tenancy.Add(new EventLogEntry { Id = Guid.NewGuid(), EventName = "host.pinged" });
             fields[0].Fill(new Pinged(), row);
@@ -278,7 +278,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         }
 
         // With neither, the row has no tenant to go under, and the save is refused with what to do about it.
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             var row = tenancy.Add(new EventLogEntry { Id = Guid.NewGuid(), EventName = "host.pinged" });
             FluentActions.Invoking(() => fields[0].Fill(new Pinged(), row))
@@ -329,14 +329,14 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
 
         using (TestUser.BeginAs(identity))
         {
-            accessor.Current.Should().Be(new ActedBy("user", identity.ToString("D")), "without a Tenancy caller the toolkit's own answer stands");
+            accessor.Current.Should().Be(new ActedBy("user", identity.ToString("D")), "without a Tenancy user the toolkit's own answer stands");
 
-            using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+            using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
             {
                 accessor.Current.Should().Be(new ActedBy("user", identity.ToString("D")), "nobody is no actor of Tenancy's");
             }
 
-            using (TenancyCallers.Begin(HostCaller.InSeat(new TenantId(1), seat)))
+            using (TenancyUsers.Begin(HostUser.InSeat(new TenantId(1), seat)))
             {
                 accessor.Current.Should().Be(new ActedBy("seat", seat.Value.ToString("D")));
             }
@@ -358,7 +358,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var wrapping = before.Provider.GetRequiredService<IActedByAccessor>();
         wrapping.Should().BeOfType<TenancyActedByAccessor>();
         wrapping.Current.Should().Be(new ActedBy("the host's", null));
-        using (TenancyCallers.Begin(HostCaller.InSeat(new TenantId(1), seat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(new TenantId(1), seat)))
         {
             wrapping.Current.Kind.Should().Be("seat");
         }

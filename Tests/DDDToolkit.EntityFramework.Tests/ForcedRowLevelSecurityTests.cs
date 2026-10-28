@@ -16,7 +16,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// what it was when it is not. On a forced table the owner is held to the policies too, unless it may bypass
 /// them, which is what the functions that run as their owner then rest on, and what the start-up check asks.
 /// </summary>
-public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres)
+public sealed class ForcedRowLevelSecurityTests(ExplicitCurrentUserPostgres postgres)
 {
     private static int roles;
 

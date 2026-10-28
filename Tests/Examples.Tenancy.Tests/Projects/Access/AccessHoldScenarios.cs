@@ -284,7 +284,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
     /// </summary>
     private static async Task<Exception?> DirectAsync(SampleOnPostgres onPostgres, DemoPerson person, Func<IServiceProvider, ValueTask<Unit>> handle)
     {
-        using (SampleCallers.BeginSeatOf(person, Harbor))
+        using (SampleUsers.BeginSeatOf(person, Harbor))
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             try

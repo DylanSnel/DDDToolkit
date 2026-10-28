@@ -133,7 +133,7 @@ public class RoleManagerTests
         await harness.As(harness.Administrator, h => h.Roles.RenameAsync(clerk, "CLERK", "Files widgets", default));
         harness.Store.Role(clerk).Name.Should().Be("CLERK", "a role may change the case of its own name");
 
-        await harness.Run(HostCaller.InSeat(other.Tenant.Id, other.Administrator.Id),
+        await harness.Run(HostUser.InSeat(other.Tenant.Id, other.Administrator.Id),
             h => h.Roles.CreateAsync("Clerk", string.Empty, [HostCatalogue.WidgetRead], default));
         harness.Store.RolesOf(other.Tenant.Id).Should().Contain(role => role.Name == "Clerk", "names are unique within a tenant only");
     }

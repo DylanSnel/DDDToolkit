@@ -100,7 +100,7 @@ problem, and the fix.
 | [DDD00098](#ddd00098) | Error | Rules that reach a resource from above read where it hangs from its [At] property |
 | [DDD00099](#ddd00099) | Warning | A permission says what it lets somebody do |
 | [DDD00100](#ddd00100) | Error | A restrictive rule narrows a table it can reach |
-| [DDD00101](#ddd00101) | Error | TenancyRowAccess.CallerSeat answers with the application's seat class |
+| [DDD00101](#ddd00101) | Error | TenancyRowAccess.CurrentSeat answers with the application's seat class |
 | [DDD00102](#ddd00102) | Error | A marker of a requirement's argument goes beside the attribute whose call it is |
 | [DDD00103](#ddd00103) | Error | An operator's command takes its tenant from the request or from itself |
 | [DDD00104](#ddd00104) | Error | [Operator] stands beside no requirement an operator cannot meet |
@@ -3248,7 +3248,7 @@ second condition and looks for what it adds. So DDD00084 is a warning. Remove th
 
 A package says what its requirement already requires, with `Implies` on its mark: `[StatesRequirement]`,
 `[PermissionMarker]` or `[PermissionWithoutMarker]`. A module's own attribute is held to the same rule. The
-package of a type says what the caller's own of that type requires, with `Implies` on `[assembly: CallersOwn]`:
+package of a type says what the caller's own of that type requires, with `Implies` on `[assembly: OwnedByCurrentUser]`:
 
 - A `Guid` is a signed-in caller's identity, so it implies `[SignedIn]`.
 - Tenancy's seat id is a seat in the tenant, so it implies `[InTenant]` and `[SignedIn]`.
@@ -3332,7 +3332,7 @@ public sealed record LeaveTenant([Own] SeatId? Seat) : ITenantsRequest;         
 ```
 
 The access check compares the value that the request names with the caller's own value of the same type. It does
-this before the handler runs, so the request does not need to know who sends it. An `ICallersOwn<TValue>` says what the
+this before the handler runs, so the request does not need to know who sends it. An `IOwnedByCurrentUser<TValue>` says what the
 caller's own value of a type is:
 
 - the core's, for a `Guid`: the caller's verified identity, the id that its token names;
@@ -3340,19 +3340,19 @@ caller's own value of a type is:
 - yours, for a kind of your own: a small implementation beside your requests, which the host registers.
 
 ```csharp
-public sealed class CallersUser : ICallersOwn<UserId>
+public sealed class CurrentUserId : IOwnedByCurrentUser<UserId>
 {
     public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
 }
 
-services.AddCallersOwn<UserId, CallersUser>();
+services.AddOwnedByCurrentUser<UserId, CurrentUserId>();
 ```
 
 On a member of a type without such an implementation, the access check would refuse the request every time it is
 sent. So
 DDD00086 reports the member, and the generator writes no line. The generator finds an implementation in the
 requests' project, or a public one in a project that the requests' project references. A package names its types
-with `[assembly: CallersOwn(...)]`. A package may name its type by the template that an application declares its
+with `[assembly: OwnedByCurrentUser(...)]`. A package may name its type by the template that an application declares its
 class with, as Tenancy names its seat id. If the project sees no class declared with that template, nothing can be
 told, and the access check reports the problem when the request is sent.
 
@@ -3366,7 +3366,7 @@ The id of an aggregate root that marks its owner with `[Owner]` is an exception,
 caller's own of the id. `[Own] BoardId Board` is then about the board's owner, and the generated line is
 `AccessRequirement.OwnerOf(request.Board)` ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)).
 The id of an aggregate that marks no owner is reported as above, and the message says where to mark the owner. If
-an `ICallersOwn` exists for the id itself, that implementation wins, and the owner is not read.
+an `IOwnedByCurrentUser` exists for the id itself, that implementation wins, and the owner is not read.
 
 ## DDD00087
 
@@ -3425,8 +3425,8 @@ The access check compares the owner that the row holds with the caller's own val
 
 - a `Guid`: the caller's verified identity;
 - your seat id: the caller's seat, from Tenancy;
-- a kind of your own, with a small `ICallersOwn<TValue>` beside your requests, which the host registers with
-  `services.AddCallersOwn<UserId, CallersUser>()`.
+- a kind of your own, with a small `IOwnedByCurrentUser<TValue>` beside your requests, which the host registers with
+  `services.AddOwnedByCurrentUser<UserId, CurrentUserId>()`.
 
 An owner that may be null is fine. A row whose owner is null belongs to nobody, and nobody comes through as its
 owner.
@@ -3434,8 +3434,8 @@ owner.
 A `string`, a class or an enum can never be compared, whatever a project sees. So DDD00088 reports such an owner
 where the property is declared.
 
-Whether an `ICallersOwn` exists for the owner's type can only be told where the requests are. Your
-`ICallersOwn` is declared beside them, and the domain does not see it. So a request that names the aggregate is
+Whether an `IOwnedByCurrentUser` exists for the owner's type can only be told where the requests are. Your
+`IOwnedByCurrentUser` is declared beside them, and the domain does not see it. So a request that names the aggregate is
 reported there, at its marker, where the project can tell that none exists. The generator writes no line for such
 a request. If a package names the owner's type by a template whose classes the project does not see, nothing can
 be told, and the access check reports the problem when the request is sent.
@@ -3781,17 +3781,17 @@ So a restrictive rule on a tenant or an invitation is refused. Put the rule on o
 
 ## DDD00101
 
-**`TenancyRowAccess.CallerSeat` answers with the application's seat class.**
+**`TenancyRowAccess.CurrentSeat` answers with the application's seat class.**
 
 ```csharp
-TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
-TenancyRowAccess.CallerSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
+TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
+TenancyRowAccess.CurrentSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
 ```
 
-`CallerSeat<TSeat>()` is the calling seat's own row, and a rule reads a field of it. The function behind it answers
+`CurrentSeat<TSeat>()` is the calling seat's own row, and a rule reads a field of it. The function behind it answers
 with a row of Tenancy's seats table. So `TSeat` must be the class that this table is mapped to: the class declared
 with `[SeatAggregate]`. In a rule of a module whose context does not map the seats, use
-`TenancyRowAccess.CallerSeatId<SeatId>()` for the seat's id.
+`TenancyRowAccess.CurrentSeatId<SeatId>()` for the seat's id.
 
 ## DDD00102
 

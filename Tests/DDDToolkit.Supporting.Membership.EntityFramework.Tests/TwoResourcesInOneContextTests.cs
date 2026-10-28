@@ -59,13 +59,13 @@ public sealed class TwoResourcesInOneContextTests
         });
 
         // Ada owns a document and is on no folder: a folder asks who she is by another fact about her.
-        var ada = TestCallers.User(data.Ada);
+        var ada = TestUsers.User(data.Ada);
         (await filing.FoldersAsync(ada, access => access.HoldAsync(data.Cabinet, FolderPermissions.Read, Cancellation))).Should().BeNull();
         (await filing.FoldersAsync(ada, access => access.PermissionsOnAsync([data.Cabinet, data.Annex], FilingScenario.FolderPermissionsAsked, Cancellation))).Should().BeEmpty();
         await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotFound, () => filing.FoldersAsync(ada, access => access.RequireAsync(data.Cabinet, FolderPermissions.Read, Cancellation)));
 
         // The keeper keeps a folder and is a member of no document.
-        var keeper = TestCallers.Staff(data.Keeper);
+        var keeper = TestUsers.Staff(data.Keeper);
         (await filing.FoldersAsync(keeper, access => access.HoldAsync(data.Cabinet, FolderPermissions.Staff, Cancellation)))!.Via.Should().Be(MemberVia.Members);
         foreach (var document in data.Documents)
         {
@@ -85,8 +85,8 @@ public sealed class TwoResourcesInOneContextTests
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
 
-        var document = await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.DocumentsAsync(TestCallers.User(data.Cy), access => access.RequireAsync(data.Minutes, DocumentPermissions.Edit, Cancellation)));
-        var folder = await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.FoldersAsync(TestCallers.Staff(data.Visitor), access => access.RequireAsync(data.Cabinet, FolderPermissions.File, Cancellation)));
+        var document = await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.DocumentsAsync(TestUsers.User(data.Cy), access => access.RequireAsync(data.Minutes, DocumentPermissions.Edit, Cancellation)));
+        var folder = await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.FoldersAsync(TestUsers.Staff(data.Visitor), access => access.RequireAsync(data.Cabinet, FolderPermissions.File, Cancellation)));
 
         (document.Code, folder.Code).Should().Be(("documents.not-permitted", "folders.not-permitted"));
         document.Arguments.Should().Contain("Permission", DocumentPermissions.Edit);
@@ -102,7 +102,7 @@ public sealed class TwoResourcesInOneContextTests
         // A request about a document, by its owner: passed, in one statement, and what was read is kept for its handler.
         var version = (await filing.Services.ReadAsync(data.Minutes)).Version;
         filing.Commands.Reset();
-        await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
             var share = new ShareDocument(data.Minutes, data.Hal, ExpectedVersion: version);
             await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(share, Cancellation);
@@ -112,7 +112,7 @@ public sealed class TwoResourcesInOneContextTests
         filing.Commands.Count.Should().Be(1);
 
         // A request about a folder, by its clerk, in the same set: decided by the folder's check.
-        await filing.Services.AsAsync(TestCallers.Staff(data.Clerk), async provider =>
+        await filing.Services.AsAsync(TestUsers.Staff(data.Clerk), async provider =>
         {
             var file = new FileInFolder(data.Cabinet);
             await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(file, Cancellation);
@@ -124,17 +124,17 @@ public sealed class TwoResourcesInOneContextTests
         Task RequireAsync(CurrentUserSnapshot caller, IFilingRequest request)
             => filing.Services.AsAsync(caller, provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(request, Cancellation).AsTask());
 
-        (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(TestCallers.User(data.Ben), new ShareDocument(data.Minutes, data.Hal)))).Code.Should().Be("documents.not-permitted");
-        (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => RequireAsync(TestCallers.Staff(data.Clerk), new ShareDocument(data.Minutes, data.Hal)))).Code.Should().Be("documents.not-found");
-        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(TestCallers.Staff(data.Visitor), new FileInFolder(data.Cabinet)))).Code.Should().Be("folders.not-permitted");
-        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotFound, () => RequireAsync(TestCallers.User(data.Ada), new FileInFolder(data.Cabinet)))).Code.Should().Be("folders.not-found");
+        (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(TestUsers.User(data.Ben), new ShareDocument(data.Minutes, data.Hal)))).Code.Should().Be("documents.not-permitted");
+        (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => RequireAsync(TestUsers.Staff(data.Clerk), new ShareDocument(data.Minutes, data.Hal)))).Code.Should().Be("documents.not-found");
+        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(TestUsers.Staff(data.Visitor), new FileInFolder(data.Cabinet)))).Code.Should().Be("folders.not-permitted");
+        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotFound, () => RequireAsync(TestUsers.User(data.Ada), new FileInFolder(data.Cabinet)))).Code.Should().Be("folders.not-found");
 
         // A list refuses nobody for want of the permission: its statement shows what the caller reaches, which may be
         // nothing. A caller who did not sign in reaches nothing under any rules, and is refused before its
         // statement, under the codes of the resource the list is of.
         filing.Commands.Reset();
-        await RequireAsync(TestCallers.User(data.Hal), new ListDocuments());
-        await RequireAsync(TestCallers.Staff(data.Nobody), new ListFolders());
+        await RequireAsync(TestUsers.User(data.Hal), new ListDocuments());
+        await RequireAsync(TestUsers.Staff(data.Nobody), new ListFolders());
         (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(CurrentUserSnapshot.Anonymous, new ListFolders()))).Code.Should().Be("folders.not-permitted");
         filing.Commands.Count.Should().Be(0);
     }
@@ -150,13 +150,13 @@ public sealed class TwoResourcesInOneContextTests
         await filing.Services.ChangeAsync(data.Minutes, document => document.ShareWith(data.Hal, MemberPeriod.Open(data.Now), data.Now, by: data.Ada));
 
         var stale = new ShareDocument(data.Minutes, data.Hal, ExpectedVersion: read);
-        var lost = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ada), provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(stale, Cancellation).AsTask()))
+        var lost = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ada), provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(stale, Cancellation).AsTask()))
             .Should().ThrowAsync<ConcurrencyConflictException>();
         (lost.Which.AggregateType, lost.Which.AggregateId).Should().Be((typeof(Document), data.Minutes));
 
         // A caller without access learns nothing from a version: answered as if it had sent none.
-        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.Services.AsAsync(TestCallers.User(data.Ben), provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(stale, Cancellation).AsTask()));
-        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => filing.Services.AsAsync(TestCallers.User(data.Eve), provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(stale, Cancellation).AsTask()));
+        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.Services.AsAsync(TestUsers.User(data.Ben), provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(stale, Cancellation).AsTask()));
+        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => filing.Services.AsAsync(TestUsers.User(data.Eve), provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(stale, Cancellation).AsTask()));
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class TwoResourcesInOneContextTests
 
         filing.Commands.Reset();
         await filing.Services.ChangeAsync(data.Minutes, document => document.ShareWith(data.Hal, DocumentMembership.Onlooker, MemberPeriod.Open(data.Now), data.Now, by: data.Ada));
-        await filing.DocumentsAsync(TestCallers.User(data.Hal), access => access.PermissionsOnAsync([data.Minutes], FilingScenario.DocumentPermissionsAsked, Cancellation));
+        await filing.DocumentsAsync(TestUsers.User(data.Hal), access => access.PermissionsOnAsync([data.Minutes], FilingScenario.DocumentPermissionsAsked, Cancellation));
         filing.Commands.Commands.Should().NotBeEmpty().And.NotContain(sql => ofFolders.Any(table => sql.Contains(table, StringComparison.Ordinal)));
 
         filing.Commands.Reset();
@@ -180,7 +180,7 @@ public sealed class TwoResourcesInOneContextTests
             cabinet.Dismiss(data.Visitor);
             await context.SaveChangesAsync(Cancellation);
         });
-        await filing.FoldersAsync(TestCallers.Staff(data.Clerk), access => access.PermissionsOnAsync([data.Cabinet], FilingScenario.FolderPermissionsAsked, Cancellation));
+        await filing.FoldersAsync(TestUsers.Staff(data.Clerk), access => access.PermissionsOnAsync([data.Cabinet], FilingScenario.FolderPermissionsAsked, Cancellation));
         filing.Commands.Commands.Should().NotBeEmpty().And.NotContain(sql => ofDocuments.Any(table => sql.Contains(table, StringComparison.Ordinal)));
     }
 }

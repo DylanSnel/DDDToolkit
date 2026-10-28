@@ -68,7 +68,7 @@ Some contexts need a different call:
 - **The older chain** `UseDDDToolkit(provider).UsePostgresRowLevelSecurity(provider)` still works, and adds the
   interceptor once.
 
-| The current user | Runs as | `ddd.caller_id()` |
+| The current user | Runs as | `ddd.current_user_id()` |
 |---|---|---|
 | A signed-in user | `authenticated`, with the token's claims. When the token carries a role of its own, the role that its [token role](#token-roles) maps to. | the user's id |
 | A request without a user | `anon`, with the claims `{"role":"anon"}` | `null` |
@@ -182,7 +182,7 @@ to the next client unchanged. So a setting made for a session would reach the ne
 the interceptor never sets anything for a session:
 
 - **A command outside a transaction** gets
-  `RESET ROLE; CALL "ddd".use_caller(@__ddd_role, @__ddd_claims, @__ddd_names, @__ddd_values);` in front of its text.
+  `RESET ROLE; CALL "ddd".use_current_user(@__ddd_role, @__ddd_claims, @__ddd_names, @__ddd_values);` in front of its text.
   Npgsql sends both together, and Postgres runs them as one transaction. So the settings apply to that command and
   end with it, with no extra round trip. `RESET ROLE` removes any role that another client left on the server
   connection. So the role the application logged in as always makes the call.
@@ -239,14 +239,14 @@ builder.Services.AddDbContext<OrderingContext>((provider, options) => options
 ```sql
 -- for a login role that did not run the script that made the procedure
 grant usage on schema ddd to app;
-grant execute on procedure ddd.use_caller(text, text, text[], text[]) to app;
+grant execute on procedure ddd.use_current_user(text, text, text[], text[]) to app;
 ```
 
 </details>
 
 What `Transaction` scope needs from an application:
 
-- **The procedure `ddd.use_caller`.** `PostgresRowAccess.SetupScript()` makes it. Every script of policies and every
+- **The procedure `ddd.use_current_user`.** `PostgresRowAccess.SetupScript()` makes it. Every script of policies and every
   exported access file also makes it, so a database with the policies has the procedure. The procedure runs as its
   caller, and its `EXECUTE` privilege is revoked from `PUBLIC`. Only the role the application logs in as may call it,
   because anyone who can call it can say who they are. A login role that did not run the script needs the two grants
@@ -387,7 +387,7 @@ builder.Services.AddPostgresRowLevelSecurity(options =>
 ```
 
 A user whose token carries `analyst` then runs as `desk_analyst`. The claims stay the token's claims, so
-`ddd.caller_role()` returns `analyst` and `ddd.caller_id()` returns the user's id. A rule names the token role, never
+`ddd.current_user_role()` returns `analyst` and `ddd.current_user_id()` returns the user's id. A rule names the token role, never
 the database role, so no database role name is compiled into a module:
 
 ```csharp
@@ -409,7 +409,7 @@ public static partial class AnalystsReadEveryTicket
   `RowAccessRoleNames.From(options)` carries the map.
 - When those roles do not map the token role, the script refuses the rule when it is written, and names the rule. The
   rule's policy would be for a role that no query runs as.
-- The Supabase export takes the map from a [build property](supabase.md#custom-roles-and-caller-functions).
+- The Supabase export takes the map from a [build property](supabase.md#custom-roles-and-current-user-functions).
 
 #### Checks on a mapped role
 
@@ -464,7 +464,7 @@ then runs as `UserRole`, and nothing is made or checked for the mapping.
 
 `UnknownTokenRole.Refuse` is the default. With `UnknownTokenRole.Anonymous`, a caller whose role is on no list runs
 as an anonymous caller: `AnonymousRole`, with the claims `{"role":"anon"}`. The database sees no user, and
-`ddd.caller_id()` is `null`. The interceptor asks a module's [custom settings](#custom-connection-settings) for
+`ddd.current_user_id()` is `null`. The interceptor asks a module's [custom settings](#custom-connection-settings) for
 `CurrentUserSnapshot.Anonymous` too. So a setting derived from the user's id or claims gets the value for a request without a
 user. In C# the caller is still the user that the token names. So a rule checked in C# may allow what the policies
 then refuse. Choose this option for a host that prefers to show such a caller what everybody may see, instead of
@@ -591,7 +591,7 @@ sequenceDiagram
 ```sql
 CREATE POLICY "A team sees its notebooks" ON "teams"."Notebooks" FOR SELECT TO authenticated
     USING ("Team" = current_setting('teams.current', true)
-           AND "Members" @> ARRAY[(SELECT "ddd".caller_id())]);
+           AND "Members" @> ARRAY[(SELECT "ddd".current_user_id())]);
 ```
 
 </details>
@@ -723,9 +723,9 @@ without Supabase has neither until `PostgresRowAccess.SetupScript()` makes them:
 - The roles `anon`, `authenticated` and `ddd_system_in`, the [scoped system role](#the-scoped-system-role). The script
   grants all three to the role the application logs in as, so that role may switch to them. The script also makes
   the role of every [token role](#token-roles) that the given options map.
-- `ddd.caller_id()`, `ddd.caller_role()` and `ddd.caller_claims()`, which read the claims that the interceptor set.
+- `ddd.current_user_id()`, `ddd.current_user_role()` and `ddd.current_user_claims()`, which read the claims that the interceptor set.
 - `ddd.written_in_this_transaction(xmin)`, which the policies of an aggregate's entities call.
-- The procedure `ddd.use_caller`, which sets a caller for one transaction in
+- The procedure `ddd.use_current_user`, which sets a caller for one transaction in
   [`Transaction` scope](#settings-per-connection-or-per-transaction). Only the login role may call it.
 
 The script can run more than once, so put it in an early migration:
@@ -749,7 +749,7 @@ The grants give the two roles the tables. The policies then decide which rows. A
 grants instead, per table and per command, from the policies it holds
 ([Privileges from the policies](#privileges-from-the-policies)).
 
-`ddd.caller_id()` is `null` for a token whose `sub` is not a `uuid`. So a rule about a user matches nobody, and does
+`ddd.current_user_id()` is `null` for a token whose `sub` is not a `uuid`. So a rule about a user matches nobody, and does
 not fail every query. `ICurrentUser.Id` is `null` for such a token too.
 
 The grants above also cover the module's outbox and inbox tables. Those tables have no policies, so a caller could
@@ -765,7 +765,7 @@ revoke all on ordering."InboxMessages" from anon, authenticated;
 The role that runs `SetupScript()` owns the `ddd` schema, its functions and its procedure. Another role can run the
 script with `SetupScript(loginRole: "app")`, while the application's migrations run as `app`. The policy scripts
 then leave those objects alone, as long as the objects are as the policies need them. A toolkit upgrade may change
-`ddd.written_in_this_transaction` or `ddd.use_caller`, or add a role that the setup makes, such as `ddd_system_in`.
+`ddd.written_in_this_transaction` or `ddd.use_current_user`, or add a role that the setup makes, such as `ddd_system_in`.
 `app` cannot replace objects it does not own, and may not be allowed to create a role. So first run the new
 version's `SetupScript()`, as the role that ran it before. That run makes and grants what is missing, and the
 policy scripts then leave it as it is.
@@ -815,7 +815,7 @@ flowchart LR
 ```csharp
 partial class ACustomerSeesTheirOrders
 {
-    public const string RowAccessSql = "(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}))";
+    public const string RowAccessSql = "(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {user:uid}))";
 }
 ```
 
@@ -833,7 +833,7 @@ var allowed = ACustomerSeesTheirOrders.Allows(order, user);
 
 ```sql
 CREATE POLICY "A customer sees their orders (select) for authenticated" ON "ordering"."Orders" FOR SELECT TO authenticated
-    USING (("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())));
+    USING (("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".current_user_id())));
 -- and one for anon, and one per role for UPDATE
 
 -- OrderLine belongs to the aggregate. A caller reads a line with its order, and writes a line as the rules let the caller write the order.
@@ -870,12 +870,12 @@ More about rules:
 
 | In `Allows` | In the policy |
 |---|---|
-| `order.PlacedBy == null \|\| order.PlacedBy?.Value == user.Id` | `("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM "ddd".caller_id())` |
+| `order.PlacedBy == null \|\| order.PlacedBy?.Value == user.Id` | `("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM "ddd".current_user_id())` |
 | `order.Status != OrderStatus.Cancelled` | `"Status" <> 2`, or `'Cancelled'` when the column stores it as text |
 | `order.Total.Amount <= 500` | `coalesce("Total_Amount" <= 500, FALSE)` |
-| `user.IsAuthenticated && !order.IsPublic` | `("ddd".caller_id() IS NOT NULL) AND (NOT "IsPublic")` |
-| `user.FindClaim("app_metadata.team") == order.Team` | `"ddd".caller_claims() #>> '{app_metadata,team}' IS NOT DISTINCT FROM "Team"` |
-| `user.Role == "authenticated"` | `"ddd".caller_role() IS NOT DISTINCT FROM 'authenticated'` |
+| `user.IsAuthenticated && !order.IsPublic` | `("ddd".current_user_id() IS NOT NULL) AND (NOT "IsPublic")` |
+| `user.FindClaim("app_metadata.team") == order.Team` | `"ddd".current_user_claims() #>> '{app_metadata,team}' IS NOT DISTINCT FROM "Team"` |
+| `user.Role == "authenticated"` | `"ddd".current_user_role() IS NOT DISTINCT FROM 'authenticated'` |
 | `order.Due < DateTimeOffset.UtcNow` | `coalesce("Due" < now(), FALSE)` |
 
 - `==` keeps its C# meaning. Between two values that C# says cannot be null (an enum, a number, a flag, a `Guid`, or
@@ -887,7 +887,7 @@ More about rules:
   Compare `now()` with a column of type `timestamp with time zone`. Npgsql makes that type of a `DateTime` or a
   `DateTimeOffset` by default. Against a `timestamp without time zone`, Postgres converts `now()` to the time in the
   session's time zone, and a caller of the Data API can choose that time zone.
-- The policy wraps the caller functions in `(SELECT ...)`. So Postgres calls them once per query, and not once per
+- The policy wraps the current user functions in `(SELECT ...)`. So Postgres calls them once per query, and not once per
   row.
 - Column names come from the Entity Framework model when the policies are written. Renaming a property or its
   column changes the policy too.
@@ -968,8 +968,8 @@ public static partial class AuditorsSeeEveryOrder
 ```sql
 -- Orders (select) for authenticated asks the rules 'A customer has their orders' and 'Auditors see every order': a row one of them allows is allowed.
 CREATE POLICY "Orders (select) for authenticated" ON "ordering"."Orders" FOR SELECT TO authenticated
-    USING ((("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())))
-        OR ((SELECT "ddd".caller_claims() #>> '{app_metadata,auditor}') IS NOT DISTINCT FROM 'true'));
+    USING ((("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".current_user_id())))
+        OR ((SELECT "ddd".current_user_claims() #>> '{app_metadata,auditor}') IS NOT DISTINCT FROM 'true'));
 ```
 
 </details>
@@ -993,7 +993,7 @@ host calls its roles. `RowAccessRoleNames.Default` is `authenticated`, `anon` an
 var sql = PostgresRowAccess.Script(context, rules, accessFunctions, new RowAccessExport
 {
     Roles = RowAccessRoleNames.From(rowLevelSecurityOptions),
-    CallerFunctions = PostgresCallerFunctions.Toolkit,
+    CurrentUserFunctions = PostgresCurrentUserFunctions.Toolkit,
 });
 ```
 
@@ -1004,8 +1004,8 @@ would otherwise fold it to lower case. The script refuses these names:
 - A name with a `$`. A script cannot write such a name into the blocks that hold role names.
 - A name longer than 63 bytes, the most that Postgres keeps of a name.
 
-The Supabase build takes the roles and the caller functions from two project properties
-([Supabase](supabase.md#custom-roles-and-caller-functions)).
+The Supabase build takes the roles and the current user functions from two project properties
+([Supabase](supabase.md#custom-roles-and-current-user-functions)).
 
 ### Restrictive rules
 
@@ -1033,14 +1033,14 @@ its employees read the organization:
 public static partial class OnlyEmployeesReadTheOrganization
 {
     public static bool Allows(Organization organization, ICurrentUser user)
-        => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee;
+        => TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee;
 }
 ```
 
 ```sql
 -- Only employees read the organization (select) for authenticated is the restrictive rule 'Only employees read the organization': a row passes only where it allows it as well as a permissive policy, so it never allows more.
 CREATE POLICY "Only employees read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
-    USING ((SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1) = 0);
+    USING ((SELECT q1."Kind" FROM "tenancy".current_seat_row() q1) = 0);
 -- and the same on the units, and on the closure of the tree, which follows the organization
 ```
 
@@ -1073,7 +1073,7 @@ role.
 - The role cannot log in, and cannot bypass RLS. So it reads and writes only the rows that its
   policies allow, as a user does.
 - Its claims carry its scope: `{"role":"ddd_system_in","scope":"projects"}`. A policy tells one module's work from
-  another's with `(SELECT ddd.caller_claims()) ->> 'scope'`.
+  another's with `(SELECT ddd.current_user_claims()) ->> 'scope'`.
 - A scope is lower case letters, digits, `_` and `-`, such as the module's name.
 
 A script whose policies are for this role checks the role in its prelude:
@@ -1196,8 +1196,8 @@ CREATE POLICY "OrderLine (select) for authenticated" ON "ordering"."OrderLine" F
 
 CREATE POLICY "OrderLine (insert) for authenticated" ON "ordering"."OrderLine" FOR INSERT TO authenticated
     WITH CHECK (EXISTS (SELECT 1 FROM "ordering"."Orders" r WHERE r."Id" = "ordering"."OrderLine"."OrderId"
-        AND (((r."PlacedBy" IS NULL) OR (r."PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())))
-          OR ((r."PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())) AND "ddd".written_in_this_transaction(r.xmin)))));
+        AND (((r."PlacedBy" IS NULL) OR (r."PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".current_user_id())))
+          OR ((r."PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".current_user_id())) AND "ddd".written_in_this_transaction(r.xmin)))));
 ```
 
 </details>
@@ -1266,7 +1266,7 @@ CREATE OR REPLACE FUNCTION projects.is_member(uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
     SELECT EXISTS (SELECT 1 FROM "projects"."Projects" root
                    WHERE root."Id" = $1 AND (EXISTS (SELECT 1 FROM "projects"."ProjectMember" e1
-                                                     WHERE e1."ProjectId" = root."Id" AND ((e1."UserId" IS NOT DISTINCT FROM (SELECT "ddd".caller_id()))))))
+                                                     WHERE e1."ProjectId" = root."Id" AND ((e1."UserId" IS NOT DISTINCT FROM (SELECT "ddd".current_user_id()))))))
 $function$;
 
 CREATE POLICY "Members work on their projects (select) for authenticated" ON "projects"."Projects" FOR SELECT TO authenticated
@@ -1431,7 +1431,7 @@ flowchart TD
 CREATE OR REPLACE FUNCTION "desk".tickets_i_watch() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
     SELECT DISTINCT e1."TicketId" FROM "desk"."TicketWatcher" e1
-    WHERE (e1."User" IS NOT DISTINCT FROM (SELECT "ddd".caller_id()))
+    WHERE (e1."User" IS NOT DISTINCT FROM (SELECT "ddd".current_user_id()))
 $function$;
 
 CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" ON "desk"."Tickets" FOR SELECT TO authenticated
@@ -1468,7 +1468,7 @@ public static partial class TicketsIReactedIn
 CREATE OR REPLACE FUNCTION desk.tickets_i_reacted_in() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
     SELECT DISTINCT e1."TicketId" FROM "desk"."TicketComment" e1
-    WHERE (EXISTS (SELECT 1 FROM "desk"."CommentReaction" e2 WHERE e2."TicketCommentTicketId" = e1."TicketId" AND e2."TicketCommentId" = e1."Id" AND ((e2."User" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())))))
+    WHERE (EXISTS (SELECT 1 FROM "desk"."CommentReaction" e2 WHERE e2."TicketCommentTicketId" = e1."TicketId" AND e2."TicketCommentId" = e1."Id" AND ((e2."User" IS NOT DISTINCT FROM (SELECT "ddd".current_user_id())))))
 $function$;
 ```
 
@@ -1486,14 +1486,14 @@ public static partial class Questions
     [AccessSet("ids_i_follow")]
     public static partial AccessSet<TId> IdsIFollow<TId>(string kind) where TId : IEntityId;
 
-    [AccessScalar("caller_team")]
-    public static partial string CallerTeam();
+    [AccessScalar("current_team")]
+    public static partial string CurrentTeam();
 }
 
 // Questions.IdsIFollow<ProjectId>("projects").Contains(project.Id)
 //   "Id" = ANY (ARRAY(SELECT "projects".ids_i_follow('projects')))
-// project.Team == Questions.CallerTeam()
-//   "Team" = (SELECT "projects".caller_team())
+// project.Team == Questions.CurrentTeam()
+//   "Team" = (SELECT "projects".current_team())
 ```
 
 - An `[AccessSet]` question returns a set. An `[AccessScalar]` question returns a value. Called in C#, either one
@@ -1502,7 +1502,7 @@ public static partial class Questions
   question over ids that a package does not know.
 - The SQL function is the function of that name. It is an access function, or a function that a package writes into
   your migrations.
-- A question named with its schema, such as `extras.caller_team`, is a function of yours. The policy calls it as
+- A question named with its schema, such as `extras.current_team`, is a function of yours. The policy calls it as
   written, as `Sql.Call` does.
 
 **The arguments of a set do not read the row.** The database asks for a set once per statement. Only the value
@@ -1511,14 +1511,14 @@ caller, or the parameters of the enclosing access function. An argument that rea
 different for every row, and the database would ask for the set once per row after all
 ([DDD00051](diagnostics.md#ddd00051)). A scalar question may take a column, and is then asked once per row.
 
-**A scalar question and null.** A question such as `CallerTeam()` returns `NULL` for a caller it does not know. Such
+**A scalar question and null.** A question such as `CurrentTeam()` returns `NULL` for a caller it does not know. Such
 a caller must pass no condition built on that question. So a comparison with a scalar question uses SQL's operators,
 `a = b`, `a <> b` and `a < b`, whatever C# says about the nullability of the two sides. For such a caller the
 comparison is unknown, and a policy counts unknown as no:
 
 - A ticket without a team is not in the team of a caller without one.
 - A team is not "another team" than a team nobody knows.
-- The comparison stays unknown under `!`. So `!(ticket.Team == Questions.CallerTeam())` lets such a caller through no
+- The comparison stays unknown under `!`. So `!(ticket.Team == Questions.CurrentTeam())` lets such a caller through no
   more than `==` does.
 
 There is no C# behavior to match here, because the question throws in C#.
@@ -1532,19 +1532,19 @@ the question once per statement, for the field that the rule reads:
 [AccessFunctions]
 public static partial class Questions
 {
-    [AccessRow("caller_profile")]
-    public static partial Profile CallerProfile();
+    [AccessRow("current_profile")]
+    public static partial Profile CurrentProfile();
 }
 
-// project.Region == Questions.CallerProfile().Region
-//   "Region" = (SELECT q1."Region" FROM "projects".caller_profile() q1)
+// project.Region == Questions.CurrentProfile().Region
+//   "Region" = (SELECT q1."Region" FROM "projects".current_profile() q1)
 ```
 
 - The model of the context that the policy is written for must map the class to a table. The column names come from
   that model. A rule of another context is refused when its script is written.
 - When the function returns no row, every field is null, and the caller passes no condition built on a field.
 - Tenancy offers one such question, the calling seat's row:
-  `TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee`.
+  `TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee`.
 
 ### Function names relative to the module
 
@@ -1637,7 +1637,7 @@ flowchart LR
 The toolkit writes the names that it does not choose as they were given:
 
 - A function that you name with its schema is SQL of yours. This covers an access function declared `schema.name`,
-  a `Sql.Call`, a caller function, and a `RowAccessExport.FunctionNames` entry written by hand.
+  a `Sql.Call`, a current user function, and a `RowAccessExport.FunctionNames` entry written by hand.
 - Postgres's `pg_catalog` and the functions of Supabase and pgmq, such as `auth.uid()` and `pgmq.send(...)`, are
   written as their makers document them.
 - The SQL that Entity Framework writes, the migrations and a context's queries, names a schema as Entity Framework
@@ -1645,7 +1645,7 @@ The toolkit writes the names that it does not choose as they were given:
 - The Supabase export writes one line into a migration's file, the `ENABLE ROW LEVEL SECURITY` of a table that the
   migration creates. That line is the toolkit's, and quotes the schema like every other statement of the toolkit:
   `ALTER TABLE "desk"."Tickets" ENABLE ROW LEVEL SECURITY;`.
-- The prose of these pages names a function without the quotes, such as `ddd.caller_id()`. It is the same function.
+- The prose of these pages names a function without the quotes, such as `ddd.current_user_id()`. It is the same function.
 
 <details>
 <summary>Show the code: a module in "Help_Desk"</summary>
@@ -1658,7 +1658,7 @@ modelBuilder.HasDefaultSchema("Help_Desk");
 CREATE OR REPLACE FUNCTION "Help_Desk".tickets_i_watch() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
     SELECT DISTINCT e1."TicketId" FROM "Help_Desk"."TicketWatcher" e1
-    WHERE (e1."User" IS NOT DISTINCT FROM (SELECT "ddd".caller_id()))
+    WHERE (e1."User" IS NOT DISTINCT FROM (SELECT "ddd".current_user_id()))
 $function$;
 
 CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" ON "Help_Desk"."Tickets" FOR SELECT TO authenticated
@@ -1779,7 +1779,7 @@ public static partial class SeatsRecordWhereTheyMay
 {
     public static bool Allows(Inspection inspection, ICurrentUser user)
         => ProjectsWhereIHold.Ids(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
-            && inspection.RecordedBy == TenancyRowAccess.CallerSeatId<SeatId>();
+            && inspection.RecordedBy == TenancyRowAccess.CurrentSeatId<SeatId>();
 }
 ```
 
@@ -1789,11 +1789,11 @@ rules give the function:
 ```sql
 -- SeatsRecordWhereTheyMay.RowAccessSql
 (({col:ProjectId} = ANY (ARRAY(SELECT {fn:@Examples.Tenancy.Projects.Contracts.ValueObjects.ProjectId/held_on}('inspections.record'))))
-  AND ({col:RecordedBy} = (SELECT {fn:tenancy/caller_seat}())))
+  AND ({col:RecordedBy} = (SELECT {fn:tenancy/current_seat}())))
 
 -- Inspections' access file
 CREATE POLICY "Seats record where they may (insert) for authenticated" ON "inspections"."Inspections" FOR INSERT TO authenticated
-    WITH CHECK (("ProjectId" = ANY (ARRAY(SELECT "projects".projects_where_i_hold('inspections.record')))) AND ("RecordedBy" = (SELECT "tenancy".caller_seat())));
+    WITH CHECK (("ProjectId" = ANY (ARRAY(SELECT "projects".projects_where_i_hold('inspections.record')))) AND ("RecordedBy" = (SELECT "tenancy".current_seat())));
 ```
 
 </details>
@@ -2049,7 +2049,7 @@ public sealed class AuditRowAccess : IRowAccessContribution
             Functions:
             [
                 new ContributedFunction("entries_i_wrote", "", "SETOF " + RowAccessModel.ColumnType(entries, nameof(AuditEntry.Id)),
-                    $"SELECT e.{id} FROM {RowAccessModel.Table(entries)} e WHERE e.{writtenBy} = {{caller:uid}}",
+                    $"SELECT e.{id} FROM {RowAccessModel.Table(entries)} e WHERE e.{writtenBy} = {{user:uid}}",
                     SecurityDefiner: true, GrantTo: [RowAccessRoles.User]),
             ],
             Policies:
@@ -2264,8 +2264,8 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
 - The script creates them in the default schema of the context that the contribution answered for, or in `public`
   when the context has none. An access function's schema is a table's schema. A contribution's function has the
   context's schema, because a contribution may write for several tables. The schema is any schema that Entity
-  Framework accepts, written in double quotes like [every schema](#schema-names): `"tenancy".caller_seat()`,
-  `"Tenancy".caller_seat()`.
+  Framework accepts, written in double quotes like [every schema](#schema-names): `"tenancy".current_seat()`,
+  `"Tenancy".current_seat()`.
 - They are `LANGUAGE sql` with `SET search_path = ''`, so their bodies name everything with its schema.
 - `SecurityDefiner` is false unless the contribution sets it.
 - Rules and other contributions call a function by its logical name, `{fn:audit/entries_i_wrote}`, with the
@@ -2363,8 +2363,8 @@ reads as a default: a permissive policy for `SELECT` with `Default = new Contrib
 
 **Placeholders and model names**
 
-- In all of these, `{fn:owner/name}`, `{caller:uid}`, `{caller:role}`, `{caller:claims}`, `{caller:signedin}` and
-  `{caller:claim:path}` are filled in as in a rule, with the export's caller functions. Write a literal brace as `{{`
+- In all of these, `{fn:owner/name}`, `{user:uid}`, `{user:role}`, `{user:claims}`, `{user:signedin}` and
+  `{user:claim:path}` are filled in as in a rule, with the export's current user functions. Write a literal brace as `{{`
   or `}}`.
 - `RowAccessModel` writes names from the model, each in double quotes, so it means them as the model spells them:
   - `Table`, `Column` and `ColumnType`,
@@ -2559,8 +2559,8 @@ var sql = PostgresRowAccess.Script(context,
 ]);
 ```
 
-With a `RowAccessExport` as well, the script writes the roles and the caller functions that the export names. The
-roles are what the rules' symbolic roles become. The caller functions are how a policy reads the caller. Without an
+With a `RowAccessExport` as well, the script writes the roles and the current user functions that the export names. The
+roles are what the rules' symbolic roles become. The current user functions are how a policy reads the caller. Without an
 export, the script uses `RowAccessRoleNames.Default` and the toolkit's `ddd` functions. The export's `Contributions`
 are the [policies that packages ship](#policies-a-package-ships).
 
@@ -2715,7 +2715,7 @@ builder.Services.AddPostgresRowLevelSecurity(options => options.SystemRole = "dd
 
 On Supabase no line is needed. `ddd_system` is the bookkeeping role that `AddSupabaseRowLevelSecurity` and the export
 both use, unless `SupabaseRowAccessRoles` names another role
-([Roles and caller functions of your own](supabase.md#custom-roles-and-caller-functions)).
+([Roles and current user functions of your own](supabase.md#custom-roles-and-current-user-functions)).
 
 `RowAccessRoleNames.From(options)` carries that role as `System`. A script written with it and with `WriteGrants`
 checks the role in its prelude and in its privileges:
@@ -2738,7 +2738,7 @@ The login role needs the grant too, in a migration after the script: `grant ddd_
 writes that grant into the login role's file, with the bookkeeping role that the project maps, `ddd_system` unless it
 names another. In [`Transaction` scope](#settings-per-connection-or-per-transaction), the login role also needs the
 procedure that sets the settings: `grant usage on schema ddd to app;` and
-`grant execute on procedure ddd.use_caller(text, text, text[], text[]) to app;`. No file of the build writes these
+`grant execute on procedure ddd.use_current_user(text, text, text[], text[]) to app;`. No file of the build writes these
 two grants.
 
 System work that reads a module's tables now fails with `permission denied`. This is intended. Such work runs as a
@@ -2770,7 +2770,7 @@ builder.Services.RunStartupChecks();
 
 | Start-up check | Method, to run it by hand | What it checks |
 |---|---|---|
-| `postgres.login-role-may-switch-to-callers` | `EnsureLoginRoleMaySwitchToCallersAsync` | The login role may switch to every role that the interceptor switches to. |
+| `postgres.login-role-may-switch-to-user-roles` | `EnsureLoginRoleMaySwitchToUserRolesAsync` | The login role may switch to every role that the interceptor switches to. |
 | `postgres.login-role-owns-nothing` | `EnsureLoginRoleOwnsNothingAsync` | The login role owns and holds nothing. |
 | `postgres.row-level-security-wired` | `EnsureRowLevelSecurityWired` | The context runs its commands through the RLS interceptor. |
 | `postgres.definer-owners-bypass` | `EnsureDefinerOwnersBypassAsync` | Every function that runs as its owner is owned by a role that bypasses RLS ([Forcing row level security](#forcing-row-level-security)). |
@@ -2779,7 +2779,7 @@ builder.Services.RunStartupChecks();
 - On Supabase, `AddSupabaseRowLevelSecurity` adds one more check that runs before the switch check:
   `supabase.roles-match-access-files`. It compares the roles that the host switches to with the roles that the
   exported access files record they were written for
-  ([Roles and caller functions of your own](supabase.md#custom-roles-and-caller-functions)).
+  ([Roles and current user functions of your own](supabase.md#custom-roles-and-current-user-functions)).
 - A host turns a check off only by name, and with a reason in its code
   ([Turning a check off](startup-checks.md#turning-a-check-off)). The login role's checks are the last that a host
   should turn off.
@@ -2787,12 +2787,12 @@ builder.Services.RunStartupChecks();
 A host that runs the checks by hand, from a class of its own, calls the methods behind them, the switch check first:
 
 ```csharp
-await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, cancellationToken);
+await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync(context, cancellationToken);
 await PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, cancellationToken);
 PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
 ```
 
-**The switch check**, `postgres.login-role-may-switch-to-callers`:
+**The switch check**, `postgres.login-role-may-switch-to-user-roles`:
 
 - It checks that the login role may switch to every role that the context's interceptor switches to: the user's role,
   the anonymous caller's role, the scoped system role, `SystemRole`, and the role of every mapped token role.
@@ -2802,7 +2802,7 @@ PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
 - It checks the scoped system role only where the role exists. Supabase's access files make that role only where a
   rule is for it, or where the grants are written, as they are unless the project turns that off. No policy can be
   for a role that does not exist. So an application without the role does no scoped system work, and starts.
-- In `Transaction` scope, it also checks that the login role may call `ddd.use_caller`.
+- In `Transaction` scope, it also checks that the login role may call `ddd.use_current_user`.
 - It runs as the login role itself, on the context's connection opened past the interceptor, because the system
   role is one of the roles it checks. So it must run before every check that runs as system work,
   including `EnsureSupabaseMigrationsAppliedAsync`. The runner runs it in a separate stage, before those checks.

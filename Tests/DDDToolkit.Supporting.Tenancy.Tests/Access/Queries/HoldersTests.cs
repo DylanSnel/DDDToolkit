@@ -17,9 +17,9 @@ public class HoldersTests
     private OrganizationUnitId South => _harness.Harbor.South;
 
     /// <summary>Asks as <paramref name="caller"/>, over <paramref name="source"/> or the store's rows, and runs the answer while the caller is current.</summary>
-    private SeatId[] Holders(ITenancyCaller caller, string permission, OrganizationUnitId unit, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
+    private SeatId[] Holders(ITenancyUser caller, string permission, OrganizationUnitId unit, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
     {
-        using (TenancyCallers.Begin(caller))
+        using (TenancyUsers.Begin(caller))
         {
             var tenancy = new TenancyAccessManager(_harness.Catalogue, _harness.Clock, NoServices.Instance);
             return [.. tenancy.In(source ?? _harness.Store, _harness.Store).SeatsHoldingPermissionAt(permission, unit)];
@@ -33,7 +33,7 @@ public class HoldersTests
         var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorStarterRole);
         var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorStarterRole);
         var di = await _harness.SeatAt("Di", South, HostCatalogue.WatcherStarterRole);
-        var asAda = _harness.SeatCaller(ada);
+        var asAda = _harness.SeatUser(ada);
 
         // Ada holds every permission at the root, Bert the supervisor's at North, Cy the operator's at North Coast, Di the
         // watcher's at South: a permission held above a unit is held at it, and one held beside or below it is not.
@@ -64,16 +64,16 @@ public class HoldersTests
 
         // Cy works with widgets and manages nothing: where Cy holds the permission the answer is Cy, and where not, nobody,
         // whoever holds it there.
-        Holders(_harness.SeatCaller(cy), HostCatalogue.WidgetRead, NorthCoast).Should().Equal(cy);
-        Holders(_harness.SeatCaller(cy), HostCatalogue.WidgetRead, North).Should().BeEmpty();
-        Holders(_harness.SeatCaller(cy), TenancyPermissions.UnitsManage, NorthCoast).Should().BeEmpty();
-        Holders(_harness.SeatCaller(di), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
+        Holders(_harness.SeatUser(cy), HostCatalogue.WidgetRead, NorthCoast).Should().Equal(cy);
+        Holders(_harness.SeatUser(cy), HostCatalogue.WidgetRead, North).Should().BeEmpty();
+        Holders(_harness.SeatUser(cy), TenancyPermissions.UnitsManage, NorthCoast).Should().BeEmpty();
+        Holders(_harness.SeatUser(di), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
 
         // Bert manages units, seats and grants at North: he reads the grants at North and below it, and so learns who holds
         // the permission from there, Cy and himself; not Ada, whose grant is at the root above him, nor Di, beside him at South.
-        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([bert, cy]);
-        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, North).Should().Equal(bert);
-        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, South).Should().BeEmpty();
+        Holders(_harness.SeatUser(bert), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([bert, cy]);
+        Holders(_harness.SeatUser(bert), HostCatalogue.WidgetRead, North).Should().Equal(bert);
+        Holders(_harness.SeatUser(bert), HostCatalogue.WidgetRead, South).Should().BeEmpty();
 
         // Each of the three permissions does where it is held, and only there; the permission to manage roles does for the whole
         // tenant only.
@@ -82,26 +82,26 @@ public class HoldersTests
             var desk = (await _harness.BySystemWork(h => h.Roles.CreateAsync("Desk for " + permission, string.Empty, [permission], default))).Id;
             var keeper = await _harness.SeatAt("Keeper of " + permission, South);
             await _harness.BySystemWork(h => h.Seats.GrantAsync(keeper, desk, South, until: null, reason: null, default));
-            Holders(_harness.SeatCaller(keeper), HostCatalogue.WidgetRead, South).Should().Equal([di], "{0} is held at South, and Ada's grant is at the root", permission);
-            Holders(_harness.SeatCaller(keeper), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty("{0} is held at South alone", permission);
+            Holders(_harness.SeatUser(keeper), HostCatalogue.WidgetRead, South).Should().Equal([di], "{0} is held at South, and Ada's grant is at the root", permission);
+            Holders(_harness.SeatUser(keeper), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty("{0} is held at South alone", permission);
         }
 
         var roles = (await _harness.BySystemWork(h => h.Roles.CreateAsync("Roles desk", string.Empty, [TenancyPermissions.RolesManage], default))).Id;
         var below = await _harness.SeatAt("Ed", North);
         await _harness.BySystemWork(h => h.Seats.GrantAsync(below, roles, North, until: null, reason: null, default));
-        Holders(_harness.SeatCaller(below), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty("the role permission held below the root changes no role");
-        Holders(_harness.SeatCaller(below), TenancyPermissions.RolesManage, NorthCoast).Should().Equal(below);
+        Holders(_harness.SeatUser(below), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty("the role permission held below the root changes no role");
+        Holders(_harness.SeatUser(below), TenancyPermissions.RolesManage, NorthCoast).Should().Equal(below);
 
         var whole = await _harness.SeatAt("Fay", _harness.Harbor.Root);
         await _harness.BySystemWork(h => h.Seats.GrantAsync(whole, roles, _harness.Harbor.Root, until: null, reason: null, default));
-        Holders(_harness.SeatCaller(whole), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy]);
+        Holders(_harness.SeatUser(whole), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy]);
 
         // A permission that manages access held only in the past, or only later, reads nobody's grants now.
         var former = await _harness.SeatAt("Gil", South);
         await _harness.Grant(former, South, HostCatalogue.SupervisorStarterRole, until: FixedClock.Start.AddHours(1));
-        Holders(_harness.SeatCaller(former), HostCatalogue.WidgetRead, South).Should().BeEquivalentTo([di, former], "while it lasts, Gil reads the grants at South");
+        Holders(_harness.SeatUser(former), HostCatalogue.WidgetRead, South).Should().BeEquivalentTo([di, former], "while it lasts, Gil reads the grants at South");
         _harness.Clock.Advance(TimeSpan.FromHours(2));
-        Holders(_harness.SeatCaller(former), HostCatalogue.WidgetRead, South).Should().BeEmpty();
+        Holders(_harness.SeatUser(former), HostCatalogue.WidgetRead, South).Should().BeEmpty();
     }
 
     [Fact]
@@ -112,25 +112,25 @@ public class HoldersTests
         var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorStarterRole);
         var orchard = _harness.Seed(2, "orchard");
 
-        Holders(_harness.SystemCaller(), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy]);
-        Holders(_harness.SystemCaller(actingSeat: cy), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy], "system work acts for a seat, and is not held to what that seat may learn");
+        Holders(_harness.SystemUser(), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy]);
+        Holders(_harness.SystemUser(actingSeat: cy), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy], "system work acts for a seat, and is not held to what that seat may learn");
 
         // System work in another tenant learns that tenant's holders, and none of Harbor's; a seat of it none either.
-        Holders(HostCaller.SystemIn(orchard.Tenant.Id), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
-        Holders(HostCaller.SystemIn(orchard.Tenant.Id), HostCatalogue.WidgetRead, orchard.Root).Should().Equal(orchard.Administrator.Id);
-        Holders(HostCaller.InSeat(orchard.Tenant.Id, orchard.Administrator.Id), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
-        Holders(_harness.SystemCaller(), HostCatalogue.WidgetRead, NorthCoast, _harness.Store.Unfiltered).Should().BeEquivalentTo([ada, bert, cy], "the question keeps to the caller's tenant itself");
+        Holders(HostUser.SystemIn(orchard.Tenant.Id), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
+        Holders(HostUser.SystemIn(orchard.Tenant.Id), HostCatalogue.WidgetRead, orchard.Root).Should().Equal(orchard.Administrator.Id);
+        Holders(HostUser.InSeat(orchard.Tenant.Id, orchard.Administrator.Id), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
+        Holders(_harness.SystemUser(), HostCatalogue.WidgetRead, NorthCoast, _harness.Store.Unfiltered).Should().BeEquivalentTo([ada, bert, cy], "the question keeps to the caller's tenant itself");
 
         // Nobody learns nothing, and system work outside any tenant has nothing to ask.
-        Holders(HostCaller.Nobody(TenancyRefusals.NotSeated), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
-        FluentActions.Invoking(() => Holders(HostCaller.System, HostCatalogue.WidgetRead, NorthCoast)).Should().Throw<InvalidOperationException>();
+        Holders(HostUser.Nobody(TenancyRefusals.NotSeated), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
+        FluentActions.Invoking(() => Holders(HostUser.System, HostCatalogue.WidgetRead, NorthCoast)).Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
     public async Task A_suspended_seat_and_a_grant_that_has_ended_hold_the_permission_no_longer()
     {
         var ada = _harness.Administrator;
-        var asAda = _harness.SeatCaller(ada);
+        var asAda = _harness.SeatUser(ada);
         var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorStarterRole);
         var cy = await _harness.SeatAt("Cy", NorthCoast);
         await _harness.Grant(cy, NorthCoast, HostCatalogue.OperatorStarterRole, until: FixedClock.Start.AddDays(1));
@@ -160,7 +160,7 @@ public class HoldersTests
             },
             []);
         Holders(asAda, HostCatalogue.WidgetCreate, NorthCoast).Should().BeEquivalentTo([ada, bert]);
-        using (TenancyCallers.Begin(asAda))
+        using (TenancyUsers.Begin(asAda))
         {
             new TenancyAccessManager(retired, _harness.Clock, NoServices.Instance).In(_harness.Store, _harness.Store)
                 .SeatsHoldingPermissionAt(HostCatalogue.WidgetCreate, NorthCoast).Should().BeEmpty("the rights for it are still stored, and a retired permission holds nowhere");
@@ -176,14 +176,14 @@ public class HoldersTests
 
         // A storage that shows a seat only its own rights says who holds the permission itself: the question passes its answer
         // on for a seat, whatever the rows would say.
-        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, NorthCoast, answering).Should().Equal(cy);
+        Holders(_harness.SeatUser(bert), HostCatalogue.WidgetRead, NorthCoast, answering).Should().Equal(cy);
         answering.Asked.Should().Equal((HostCatalogue.WidgetRead, NorthCoast));
 
         // System work in the tenant reads every right of it, and is answered from the rows; nobody is answered nothing,
         // and a permission that is retired or unknown never reaches the storage.
-        Holders(_harness.SystemCaller(), HostCatalogue.WidgetRead, NorthCoast, answering).Should().BeEquivalentTo([_harness.Administrator, bert, cy]);
-        Holders(HostCaller.Nobody(TenancyRefusals.NotSeated), HostCatalogue.WidgetRead, NorthCoast, answering).Should().BeEmpty();
-        FluentActions.Invoking(() => Holders(_harness.SeatCaller(bert), "widget.polish", NorthCoast, answering)).Should().Throw<ArgumentException>();
+        Holders(_harness.SystemUser(), HostCatalogue.WidgetRead, NorthCoast, answering).Should().BeEquivalentTo([_harness.Administrator, bert, cy]);
+        Holders(HostUser.Nobody(TenancyRefusals.NotSeated), HostCatalogue.WidgetRead, NorthCoast, answering).Should().BeEmpty();
+        FluentActions.Invoking(() => Holders(_harness.SeatUser(bert), "widget.polish", NorthCoast, answering)).Should().Throw<ArgumentException>();
         answering.Asked.Should().ContainSingle();
 
         // A storage without an answer of its own leaves it to the question.

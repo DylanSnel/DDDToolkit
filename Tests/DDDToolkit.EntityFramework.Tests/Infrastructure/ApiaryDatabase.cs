@@ -118,7 +118,7 @@ public sealed class ApiaryDatabase
     }
 
     /// <summary>
-    /// Makes the apiary in a new database of <paramref name="postgres"/>: the roles and the caller functions, the
+    /// Makes the apiary in a new database of <paramref name="postgres"/>: the roles and the current user functions, the
     /// tables from the model, owned by the superuser, and one access script.
     /// </summary>
     /// <param name="postgres">The run's Postgres.</param>
@@ -127,7 +127,7 @@ public sealed class ApiaryDatabase
     /// <param name="rules">The rules; the apiary's own when left out.</param>
     /// <param name="functions">The access functions the rules ask; none when left out.</param>
     public static async Task<ApiaryDatabase> CreateAsync(
-        ExplicitCallersPostgres postgres,
+        ExplicitCurrentUserPostgres postgres,
         bool logged = false,
         Func<RowAccessExport, RowAccessExport>? configure = null,
         IReadOnlyList<RowAccessRule>? rules = null,
@@ -155,7 +155,7 @@ public sealed class ApiaryDatabase
     /// </summary>
     /// <remarks>
     /// Each role is made only where the server has none of that name yet. The server is shared by every test of
-    /// this suite that asks <see cref="ExplicitCallersPostgres"/> for a database, and some of those run the
+    /// this suite that asks <see cref="ExplicitCurrentUserPostgres"/> for a database, and some of those run the
     /// toolkit's own scripts on it, which make the bookkeeping role as well: whichever runs first, the other finds
     /// the role there.
     /// </remarks>
@@ -168,7 +168,7 @@ public sealed class ApiaryDatabase
             {ServerRole.Create(LoginRole, $"LOGIN NOINHERIT PASSWORD '{LoginRole}'")}
             {ServerRole.Create(ApiaryRules.RangerRole, "NOLOGIN NOINHERIT")}
             {ServerRole.Create(SystemRole, "NOLOGIN NOINHERIT")}
-            GRANT anon, authenticated, {ExplicitCallersPostgres.SystemInRole}, {ApiaryRules.RangerRole}, {SystemRole} TO {LoginRole};
+            GRANT anon, authenticated, {ExplicitCurrentUserPostgres.SystemInRole}, {ApiaryRules.RangerRole}, {SystemRole} TO {LoginRole};
             """,
             connection);
         await command.ExecuteNonQueryAsync(CancellationToken.None);

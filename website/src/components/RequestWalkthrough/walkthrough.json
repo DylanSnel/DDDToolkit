@@ -7,42 +7,42 @@
       "name": "Ada",
       "who": "Harbor's first administrator: Access admin and Area manager at the root, so she holds every permission in harbor.",
       "runsAs": "authenticated",
-      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Ada>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
+      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Ada>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);"
     },
     {
       "id": "juno",
       "name": "Juno",
       "who": "A seat at North Coast with no role of the organization; a surveyor on Pier 7's crew, which gives no permission to manage it.",
       "runsAs": "authenticated",
-      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Juno>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
+      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Juno>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);"
     },
     {
       "id": "newcomer",
       "name": "A new sign-in",
       "who": "Signed in, with no seat in harbor.",
       "runsAs": "authenticated",
-      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<the new sign-in>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.caller_tenant', '', false);"
+      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<the new sign-in>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.current_tenant', '', false);"
     },
     {
       "id": "orla",
       "name": "Orla",
       "who": "One of the application's operators: her token carries the operators' role, and she has no seat anywhere.",
       "runsAs": "tenancy_operator",
-      "connection": "SELECT set_config('role', 'tenancy_operator', false), set_config('request.jwt.claims', '{\"sub\":\"<Orla>\",\"role\":\"tenancy_operator\",…}', false), …, set_config('tenancy.caller_tenant', '', false);"
+      "connection": "SELECT set_config('role', 'tenancy_operator', false), set_config('request.jwt.claims', '{\"sub\":\"<Orla>\",\"role\":\"tenancy_operator\",…}', false), …, set_config('tenancy.current_tenant', '', false);"
     },
     {
       "id": "anonymous",
       "name": "Anonymous",
       "who": "A request with no token.",
       "runsAs": "anon",
-      "connection": "SELECT set_config('role', 'anon', false), set_config('request.jwt.claims', '{\"role\":\"anon\"}', false), …, set_config('tenancy.caller_tenant', '', false);"
+      "connection": "SELECT set_config('role', 'anon', false), set_config('request.jwt.claims', '{\"role\":\"anon\"}', false), …, set_config('tenancy.current_tenant', '', false);"
     },
     {
       "id": "system",
       "name": "System work",
       "who": "System work in harbor, started by trusted code with `access.BeginSystemIn(harbor)`.",
       "runsAs": "ddd_system_in",
-      "connection": "SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{\"role\":\"ddd_system_in\",\"scope\":\"tenancy\"}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
+      "connection": "SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{\"role\":\"ddd_system_in\",\"scope\":\"tenancy\"}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);"
     }
   ],
   "layers": [
@@ -248,7 +248,7 @@
           "rows": {
             "round": true,
             "result": "no row",
-            "say": "A statement they send directly reads no unit, because `caller_tenant()` finds no seat, so no row is in their tenant.",
+            "say": "A statement they send directly reads no unit, because `current_tenant()` finds no seat, so no row is in their tenant.",
             "snippet": "rows.units-read"
           }
         },
@@ -1440,7 +1440,7 @@
       "language": "csharp",
       "lines": [
         "[SignedIn]",
-        "public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest;"
+        "public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest;"
       ]
     },
     "write.organization-units.property": {
@@ -1484,7 +1484,7 @@
     "write.register.property": {
       "language": "csharp",
       "lines": [
-        "public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest",
+        "public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();",
         "}"
@@ -1579,7 +1579,7 @@
         "            throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);",
         "        return;",
         "    case IOwnedRequirement owned:                                // the request names the value, never whose it is",
-        "        if (!owned.IsTheCallers(user, services))",
+        "        if (!owned.IsTheCurrentUsers(user, services))",
         "            throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);",
         "        return;",
         "}"
@@ -1688,7 +1688,7 @@
         "                             INNER JOIN \"projects\".\"ProjectRoles\" AS k ON h.\"RoleId\" = k.\"Id\"",
         "                             WHERE h.\"CrewMemberId\" = m.\"Id\" AND k.\"Status\" = 'Active' AND @permission = ANY (k.\"Permissions\")))",
         "         OR p.\"OwnerSeatId\" = @seat AS \"AsMember\",                                 -- or its owner",
-        "       p.\"UnitId\" IN (SELECT path.\"DescendantId\" FROM \"tenancy\".caller_permissions() AS r   -- or the permission where it sits",
+        "       p.\"UnitId\" IN (SELECT path.\"DescendantId\" FROM \"tenancy\".current_permissions() AS r   -- or the permission where it sits",
         "                      INNER JOIN \"tenancy\".tenant_unit_paths() AS path ON r.\"UnitId\" = path.\"AncestorId\"",
         "                      WHERE r.\"SeatId\" = @seat AND r.\"Permission\" = @permission) AS \"FromAbove\"",
         "FROM \"projects\".\"Projects\" AS p",
@@ -1709,7 +1709,7 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Members read the units (select) for authenticated\" ON \"tenancy\".\"OrganizationUnits\" FOR SELECT TO authenticated",
-        "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()));"
+        "    USING (\"TenantId\" = (SELECT \"tenancy\".current_tenant()));"
       ]
     },
     "rows.units-read-system": {
@@ -1730,13 +1730,13 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Unit managers add below their units (insert) for authenticated\" ON \"tenancy\".\"OrganizationUnits\" FOR INSERT TO authenticated",
-        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"ParentId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_permission('tenancy.units.manage')))));",
+        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".current_tenant())) AND (\"ParentId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_permission('tenancy.units.manage')))));",
         "",
         "CREATE OR REPLACE FUNCTION \"tenancy\".units_where_i_hold_permission(permission text) RETURNS SETOF uuid",
         "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$",
         "SELECT DISTINCT p.\"DescendantId\" FROM \"tenancy\".\"SeatRights\" r",
         "JOIN \"tenancy\".\"OrganizationUnitPaths\" p ON p.\"AncestorId\" = r.\"UnitId\" AND p.\"TenantId\" = r.\"TenantId\"",
-        "WHERE r.\"SeatId\" = (SELECT \"tenancy\".caller_seat()) AND r.\"Permission\" = $1 AND \"tenancy\".permission_is_live($1)",
+        "WHERE r.\"SeatId\" = (SELECT \"tenancy\".current_seat()) AND r.\"Permission\" = $1 AND \"tenancy\".permission_is_live($1)",
         "  AND r.\"StartsAt\" <= pg_catalog.now() AND (r.\"EndsAt\" IS NULL OR r.\"EndsAt\" > pg_catalog.now())",
         "$function$;"
       ]
@@ -1760,14 +1760,14 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Managers and the seat change it (update) for authenticated\" ON \"tenancy\".\"Seats\" FOR UPDATE TO authenticated",
-        "    USING ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".caller_seat())))",
-        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".caller_seat())));",
+        "    USING ((\"TenantId\" = (SELECT \"tenancy\".current_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".current_seat())))",
+        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".current_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".current_seat())));",
         "",
         "CREATE OR REPLACE FUNCTION \"tenancy\".seats_displayname_column_rule() RETURNS trigger",
         "    LANGUAGE plpgsql SET search_path = '' AS $body$",
         "BEGIN",
         "    IF CURRENT_USER = 'authenticated' THEN",
-        "        IF ((OLD.\"Id\" = (SELECT \"tenancy\".caller_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD.\"Id\" IS DISTINCT FROM NEW.\"Id\" AND ((NEW.\"Id\" = (SELECT \"tenancy\".caller_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN",
+        "        IF ((OLD.\"Id\" = (SELECT \"tenancy\".current_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD.\"Id\" IS DISTINCT FROM NEW.\"Id\" AND ((NEW.\"Id\" = (SELECT \"tenancy\".current_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN",
         "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Name changes by the seat or with the seats permission'' does not let this caller change \"DisplayName\" of \"tenancy\".\"Seats\".';",
         "        END IF;",
         "    ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN",
@@ -1801,7 +1801,7 @@
         "UNION",
         "SELECT joined.id FROM \"projects\".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'",
         "UNION",
-        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r.\"OwnerSeatId\" = (SELECT \"tenancy\".caller_seat())",
+        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r.\"OwnerSeatId\" = (SELECT \"tenancy\".current_seat())",
         "UNION",
         "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IS NOT NULL AND r.\"UnitId\" IN (SELECT reached.place FROM \"tenancy\".units_where_i_hold_permission($1) AS reached(place))",
         "UNION",
@@ -1825,8 +1825,8 @@
         "    USING ((SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage')));",
         "-- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none",
         "CREATE POLICY \"Kept to its tenant (all) for authenticated\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR ALL TO authenticated",
-        "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()))",
-        "    WITH CHECK (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()));",
+        "    USING (\"TenantId\" = (SELECT \"tenancy\".current_tenant()))",
+        "    WITH CHECK (\"TenantId\" = (SELECT \"tenancy\".current_tenant()));",
         "CREATE POLICY \"Operators only read (insert) for tenancy_operator\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR INSERT TO tenancy_operator",
         "    WITH CHECK (false);",
         "-- ... and the same for update and delete"
@@ -1839,8 +1839,8 @@
         "    USING ((SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage')));",
         "-- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none",
         "CREATE POLICY \"Kept to its tenant (all) for authenticated\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR ALL TO authenticated",
-        "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()))",
-        "    WITH CHECK (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()));",
+        "    USING (\"TenantId\" = (SELECT \"tenancy\".current_tenant()))",
+        "    WITH CHECK (\"TenantId\" = (SELECT \"tenancy\".current_tenant()));",
         "CREATE POLICY \"Operators only read (insert) for tenancy_operator\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR INSERT TO tenancy_operator",
         "    WITH CHECK (false);",
         "-- ... and the same for update and delete"
@@ -1860,8 +1860,8 @@
         "{",
         "    var tenant = await tenants.ProvisionAsync(new TenantToProvision(",
         "        command.Slug, command.Name, TenantShape.Flat, command.Name, administrator), cancellationToken);",
-        "    return tenant.Id;",
-        "}                                                                 // the caller before it is current again"
+        "    return tenant;",
+        "}                                                                 // the user before it is current again"
       ]
     },
     "rows.register-forgotten": {

@@ -58,7 +58,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// <para>
 /// What the rules have somebody else answer is asked of functions by their logical names, <c>owner/name</c>: who
 /// the caller is as a member, and where the caller holds a permission above, of the function a contribution of the export
-/// answers for the type of the member or of the place (<see cref="ICallerFunctions"/>), an organization package's for
+/// answers for the type of the member or of the place (<see cref="ICurrentUserFunctions"/>), an organization package's for
 /// its seat and its unit, or of the one the rules name (<see cref="MemberSource.Resolved"/>, <see cref="MembershipRules.ReachFromAbove"/>);
 /// which of the roles kept elsewhere give a permission, of the one <see cref="Roles.External"/> names. The script finds a
 /// function wherever it is defined: in this context's script or another's it is written with. A name nothing
@@ -162,8 +162,8 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
     /// The kinds of answer the export's contributions may give about the caller: an organization package's for its seat and its unit. A
     /// package's contribution reaches the export inside the class the build writes for it, so that is looked into.
     /// </summary>
-    private static IEnumerable<ICallerFunctions> Answering(RowAccessExport export)
-        => export.Contributions.Select(static contribution => contribution is IPackageRowAccessContribution package ? package.Contribution : contribution).OfType<ICallerFunctions>();
+    private static IEnumerable<ICurrentUserFunctions> Answering(RowAccessExport export)
+        => export.Contributions.Select(static contribution => contribution is IPackageRowAccessContribution package ? package.Contribution : contribution).OfType<ICurrentUserFunctions>();
 
     /// <summary>The rules the functions are written from.</summary>
     public MembershipRules Rules { get; }
@@ -213,10 +213,10 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
             // Follows from the member id: a contribution that keeps such an id answers who the caller is as one; an id
             // over a Guid is the caller's own; anything else nobody can tell.
             var memberId = mapping.Members.FindProperty(nameof(MemberEntity<,,>.MemberId))!.ClrType;
-            members = Answering(export).Select(answers => answers.CallerAs(context, memberId)).FirstOrDefault(function => function is not null) is { } function
+            members = Answering(export).Select(answers => answers.CurrentUserAs(context, memberId)).FirstOrDefault(function => function is not null) is { } function
                 ? MemberSource.Resolved(function)
                 : string.Equals(RowAccessModel.ColumnType(mapping.Members, nameof(MemberEntity<,,>.MemberId)).Trim(), "uuid", StringComparison.OrdinalIgnoreCase)
-                    ? MemberSource.CallerId
+                    ? MemberSource.CurrentUserId
                     : throw new InvalidOperationException(
                         "Who the caller is as a member of " + what + " follows from what a member is known by, " + memberId.Name + ", and nothing answers it in the database: "
                         + "no contribution keeps such an id, and it is no id over a Guid, the caller's own. Map the read model of the package that keeps such ids where "
@@ -231,7 +231,7 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
                     "The rules '" + Rules.Name + "' let " + what + " be reached from above, and it marks no place it hangs at. "
                     + "Mark the property that says where it hangs [At], and map it with HasMembers.");
             places = above.Function
-                ?? Answering(export).Select(answers => answers.PlacesWhereCallerHolds(context, at.ClrType)).FirstOrDefault(function => function is not null)
+                ?? Answering(export).Select(answers => answers.PlacesWhereCurrentUserHolds(context, at.ClrType)).FirstOrDefault(function => function is not null)
                 ?? throw new InvalidOperationException(
                     "The rules '" + Rules.Name + "' let " + what + " be reached from above, where it hangs at a " + at.ClrType.Name + ", and nothing answers in the database where "
                     + "the caller holds a permission at one: no contribution keeps such a place. Map the read model of the package that keeps such places where the context maps "

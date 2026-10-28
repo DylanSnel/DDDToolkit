@@ -269,11 +269,11 @@ public static class TenancyPostgresChecks
                     FROM found
                     WHERE pg_catalog.to_regrole($5) IS NOT NULL AND NOT pg_catalog.has_function_privilege(pg_catalog.to_regrole($5), found.oid, 'EXECUTE')
                     UNION ALL
-                    SELECT 7, pg_catalog.quote_ident(caller.rolname) || ' may execute ' || found.signature || ', which answers across tenants: REVOKE EXECUTE ON FUNCTION '
-                              || found.signature || ' FROM PUBLIC, ' || pg_catalog.quote_ident(caller.rolname) || ';'
+                    SELECT 7, pg_catalog.quote_ident(grantee.rolname) || ' may execute ' || found.signature || ', which answers across tenants: REVOKE EXECUTE ON FUNCTION '
+                              || found.signature || ' FROM PUBLIC, ' || pg_catalog.quote_ident(grantee.rolname) || ';'
                     FROM found
-                    JOIN pg_catalog.pg_roles caller ON caller.rolname IN ($6, $7)
-                    WHERE pg_catalog.has_function_privilege(caller.oid, found.oid, 'EXECUTE')
+                    JOIN pg_catalog.pg_roles grantee ON grantee.rolname IN ($6, $7)
+                    WHERE pg_catalog.has_function_privilege(grantee.oid, found.oid, 'EXECUTE')
                       AND NOT pg_catalog.has_function_privilege('public', found.oid, 'EXECUTE')
                     UNION ALL
                     SELECT 8, 'every role may execute ' || found.signature || ', which answers across tenants: REVOKE EXECUTE ON FUNCTION ' || found.signature || ' FROM PUBLIC;'
@@ -382,11 +382,11 @@ public static class TenancyPostgresChecks
                     JOIN pg_catalog.pg_roles owner ON owner.oid IN (SELECT c.relowner FROM pg_catalog.pg_class c WHERE c.relkind IN ('r', 'p'))
                     WHERE scoped.rolname = $1 AND pg_catalog.pg_has_role(scoped.oid, owner.oid, 'USAGE')
                     UNION ALL
-                    SELECT 4, pg_catalog.quote_ident(caller.rolname) || ' has its privileges, so its callers would get every policy written for it: REVOKE '
-                              || pg_catalog.quote_ident($1) || ' FROM ' || pg_catalog.quote_ident(caller.rolname) || ';'
-                    FROM pg_catalog.pg_roles caller
-                    WHERE (caller.rolname IN ($2, $3) OR caller.rolname::pg_catalog.text = ANY ($6::pg_catalog.text[]))
-                      AND pg_catalog.to_regrole($1) IS NOT NULL AND pg_catalog.pg_has_role(caller.oid, pg_catalog.to_regrole($1), 'USAGE')
+                    SELECT 4, pg_catalog.quote_ident(grantee.rolname) || ' has its privileges, so its callers would get every policy written for it: REVOKE '
+                              || pg_catalog.quote_ident($1) || ' FROM ' || pg_catalog.quote_ident(grantee.rolname) || ';'
+                    FROM pg_catalog.pg_roles grantee
+                    WHERE (grantee.rolname IN ($2, $3) OR grantee.rolname::pg_catalog.text = ANY ($6::pg_catalog.text[]))
+                      AND pg_catalog.to_regrole($1) IS NOT NULL AND pg_catalog.pg_has_role(grantee.oid, pg_catalog.to_regrole($1), 'USAGE')
                     UNION ALL
                     SELECT 5, pg_catalog.quote_ident(mapped.rolname) || ', the role of a mapped token role, has the privileges of ' || pg_catalog.quote_ident($2)
                               || ', so the holder of such a token, who has no seat, would get every policy and every function written for signed-in users: REVOKE '
@@ -694,7 +694,7 @@ public static class TenancyPostgresChecks
             (string[] Names, string What, string Why)[] asOwner =
             [
                 (
-                    [TenancyFunctionNames.TenantAdministrators, TenancyFunctionNames.PermissionsAMoveChanges, TenancyFunctionNames.SeatsHoldingPermissionAt, TenancySql.RewriteTenantRights],
+                    [TenancyFunctionNames.TenantAdministrators, TenancyFunctionNames.PermissionsAUnitMoveChanges, TenancyFunctionNames.SeatsHoldingPermissionAt, TenancySql.RewriteTenantRights],
                     "answer about other seats' rights or write a tenant's rights again",
                     "The store and the questions ask the first three, since a seat reads only its own rights, and Tenancy's own system work runs the last."),
                 (
@@ -738,7 +738,7 @@ public static class TenancyPostgresChecks
             // policies decide them, and with nothing that keeps Postgres from folding it into the module's query.
             string[] read =
             [
-                TenancyFunctionNames.CallerPermissions, TenancyFunctionNames.TenantUnitPaths, TenancyFunctionNames.TenantUnits,
+                TenancyFunctionNames.CurrentPermissions, TenancyFunctionNames.TenantUnitPaths, TenancyFunctionNames.TenantUnits,
                 TenancyFunctionNames.TenantRoles, TenancyFunctionNames.TenantPlacements, TenancyFunctionNames.TenantSeats,
             ];
             var unreadable = await ListAsync(
@@ -918,7 +918,7 @@ public static class TenancyPostgresChecks
         // The user first and then the context, as the reads themselves take theirs.
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
         using ((services.GetService<ICurrentUser>() ?? new CurrentUser()).BeginSystem(scope))
-        using (TenancyCallers.BeginNone())
+        using (TenancyUsers.BeginNone())
         {
             await using var lifetime = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var (context, tenancy) = TenancyContextOf(lifetime.ServiceProvider);

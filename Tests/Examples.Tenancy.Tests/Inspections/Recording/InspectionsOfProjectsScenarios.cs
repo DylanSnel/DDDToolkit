@@ -155,7 +155,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
         // answers is decided by its own access check.
         JsonElement data;
         using (TestUser.BeginAs(DemoPeople.Leo.Id))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Leo))))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Leo))))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var schema = await host.Services.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync("inspections", Cancellation);

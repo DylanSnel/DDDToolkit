@@ -95,7 +95,7 @@ public static class ProjectsInfrastructure
             host.Publish(outbox);
         }));
 
-        // The poller marks each stored event handled. It needs no Tenancy caller: the outbox is not kept to a tenant.
+        // The poller marks each stored event handled. It needs no Tenancy user: the outbox is not kept to a tenant.
         services.AddOutboxBackgroundService<ProjectsContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
         return services;

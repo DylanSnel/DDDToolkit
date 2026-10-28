@@ -76,7 +76,7 @@ public static class SupabaseRowAccessChecks
         ArgumentNullException.ThrowIfNull(context);
 
         var options = InterceptorOf(context)?.Options ?? throw NotWired(context);
-        if (SupabaseCallerRoles.ReadRecord(await RecordAsync(context, cancellationToken).ConfigureAwait(false)) is not { } recorded)
+        if (SupabaseUserRoles.ReadRecord(await RecordAsync(context, cancellationToken).ConfigureAwait(false)) is not { } recorded)
         {
             return;
         }
@@ -108,7 +108,7 @@ public static class SupabaseRowAccessChecks
     internal static void AddStartupChecks(IServiceCollection services)
         => services.AddStartupCheck(new StartupCheck(RolesMatchAccessFilesCheck, StartupCheckStage.Login, EachContextAsync)
         {
-            RunsBefore = [PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck],
+            RunsBefore = [PostgresRowAccessChecks.LoginRoleMaySwitchToUserRolesCheck],
         });
 
     /// <summary>
@@ -116,7 +116,7 @@ public static class SupabaseRowAccessChecks
     /// line of the message: what differs, and the fixes. The host's side is said first in its project file, where the
     /// roles are said once, and then in code; the exporter's side last.
     /// </summary>
-    private static List<string> Differences(SupabaseCallerRoles.RecordedRoles recorded, PostgresRowLevelSecurityOptions options)
+    private static List<string> Differences(SupabaseUserRoles.RecordedRoles recorded, PostgresRowLevelSecurityOptions options)
     {
         var differences = new List<string>();
         if (!string.Equals(recorded.User, options.UserRole, StringComparison.Ordinal))
@@ -155,7 +155,7 @@ public static class SupabaseRowAccessChecks
                 continue;
             }
 
-            var key = SupabaseCallerRoles.TokenKey + tokenRole;
+            var key = SupabaseUserRoles.TokenKey + tokenRole;
             differences.Add((written, runs) switch
             {
                 (not null, null) =>
@@ -193,9 +193,9 @@ public static class SupabaseRowAccessChecks
             ? "this host's system work runs as the role it logs in as"
             : $"this host's system work runs as {runs}";
         var inHost = InThisHost(
-            $"system={written ?? SupabaseCallerRoles.LoginRole}",
+            $"system={written ?? SupabaseUserRoles.LoginRole}",
             written is null ? "options.SystemRole = null" : $"options.SystemRole = \"{written}\"");
-        var inExporter = InTheExporter($"system={runs ?? SupabaseCallerRoles.LoginRole}");
+        var inExporter = InTheExporter($"system={runs ?? SupabaseUserRoles.LoginRole}");
 
         return $"system work: {files}, and {host}. Fix: {inHost}; or {inExporter}.";
     }

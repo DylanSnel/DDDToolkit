@@ -38,10 +38,10 @@ public interface IMembershipStorage<TResource, TResourceId>
     /// id is its own id or a claim there is no such caller: one that is nobody's member simply reaches nothing, so this
     /// returns for everybody. Where the application resolves who a caller is as a member
     /// (<see cref="MemberSource.Resolved"/>), a caller the application refuses outright is refused here, before
-    /// anything is read (<see cref="ICallerMember{TResourceId, TMemberId}.Require"/>).
+    /// anything is read (<see cref="ICurrentMember{TResourceId, TMemberId}.Require"/>).
     /// </summary>
     /// <exception cref="Exceptions.RefusalException">The caller is nobody the questions can be asked about.</exception>
-    void RequireCaller();
+    void RequireCurrentUser();
 
     /// <summary>
     /// The resources the caller reaches for <paramref name="permission"/>, as a set the storage puts into a statement:

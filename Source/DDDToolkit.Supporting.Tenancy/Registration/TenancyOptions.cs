@@ -58,7 +58,7 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// the check of <see cref="OperatorAttribute"/> both ask here, so they mean the same caller by it. System work is
     /// never one, whoever it is recorded as, and neither is anyone without an identity.
     /// </summary>
-    /// <param name="user">Who is calling, as the toolkit's current user answers: the user of the request, not the Tenancy caller.</param>
+    /// <param name="user">Who is calling, as the toolkit's current user answers: the user of the request, not the Tenancy user.</param>
     public bool IsOperator(CurrentUserSnapshot? user)
         => user is { Kind: CurrentUserKind.User, Id: not null, Role: { } tokenRole } && OperatorTokenRoles.Contains(tokenRole);
 

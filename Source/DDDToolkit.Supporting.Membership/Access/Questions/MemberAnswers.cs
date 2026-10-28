@@ -17,7 +17,7 @@ internal abstract class MemberAnswers<TResource>
     public abstract object Storage { get; }
 
     /// <summary>Refuses a caller nothing can be answered for at all.</summary>
-    public abstract void RequireCaller();
+    public abstract void RequireCurrentUser();
 
     /// <summary>The resources the caller reaches for <paramref name="permission"/>.</summary>
     public abstract MemberReach<TResource> Reach(string permission);
@@ -50,7 +50,7 @@ internal sealed class MemberAnswers<TResource, TResourceId>(IMembershipStorage<T
     public override object Storage => storage;
 
     /// <inheritdoc />
-    public override void RequireCaller() => storage.RequireCaller();
+    public override void RequireCurrentUser() => storage.RequireCurrentUser();
 
     /// <inheritdoc />
     public override MemberReach<TResource> Reach(string permission) => storage.Reach(permission);

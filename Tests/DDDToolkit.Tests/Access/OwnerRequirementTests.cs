@@ -14,7 +14,7 @@ public readonly partial record struct OwnedBoardId;
 /// <summary>
 /// A request about the owner's own aggregate: <see cref="AccessRequirement.OwnerOf{TId}"/> names the aggregate, and the
 /// core's check has its owner read by the <see cref="IAggregateOwners{TId}"/> registered for the id, then compares it with
-/// the caller's own of the owner's type, which the <see cref="ICallersOwn{TValue}"/> of that type says. The storage here is
+/// the caller's own of the owner's type, which the <see cref="IOwnedByCurrentUser{TValue}"/> of that type says. The storage here is
 /// a list of the test's own; what Entity Framework reads, as the caller, is its package's tests'.
 /// </summary>
 public class OwnerRequirementTests
@@ -32,7 +32,7 @@ public class OwnerRequirementTests
     public readonly record struct UserId(Guid Value);
 
     /// <summary>The application's handle: the caller's own user id is the one over the id its token names.</summary>
-    public sealed class CallersUser : ICallersOwn<UserId>
+    public sealed class CurrentUserId : IOwnedByCurrentUser<UserId>
     {
         public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
     }
@@ -208,7 +208,7 @@ public class OwnerRequirementTests
 
         (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new EditBoard(AccessRequirement.OwnerOf(AnnsBoard)), Cancellation).AsTask())
                 .Should().ThrowAsync<InvalidOperationException>("no answer of the owner lets anybody through where nothing says whose it is"))
-            .WithMessage("*OwnedBoardId is a OwnerRequirementTests.UserId*services.AddCallersOwn<OwnerRequirementTests.UserId, TCallersOwn>()*");
+            .WithMessage("*OwnedBoardId is a OwnerRequirementTests.UserId*services.AddOwnedByCurrentUser<OwnerRequirementTests.UserId, THandle>()*");
     }
 
     [Fact]
@@ -238,7 +238,7 @@ public class OwnerRequirementTests
 
         if (withHandle)
         {
-            services.AddCallersOwn<UserId, CallersUser>();
+            services.AddOwnedByCurrentUser<UserId, CurrentUserId>();
         }
 
         register?.Invoke(services);

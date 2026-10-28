@@ -287,7 +287,7 @@ public sealed class CurrentUserTests
         var auth0 = CurrentUserSnapshot.FromClaims("""{"sub":"auth0|64f1c2","role":"authenticated"}""");
 
         auth0.Kind.Should().Be(CurrentUserKind.User);
-        auth0.Id.Should().BeNull("\"ddd\".caller_id() answers null for it as well");
+        auth0.Id.Should().BeNull("\"ddd\".current_user_id() answers null for it as well");
         auth0.IsAuthenticated.Should().BeFalse();
     }
 

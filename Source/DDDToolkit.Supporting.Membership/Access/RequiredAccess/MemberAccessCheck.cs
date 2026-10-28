@@ -98,7 +98,7 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(MembershipAccessMa
                 // The caller's own way through a request about a resource: the resource seen, in the same order of
                 // refusals as a permission on it, and no permission required. Read, compared and kept as a permission's case is, so a save of
                 // the resource is held to what was read whichever way the caller came through.
-                access.RequireCaller();
+                access.RequireCurrentUser();
                 var hold = await access.HoldAsync(required.Resource, required.Permission, cancellationToken).ConfigureAwait(false)
                            ?? throw access.Rules.Codes.Refuse(MembershipRefusals.NotFound);
 
@@ -116,7 +116,7 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(MembershipAccessMa
                 // asked about at all, and one that can reach something. A caller who did not sign in reaches
                 // nothing under any rules, and the statement is not sent for it: a database that checks every
                 // row may refuse that caller's role the resource's schema outright.
-                access.RequireCaller();
+                access.RequireCurrentUser();
                 if (user.Kind == CurrentUserKind.Anonymous)
                 {
                     throw access.Rules.Codes.Refuse(MembershipRefusals.NotPermitted, ("Permission", required.Permission));

@@ -250,7 +250,7 @@ internal sealed class TenancyModelFacts
 
     /// <summary>
     /// Throws when an entity type keeps who changed its rows and is not kept to a tenant. Who changed a row is
-    /// the Tenancy caller of the save, and only a save of a tenant's row is sure to have one: on any other row the
+    /// the Tenancy user of the save, and only a save of a tenant's row is sure to have one: on any other row the
     /// columns would be left blank, in silence.
     /// <para>
     /// Throws as well when such a type is stored in the table of the type it derives from, which does not keep
@@ -268,7 +268,7 @@ internal sealed class TenancyModelFacts
         {
             throw new InvalidOperationException(
                 "These entity types keep who changed their rows, with RecordsWhoChanged, but are not kept to a tenant: " + _attributedButUnscoped
-                + ". Who changed a row is the Tenancy caller of the save, which only a tenant's row is sure to have: call ScopeToTenant on the entity as well.");
+                + ". Who changed a row is the Tenancy user of the save, which only a tenant's row is sure to have: call ScopeToTenant on the entity as well.");
         }
 
         if (_attributedBelowTheRoot is not null)

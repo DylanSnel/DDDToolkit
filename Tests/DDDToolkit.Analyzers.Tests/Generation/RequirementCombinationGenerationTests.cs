@@ -204,7 +204,7 @@ public class RequirementCombinationGenerationTests
     {
         var result = RequirementAttributeGenerationTests.OverTheDomain(
             """
-            public sealed class CallersUser : ICallersOwn<UserId>
+            public sealed class CurrentUserId : IOwnedByCurrentUser<UserId>
             {
                 public UserId? Find(DDDToolkit.Abstractions.Access.ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
             }
@@ -234,7 +234,7 @@ public class RequirementCombinationGenerationTests
 
                 [EntityId<Guid>] public readonly partial record struct AccountId;
 
-                public sealed class CallersAccount : ICallersOwn<AccountId>
+                public sealed class CurrentAccount : IOwnedByCurrentUser<AccountId>
                 {
                     public AccountId? Find(DDDToolkit.Abstractions.Access.ICurrentUser user) => user.Id is { } id ? new AccountId(id) : null;
                 }

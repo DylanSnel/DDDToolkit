@@ -11,6 +11,6 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <param name="Permission">The permission.</param>
 /// <param name="EndsAt">The first moment the right no longer applies, or <see langword="null"/> when it has no end.</param>
 /// <param name="Parent">The parent it reaches. A right held above both parents comes once for each.</param>
-/// <param name="OfCaller">Whether the right is the moving seat's own.</param>
-public sealed record MoveReach<TUnitId>(TUnitId UnitId, string Permission, DateTimeOffset? EndsAt, TUnitId Parent, bool OfCaller)
+/// <param name="OfCurrentSeat">Whether the right is the moving seat's own.</param>
+public sealed record MoveReach<TUnitId>(TUnitId UnitId, string Permission, DateTimeOffset? EndsAt, TUnitId Parent, bool OfCurrentSeat)
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>;

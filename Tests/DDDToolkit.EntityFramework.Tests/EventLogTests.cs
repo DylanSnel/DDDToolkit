@@ -193,7 +193,7 @@ public sealed class EventLogTests : IDisposable
         (await SettledAsAsync(host, caller: null, 6)).Should().Be((ActedByKinds.System, null), "outside any caller the application itself acts, as in every host that requires none");
 
         // A host whose caller accessor knows the request is asked through it.
-        await using (var requests = Host(services: services => services.AddSingleton<ICurrentUser>(new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{alice}}"}""") })))
+        await using (var requests = Host(services: services => services.AddSingleton<ICurrentUser>(new UserOfTheTest { Current = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{alice}}"}""") })))
         {
             (await SettledAsAsync(requests, caller: null, 7)).Should().Be((ActedByKinds.User, alice.ToString()));
         }

@@ -25,7 +25,7 @@ public abstract partial record AccessRequirement
     /// <remarks>
     /// The fact is the domain's, and the policy the request's: the aggregate marks the property that names its owner,
     /// <c>[Owner] public UserId Owner { get; private set; }</c>, and says nothing of who may do what. The owner is of a type
-    /// the caller has an own of, as the value of <see cref="Own{TValue}"/> is, and the <see cref="ICallersOwn{TValue}"/> of
+    /// the caller has an own of, as the value of <see cref="Own{TValue}"/> is, and the <see cref="IOwnedByCurrentUser{TValue}"/> of
     /// that type says what the caller's own is. A row whose owner is null is nobody's, and nobody is its owner.
     /// <para>
     /// What reads the owner is the storage's, an <see cref="IAggregateOwners{TId}"/>: the Entity Framework package's reads
@@ -45,7 +45,7 @@ public abstract partial record AccessRequirement
     /// What <see cref="OwnerOf"/> answers: the request is about the aggregate <see cref="Aggregate"/> names, and the caller
     /// is its owner. Decided by the core's <see cref="CurrentUserAccessCheck"/>, which has the owner read by the
     /// <see cref="IAggregateOwners{TId}"/> registered for <typeparamref name="TId"/>, and compares it with what the
-    /// <see cref="ICallersOwn{TValue}"/> of the owner's type says is the caller's.
+    /// <see cref="IOwnedByCurrentUser{TValue}"/> of the owner's type says is the caller's.
     /// </summary>
     /// <typeparam name="TId">The aggregate's id.</typeparam>
     [AccessCheckRegistration("services.AddDDDToolkitEntityFramework(), which reads the owner of an aggregate from the context that maps it; a storage of another kind registers an IAggregateOwners<TId> that reads it")]
@@ -74,7 +74,7 @@ public abstract partial record AccessRequirement
                 ? known
                 : throw new InvalidOperationException(
                     $"The owner of an aggregate whose id is {WrittenTypeNames.Of(typeof(TId))} is a {WrittenTypeNames.Of(type)}, and nothing says what the caller's own {WrittenTypeNames.Of(type)} is. "
-                    + $"Register an ICallersOwn<{WrittenTypeNames.Of(type)}> with services.AddCallersOwn<{WrittenTypeNames.Of(type)}, TCallersOwn>(); a requirement nothing checks lets nobody through.");
+                    + $"Register an IOwnedByCurrentUser<{WrittenTypeNames.Of(type)}> with services.AddOwnedByCurrentUser<{WrittenTypeNames.Of(type)}, THandle>(); a requirement nothing checks lets nobody through.");
 
             // Asked before anything is read: a caller with no own of the type owns nothing, and a database that checks
             // every row may refuse such a caller the table outright, rather than answer that it sees no row.

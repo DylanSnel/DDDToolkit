@@ -269,7 +269,7 @@ public sealed class SchemaKeyTests
             builder =>
             {
                 builder.Configuration[GraphQLSchemaKey.Setting] = Key;
-                builder.Services.AddNamedCallers();
+                builder.Services.AddNamedUsers();
                 builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddQueryType<CatalogQuery>(q => q.Name("Query"));
                 builder.Services.AddInMemoryFusionGateway("user", ["catalog"], options => options.ConfigureGateway = gateway => gateway.ModifyServerOptions(server =>
                 {
@@ -544,7 +544,7 @@ public sealed class SchemaKeyTests
         }
 
         builder.Configuration[GraphQLSchemaKey.Setting] = key;
-        builder.Services.AddNamedCallers();
+        builder.Services.AddNamedUsers();
         builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddQueryType<CatalogQuery>(q => q.Name("Query"));
         builder.Services.AddGraphQLServer("inventory").AddSourceSchemaDefaults().AddQueryType<InventoryQuery>(q => q.Name("Query"));
         builder.Services.AddGraphQLServer("admin").AddSourceSchemaDefaults().AddQueryType<AdminQuery>(q => q.Name("Query"));
@@ -561,7 +561,7 @@ public sealed class SchemaKeyTests
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapInMemoryFusionGateway("/graphql", "user").RequireAuthorization();
-        app.MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization(NamedCallers.Administrators);
+        app.MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization(NamedUsers.Administrators);
     }
 
     private static Action<HttpRequestMessage> WithKey(string key) => request => request.Headers.Add(GraphQLSchemaKey.HeaderName, key);

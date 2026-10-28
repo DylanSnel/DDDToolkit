@@ -69,7 +69,7 @@ public sealed class TokenRoleTests
         SetFor(CurrentUserSnapshot.SystemIn("desk"), options).Should().Be(("ddd_system_in", """{"role":"ddd_system_in","scope":"desk"}"""));
 
         var connection = new RecordedConnection();
-        var interceptor = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest { Current = CurrentUserSnapshot.User(Ada) }, new PostgresRowLevelSecurityOptions());
+        var interceptor = new PostgresRowLevelSecurityInterceptor(new UserOfTheTest { Current = CurrentUserSnapshot.User(Ada) }, new PostgresRowLevelSecurityOptions());
         interceptor.ConnectionOpened(connection, null!);
         connection.Statements.Should().ContainSingle().Which.Sql.Should().Be(
             "SELECT set_config('role', $1, false), set_config('request.jwt.claims', $2, false), " +
@@ -131,7 +131,7 @@ public sealed class TokenRoleTests
         // Every role a token could name to get more than a signed-in user gets: the system's, the scoped
         // system's, the login role, a mapped role by its database name, and near misses of the ones listed.
         var options = new PostgresRowLevelSecurityOptions { SystemRole = SupabaseRowLevelSecurity.ServiceRole, TokenRoles = { [Analyst] = AnalystRole } };
-        var caller = new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(forged)) };
+        var caller = new UserOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(forged)) };
         var interceptor = new PostgresRowLevelSecurityInterceptor(caller, options);
 
         // Through a context: the query never connects.
@@ -165,7 +165,7 @@ public sealed class TokenRoleTests
         // read as a token without a role claim, which would be a signed-in user.
         var options = new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole } };
         var caller = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{Ada}}","role":{{role}}}""");
-        var interceptor = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest { Current = caller }, options);
+        var interceptor = new PostgresRowLevelSecurityInterceptor(new UserOfTheTest { Current = caller }, options);
 
         var connection = new RecordedConnection();
         var refused = FluentActions.Invoking(() => interceptor.ConnectionOpening(connection, null!, default)).Should().Throw<RefusalException>().Which;
@@ -196,15 +196,15 @@ public sealed class TokenRoleTests
         // A module's setting made from the caller, as a policy of that module would read it. A user who runs as
         // an anonymous caller must not reach the database through it either.
         var options = new PostgresRowLevelSecurityOptions { UnknownTokenRole = UnknownTokenRole.Anonymous, TokenRoles = { [Analyst] = AnalystRole } };
-        var caller = new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf("intern")) };
-        var interceptor = new PostgresRowLevelSecurityInterceptor(caller, options, [new SettingOfTheCaller()]);
+        var caller = new UserOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf("intern")) };
+        var interceptor = new PostgresRowLevelSecurityInterceptor(caller, options, [new SettingOfTheUser()]);
 
         var connection = new RecordedConnection();
         interceptor.ConnectionOpening(connection, null!, default);
         interceptor.ConnectionOpened(connection, null!);
 
         connection.Statements.Should().ContainSingle().Which.Parameters.Should().Equal(
-            ["anon", """{"role":"anon"}""", SettingOfTheCaller.Name, "Anonymous of nobody"],
+            ["anon", """{"role":"anon"}""", SettingOfTheUser.Name, "Anonymous of nobody"],
             "the role, the claims and the module's setting all say a caller who did not sign in");
 
         // Asked again before a transaction on the open connection, the answer is the same, so nothing is sent.
@@ -215,13 +215,13 @@ public sealed class TokenRoleTests
         caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Analyst));
         var mapped = new RecordedConnection();
         interceptor.ConnectionOpened(mapped, null!);
-        mapped.Statements.Should().ContainSingle().Which.Parameters.Should().Equal(AnalystRole, ClaimsOf(Analyst), SettingOfTheCaller.Name, $"User of {Ada}");
+        mapped.Statements.Should().ContainSingle().Which.Parameters.Should().Equal(AnalystRole, ClaimsOf(Analyst), SettingOfTheUser.Name, $"User of {Ada}");
 
         caller.Current = CurrentUserSnapshot.Anonymous;
         var nobody = new RecordedConnection();
         interceptor.ConnectionOpened(nobody, null!);
         nobody.Statements.Should().ContainSingle().Which.Parameters.Should().Equal(
-            ["anon", """{"role":"anon"}""", SettingOfTheCaller.Name, "Anonymous of nobody"],
+            ["anon", """{"role":"anon"}""", SettingOfTheUser.Name, "Anonymous of nobody"],
             "which is exactly what a request without a user gets");
     }
 
@@ -264,7 +264,7 @@ public sealed class TokenRoleTests
                     options.SystemInRole = systemInRole;
                     options.TokenRoles[tokenRole] = role;
                 }),
-                () => _ = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest(), Options()),
+                () => _ = new PostgresRowLevelSecurityInterceptor(new UserOfTheTest(), Options()),
                 () => PostgresRowAccess.SetupScript(Options()),
                 () => RowAccessRoleNames.From(Options()),
             ])
@@ -349,14 +349,14 @@ public sealed class TokenRoleTests
             "                 AND pg_catalog.pg_has_role(scoped.oid, c.relowner, 'USAGE')) THEN\n" +
             "        RAISE EXCEPTION USING MESSAGE = 'The role desk_analyst has the privileges of a role that owns tables, and Postgres does not hold an owner to row level security. It must neither own a table nor be granted a role that does.';\n" +
             "    END IF;\n" +
-            "    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles callers\n" +
-            "               WHERE scoped.rolname = 'desk_analyst' AND callers.rolname IN ('authenticated', 'anon')\n" +
-            "                 AND pg_catalog.pg_has_role(callers.oid, scoped.oid, 'USAGE')) THEN\n" +
+            "    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles users\n" +
+            "               WHERE scoped.rolname = 'desk_analyst' AND users.rolname IN ('authenticated', 'anon')\n" +
+            "                 AND pg_catalog.pg_has_role(users.oid, scoped.oid, 'USAGE')) THEN\n" +
             "        RAISE EXCEPTION USING MESSAGE = 'The role desk_analyst is granted to authenticated or anon, so their callers would get every policy written for it. Grant it only to the role the application logs in as.';\n" +
             "    END IF;\n" +
-            "    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles callers\n" +
-            "               WHERE scoped.rolname = 'desk_analyst' AND callers.rolname IN ('authenticated', 'anon')\n" +
-            "                 AND pg_catalog.pg_has_role(scoped.oid, callers.oid, 'USAGE')) THEN\n" +
+            "    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles users\n" +
+            "               WHERE scoped.rolname = 'desk_analyst' AND users.rolname IN ('authenticated', 'anon')\n" +
+            "                 AND pg_catalog.pg_has_role(scoped.oid, users.oid, 'USAGE')) THEN\n" +
             "        RAISE EXCEPTION USING MESSAGE = 'The role desk_analyst has the privileges of authenticated or anon, so the holder of a token mapped to it would get every policy and every privilege written for those callers. Take that grant back: a mapped role has what is written for it and no more.';\n" +
             "    END IF;\n" +
             "    IF NOT pg_catalog.pg_has_role(CURRENT_USER, 'desk_analyst'::pg_catalog.name,\n" +
@@ -382,11 +382,11 @@ public sealed class TokenRoleTests
 
         // The scoped system role is held apart from every mapped role, whether a policy of this script names one or not.
         var scoped = ScriptFor(mapped, DeskRules.Owners, ScopedWork);
-        scoped.Should().Contain("WHERE scoped.rolname = 'ddd_system_in' AND callers.rolname IN ('authenticated', 'anon', 'desk_analyst')\n")
+        scoped.Should().Contain("WHERE scoped.rolname = 'ddd_system_in' AND users.rolname IN ('authenticated', 'anon', 'desk_analyst')\n")
             .And.Contain("'The role ddd_system_in is granted to authenticated, anon or desk_analyst, so their callers would get every policy written for it. Grant it only to the role the application logs in as.'");
         scoped.Should().NotContain("CREATE ROLE desk_analyst", "that script names the scoped system role alone");
-        scoped.Should().NotContain("pg_catalog.pg_has_role(scoped.oid, callers.oid, 'USAGE')", "and only a mapped role is kept from having a caller's privileges: no token picks the scoped system role");
-        ScriptFor(RowAccessRoleNames.Default, DeskRules.Owners, ScopedWork).Should().Contain("callers.rolname IN ('authenticated', 'anon')\n")
+        scoped.Should().NotContain("pg_catalog.pg_has_role(scoped.oid, users.oid, 'USAGE')", "and only a mapped role is kept from having a caller's privileges: no token picks the scoped system role");
+        ScriptFor(RowAccessRoleNames.Default, DeskRules.Owners, ScopedWork).Should().Contain("users.rolname IN ('authenticated', 'anon')\n")
             .And.NotContain(AnalystRole, "without a map the check is what it was");
 
         // A token role mapped to the user's role is that role: its rule joins the user's policy, and nothing is made.
@@ -439,22 +439,22 @@ public sealed class TokenRoleTests
             .And.Contain("'The role desk_analyst has the privileges of a role that owns tables")
             .And.Contain("'The role desk_analyst is granted to authenticated or anon, so their callers would get every policy written for it.");
         setup.Should().Contain(
-            "    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles callers\n" +
-            "               WHERE scoped.rolname = 'desk_analyst' AND callers.rolname IN ('authenticated', 'anon')\n" +
-            "                 AND pg_catalog.pg_has_role(scoped.oid, callers.oid, 'USAGE')) THEN\n" +
+            "    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles users\n" +
+            "               WHERE scoped.rolname = 'desk_analyst' AND users.rolname IN ('authenticated', 'anon')\n" +
+            "                 AND pg_catalog.pg_has_role(scoped.oid, users.oid, 'USAGE')) THEN\n" +
             "        RAISE EXCEPTION USING MESSAGE = 'The role desk_analyst has the privileges of authenticated or anon, so the holder of a token mapped to it would get every policy and every privilege written for those callers. Take that grant back: a mapped role has what is written for it and no more.';\n" +
             "    END IF;\n",
             "and the other way round: the mapped role has neither a signed-in user's privileges nor an anonymous caller's");
         setup.Should().Contain("'The role ddd_system_in is granted to authenticated, anon or desk_analyst", "the scoped system role's privileges must not reach the holders of a token either");
-        setup.Split("pg_catalog.pg_has_role(scoped.oid, callers.oid, 'USAGE')").Should().HaveCount(2, "that is asked of the mapped role alone, not of the scoped system role");
+        setup.Split("pg_catalog.pg_has_role(scoped.oid, users.oid, 'USAGE')").Should().HaveCount(2, "that is asked of the mapped role alone, not of the scoped system role");
         setup.Should().Contain("GRANT \"anon\", \"authenticated\", \"ddd_system_in\", \"desk_analyst\" TO CURRENT_USER;", "the login role may switch to it");
-        setup.Should().Contain("GRANT USAGE ON SCHEMA \"ddd\" TO \"anon\", \"authenticated\", \"ddd_system_in\", \"desk_analyst\";", "and it may ask the caller functions");
+        setup.Should().Contain("GRANT USAGE ON SCHEMA \"ddd\" TO \"anon\", \"authenticated\", \"ddd_system_in\", \"desk_analyst\";", "and it may ask the current user functions");
         PostgresRowAccess.SetupScript(new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole } }, "desk_app")
             .Should().Contain("GRANT \"anon\", \"authenticated\", \"ddd_system_in\", \"desk_analyst\" TO \"desk_app\";");
 
         PostgresRowAccess.SetupScript().Should().Be(PostgresRowAccess.SetupScript(new PostgresRowLevelSecurityOptions()))
             .And.NotContain(AnalystRole)
-            .And.NotContain("pg_catalog.pg_has_role(scoped.oid, callers.oid, 'USAGE')")
+            .And.NotContain("pg_catalog.pg_has_role(scoped.oid, users.oid, 'USAGE')")
             .And.Contain("'The role ddd_system_in is granted to authenticated or anon, so their callers", "without a map the script is what it was");
     }
 
@@ -484,7 +484,7 @@ public sealed class TokenRoleTests
     public void The_interceptor_keeps_the_roles_it_was_built_with()
     {
         var options = new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole } };
-        var caller = new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Analyst)) };
+        var caller = new UserOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Analyst)) };
         var interceptor = new PostgresRowLevelSecurityInterceptor(caller, options);
 
         // Whatever is done to the host's options afterwards, checked or not, reaches no connection.
@@ -527,7 +527,7 @@ public sealed class TokenRoleTests
     /// <summary>The role and the claims the interceptor sets on a connection it opened for <paramref name="caller"/>.</summary>
     private static (string Role, string Claims) SetFor(CurrentUserSnapshot caller, PostgresRowLevelSecurityOptions options)
     {
-        var interceptor = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest { Current = caller }, options);
+        var interceptor = new PostgresRowLevelSecurityInterceptor(new UserOfTheTest { Current = caller }, options);
         var connection = new RecordedConnection();
 
         interceptor.ConnectionOpening(connection, null!, default);
@@ -551,7 +551,7 @@ public sealed class TokenRoleTests
     }
 
     /// <summary>A module's setting that says who is calling: the kind of caller and the user's id.</summary>
-    private sealed class SettingOfTheCaller : IRowLevelSecuritySettings
+    private sealed class SettingOfTheUser : IRowLevelSecuritySettings
     {
         public const string Name = "desk.caller";
 

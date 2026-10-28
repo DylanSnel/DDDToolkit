@@ -264,7 +264,7 @@ public class TenancyAccessManager<
             source,
             executor,
             _catalogue,
-            TenancyCallers.Current<TTenantId, TSeatId>(),
+            TenancyUsers.Current<TTenantId, TSeatId>(),
             _clock.GetUtcNow());
     }
 }

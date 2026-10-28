@@ -41,7 +41,7 @@ public static class OrderingModule
         // endpoints ask the checks themselves, so nothing goes in a pipeline. The order marks who placed it as its
         // owner, so the caller's own customer id is what that is compared with; the package's reader of the owner
         // comes with AddDDDToolkitEntityFramework below, and reads the one column as the caller.
-        services.AddCallersOwn<CustomerId, CallersCustomer>();
+        services.AddOwnedByCurrentUser<CustomerId, CurrentCustomer>();
         services.AddAccessChecks<IOrderingRequest>();
 
         // Ordering produces integration events, so it owns an outbox: what it publishes, as what, and

@@ -162,40 +162,40 @@ public static partial class WatchersReadTheTicketsTheyWatch
 public static partial class DeskQuestions
 {
     /// <summary>The caller's seat at the desk, or null for a caller who has none.</summary>
-    [AccessScalar("desk.caller_seat")]
-    public static partial Guid CallerSeat();
+    [AccessScalar("desk.current_seat")]
+    public static partial Guid CurrentSeat();
 
     /// <summary>Whether the caller is on duty at the desk, or null for a caller the desk does not know.</summary>
-    [AccessScalar("desk.caller_on_duty")]
-    public static partial bool CallerOnDuty();
+    [AccessScalar("desk.current_on_duty")]
+    public static partial bool CurrentOnDuty();
 }
 
 /// <summary>Whoever is on duty does anything with every ticket: a rule that is one question and nothing else.</summary>
 [RowAccess<Ticket>(RowOperations.All)]
 public static partial class OnDutyHandleEveryTicket
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user) => DeskQuestions.CallerOnDuty();
+    public static bool Allows(Ticket ticket, ICurrentUser user) => DeskQuestions.CurrentOnDuty();
 }
 
 /// <summary>A ticket is read from the seat that owns it.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
-public static partial class TicketsOfTheCallersSeat
+public static partial class TicketsOfTheCurrentSeat
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Owner == DeskQuestions.CallerSeat();
+    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Owner == DeskQuestions.CurrentSeat();
 }
 
 /// <summary>A ticket is read from every seat but the one that owns it.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
 public static partial class TicketsOfAnotherSeat
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Owner != DeskQuestions.CallerSeat();
+    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Owner != DeskQuestions.CurrentSeat();
 }
 
 /// <summary>A ticket is read from every seat but the one that owns it, written as not owning it.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
-public static partial class TicketsNotOfTheCallersSeat
+public static partial class TicketsNotOfTheCurrentSeat
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user) => !(ticket.Owner == DeskQuestions.CallerSeat());
+    public static bool Allows(Ticket ticket, ICurrentUser user) => !(ticket.Owner == DeskQuestions.CurrentSeat());
 }
 
 /// <summary>An owner does anything with their own tickets.</summary>
@@ -282,11 +282,11 @@ public static class DeskRules
 
     public static readonly RowAccessRule WatchersBySet = RowAccessRule.For<Ticket>("Watchers read the tickets they watch", RowOperations.Read, WatchersReadTheTicketsTheyWatch.RowAccessSql);
 
-    public static readonly RowAccessRule OfTheCallersSeat = RowAccessRule.For<Ticket>("Tickets of the callers seat", RowOperations.Read, TicketsOfTheCallersSeat.RowAccessSql);
+    public static readonly RowAccessRule OfTheCurrentSeat = RowAccessRule.For<Ticket>("Tickets of the callers seat", RowOperations.Read, TicketsOfTheCurrentSeat.RowAccessSql);
 
     public static readonly RowAccessRule OfAnotherSeat = RowAccessRule.For<Ticket>("Tickets of another seat", RowOperations.Read, TicketsOfAnotherSeat.RowAccessSql);
 
-    public static readonly RowAccessRule NotOfTheCallersSeat = RowAccessRule.For<Ticket>("Tickets not of the callers seat", RowOperations.Read, TicketsNotOfTheCallersSeat.RowAccessSql);
+    public static readonly RowAccessRule NotOfTheCurrentSeat = RowAccessRule.For<Ticket>("Tickets not of the callers seat", RowOperations.Read, TicketsNotOfTheCurrentSeat.RowAccessSql);
 
     public static readonly RowAccessRule OnDuty = RowAccessRule.For<Ticket>("On duty handle every ticket", RowOperations.All, OnDutyHandleEveryTicket.RowAccessSql);
 

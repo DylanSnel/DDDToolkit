@@ -359,7 +359,7 @@ public static partial class SupabaseMigrations
 
         // Refused before anything is written: the role the application logs in as is no role a caller runs as.
         // Asked here rather than where it was set, since the roles may have been set after it.
-        if (options.LoginRole is { } login && CallerRoleNamed(login, options.Roles) is { } key)
+        if (options.LoginRole is { } login && RunAsRoleNamed(login, options.Roles) is { } key)
         {
             throw new InvalidOperationException(
                 $"The login role '{login}' is the role of {key} among the roles callers run as. The role the application logs in as only switches to those, and is a role of its own; name another, such as {ExampleLoginRole}.");
@@ -434,13 +434,13 @@ public static partial class SupabaseMigrations
     }
 
     /// <summary>
-    /// What the policies are written with: the options' roles, caller functions and contributions, where the
+    /// What the policies are written with: the options' roles, current user functions and contributions, where the
     /// functions of other modules live, and whether the files write privileges and force row level security.
     /// </summary>
     private static RowAccessExport ExportOf(SupabaseMigrationOptions options, IReadOnlyDictionary<string, string>? names)
         => new()
         {
-            CallerFunctions = options.CallerFunctions,
+            CurrentUserFunctions = options.CurrentUserFunctions,
             Roles = options.Roles,
             Contributions = [.. options.RowAccessContributions],
             Rules = [.. options.RowAccessRules],
@@ -579,7 +579,7 @@ public static partial class SupabaseMigrations
             // Every file says them, so roles that change write every module's file again, and the newest file
             // applied records what the newest export said.
             .Append('\n')
-            .Append(SupabaseCallerRoles.RecordStatement(options.Roles))
+            .Append(SupabaseUserRoles.RecordStatement(options.Roles))
             .ToString();
 
         if (files.LastOrDefault() is { } newest)
@@ -727,7 +727,7 @@ public static partial class SupabaseMigrations
     /// name, and the type after <c>RETURNS</c>, up to the first of the function's options. A contributed
     /// statement may write a whole function on that line, whose options and body are not its signature. Each is
     /// found by its name without double quotes, so a file written before the schemas were quoted, which names
-    /// <c>tenancy.caller_seat</c>, finds the function the next one names <c>"tenancy".caller_seat</c>.
+    /// <c>tenancy.current_seat</c>, finds the function the next one names <c>"tenancy".current_seat</c>.
     /// </summary>
     private static Dictionary<string, (string Name, string Parameters, string Returns)> FunctionHeaders(string sql)
     {

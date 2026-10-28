@@ -566,7 +566,7 @@ public sealed class LayerReferenceTests
             var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
             return definition == typeof(ISeatDirectory<,>)
                 || definition == typeof(TenantSelection<,>)
-                || definition == typeof(SeatOfCaller<,>)
+                || definition == typeof(SeatOfUser<,>)
                 || definition == typeof(SeatInTenant<>)
                 || IsAManager(definition)
                 || (definition.DeclaringType is { } outer && IsAManager(outer));

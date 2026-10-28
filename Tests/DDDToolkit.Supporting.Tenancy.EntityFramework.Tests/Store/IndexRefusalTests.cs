@@ -75,7 +75,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         // The other two rules the aggregates keep themselves, so only a write that goes past them meets the index:
         // a context without the toolkit's checks, saving a second root and a second primary placement.
         await using (var past = PastTheAggregates())
-        using (TenancyCallers.Begin(HostCaller.SystemIn(harbor.Tenant)))
+        using (TenancyUsers.Begin(HostUser.SystemIn(harbor.Tenant)))
         {
             var organization = await past.Set<HostOrganization>().SingleAsync(row => row.Id == harbor.Tenant, Cancellation);
             past.Entry(organization.Units.Single(unit => unit.Id == north)).Property(unit => unit.ParentId).CurrentValue = null;
@@ -86,7 +86,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         }
 
         await using (var past = PastTheAggregates())
-        using (TenancyCallers.Begin(HostCaller.SystemIn(harbor.Tenant)))
+        using (TenancyUsers.Begin(HostUser.SystemIn(harbor.Tenant)))
         {
             var seat = await past.Set<HostSeat>().SingleAsync(row => row.Id == grace, Cancellation);
             past.Entry(seat.Placements.Single(placement => placement.UnitId == north)).Property(placement => placement.IsPrimary).CurrentValue = true;

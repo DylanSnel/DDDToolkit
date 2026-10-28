@@ -11,7 +11,7 @@ global using Xunit;
 // The caller closed over the host's ids, once, as an application does. The managers are the classes the toolkit's
 // generator writes into the test host that declares the classes: SeatManager and the others, and HostRoleManager, under
 // the name the host gives it.
-global using HostCaller = DDDToolkit.Supporting.Tenancy.Access.TenancyCaller<
+global using HostUser = DDDToolkit.Supporting.Tenancy.Access.TenancyUser<
     DDDToolkit.Supporting.Tenancy.TestHost.Contracts.TenantId,
     DDDToolkit.Supporting.Tenancy.TestHost.Contracts.SeatId>;
 

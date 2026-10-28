@@ -48,25 +48,25 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
 
         _store = store;
         _catalogue = catalogue;
-        Caller = TenancyCallers.Current<TTenantId, TSeatId>();
+        User = TenancyUsers.Current<TTenantId, TSeatId>();
         Now = clock.GetUtcNow();
     }
 
     /// <summary>The caller the command runs for.</summary>
-    public TenancyCaller<TTenantId, TSeatId> Caller { get; }
+    public TenancyUser<TTenantId, TSeatId> User { get; }
 
     /// <summary>The moment the command runs at.</summary>
     public DateTimeOffset Now { get; }
 
     /// <summary>Whether this is system work in a tenant, which holds every permission there.</summary>
-    public bool BySystem => Caller.Kind == TenancyCallerKind.SystemInTenant;
+    public bool BySystem => User.Kind == TenancyUserKind.SystemInTenant;
 
     /// <summary>
     /// Whether the caller is held to containment: it is a seat, and the catalogue keeps the permissions that manage
     /// access contained (<see cref="TenancyCatalogue.ContainAccessManagingPermissions"/>). System work in a tenant
     /// holds every permission there and never is, whatever the catalogue says.
     /// </summary>
-    private bool HeldToContainment => Caller.Kind == TenancyCallerKind.Seat && _catalogue.ContainAccessManagingPermissions;
+    private bool HeldToContainment => User.Kind == TenancyUserKind.Seat && _catalogue.ContainAccessManagingPermissions;
 
     /// <summary>
     /// The permissions of <paramref name="role"/> that a seat hands on only where it holds them: its permissions that manage
@@ -89,20 +89,20 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// log it is kept in cannot come to disagree. <see langword="null"/> only for nobody, who is refused before
     /// anything changes.
     /// </summary>
-    public TenancyActor<TSeatId>? By => Caller.Actor;
+    public TenancyActor<TSeatId>? By => User.Actor;
 
     /// <summary>The access queries for the caller, over the store's reads; made when first asked for.</summary>
     public ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> Queries
-        => _queries ??= new TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(_store.Reads, _store.Queries, _catalogue, Caller, Now);
+        => _queries ??= new TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(_store.Reads, _store.Queries, _catalogue, User, Now);
 
     /// <summary>The tenant a seat or system work in a tenant acts in. Reads nothing.</summary>
     /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
     public TTenantId RequireTenant()
-        => Caller.Kind switch
+        => User.Kind switch
         {
-            TenancyCallerKind.Seat or TenancyCallerKind.SystemInTenant => Caller.Tenant!.Value,
-            TenancyCallerKind.System => throw new InvalidOperationException(
+            TenancyUserKind.Seat or TenancyUserKind.SystemInTenant => User.Tenant!.Value,
+            TenancyUserKind.System => throw new InvalidOperationException(
                 "System work outside any tenant only provisions tenants. "
                 + SystemWorkAdvice.BeginInATenant("for work inside one")),
             _ => throw Refusal(),
@@ -118,13 +118,13 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// <exception cref="InvalidOperationException">The caller is system work in a tenant.</exception>
     public void RequireSystemOutsideTenants()
     {
-        switch (Caller.Kind)
+        switch (User.Kind)
         {
-            case TenancyCallerKind.System:
+            case TenancyUserKind.System:
                 return;
-            case TenancyCallerKind.Seat:
+            case TenancyUserKind.Seat:
                 throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
-            case TenancyCallerKind.SystemInTenant:
+            case TenancyUserKind.SystemInTenant:
                 throw new InvalidOperationException(
                     "A tenant is provisioned by system work outside any tenant. "
                     + SystemWorkAdvice.BeginOutsideTenants("for it"));
@@ -141,11 +141,11 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat; the caller's own refusal for nobody.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant, told what to begin for <paramref name="work"/>.</exception>
     public TTenantId RequireSystemInTenant(string work)
-        => Caller.Kind switch
+        => User.Kind switch
         {
-            TenancyCallerKind.SystemInTenant => Caller.Tenant!.Value,
-            TenancyCallerKind.Seat => throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly),
-            TenancyCallerKind.System => throw new InvalidOperationException(
+            TenancyUserKind.SystemInTenant => User.Tenant!.Value,
+            TenancyUserKind.Seat => throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly),
+            TenancyUserKind.System => throw new InvalidOperationException(
                 $"{work} by system work in that tenant. " + SystemWorkAdvice.BeginInATenant("for it")),
             _ => throw Refusal(),
         };
@@ -216,13 +216,13 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// </exception>
     public async Task RequireGrantableAsync(TSeatId? to, TUnitId unit, TRole role, DateTimeOffset? until, CancellationToken cancellationToken)
     {
-        if (Caller.Kind != TenancyCallerKind.Seat)
+        if (User.Kind != TenancyUserKind.Seat)
         {
             return;
         }
 
         var managing = ContainedPermissionsOf(role);
-        var self = to is { } target && target.Equals(Caller.Seat!.Value);
+        var self = to is { } target && target.Equals(User.Seat!.Value);
         if (managing.Count > 0 && self)
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.SelfAppointment, ("Role", role.Id));
@@ -377,7 +377,7 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// </exception>
     public async Task RequireMovableAsync(TUnitId unit, TUnitId parent, TUnitId newParent, CancellationToken cancellationToken)
     {
-        if (Caller.Kind != TenancyCallerKind.Seat)
+        if (User.Kind != TenancyUserKind.Seat)
         {
             return;
         }
@@ -387,7 +387,7 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
         // above both parents: the mover's own come back twice from there, and another seat's not at all. These
         // are other seats' rights too, so the store answers, which reads them where a seat's own reads may not.
         var rows = await _store.RightsAMoveChangesAsync(
-            Caller.Tenant!.Value, Caller.Seat!.Value, parent, newParent, _catalogue.AccessManagingPermissions, Now, cancellationToken).ConfigureAwait(false);
+            User.Tenant!.Value, User.Seat!.Value, parent, newParent, _catalogue.AccessManagingPermissions, Now, cancellationToken).ConfigureAwait(false);
         var aboveParent = rows.Where(row => row.Parent.Equals(parent)).Select(row => row.UnitId).ToHashSet();
         var aboveNewParent = rows.Where(row => row.Parent.Equals(newParent)).Select(row => row.UnitId).ToHashSet();
         var changed = new Dictionary<string, DateTimeOffset?>(StringComparer.Ordinal);
@@ -397,7 +397,7 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
             var takes = row.Parent.Equals(parent) && !aboveNewParent.Contains(row.UnitId);
             var counts = IsContained(row.Permission)
                 ? gives || takes
-                : gives && row.OfCaller && _catalogue.IsLive(row.Permission);
+                : gives && row.OfCurrentSeat && _catalogue.IsLive(row.Permission);
             if (counts)
             {
                 Extend(changed, row.Permission, row.EndsAt);
@@ -466,7 +466,7 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// grant keeps, and what the seat's own rules read; who acted, in full, is <see cref="By"/>.
     /// </summary>
     public TSeatId? ActorFor(TSeatId target)
-        => BySystem && Caller.Seat is { } acting && acting.Equals(target) ? null : Caller.Seat;
+        => BySystem && User.Seat is { } acting && acting.Equals(target) ? null : User.Seat;
 
     /// <summary>The tenant, which is the caller's own.</summary>
     public async Task<TTenant> LoadTenantAsync(TTenantId id, CancellationToken cancellationToken)
@@ -488,7 +488,7 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// restrictive row access rule of the application's keeps out of the organization, on a database that keeps
     /// its own policies. System work in the tenant always reads it.
     /// </summary>
-    public async Task<TOrganization?> OrganizationTheCallerReadsAsync(TTenantId id, CancellationToken cancellationToken)
+    public async Task<TOrganization?> OrganizationTheUserReadsAsync(TTenantId id, CancellationToken cancellationToken)
         => BySystem
             ? await ReadOrganizationAsync(id, cancellationToken).ConfigureAwait(false)
             : await _store.ReadOrganizationAsync(id, cancellationToken).ConfigureAwait(false);
@@ -533,8 +533,8 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// </summary>
     private async Task<Dictionary<string, DateTimeOffset?>> HeldUntilAsync(TUnitId unit, CancellationToken cancellationToken)
     {
-        var tenant = Caller.Tenant!.Value;
-        var seat = Caller.Seat!.Value;
+        var tenant = User.Tenant!.Value;
+        var seat = User.Seat!.Value;
         var now = Now;
         var reaching = from right in _store.Reads.SeatRights
                        where right.TenantId.Equals(tenant) && right.SeatId.Equals(seat)
@@ -593,7 +593,7 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     private static bool HeldLongEnough(IReadOnlyDictionary<string, DateTimeOffset?> held, string permission, DateTimeOffset? until)
         => held.TryGetValue(permission, out var end) && (end is not { } ends || (until is { } needed && ends >= needed));
 
-    private Exceptions.RefusalException Refusal() => TenancyRefusals.Refuse(Caller.Refusal ?? TenancyRefusals.NotSeated);
+    private Exceptions.RefusalException Refusal() => TenancyRefusals.Refuse(User.Refusal ?? TenancyRefusals.NotSeated);
 
     /// <summary>
     /// <c>tenancy.not-permitted</c>, with the permission and the unit as values. The unit is not written into the

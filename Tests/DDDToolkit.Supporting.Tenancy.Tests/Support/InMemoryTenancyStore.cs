@@ -11,14 +11,14 @@ namespace DDDToolkit.Supporting.Tenancy.Tests.Support;
 /// <list type="bullet">
 /// <item>It keeps what was saved apart from a unit of work: a command gets its own copies of what it loads,
 /// and a refused command leaves the saved state as it was.</item>
-/// <item>It emulates the tenant filter: every lookup and every read row keeps to the current Tenancy caller's
+/// <item>It emulates the tenant filter: every lookup and every read row keeps to the current Tenancy user's
 /// tenant, evaluated when the query runs; only <see cref="SlugTakenAsync"/> and <see cref="ListTenantsAsync"/>
 /// look across tenants.</item>
 /// <item>It emulates the save: <see cref="TenancySaveCheck"/> on every changed or added aggregate first, then
 /// the invariants, then the closure and the rights recomputed with <see cref="TenancyProjection"/>, the same
 /// functions the Entity Framework writer uses.</item>
 /// <item>It records the order of the calls made to it, so a test sees what a command read first, and who was
-/// calling at each, Tenancy's caller and the toolkit's, so a test sees what a command ran as.</item>
+/// calling at each, Tenancy's user and the toolkit's, so a test sees what a command ran as.</item>
 /// <item>With <see cref="KeepsOtherSeatsRights"/> it shows a seat only its own rights, as a database that keeps the
 /// rights itself does, while it still answers what the use cases ask about every seat's: the administrators, and
 /// the rights a move changes.</item>
@@ -502,7 +502,7 @@ public sealed class InMemoryTenancyStore
     // ---------------------------------------------------------------- the rest
 
     /// <summary>Whether the tenant filter lets the current caller see a row of <paramref name="tenant"/>.</summary>
-    private static bool Visible(TenantId tenant) => TenancyCallers.CurrentTenantOrNull() is TenantId current && current == tenant;
+    private static bool Visible(TenantId tenant) => TenancyUsers.CurrentTenantOrNull() is TenantId current && current == tenant;
 
     private static TenantId TenantOf(object aggregate) => aggregate switch
     {
@@ -530,7 +530,7 @@ public sealed class InMemoryTenancyStore
     private void Record(string call)
     {
         _calls.Add(call);
-        _observed.Add(new StoreCall(call, TenancyCallers.Ambient, BegunUser));
+        _observed.Add(new StoreCall(call, TenancyUsers.Ambient, BegunUser));
     }
 
     private void AddToUnitOfWork(object aggregate)
@@ -599,7 +599,7 @@ public sealed class InMemoryTenancyStore
         private bool Readable(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId> right)
             => !mayKeepRights
                || !store.KeepsOtherSeatsRights
-               || TenancyCallers.Ambient is not HostCaller { Kind: TenancyCallerKind.Seat } seat
+               || TenancyUsers.Ambient is not HostUser { Kind: TenancyUserKind.Seat } seat
                || right.SeatId == seat.Seat;
 
         public IQueryable<OrganizationUnitPath<TenantId, OrganizationUnitId>> UnitPaths
@@ -666,6 +666,6 @@ public sealed class InMemoryTenancyStore
 
 /// <summary>One call made to the store, and who was calling when it was made.</summary>
 /// <param name="Name">The call.</param>
-/// <param name="Tenancy">The Tenancy caller then.</param>
-/// <param name="Core">The toolkit's caller then.</param>
-public sealed record StoreCall(string Name, ITenancyCaller? Tenancy, CurrentUserSnapshot? Core);
+/// <param name="Tenancy">The Tenancy user then.</param>
+/// <param name="Core">The toolkit's current user then.</param>
+public sealed record StoreCall(string Name, ITenancyUser? Tenancy, CurrentUserSnapshot? Core);

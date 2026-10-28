@@ -205,7 +205,7 @@ public sealed class PooledContextRowLevelSecurityTests(SupabaseRowLevelSecurityD
         await using var plain = new NpgsqlConnection(connectionString);
         await plain.OpenAsync(Cancellation);
         await using var command = new NpgsqlCommand(
-            $"SELECT pg_backend_pid()::text || '|' || current_user || '|' || coalesce(current_setting('{TeamOfTheCaller.Setting}', true), '') || '|' || coalesce(current_setting('request.jwt.claims', true), '')",
+            $"SELECT pg_backend_pid()::text || '|' || current_user || '|' || coalesce(current_setting('{TeamOfTheUser.Setting}', true), '') || '|' || coalesce(current_setting('request.jwt.claims', true), '')",
             plain);
 
         (await command.ExecuteScalarAsync(Cancellation)).Should().Be($"{backend}|{LoginRole}||", "the connection pool's reset takes the role, the claims and the settings off");

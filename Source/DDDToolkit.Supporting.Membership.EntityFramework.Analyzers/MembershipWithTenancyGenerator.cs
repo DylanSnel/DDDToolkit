@@ -308,7 +308,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         var ids = tenant + ", " + join.Seat + ", " + unit + ", " + role;
         var tenancy = TenancyAccessNamespace + ".TenancyAccessManager<" + ids + ">";
         var queries = TenancyAccessNamespace + ".ITenancyQueries<" + ids + ">";
-        var callers = TenancyAccessNamespace + ".TenancyCallers.Current<" + tenant + ", " + join.Seat + ">()";
+        var currentUser = TenancyAccessNamespace + ".TenancyUsers.Current<" + tenant + ", " + join.Seat + ">()";
         var catalogue = "global::" + Tenancy + ".Catalogue.TenancyCatalogue";
         var joined = join.ClassName + parameters;
 
@@ -347,7 +347,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 // The one thing the resource's own registration cannot tell: a seat's id is over the same value as a
                 // user's, so rules that take the member from the token would be accepted, and read a user for a seat.
                 // Who a member is follows from the member id where the rules say nothing: here, the caller's seat.
-                using (writer.Block("if (rules.Members.Kind is " + Membership + ".Access.MemberSourceKind.CallerId or " + Membership + ".Access.MemberSourceKind.Claim)"))
+                using (writer.Block("if (rules.Members.Kind is " + Membership + ".Access.MemberSourceKind.CurrentUserId or " + Membership + ".Access.MemberSourceKind.Claim)"))
                 {
                     writer.Line("throw new global::System.ArgumentException(");
                     writer.Line("    \"The rules '\" + rules.Name + \"' take a member from the caller's token (MemberSource.\" + rules.Members.Kind + \"), and "
@@ -377,7 +377,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         writer.Line("/// </summary>");
         var answered = new List<string>
         {
-            Membership + ".Access.ICallerMember<" + join.IdOfResource + ", " + join.Seat + ">",
+            Membership + ".Access.ICurrentMember<" + join.IdOfResource + ", " + join.Seat + ">",
             Membership + ".Managers.IMemberDirectory<" + join.IdOfResource + ", " + join.Seat + ">",
             Membership + ".EntityFramework.IPlacesReached<" + join.IdOfResource + ", " + unit + ">",
             Membership + ".Managers.IOwnPlaceWork<" + join.IdOfResource + ", " + join.Seat + ">",
@@ -414,8 +414,8 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("/// <summary>The caller's seat, while it is one: the application's own work in a tenant acts for a seat at most, and is nobody's member.</summary>");
             using (writer.Block("public " + join.Seat + "? Find(" + CurrentUserSnapshot + " user)"))
             {
-                writer.Line("var current = " + callers + ";");
-                writer.Line("return current.Kind == " + TenancyAccessNamespace + ".TenancyCallerKind.Seat ? current.Seat : null;");
+                writer.Line("var current = " + currentUser + ";");
+                writer.Line("return current.Kind == " + TenancyAccessNamespace + ".TenancyUserKind.Seat ? current.Seat : null;");
             }
 
             writer.Line();

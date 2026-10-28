@@ -18,7 +18,7 @@ namespace DDDToolkit.Access;
 /// var checks = new AccessChecks&lt;IBillingRequest&gt;([new CurrentUserAccessCheck(user), new BillingAccessCheck(...)]);
 /// </code>
 /// <para>
-/// What the caller's own value of a type is, the <see cref="ICallersOwn{TValue}"/> registered for the type says, found
+/// What the caller's own value of a type is, the <see cref="IOwnedByCurrentUser{TValue}"/> registered for the type says, found
 /// in the scope's services it is given; for a <see cref="Guid"/> it is the caller's verified identity unless one is
 /// registered. A value of a type nothing says that for is a case it does not decide, so the set of checks stops the
 /// request, as it stops any requirement nothing decides, and names the registration that is missing.
@@ -49,7 +49,7 @@ namespace DDDToolkit.Access;
 /// </remarks>
 /// <param name="user">Who is calling.</param>
 /// <param name="services">
-/// The services of the scope the check runs in, where an <see cref="ICallersOwn{TValue}"/> and an
+/// The services of the scope the check runs in, where an <see cref="IOwnedByCurrentUser{TValue}"/> and an
 /// <see cref="IAggregateOwners{TId}"/> are registered; left out, only a <see cref="Guid"/> is said the caller's own of, and
 /// the owner of no aggregate is read.
 /// </param>
@@ -132,7 +132,7 @@ public sealed class CurrentUserAccessCheck(ICurrentUser user, IServiceProvider? 
 
             case IOwnedRequirement owned:
                 // Compared at the door with what the caller has: the request names the value, and never says whose it is.
-                if (!owned.IsTheCallers(user, services))
+                if (!owned.IsTheCurrentUsers(user, services))
                 {
                     throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);
                 }

@@ -106,11 +106,11 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
             var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
             var toolkit = () => EntityFrameworkChecks.EnsureToolkitWired(context);
             var tenancy = () => TenancyChecks.EnsureWired(context);
-            var asCaller = () => PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
+            var asUser = () => PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
 
             toolkit.Should().NotThrow("{0} saves through the toolkit's interceptors, and its outbox and the history it keeps are in its model", contextType.Name);
             tenancy.Should().NotThrow("{0} keeps rows to a tenant, and UseDDDToolkit gave it Tenancy's save check after the toolkit's interceptors", contextType.Name);
-            asCaller.Should().NotThrow("{0} runs as its caller: the host registered row level security, and UseDDDToolkit put it on the context", contextType.Name);
+            asUser.Should().NotThrow("{0} runs as its caller: the host registered row level security, and UseDDDToolkit put it on the context", contextType.Name);
 
             // Each module wrote UseDDDToolkit and nothing more: the toolkit's interceptors, then the caller on every
             // connection, then Tenancy's save check, each once, in that order.
@@ -251,7 +251,7 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
         }
 
         // And it is not only listed: a statement of a request passes through it.
-        using (SampleCallers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
         {
             added.WatchThisFlow();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(new VisibleProjects(), Cancellation);

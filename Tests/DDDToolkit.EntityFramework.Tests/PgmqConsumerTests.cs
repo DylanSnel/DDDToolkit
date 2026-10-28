@@ -140,7 +140,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
     public async Task Pgmq_consumes_with_explicit_callers_required()
     {
         var shelves = new ShelfCounter();
-        await using (var host = await HostAsync("strict_q", shelves, requireExplicitCallers: true, around: IntegrationEventScopes.System))
+        await using (var host = await HostAsync("strict_q", shelves, requireExplicitCurrentUser: true, around: IntegrationEventScopes.System))
         {
             await host.SendAsync(Message());
             (await host.Consumer.ConsumeOnceAsync(Cancellation)).Should().Be(1);
@@ -151,7 +151,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         }
 
         var unscoped = new ShelfCounter();
-        await using (var host = await HostAsync("unscoped_q", unscoped, options => options.VisibilityTimeout = TimeSpan.FromSeconds(1), requireExplicitCallers: true))
+        await using (var host = await HostAsync("unscoped_q", unscoped, options => options.VisibilityTimeout = TimeSpan.FromSeconds(1), requireExplicitCurrentUser: true))
         {
             await host.SendAsync(Message());
             await host.Consumer.ConsumeOnceAsync(Cancellation);
@@ -232,7 +232,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         string queue,
         ShelfCounter shelves,
         Action<PgmqConsumerOptions>? configure = null,
-        bool requireExplicitCallers = false,
+        bool requireExplicitCurrentUser = false,
         IntegrationEventScope? around = null)
     {
         var database = Database;
@@ -240,7 +240,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(contracts => contracts.Register<ShelfOpenedV3>()));
-        if (requireExplicitCallers)
+        if (requireExplicitCurrentUser)
         {
             // The module's context runs under row level security, which asks who is calling on every connection:
             // UseDDDToolkit below puts it on the context once it is registered.

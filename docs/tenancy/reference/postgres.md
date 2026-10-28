@@ -16,7 +16,7 @@ Namespace `DDDToolkit.Supporting.Tenancy.Postgres`.
 ### `TenancyRowAccessContribution`
 
 ```csharp
-public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunctions
+public class TenancyRowAccessContribution : IRowAccessContribution, ICurrentUserFunctions
 ```
 
 Tenancy's row level security, written from each context's model when the policies are exported: the SQL functions rules ask ([`TenancyRowAccess`](queries.md#tenancyrowaccess)), the policies on Tenancy's own tables and on every table a module keeps to a tenant, and the triggers that check at commit what no policy can see. This package declares it with `[assembly: RowAccessContribution]`, so the Supabase export of every application that references the package writes it, and the application writes nothing for it but, where it has them, two marks:
@@ -33,13 +33,13 @@ The catalogue is the one the application runs with, the application's part and e
 
 **Remarks**
 
-For the context that maps Tenancy's tables, in its default schema: the functions `caller_seat`, `caller_tenant`, `system_tenant`, `units_where_i_hold_permission`, `readable_units`, `seats_in_my_units`, `roles_with_permission`, `holds_permission`, `holds_at_tenant`, `identity_tenants`, `unit_parent`, `permission_manages_access`, `permission_is_contained` and `starter_role_permissions`, executable by signed-in users and by system work in a tenant; the policies on Tenancy's tables, which only this contribution writes; and the triggers that keep an administrator in every active or suspended tenant, every right backed by a grant, the closure of the tree exact, and fixed what a seat, a placement and a grant are about.
+For the context that maps Tenancy's tables, in its default schema: the functions `current_seat`, `current_tenant`, `system_tenant`, `units_where_i_hold_permission`, `readable_units`, `seats_in_my_units`, `roles_with_permission`, `holds_permission`, `holds_at_tenant`, `identity_tenants`, `unit_parent`, `permission_manages_access`, `permission_is_contained` and `starter_role_permissions`, executable by signed-in users and by system work in a tenant; the policies on Tenancy's tables, which only this contribution writes; and the triggers that keep an administrator in every active or suspended tenant, every right backed by a grant, the closure of the tree exact, and fixed what a seat, a placement and a grant are about.
 
 Who reads the seats, and who besides the seats managers at its unit reads an invitation, are defaults (`ContributedDefault`), since what people may see of each other is the application's choice: a `[RowAccess]` rule of the application's on its seat class, or on its invitation class, that allows `Read` to signed-in users takes the place of the default, held to the calling seat's tenant. What Tenancy's own work reads stays whatever the rule says: a person's own seats, every seat of the tenant to a seat that manages seats, grants or units anywhere or roles for the whole tenant, and an invitation to the seats managers at its unit. The functions that answer about the caller and about rights run as their owner and are no read of a table, so a rule changes nothing they answer; `tenant_seats`, which runs as its caller, answers the seats the rule lets the caller read. Every other read, and every write, stays this contribution's.
 
-The database keeps the rights: a trigger on the grants, the seats and the roles writes each seat's rights as they change, from `permission_is_live`, which says which permissions the catalogue has live, and no caller writes one. A seat reads its own rights and no other seat's; a grant is read by its seat, by the seats that manage grants, seats or units at its unit, held there or above it, and by the seats that manage roles for the whole tenant. What a seat may learn of other seats' rights, three functions answer, executable by signed-in users alone, as ids, permissions and dates: `tenant_administrators` and `seats_holding_permission_at` each right whose grant the seat may read, and `permissions_a_move_changes` to a seat that manages units at both parents of the move, of another seat's rights only those the move changes, which reach one parent and not the other. Tenancy's own system work in a tenant writes that tenant's rights again with `rewrite_tenant_rights`, after rows were written past the trigger.
+The database keeps the rights: a trigger on the grants, the seats and the roles writes each seat's rights as they change, from `permission_is_live`, which says which permissions the catalogue has live, and no caller writes one. A seat reads its own rights and no other seat's; a grant is read by its seat, by the seats that manage grants, seats or units at its unit, held there or above it, and by the seats that manage roles for the whole tenant. What a seat may learn of other seats' rights, three functions answer, executable by signed-in users alone, as ids, permissions and dates: `tenant_administrators` and `seats_holding_permission_at` each right whose grant the seat may read, and `permissions_a_unit_move_changes` to a seat that manages units at both parents of the move, of another seat's rights only those the move changes, which reach one parent and not the other. Tenancy's own system work in a tenant writes that tenant's rights again with `rewrite_tenant_rights`, after rows were written past the trigger.
 
-A module reads Tenancy through six more functions, one for each row of the read model, which its context maps with `AddTenancyReadFunctions`: `caller_permissions`, `tenant_unit_paths`, `tenant_units`, `tenant_roles_with_starter_roles`, `tenant_placements` and `tenant_seats`. They are executable by signed-in users and by system work in a tenant, run as their caller, so the policies on Tenancy's tables decide their rows, and are written for Postgres to fold into the query that asks them: a module's question is planned over the tables, with their indexes. They answer under column names of their own and a status as the name of its enum member, whatever the application calls Tenancy's tables and columns and however it stores them. They answer access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions, and never what a seat, a unit or a role is called. A start-up check compares the columns each answers with the read model's ([`TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync`](#ensurepoliciesareinplaceasynciserviceprovider-cancellationtoken)).
+A module reads Tenancy through six more functions, one for each row of the read model, which its context maps with `AddTenancyReadFunctions`: `current_permissions`, `tenant_unit_paths`, `tenant_units`, `tenant_roles_with_starter_roles`, `tenant_placements` and `tenant_seats`. They are executable by signed-in users and by system work in a tenant, run as their caller, so the policies on Tenancy's tables decide their rows, and are written for Postgres to fold into the query that asks them: a module's question is planned over the tables, with their indexes. They answer under column names of their own and a status as the name of its enum member, whatever the application calls Tenancy's tables and columns and however it stores them. They answer access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions, and never what a seat, a unit or a role is called. A start-up check compares the columns each answers with the read model's ([`TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync`](#ensurepoliciesareinplaceasynciserviceprovider-cancellationtoken)).
 
 What has to be read before any tenant is known, three functions answer, to system work alone, which asks them in no tenant, where the policies show it no row: `role_permissions_in_use`, the permissions stored on every tenant's roles, and `seats_of_identity`, the seats a person has in every tenant, to Tenancy's own work and to no other scope's; and `tenants_to_sweep`, the ids of the active and the suspended tenants, to the work of every module, which then visits each tenant under its own scope. So nothing of Tenancy's runs as the application itself, past the policies.
 
@@ -67,8 +67,8 @@ A signed-in user is found as the active seat of the verified identity in the ten
 | `IReadOnlyList<string> OperatorTokenRoles { get; }` | The token roles of the application's operators, each once, in ordinal order. |
 | `string Owner { get; }` | The owner of the functions it defines, lower case letters, digits and `-`: their logical names are `owner/name`, which rules and other contributions ask them by. |
 | [`Contribute(DbContext, RowAccessExport)`](#contributedbcontext-rowaccessexport) | What this contribution writes for `context`, or `null` when the context is none of its business. |
-| [`CallerAs(DbContext, Type)`](#callerasdbcontext-type) | The function that answers who the caller is as an `id`, without parameters, or `null` where this keeps no such id in the model of `context`. |
-| [`PlacesWhereCallerHolds(DbContext, Type)`](#placeswherecallerholdsdbcontext-type) | The function that answers, for a key given as text, the places of type `place` the caller's hold of it reaches, or `null` where this keeps no such place in the model of `context`. |
+| [`CurrentUserAs(DbContext, Type)`](#currentuserasdbcontext-type) | The function that answers who the caller is as an `id`, without parameters, or `null` where this keeps no such id in the model of `context`. |
+| [`PlacesWhereCurrentUserHolds(DbContext, Type)`](#placeswherecurrentuserholdsdbcontext-type) | The function that answers, for a key given as text, the places of type `place` the caller's hold of it reaches, or `null` where this keeps no such place in the model of `context`. |
 
 #### `TenancyRowAccessContribution(IEnumerable<IEnumerable<Permission>>, ApplicationCatalogue?, IReadOnlyCollection<string>?)`
 
@@ -128,17 +128,17 @@ What this contribution writes for `context`, or `null` when the context is none 
 **Parameters**
 
 - `context`: The context whose script is being written; it is never opened.
-- `export`: What the script is written with: the roles and the caller functions.
+- `export`: What the script is written with: the roles and the current user functions.
 
 **Exceptions**
 
 - `ArgumentNullException`: `context` or `export` is null.
 - `InvalidOperationException`: The context maps some of Tenancy's tables but not all of them, stores a role's permissions in neither an array nor a JSON array, keeps a type to a tenant in a table of its own apart from the type it derives from, or maps Tenancy's access history without Tenancy's tables; or an operator's token role is mapped to the role of a signed-in user, or to a role another token role shares.
 
-#### `CallerAs(DbContext, Type)`
+#### `CurrentUserAs(DbContext, Type)`
 
 ```csharp
-public DatabaseFunction? CallerAs(DbContext context, Type id)
+public DatabaseFunction? CurrentUserAs(DbContext context, Type id)
 ```
 
 The function that answers who the caller is as an `id`, without parameters, or `null` where this keeps no such id in the model of `context`.
@@ -150,12 +150,12 @@ The function that answers who the caller is as an `id`, without parameters, or `
 
 **Remarks**
 
-[`TenancyFunctions.CallerSeat`](queries.md#tenancyfunctions) for the application's seat id, where the context maps Tenancy's tables or its read model, which knows it: so a resource whose members are seats has its functions ask the caller's seat without its rules naming one.
+[`TenancyFunctions.CurrentSeat`](queries.md#tenancyfunctions) for the application's seat id, where the context maps Tenancy's tables or its read model, which knows it: so a resource whose members are seats has its functions ask the caller's seat without its rules naming one.
 
-#### `PlacesWhereCallerHolds(DbContext, Type)`
+#### `PlacesWhereCurrentUserHolds(DbContext, Type)`
 
 ```csharp
-public DatabaseFunction? PlacesWhereCallerHolds(DbContext context, Type place)
+public DatabaseFunction? PlacesWhereCurrentUserHolds(DbContext context, Type place)
 ```
 
 The function that answers, for a key given as text, the places of type `place` the caller's hold of it reaches, or `null` where this keeps no such place in the model of `context`.
@@ -179,15 +179,15 @@ What Tenancy puts on a Postgres connection for its policies to read.
 
 | Member | Summary |
 |---|---|
-| [`TenantSetting`](#tenantsetting) | The setting the tenant of the current Tenancy caller travels in, next to the caller's role and claims and in the same statement: the value of its id, written with the invariant culture (a `Guid` as `D`), or `''` when the caller acts in no tenant. |
+| [`TenantSetting`](#tenantsetting) | The setting the tenant of the current Tenancy user travels in, next to the caller's role and claims and in the same statement: the value of its id, written with the invariant culture (a `Guid` as `D`), or `''` when the caller acts in no tenant. |
 
 #### `TenantSetting`
 
 ```csharp
-public const string TenantSetting = "tenancy.caller_tenant"
+public const string TenantSetting = "tenancy.current_tenant"
 ```
 
-The setting the tenant of the current Tenancy caller travels in, next to the caller's role and claims and in the same statement: the value of its id, written with the invariant culture (a `Guid` as `D`), or `''` when the caller acts in no tenant. SQL reads it with `current_setting('tenancy.caller_tenant', true)`.
+The setting the tenant of the current Tenancy user travels in, next to the caller's role and claims and in the same statement: the value of its id, written with the invariant culture (a `Guid` as `D`), or `''` when the caller acts in no tenant. SQL reads it with `current_setting('tenancy.current_tenant', true)`.
 
 It is the application's word, as every setting is: any statement on the application's connection can set it. SQL that reads it for a signed-in user should find the seat from the verified identity and this tenant, and require that seat and tenant to be active, so a wrong tenant reaches no seat; only work the application begins on purpose, the scoped system work's, can take it as given.
 
@@ -225,7 +225,7 @@ The ones that ask the database do so on a context of Tenancy's own, made in a sc
 | `PoliciesInPlaceCheck = "tenancy.policies-in-place"` | The start-up check that Tenancy's policies, functions, triggers and the unique index on a tenant's root are in the database, written from the catalogue the application runs with ([`EnsurePoliciesAreInPlaceAsync`](#ensurepoliciesareinplaceasynciserviceprovider-cancellationtoken)). |
 | `DataApiLoginRole = "authenticator"` | The role PostgREST, and so Supabase's Data API, logs in as before it switches to a caller's role. |
 | [`EnsureExplicitCurrentUser(IServiceProvider)`](#ensureexplicitcurrentuseriserviceprovider) | Proves the host still requires every flow of work to begin its user, as [`TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres`](managers.md#addtenancypostgresiservicecollection) registered: the `CurrentUserOptions` the services resolve, and the row level security interceptor the contexts use, which read them when it was built. |
-| [`EnsureSeatedTokenRolesAreSignedInUsers(IServiceProvider)`](#ensureseatedtokenrolesaresignedinusersiserviceprovider) | Proves every token role Tenancy seats ([`TenantSelectionOptions.SeatedTokenRoles`](callers.md#tenantselectionoptions)) reaches the database as a signed-in user: the role `authenticated`, the user's role by its own name, or a token role mapped to the user's role (`PostgresRowLevelSecurityOptions.TokenRoles`). |
+| [`EnsureSeatedTokenRolesAreSignedInUsers(IServiceProvider)`](#ensureseatedtokenrolesaresignedinusersiserviceprovider) | Proves every token role Tenancy seats ([`TenantSelectionOptions.SeatedTokenRoles`](access.md#tenantselectionoptions)) reaches the database as a signed-in user: the role `authenticated`, the user's role by its own name, or a token role mapped to the user's role (`PostgresRowLevelSecurityOptions.TokenRoles`). |
 | [`EnsureSystemReadsAcrossTenantsAsync(IServiceProvider, CancellationToken)`](#ensuresystemreadsacrosstenantsasynciserviceprovider-cancellationtoken) | Proves Tenancy's reads across tenants answer, with nothing running past the policies: the few reads made before any tenant is known, the permissions stored on every tenant's roles among them and the tenants a round of system work visits. |
 | [`EnsureSystemInRoleIsConfinedAsync(IServiceProvider, CancellationToken)`](#ensuresysteminroleisconfinedasynciserviceprovider-cancellationtoken) | Proves the scoped system role, `PostgresRowLevelSecurityOptions.SystemInRole`, cannot escape the tenant its policies keep it in: it is not a superuser, has no `BYPASSRLS`, cannot log in and has the privileges of no role that owns a table; neither the user's nor the anonymous caller's role has its privileges, nor does the role of any mapped token role (`PostgresRowLevelSecurityOptions.TokenRoles`), and the Data API's login role ([`DataApiLoginRole`](#tenancypostgreschecks)), where there is one, is not a member of it; no mapped token role has the privileges of the user's role, which would give the holder of such a token, who has no seat, every policy and every function written for signed-in users; no mapped token role may execute a function in Tenancy's schema either, by a grant of its own or with the privileges of another role it was given; and neither the anonymous caller's role nor every role at once, `PUBLIC`, may execute any of the functions in Tenancy's schema that run as their owner, the ones that answer about other seats' rights among them. |
 | [`EnsurePoliciesAreInPlaceAsync(IServiceProvider, CancellationToken)`](#ensurepoliciesareinplaceasynciserviceprovider-cancellationtoken) | Proves Tenancy's policies are in the database the application talks to, and that the application leaves to the database what they take from it: every one of Tenancy's tables has row level security on, and so has its access history where the context maps one; the units' table has the unique index that keeps a tenant's organization to a single root; the functions written from the catalogue, which say which permissions manage access, which of them a seat hands on only where it holds them, which permissions a copy of each starter role holds and which permissions are live, answer as the catalogue the application runs with does, so a database written with containment on for an application that turned it off, or the other way round, is refused and said to be so; the store leaves the rights to the database ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), and the trigger that writes them is on the grants, the seats and the roles; the functions the store asks about other seats' rights, the ones system work reads across tenants through and the ones that take the tenant as an argument are there, running as their owner; and the functions a module reads Tenancy through are there, running as their caller and written for Postgres to fold into the module's queries, each answering exactly the columns of its row of the read model, in order. |
@@ -253,7 +253,7 @@ Proves the host still requires every flow of work to begin its user, as [`Tenanc
 public static void EnsureSeatedTokenRolesAreSignedInUsers(IServiceProvider services)
 ```
 
-Proves every token role Tenancy seats ([`TenantSelectionOptions.SeatedTokenRoles`](callers.md#tenantselectionoptions)) reaches the database as a signed-in user: the role `authenticated`, the user's role by its own name, or a token role mapped to the user's role (`PostgresRowLevelSecurityOptions.TokenRoles`). Tenancy's policies are written for that one database role. A seated token role that runs as another, a mapped role of its own or the anonymous caller's, would be a seat in C# and nobody to the database: every read empty and every write refused, with nothing that says why.
+Proves every token role Tenancy seats ([`TenantSelectionOptions.SeatedTokenRoles`](access.md#tenantselectionoptions)) reaches the database as a signed-in user: the role `authenticated`, the user's role by its own name, or a token role mapped to the user's role (`PostgresRowLevelSecurityOptions.TokenRoles`). Tenancy's policies are written for that one database role. A seated token role that runs as another, a mapped role of its own or the anonymous caller's, would be a seat in C# and nobody to the database: every read empty and every write refused, with nothing that says why.
 
 **Parameters**
 

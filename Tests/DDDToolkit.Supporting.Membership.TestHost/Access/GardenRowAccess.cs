@@ -22,8 +22,8 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Access;
 public static partial class GardenQuestions
 {
     /// <summary>The garden the caller's requests are in, as its token says it, or null for a caller in none.</summary>
-    [AccessScalar("caller_garden")]
-    public static partial GardenId CallerGarden();
+    [AccessScalar("current_garden")]
+    public static partial GardenId CurrentGarden();
 }
 
 /// <summary>The questions about plots the database answers, under the names a plot's rules give its functions.</summary>
@@ -45,7 +45,7 @@ public static partial class PlotQuestions
 public static partial class GardenersReadTheRolesOfTheirGarden
 {
     /// <summary>Whether the caller reads <paramref name="role"/>: a role of the garden its requests are in.</summary>
-    public static bool Allows(PlotRole role, ICurrentUser user) => role.GardenId == GardenQuestions.CallerGarden();
+    public static bool Allows(PlotRole role, ICurrentUser user) => role.GardenId == GardenQuestions.CurrentGarden();
 }
 
 /// <summary>A signed-in user reads the roles of sheds, and changes none.</summary>

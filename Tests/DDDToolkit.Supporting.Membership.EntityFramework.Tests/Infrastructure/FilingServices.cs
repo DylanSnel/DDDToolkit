@@ -171,7 +171,7 @@ public sealed class FilingServices : IDisposable
 }
 
 /// <summary>The callers of the tests, each as a host makes one: from the claims of a validated token.</summary>
-public static class TestCallers
+public static class TestUsers
 {
     /// <summary>The claim a member of staff is known by, as the folder's rules name it.</summary>
     public const string StaffClaim = "app_metadata.staff";

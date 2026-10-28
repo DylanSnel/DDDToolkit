@@ -1487,12 +1487,12 @@ docs must explain. A package can take over these lines:
     `[OnResource]` names `MemberAccess.Sees`, so a caller acting on its own value still sees the resource. `[OrOwn]`
     next to it is `Any(All(Own(member), Sees(permission, resource)), On(permission, resource))`. Without
     `OwnAlternative`, `[OrOwn]` is [DDD00085](diagnostics.md#ddd00085).
-  - A type that your package declares the caller's own, with an `ICallersOwn<TValue>` it registers, goes in
-    `[assembly: CallersOwn(typeof(...))]`. For an id that the application declares with your template, write
-    `[assembly: CallersOwn(IdOf = typeof(SeatAggregateAttribute<>))]`, as Tenancy does for its seat id. The generator
+  - A type that your package declares the caller's own, with an `IOwnedByCurrentUser<TValue>` it registers, goes in
+    `[assembly: OwnedByCurrentUser(typeof(...))]`. For an id that the application declares with your template, write
+    `[assembly: OwnedByCurrentUser(IdOf = typeof(SeatAggregateAttribute<>))]`, as Tenancy does for its seat id. The generator
     then reports `[OrOwn]` on any other type, [DDD00086](diagnostics.md#ddd00086). `Implies` there names what a
     caller with such a value already meets, as Tenancy names `[InTenant]` and `[SignedIn]` for its seat id. Register
-    the handle with `TryAdd`, so a host's own handle, registered before yours with `AddCallersOwn`, stays. A handle
+    the handle with `TryAdd`, so a host's own handle, registered before yours with `AddOwnedByCurrentUser`, stays. A handle
     registered after yours replaces it.
 
 - **The package's texts.** The registration that knows the refusal codes offers the texts for them. An application

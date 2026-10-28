@@ -58,8 +58,8 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         {
             foreach (var (caller, who) in callers)
             {
-                await using var asCaller = await AsCaller.PersonAsync(database, caller.Identity, Harbor, Cancellation);
-                var refused = (await FluentActions.Awaiting(() => asCaller.ExecuteAsync(change, Cancellation, Oli.Seat.Value)).Should().ThrowAsync<PostgresException>(change)).Which;
+                await using var asUser = await AsUser.PersonAsync(database, caller.Identity, Harbor, Cancellation);
+                var refused = (await FluentActions.Awaiting(() => asUser.ExecuteAsync(change, Cancellation, Oli.Seat.Value)).Should().ThrowAsync<PostgresException>(change)).Which;
                 (refused.SqlState, refused.Hint, refused.ConstraintName).Should().Be((PostgresErrorCodes.InsufficientPrivilege, "ddd:access.refused", SeatIsFixed), "{0} may not: {1}", who, change);
             }
         }
@@ -114,7 +114,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         (await OlisSeatAsync(database)).Should().Be((relinked, Harbor.Value));
 
         // It moves the seat to no other tenant: the policy that keeps system work to its tenant refuses the new row.
-        await using (var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
+        await using (var system = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
         {
             var moved = (await FluentActions.Awaiting(() => system.AttemptAsync("UPDATE tenancy.\"Seats\" SET \"TenantId\" = 2 WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value))
                 .Should().ThrowAsync<PostgresException>()).Which;
@@ -125,7 +125,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
 
         // Another module's system work writes none of Tenancy's rows, and the role that owns the tables, which bypasses
         // every policy, is held by the trigger: a migration changes what a seat is no more than a seat does.
-        await using (var widgets = await AsCaller.SystemInAsync(database, Harbor, "widgets", Cancellation))
+        await using (var widgets = await AsUser.SystemInAsync(database, Harbor, "widgets", Cancellation))
         {
             (await widgets.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Identity\" = gen_random_uuid() WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value)).Should().Be(0);
         }
@@ -145,7 +145,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         var database = await ForcedAsync();
 
         // Hiro may write Seth's row, and suspending Seth would take away the grants Hiro cannot.
-        await using (var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
+        await using (var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
         {
             var refused = (await FluentActions.Awaiting(() => hiro.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Status\" = 'Suspended' WHERE \"Id\" = $1", Cancellation, Seth.Seat.Value))
                 .Should().ThrowAsync<PostgresException>()).Which;
@@ -180,7 +180,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         // application's own commands write the row, and holding it to the units would decide for the application which
         // of its fields a grants manager writes. So Hiro, who gives roles at North alone, writes the version of Sue, at
         // South, which no use case of his would; it changes nothing she holds.
-        await using (var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
+        await using (var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
         {
             (await hiro.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Version\" = \"Version\" + 1 WHERE \"Id\" = $1", Cancellation, Sue.Seat.Value)).Should().Be(1);
         }
@@ -197,12 +197,12 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
 
         // A seat that manages neither writes no other seat's row, the version included: the row is not its to find.
         // Hiro, his desk taken away, is one now.
-        await using (var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
+        await using (var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
         {
             (await hiro.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Version\" = \"Version\" + 1 WHERE \"Id\" = $1", Cancellation, Sue.Seat.Value)).Should().Be(0);
         }
 
-        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        await using (var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Version\" = \"Version\" + 1 WHERE \"Id\" = $1", Cancellation, Sue.Seat.Value)).Should().Be(0);
             (await oli.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Version\" = \"Version\" + 1 WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value)).Should().Be(1, "his own row is his");
@@ -230,26 +230,26 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         // The name has no rule of the application's: whoever may write the row writes it, Tenancy decides nothing.
         foreach (var (caller, seat) in new[] { (Hiro, Sue), (Seth, Sue), (Oli, Oli) })
         {
-            await using var asCaller = await AsCaller.PersonAsync(database, caller.Identity, Harbor, Cancellation);
-            (await asCaller.ExecuteAsync(Renaming, Cancellation, seat.Seat.Value)).Should().Be(1, "{0} may write {1}'s row", caller.Name, seat.Name);
+            await using var asUser = await AsUser.PersonAsync(database, caller.Identity, Harbor, Cancellation);
+            (await asUser.ExecuteAsync(Renaming, Cancellation, seat.Seat.Value)).Should().Be(1, "{0} may write {1}'s row", caller.Name, seat.Name);
         }
 
         // The job title has one: it changes with the seats permission for the whole tenant, which neither Hiro, Seth nor Oli
         // holds, the seat's own row included.
         foreach (var (caller, seat) in new[] { (Hiro, Sue), (Seth, Sue), (Oli, Oli) })
         {
-            await using var asCaller = await AsCaller.PersonAsync(database, caller.Identity, Harbor, Cancellation);
-            var refused = (await FluentActions.Awaiting(() => asCaller.ExecuteAsync(Retitling, Cancellation, seat.Seat.Value)).Should().ThrowAsync<PostgresException>()).Which;
+            await using var asUser = await AsUser.PersonAsync(database, caller.Identity, Harbor, Cancellation);
+            var refused = (await FluentActions.Awaiting(() => asUser.ExecuteAsync(Retitling, Cancellation, seat.Seat.Value)).Should().ThrowAsync<PostgresException>()).Which;
             (refused.SqlState, refused.Hint, refused.ConstraintName).Should().Be((PostgresErrorCodes.InsufficientPrivilege, "ddd:access.refused", JobTitleRule), "{0} on {1}'s seat", caller.Name, seat.Name);
         }
 
         // Ada holds it, and system work is the application's own work, which a column rule does not hold.
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync(Retitling, Cancellation, Sue.Seat.Value)).Should().Be(1);
         }
 
-        await using (var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
+        await using (var system = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
         {
             (await system.ExecuteAsync(Retitling, Cancellation, Oli.Seat.Value)).Should().Be(1);
         }
@@ -278,7 +278,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
     /// <summary>Oli's seat in Harbor as it is stored: its identity and its tenant, read by Tenancy's system work in Harbor.</summary>
     private static async Task<(Guid Identity, long Tenant)> OlisSeatAsync(TestDatabase database)
     {
-        await using var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
+        await using var system = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
         var identity = await system.ScalarAsync<Guid>("SELECT \"Identity\" FROM tenancy.\"Seats\" WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value);
         var tenant = await system.ScalarAsync<long>("SELECT \"TenantId\" FROM tenancy.\"Seats\" WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value);
         return (identity, tenant);

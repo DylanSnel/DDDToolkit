@@ -30,13 +30,13 @@ public static class MembershipAccessManager
     /// the caller's own refusal when it is nobody; then <c>not-found</c> for a resource it may not see, exactly as for one
     /// that does not exist; then <c>not-permitted</c>, naming the permission.
     /// </summary>
-    internal static async Task<MemberHold<T>> RequireAsync<T>(MembershipRules rules, Action requireCaller, Func<Task<MemberHold<T>?>> hold, string permission)
+    internal static async Task<MemberHold<T>> RequireAsync<T>(MembershipRules rules, Action requireCurrentUser, Func<Task<MemberHold<T>?>> hold, string permission)
         where T : notnull
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(permission);
 
         // The caller before anything is read: nobody is refused as nobody, without a statement made for it.
-        requireCaller();
+        requireCurrentUser();
 
         var codes = rules.Codes;
         var held = await hold().ConfigureAwait(false) ?? throw codes.Refuse(MembershipRefusals.NotFound);
@@ -50,14 +50,14 @@ public static class MembershipAccessManager
     /// How the caller holds <paramref name="permission"/> on a resource it may see, or <see langword="null"/> when it
     /// does not hold it, refusing as <see cref="RequireAsync{T}"/> does up to <c>not-found</c>.
     /// </summary>
-    internal static async Task<MemberVia?> ViaAsync<T>(MembershipRules rules, Action requireCaller, Func<Task<MemberHold<T>?>> hold, string permission)
+    internal static async Task<MemberVia?> ViaAsync<T>(MembershipRules rules, Action requireCurrentUser, Func<Task<MemberHold<T>?>> hold, string permission)
         where T : notnull
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(permission);
 
         // The same first step as every question: nobody is told a resource is not found, as if it had been
         // looked for, when the questions cannot be asked about that caller at all.
-        requireCaller();
+        requireCurrentUser();
 
         var held = await hold().ConfigureAwait(false) ?? throw rules.Codes.Refuse(MembershipRefusals.NotFound);
         return held.Via;
@@ -126,7 +126,7 @@ public sealed class MembershipAccessManager<TResource>
     /// organization the resources belong to, is refused here, before anything is read.
     /// </summary>
     /// <exception cref="Exceptions.RefusalException">The caller is nobody the questions can be asked about.</exception>
-    public void RequireCaller() => _answers.RequireCaller();
+    public void RequireCurrentUser() => _answers.RequireCurrentUser();
 
     /// <summary>
     /// The resources the caller reaches for <paramref name="permission"/>, as a set a statement of your own takes: the
@@ -186,7 +186,7 @@ public sealed class MembershipAccessManager<TResource>
     {
         ArgumentNullException.ThrowIfNull(resource);
 
-        return MembershipAccessManager.RequireAsync(Rules, RequireCaller, () => HoldAsync(resource, permission, cancellationToken), permission);
+        return MembershipAccessManager.RequireAsync(Rules, RequireCurrentUser, () => HoldAsync(resource, permission, cancellationToken), permission);
     }
 
     /// <summary>
@@ -204,7 +204,7 @@ public sealed class MembershipAccessManager<TResource>
     {
         ArgumentNullException.ThrowIfNull(resource);
 
-        return MembershipAccessManager.ViaAsync(Rules, RequireCaller, () => HoldAsync(resource, permission, cancellationToken), permission);
+        return MembershipAccessManager.ViaAsync(Rules, RequireCurrentUser, () => HoldAsync(resource, permission, cancellationToken), permission);
     }
 
     /// <summary>

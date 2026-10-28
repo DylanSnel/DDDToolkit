@@ -17,7 +17,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 ///     public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export)
 ///         => context.Model.FindEntityType(typeof(AuditEntry)) is { } entries
 ///             ? new([], [new ContributedPolicy(entries, "Entries are read by who wrote them", "SELECT", RowAccessRoles.User,
-///                   $"{RowAccessModel.Column(entries, nameof(AuditEntry.WrittenBy))} = {{caller:uid}}", null)], [])
+///                   $"{RowAccessModel.Column(entries, nameof(AuditEntry.WrittenBy))} = {{user:uid}}", null)], [])
 ///             : null;
 /// }
 /// </code>
@@ -34,8 +34,8 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </para>
 /// <para>
 /// SQL a contribution writes may ask functions by <c>{fn:owner/name}</c>, its own or another module's, and
-/// the caller by <c>{caller:uid}</c>, <c>{caller:role}</c>, <c>{caller:claims}</c>, <c>{caller:signedin}</c>
-/// and <c>{caller:claim:path}</c>, which the script fills in as it fills a rule's; <c>{{</c> and <c>}}</c> are
+/// the caller by <c>{user:uid}</c>, <c>{user:role}</c>, <c>{user:claims}</c>, <c>{user:signedin}</c>
+/// and <c>{user:claim:path}</c>, which the script fills in as it fills a rule's; <c>{{</c> and <c>}}</c> are
 /// braces. The script learns from the <c>{fn:...}</c> places which functions a context asks, so it writes
 /// the context that defines a function first.
 /// </para>
@@ -64,6 +64,6 @@ public interface IRowAccessContribution
     /// time and cheaply.
     /// </summary>
     /// <param name="context">The context whose script is being written; it is never opened.</param>
-    /// <param name="export">What the script is written with: the roles and the caller functions.</param>
+    /// <param name="export">What the script is written with: the roles and the current user functions.</param>
     RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export);
 }

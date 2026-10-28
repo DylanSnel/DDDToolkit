@@ -19,7 +19,7 @@ public sealed class ReadFunctionModelTests
     /// <summary>The rows of the read model, with the function that answers each.</summary>
     private static readonly Dictionary<Type, string> Functions = new()
     {
-        [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = TenancyFunctionNames.CallerPermissions,
+        [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = TenancyFunctionNames.CurrentPermissions,
         [typeof(OrganizationUnitPath<TenantId, OrganizationUnitId>)] = TenancyFunctionNames.TenantUnitPaths,
         [typeof(OrganizationUnitRow<TenantId, OrganizationUnitId>)] = TenancyFunctionNames.TenantUnits,
         [typeof(RoleRow<TenantId, RoleId>)] = TenancyFunctionNames.TenantRoles,
@@ -95,7 +95,7 @@ public sealed class ReadFunctionModelTests
         PropertiesOfTheRowNamed(tenancy.Model, "TenantToSweepRow").Should().BeEquivalentTo(["TenantId"]);
         PropertiesOfTheRowNamed(tenancy.Model, "SeatHolderRow").Should().BeEquivalentTo(["SeatId"]);
         PropertiesOfTheRowNamed(module.Model, "SeatHolderRow").Should().BeEquivalentTo(["SeatId"]);
-        PropertiesOfTheRowNamed(tenancy.Model, "MoveReach").Should().BeEquivalentTo(["UnitId", "Permission", "EndsAt", "Parent", "OfCaller"]);
+        PropertiesOfTheRowNamed(tenancy.Model, "MoveReach").Should().BeEquivalentTo(["UnitId", "Permission", "EndsAt", "Parent", "OfCurrentSeat"]);
 
         // And what the units asked about are called, which is a name and a path and nothing more of a unit.
         PropertiesOfTheRowNamed(tenancy.Model, "NamedUnit").Should().BeEquivalentTo(["Id", "Name", "Path", "Depth"]);
@@ -179,8 +179,8 @@ public sealed class ReadFunctionModelTests
         named.Model.GetDbFunctions().Should().HaveCount(6).And.OnlyContain(function => function.Schema == TestTenancyContext.Schema);
         own.Model.GetDbFunctions().Should().HaveCount(6).And.OnlyContain(function => function.Schema == TestWidgetContext.Schema, "without a schema, the functions are looked for where the model's own tables are");
 
-        named.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM tenancy.caller_permissions() AS");
-        own.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM widgets.caller_permissions() AS");
+        named.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM tenancy.current_permissions() AS");
+        own.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM widgets.current_permissions() AS");
 
         // On Npgsql a role's permissions are the array the function answers, asked in SQL.
         named.Model.FindEntityType(typeof(RoleRow<TenantId, RoleId>))!.FindProperty(nameof(RoleRow<TenantId, RoleId>.Permissions))!.GetColumnType().Should().Be("text[]");

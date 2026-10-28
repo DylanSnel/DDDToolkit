@@ -190,7 +190,7 @@ public sealed class SampleOnSupabaseTests(SampleSupabaseStack stack)
         // As Rhea in harbor, the way the host's connections say it: the north's projects, which her seat reaches.
         await RunAsync(login, $$"""
             SELECT set_config('request.jwt.claims', '{"sub":"{{DemoPeople.Rhea.Id}}","role":"authenticated"}', false);
-            SELECT set_config('tenancy.caller_tenant', '{{Harbor.Id.Value}}', false);
+            SELECT set_config('tenancy.current_tenant', '{{Harbor.Id.Value}}', false);
             """);
         (await NamesAsync(login)).Should().BeEquivalentTo("Pier 7", "Inland depot");
 
@@ -198,7 +198,7 @@ public sealed class SampleOnSupabaseTests(SampleSupabaseStack stack)
         // database finds the seat itself, from the identity and the tenant, and takes nobody's word for it. What
         // she still reads is her own, whatever tenant she names, which is how a person picks a tenant before
         // being in one: her seat, and the tenant and the organization it is in. All three are harbor's.
-        await RunAsync(login, $"SELECT set_config('tenancy.caller_tenant', '{Meadow.Id.Value}', false)");
+        await RunAsync(login, $"SELECT set_config('tenancy.current_tenant', '{Meadow.Id.Value}', false)");
         await NoRowIsReadAsync("Rhea, who has no seat in meadow", own: new()
         {
             [$"{TenantsContext.Schema}.Seats"] = Harbor.SeatOf(DemoPeople.Rhea).Value,

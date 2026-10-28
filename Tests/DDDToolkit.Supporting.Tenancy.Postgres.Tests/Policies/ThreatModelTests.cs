@@ -62,7 +62,7 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
             .Where(right => right.SeatId == Oli.Seat || right.SeatId == OliInOrchard)
             .ExecuteDeleteAsync(Cancellation));
 
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>("SELECT \"DisplayName\" FROM tenancy.\"Seats\" WHERE \"DisplayName\" = 'Renamed'", Cancellation)).Should().ContainSingle();
         deleted.Should().Be(0);
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, Oli.Seat.Value)).Should().Be(3, "the three rights of Oli's Operator role at North Pier stay");
@@ -95,7 +95,7 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
         var failure = await removing.Should().ThrowAsync<Exception>();
         (failure.Which as PostgresException ?? failure.Which.InnerException as PostgresException)!.ConstraintName.Should().Be("tenancy_administrator_remains");
 
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"TenantId\" = 1 AND \"Permission\" = $1", Cancellation, TenancyPermissions.AdministratorPermission))
             .Should().Be(1, "Ada is still Harbor's administrator");
     }
@@ -108,20 +108,20 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
         // Postgres checks SET ROLE against the role that logged in, not the one in use: any statement on the application's
         // connection can go back to the owner, or become system work in any tenant. Parameterized queries are what keep
         // such a statement off the connection.
-        await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
+        await using var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
         (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Roles\"", Cancellation)).Should().Be(5);
 
         await oli.ExecuteAsync("RESET ROLE", Cancellation);
         (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Roles\"", Cancellation)).Should().Be(13, "as the owner, every tenant's");
 
-        await oli.ExecuteAsync("SELECT set_config('role', 'ddd_system_in', true), set_config('tenancy.caller_tenant', '2', true), set_config('request.jwt.claims', '{\"scope\":\"tenancy\"}', true)", Cancellation);
+        await oli.ExecuteAsync("SELECT set_config('role', 'ddd_system_in', true), set_config('tenancy.current_tenant', '2', true), set_config('request.jwt.claims', '{\"scope\":\"tenancy\"}', true)", Cancellation);
         (await oli.ListAsync<string>("SELECT \"DisplayName\" FROM tenancy.\"Seats\" ORDER BY 1", Cancellation)).Should().BeEquivalentTo("Odette", "Oli");
     }
 
     /// <summary>How many rights Harbor has, as the owner counts them.</summary>
     private static async Task<long> HarborRightsAsync(TestDatabase database)
     {
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         return await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"TenantId\" = 1", Cancellation);
     }
 }

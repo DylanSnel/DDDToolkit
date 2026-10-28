@@ -53,14 +53,14 @@ public sealed class ToolkitWork : IAsyncDisposable
     /// <param name="configure">Anything else about the toolkit's options, such as an in-process dispatch.</param>
     /// <param name="services">Anything else about the host.</param>
     /// <param name="sendToModules">Whether the outbox publishes to the modules, or only dispatches in process.</param>
-    /// <param name="requireExplicitCallers">Whether the host requires explicit callers.</param>
+    /// <param name="requireExplicitCurrentUser">Whether the host requires explicit callers.</param>
     public static async Task<ToolkitWork> StartAsync(
         string connectionString,
-        Action<ModuleIntegrationEvents<CallerInboxContext>>? module = null,
+        Action<ModuleIntegrationEvents<UserInboxContext>>? module = null,
         Action<DDDEntityFrameworkOptions>? configure = null,
         Action<IServiceCollection>? services = null,
         bool sendToModules = true,
-        bool requireExplicitCallers = true)
+        bool requireExplicitCurrentUser = true)
     {
         await CreateTablesAsync(connectionString);
 
@@ -70,7 +70,7 @@ public sealed class ToolkitWork : IAsyncDisposable
         collection.AddDDDToolkitEntityFramework(options =>
         {
             options.MapIntegrationEvents(contracts => contracts.Register<ShelfOpenedV3>());
-            options.UseOutbox<CallerOutboxContext>(outbox =>
+            options.UseOutbox<UserOutboxContext>(outbox =>
             {
                 outbox.RegisterEvent<ShelfCreated>();
                 if (sendToModules)
@@ -83,22 +83,22 @@ public sealed class ToolkitWork : IAsyncDisposable
         });
 
         collection.AddPostgresRowLevelSecurity();
-        if (requireExplicitCallers)
+        if (requireExplicitCurrentUser)
         {
             collection.RequireExplicitCurrentUser();
         }
 
-        collection.AddDbContext<CallerOutboxContext>((provider, options) => options
+        collection.AddDbContext<UserOutboxContext>((provider, options) => options
             .UseNpgsql(connectionString)
             .UseDDDToolkit(provider)
             .UsePostgresRowLevelSecurity(provider));
-        collection.AddDbContext<CallerInboxContext>((provider, options) => options
+        collection.AddDbContext<UserInboxContext>((provider, options) => options
             .UseNpgsql(connectionString)
             .UseDDDToolkit(provider)
             .UsePostgresRowLevelSecurity(provider));
 
-        collection.AddOutboxProcessor<CallerOutboxContext>();
-        collection.AddModuleIntegrationEvents<CallerInboxContext>(registration => module?.Invoke(registration));
+        collection.AddOutboxProcessor<UserOutboxContext>();
+        collection.AddModuleIntegrationEvents<UserInboxContext>(registration => module?.Invoke(registration));
         services?.Invoke(collection);
 
         return new ToolkitWork(connectionString, collection.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }));
@@ -122,10 +122,10 @@ public sealed class ToolkitWork : IAsyncDisposable
     /// </summary>
     public async Task<Guid> QueueAsync(string name = "Fiction", DateTimeOffset? processedAt = null)
     {
-        var outbox = _provider.GetRequiredService<DDDEntityFrameworkOptions>().OutboxFor(typeof(CallerOutboxContext))!;
+        var outbox = _provider.GetRequiredService<DDDEntityFrameworkOptions>().OutboxFor(typeof(UserOutboxContext))!;
         var created = new ShelfCreated(ShelfId.CreateUnique(), name);
 
-        await using var owner = Owner<CallerOutboxContext>(options => new CallerOutboxContext(options));
+        await using var owner = Owner<UserOutboxContext>(options => new UserOutboxContext(options));
         owner.Outbox.Add(new OutboxMessage
         {
             Id = created.EventId,
@@ -148,20 +148,20 @@ public sealed class ToolkitWork : IAsyncDisposable
     public async Task<int> ProcessAsync()
     {
         await using var scope = _provider.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<OutboxProcessor<CallerOutboxContext>>().ProcessPendingAsync(cancellationToken: Cancellation);
+        return await scope.ServiceProvider.GetRequiredService<OutboxProcessor<UserOutboxContext>>().ProcessPendingAsync(cancellationToken: Cancellation);
     }
 
     /// <summary>The outbox's rows, read as the owner.</summary>
     public async Task<List<OutboxMessage>> OutboxAsync()
     {
-        await using var owner = Owner<CallerOutboxContext>(options => new CallerOutboxContext(options));
+        await using var owner = Owner<UserOutboxContext>(options => new UserOutboxContext(options));
         return await owner.Outbox.AsNoTracking().ToListAsync(Cancellation);
     }
 
     /// <summary>The sending module's labels, read as the owner.</summary>
     public async Task<List<string>> LabelsAsync()
     {
-        await using var owner = Owner<CallerOutboxContext>(options => new CallerOutboxContext(options));
+        await using var owner = Owner<UserOutboxContext>(options => new UserOutboxContext(options));
         return await owner.Labels.Select(label => label.Text).ToListAsync(Cancellation);
     }
 
@@ -199,12 +199,12 @@ public sealed class ToolkitWork : IAsyncDisposable
     /// </summary>
     private static async Task CreateTablesAsync(string connectionString)
     {
-        await using (var sender = new CallerOutboxContext(new DbContextOptionsBuilder<CallerOutboxContext>().UseNpgsql(connectionString).Options))
+        await using (var sender = new UserOutboxContext(new DbContextOptionsBuilder<UserOutboxContext>().UseNpgsql(connectionString).Options))
         {
             await sender.GetService<IRelationalDatabaseCreator>().CreateTablesAsync(Cancellation);
         }
 
-        await using (var receiver = new CallerInboxContext(new DbContextOptionsBuilder<CallerInboxContext>().UseNpgsql(connectionString).Options))
+        await using (var receiver = new UserInboxContext(new DbContextOptionsBuilder<UserInboxContext>().UseNpgsql(connectionString).Options))
         {
             await receiver.GetService<IRelationalDatabaseCreator>().CreateTablesAsync(Cancellation);
         }
@@ -219,15 +219,15 @@ public sealed class ToolkitWork : IAsyncDisposable
                 ADD COLUMN "WrittenBy" text NOT NULL DEFAULT current_user,
                 ADD COLUMN "WrittenClaims" text DEFAULT current_setting('request.jwt.claims', true);
 
-            GRANT USAGE ON SCHEMA receiver TO {ExplicitCallersPostgres.SystemInRole};
-            GRANT SELECT, INSERT ON receiver."InboxMessages", receiver."Receipts" TO {ExplicitCallersPostgres.SystemInRole};
+            GRANT USAGE ON SCHEMA receiver TO {ExplicitCurrentUserPostgres.SystemInRole};
+            GRANT SELECT, INSERT ON receiver."InboxMessages", receiver."Receipts" TO {ExplicitCurrentUserPostgres.SystemInRole};
 
             ALTER TABLE receiver."Receipts" ENABLE ROW LEVEL SECURITY;
             CREATE POLICY "Receipts are the receiving scope's to write" ON receiver."Receipts"
-                FOR INSERT TO {ExplicitCallersPostgres.SystemInRole}
+                FOR INSERT TO {ExplicitCurrentUserPostgres.SystemInRole}
                 WITH CHECK ((current_setting('request.jwt.claims', true)::jsonb ->> 'scope') = '{ReceivingScope}');
             CREATE POLICY "Receipts are the receiving scope's to read" ON receiver."Receipts"
-                FOR SELECT TO {ExplicitCallersPostgres.SystemInRole}
+                FOR SELECT TO {ExplicitCurrentUserPostgres.SystemInRole}
                 USING ((current_setting('request.jwt.claims', true)::jsonb ->> 'scope') = '{ReceivingScope}');
             """, connection);
         await command.ExecuteNonQueryAsync(Cancellation);
@@ -254,7 +254,7 @@ public sealed class SeenCallers
 }
 
 /// <summary>The sending module: its outbox, and labels of its own, in a schema of its own.</summary>
-public class CallerOutboxContext(DbContextOptions<CallerOutboxContext> options) : DbContext(options)
+public class UserOutboxContext(DbContextOptions<UserOutboxContext> options) : DbContext(options)
 {
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
@@ -276,7 +276,7 @@ public class Label
 }
 
 /// <summary>The receiving module: its inbox, and the receipts its handler writes.</summary>
-public class CallerInboxContext(DbContextOptions<CallerInboxContext> options) : DbContext(options)
+public class UserInboxContext(DbContextOptions<UserInboxContext> options) : DbContext(options)
 {
     public DbSet<InboxMessage> Inbox => Set<InboxMessage>();
 
@@ -302,7 +302,7 @@ public class Receipt
 /// context, in the inbox's transaction.
 /// </summary>
 [IntegrationEventConsumer("callers.receipt-log")]
-public sealed class ReceiptLog(CallerInboxContext context, SeenCallers seen) : IIntegrationEventHandler<ShelfOpenedV3>
+public sealed class ReceiptLog(UserInboxContext context, SeenCallers seen) : IIntegrationEventHandler<ShelfOpenedV3>
 {
     public Task HandleAsync(ShelfOpenedV3 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {

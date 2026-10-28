@@ -920,7 +920,7 @@ public sealed class PooledContextSaveTests : IDisposable
     [Fact]
     public async Task The_outbox_poller_takes_its_context_as_the_system_caller()
     {
-        using var provider = PollerHost(requireExplicitCallers: true, out var rentals, out var recorder);
+        using var provider = PollerHost(requireExplicitCurrentUser: true, out var rentals, out var recorder);
         var handlerCallers = new List<CurrentUserSnapshot?>();
         recorder.OnEvent = (_, _, _) =>
         {
@@ -944,7 +944,7 @@ public sealed class PooledContextSaveTests : IDisposable
     [Fact]
     public async Task The_outbox_poller_begins_no_caller_where_none_is_required()
     {
-        using var provider = PollerHost(requireExplicitCallers: false, out var rentals, out var recorder);
+        using var provider = PollerHost(requireExplicitCurrentUser: false, out var rentals, out var recorder);
         await QueueAsync(provider);
         rentals.Clear();
 
@@ -959,7 +959,7 @@ public sealed class PooledContextSaveTests : IDisposable
     /// A host whose poller's context comes from a factory the host registered by hand, as one that chooses a
     /// pool by who is calling would be: it writes down who the caller was at every rental.
     /// </summary>
-    private ServiceProvider PollerHost(bool requireExplicitCallers, out List<CurrentUserSnapshot?> rentals, out EventRecorder recorder)
+    private ServiceProvider PollerHost(bool requireExplicitCurrentUser, out List<CurrentUserSnapshot?> rentals, out EventRecorder recorder)
     {
         var seen = new List<CurrentUserSnapshot?>();
         var events = new EventRecorder();
@@ -973,7 +973,7 @@ public sealed class PooledContextSaveTests : IDisposable
             options.UseOutbox(outbox => outbox.RegisterEvent<ShelfCreated>());
         });
 
-        if (requireExplicitCallers)
+        if (requireExplicitCurrentUser)
         {
             services.RequireExplicitCurrentUser();
         }

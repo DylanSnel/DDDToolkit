@@ -456,13 +456,13 @@ where you declare them. The last column says where each closed form is available
 
 | What | Generic over your ids | Closed over your ids | Where the closed form is available |
 |---|---|---|---|
-| Who acts, and system work | `TenancyCallers.Current<TenantId, SeatId>()`, `TenancyWork.BeginSystem<TenantId, SeatId>()` and the others | `TenancyAccessManager`: `CurrentUser`, `CurrentTenant`, `BeginSystem()`, `BeginSystemIn(tenant)`, `BeginTokenIn(...)`, `TenantsToSweepAsync(...)` | Every project that sees your classes: their module, the host, your tests. Also a project of another module with the `TenancyIds` line below. |
+| Who acts, and system work | `TenancyUsers.Current<TenantId, SeatId>()`, `TenancyWork.BeginSystem<TenantId, SeatId>()` and the others | `TenancyAccessManager`: `CurrentUser`, `CurrentTenant`, `BeginSystem()`, `BeginSystemIn(tenant)`, `BeginTokenIn(...)`, `TenantsToSweepAsync(...)` | Every project that sees your classes: their module, the host, your tests. Also a project of another module with the `TenancyIds` line below. |
 | Tenancy's queries over a context | `access.In(source, executor)`, over a read source that is not Entity Framework | `db.Tenancy()` | The project that holds the context, in your classes' module or in a module with the `TenancyIds` line |
 | Registrations | `outbox.AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()` and the others | `outbox.AddTenancyDomainEvents()`, `log.AddTenancyEventLog()`, `modelBuilder.AddTenancyReadModel()` and the others, beside `AddTenancy` | Internal to the project that declares your classes, or to a project of their module that registers Tenancy. A test project that registers Tenancy itself writes the ids. |
 | Tenant selection, for a host's middleware | `TenantSelection<TenantId, SeatId>` | `ITenantSelection`, which returns the caller without its ids | Every project |
 
 - **`ITenantSelection`** is the closed selection, registered per scope, unless your host registered one before. It
-  returns an `ITenancyCaller`, which `TenancyCallers.Begin` takes. So a host's middleware
+  returns an `ITenancyUser`, which `TenancyUsers.Begin` takes. So a host's middleware
   ([tutorial step 5](tutorial.md#step-5-the-host)) looks the same in every application.
 - **Another module sees only your ids** (Billing, Projects). The toolkit never picks an id type as the tenant's id
   because of its name. The module says which of its ids are Tenancy's, with one line in its application project:
@@ -476,7 +476,7 @@ where you declare them. The last column says where each closed form is available
   `modelBuilder.AddTenancyReadFunctions(schema)`. None of them names an id. The managers are not written there: only
   the module that declares Tenancy's classes changes them. A class that the module declares with one of Tenancy's
   templates wins over the line.
-- **Some types always carry the ids**: `ITenancyQueries<...>`, and records such as `SeatOfCaller<TenantId, SeatId>`.
+- **Some types always carry the ids**: `ITenancyQueries<...>`, and records such as `SeatOfUser<TenantId, SeatId>`.
   A module that sees only the ids can use these types. Name each one once per project with a `global using` alias.
 - **Two calls take the ids in every project**, the declaring project included:
   - `TenantSelection<TenantId, SeatId>.SeatsOfAsync`, which returns a person's seats for a tenant picker;

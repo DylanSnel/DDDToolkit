@@ -16,7 +16,7 @@ internal static class TenancyFunctionSql
     /// A package that writes Tenancy's functions for a database that keeps the rights writes it under this name,
     /// in the schema of the context that maps Tenancy's tables.
     /// </summary>
-    internal const string CallerSeat = "caller_seat";
+    internal const string CurrentSeat = "current_seat";
 
     /// <summary>
     /// <c>SELECT f."SeatId", f."RoleId" FROM "tenancy"."tenant_administrators"({0}, {1}) AS f</c>: every row the
@@ -54,7 +54,7 @@ internal static class TenancyFunctionSql
     }
 
     /// <summary>
-    /// <c>SELECT "tenancy"."caller_seat"() IS NOT NULL AS "Value"</c>: whether a function without parameters
+    /// <c>SELECT "tenancy"."current_seat"() IS NOT NULL AS "Value"</c>: whether a function without parameters
     /// answers anything, under the name Entity Framework reads a single value by.
     /// </summary>
     /// <param name="context">The context that will run it.</param>

@@ -146,13 +146,13 @@ public class DirectoryTests
 
         (await harness.As(harness.Administrator, h => h.Seats.WhoAmIAsync(default))).Seat.Id.Should().Be(harness.Administrator);
 
-        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(harness.SystemCaller(actingSeat: harness.Administrator), h => h.Seats.WhoAmIAsync(default)));
-        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(HostCaller.System, h => h.Seats.WhoAmIAsync(default)));
+        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(harness.SystemUser(actingSeat: harness.Administrator), h => h.Seats.WhoAmIAsync(default)));
+        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(HostUser.System, h => h.Seats.WhoAmIAsync(default)));
         await Refused.WithCodeAsync(TenancyRefusals.NotSeated,
-            () => harness.Run(HostCaller.Nobody(TenancyRefusals.TenantRequired), h => h.Seats.WhoAmIAsync(default)),
+            () => harness.Run(HostUser.Nobody(TenancyRefusals.TenantRequired), h => h.Seats.WhoAmIAsync(default)),
             "who am I answers every caller that is not a seat alike");
         await Refused.WithCodeAsync(TenancyRefusals.NotSeated,
-            () => harness.Run(HostCaller.Nobody(TenancyRefusals.NotSeated), h => h.Seats.ListAsync(default)));
+            () => harness.Run(HostUser.Nobody(TenancyRefusals.NotSeated), h => h.Seats.ListAsync(default)));
     }
 
     [Fact]
@@ -203,11 +203,11 @@ public class DirectoryTests
         // Nobody is refused with its own code before anything is read, and system work outside a tenant has no tenant to read.
         foreach (var code in new[] { TenancyRefusals.NotSeated, TenancyRefusals.SeatSuspended, TenancyRefusals.TenantRequired, TenancyRefusals.TenantInactive })
         {
-            await Refused.WithCodeAsync(code, () => harness.Run(HostCaller.Nobody(code), h => h.Seats.OverviewAsync(bert, default)));
+            await Refused.WithCodeAsync(code, () => harness.Run(HostUser.Nobody(code), h => h.Seats.OverviewAsync(bert, default)));
             harness.Store.Calls.Should().BeEmpty("a refused caller reads nothing");
         }
 
-        await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Seats.OverviewAsync(bert, default))).Should().ThrowAsync<InvalidOperationException>();
+        await FluentActions.Awaiting(() => harness.Run(HostUser.System, h => h.Seats.OverviewAsync(bert, default))).Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]
@@ -450,9 +450,9 @@ public class DirectoryTests
         // The caller is asked about before the list is looked at: nobody is refused with its own code.
         foreach (var code in new[] { TenancyRefusals.NotSeated, TenancyRefusals.SeatSuspended, TenancyRefusals.TenantRequired, TenancyRefusals.TenantInactive })
         {
-            await Refused.WithCodeAsync(code, () => harness.Run(HostCaller.Nobody(code), h => h.Seats.ByIdAsync([], default)));
-            await Refused.WithCodeAsync(code, () => harness.Run(HostCaller.Nobody(code), h => h.Roles.ByIdAsync([], default)));
-            await Refused.WithCodeAsync(code, () => harness.Run(HostCaller.Nobody(code), h => h.Organization.UnitsByIdAsync([], default)));
+            await Refused.WithCodeAsync(code, () => harness.Run(HostUser.Nobody(code), h => h.Seats.ByIdAsync([], default)));
+            await Refused.WithCodeAsync(code, () => harness.Run(HostUser.Nobody(code), h => h.Roles.ByIdAsync([], default)));
+            await Refused.WithCodeAsync(code, () => harness.Run(HostUser.Nobody(code), h => h.Organization.UnitsByIdAsync([], default)));
             harness.Store.Calls.Should().BeEmpty("a refused caller reads nothing");
         }
     }
@@ -491,7 +491,7 @@ public class DirectoryTests
             .Select(seat => seat.Id).Should().Equal(harness.Administrator);
 
         // The limit is told to a caller that may ask, and to no other.
-        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(HostCaller.Nobody(TenancyRefusals.NotSeated), h => h.Seats.ByIdAsync(seats, default)));
+        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(HostUser.Nobody(TenancyRefusals.NotSeated), h => h.Seats.ByIdAsync(seats, default)));
     }
 
     [Fact]
@@ -508,9 +508,9 @@ public class DirectoryTests
             .Select(unit => unit.Path).Should().Equal("Harbor Works / North / North Coast");
 
         // Outside any tenant there is no tenant whose names to read.
-        await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Seats.ByIdAsync([harness.Administrator], default))).Should().ThrowAsync<InvalidOperationException>();
-        await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Roles.ByIdAsync([], default))).Should().ThrowAsync<InvalidOperationException>();
-        await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Organization.UnitsByIdAsync([], default))).Should().ThrowAsync<InvalidOperationException>();
+        await FluentActions.Awaiting(() => harness.Run(HostUser.System, h => h.Seats.ByIdAsync([harness.Administrator], default))).Should().ThrowAsync<InvalidOperationException>();
+        await FluentActions.Awaiting(() => harness.Run(HostUser.System, h => h.Roles.ByIdAsync([], default))).Should().ThrowAsync<InvalidOperationException>();
+        await FluentActions.Awaiting(() => harness.Run(HostUser.System, h => h.Organization.UnitsByIdAsync([], default))).Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]

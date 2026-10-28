@@ -35,7 +35,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         await using var services = TallyDatabase.Services(database, operators: true);
 
         // The seed keeps no note on a tenant: one, so every table has a row to read and to try a write with.
-        await using (var seeding = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var seeding = await AsUser.OwnerAsync(database, Cancellation))
         {
             await seeding.ExecuteAsync("INSERT INTO tenancy.\"TenantNote\" (\"Id\", \"HostTenantId\", \"Text\") VALUES (gen_random_uuid(), 1, 'Moored at the quay')", Cancellation);
             await seeding.CommitAsync(Cancellation);
@@ -49,7 +49,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         const string Digests = "tenancy.\"InvitationDigests\"";
         var rows = new Dictionary<string, long>(StringComparer.Ordinal);
         string digest;
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             var tables = await owner.ListAsync<string>(
                 "SELECT pg_catalog.quote_ident(schemaname) || '.' || pg_catalog.quote_ident(tablename) FROM pg_catalog.pg_tables WHERE schemaname = 'tenancy' OR (schemaname = 'ddd' AND tablename = 'EventLog') ORDER BY 1",
@@ -77,7 +77,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
 
         // As a query of the application's own that forgot every condition would run: the mapped role, with every
         // privilege on the tables, and no tenant named on the connection.
-        await using (var asOperator = await AsCaller.TokenRoleAsync(database, TallyRules.OperatorRole, TallyRules.OperatorTokenRole, Operator, tenant: null, Cancellation))
+        await using (var asOperator = await AsUser.TokenRoleAsync(database, TallyRules.OperatorRole, TallyRules.OperatorTokenRole, Operator, tenant: null, Cancellation))
         {
             (await asOperator.ScalarAsync<string>("SELECT current_user::text", Cancellation)).Should().Be(TallyRules.OperatorRole);
 
@@ -115,7 +115,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
             await RefusedAsync(asOperator, "INSERT INTO tenancy.\"SeatRights\" SELECT * FROM tenancy.\"SeatRights\" LIMIT 1");
 
             // The questions a seat asks are not an operator's to ask: it has no seat for them to be about.
-            await RefusedAsync(asOperator, "SELECT tenancy.caller_seat()");
+            await RefusedAsync(asOperator, "SELECT tenancy.current_seat()");
             await RefusedAsync(asOperator, "SELECT tenancy.holds_permission('tenancy.seats.manage')");
         }
 
@@ -125,9 +125,9 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
         {
             var selected = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(BegunUser!, "harbor", Cancellation));
-            selected.Should().Be(HostCaller.OperatorNaming(Harbor));
+            selected.Should().Be(HostUser.OperatorNaming(Harbor));
 
-            using (TenancyCallers.Begin(selected))
+            using (TenancyUsers.Begin(selected))
             {
                 var (role, first) = await services.InScopeAsync(async scoped => (
                     await scoped.TenancyContext().Database.SqlQueryRaw<string>("SELECT current_user::text AS \"Value\"").SingleAsync(Cancellation),
@@ -181,7 +181,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
             scope: TallyContext.Schema);
 
         var tallies = TallyDatabase.NamesOf(database);
-        await using (var asOperator = await AsCaller.TokenRoleAsync(database, TallyRules.OperatorRole, TallyRules.OperatorTokenRole, Operator, tenant: null, Cancellation))
+        await using (var asOperator = await AsUser.TokenRoleAsync(database, TallyRules.OperatorRole, TallyRules.OperatorTokenRole, Operator, tenant: null, Cancellation))
         {
             // What the module's rule admits, across tenants, and nothing of a module that has no rule for operators.
             (await asOperator.ListAsync<string>($"SELECT {tallies.Column("Name")} FROM {tallies.Table} ORDER BY 1", Cancellation)).Should().Equal("Apples", "Crates");
@@ -196,7 +196,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
                 $"INSERT INTO {tallies.Table} ({tallies.Columns}) VALUES ({TallyNames.Values(Harbor, North, "Smuggled", seat: null, "operator", Operator, shared: true)})");
         }
 
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ListAsync<string>($"SELECT {tallies.Column("Name")} FROM {tallies.Table} ORDER BY 1", Cancellation)).Should().Equal("Apples", "Barrels", "Crates");
             (await owner.ListAsync<string>(
@@ -214,7 +214,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
 
         // In the application an operator acts in no tenant, so a query of the module's names that it looks across them.
         using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             var (filtered, across) = await services.InScopeAsync(async scoped => (
                 await scoped.Tallies().Tallies.Select(tally => tally.Name).ToListAsync(Cancellation),
@@ -344,7 +344,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
     private static RowAccessRoleNames Mapped()
         => RowAccessRoleNames.Default with { TokenRoles = new Dictionary<string, string> { [TallyRules.OperatorTokenRole] = TallyRules.OperatorRole } };
 
-    private static async Task RefusedAsync(AsCaller caller, string sql)
+    private static async Task RefusedAsync(AsUser caller, string sql)
     {
         var refusal = await FluentActions.Awaiting(() => caller.AttemptAsync(sql, Cancellation)).Should().ThrowAsync<PostgresException>(sql);
         refusal.Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege, sql);

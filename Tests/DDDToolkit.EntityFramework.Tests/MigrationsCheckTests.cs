@@ -13,7 +13,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// runs the module's context under row level security: it reads the migration history as the application
 /// itself, whatever the host requires of other work.
 /// </summary>
-public sealed class MigrationsCheckTests(ExplicitCallersPostgres postgres)
+public sealed class MigrationsCheckTests(ExplicitCurrentUserPostgres postgres)
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 

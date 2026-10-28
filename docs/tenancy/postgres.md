@@ -111,7 +111,7 @@ enough for the export to write the SQL.
   Tenancy's SQL. A table without RLS is open to every caller with privileges on it. The start-up checks still
   expect the SQL that the contribution writes.
 - **The schema** is the default schema of the context that maps Tenancy's tables. The SQL always quotes it, for
-  example `"tenancy".caller_seat()` ([Schema names](../row-level-security.md#schema-names)).
+  example `"tenancy".current_seat()` ([Schema names](../row-level-security.md#schema-names)).
 
 ### The start-up checks
 
@@ -183,11 +183,11 @@ A tenant with two roots cannot get the index until one of the roots has a parent
 
 ## Passing the tenant to Postgres
 
-- Tenancy passes the tenant in one setting, `tenancy.caller_tenant`
-  ([`TenantSetting`](reference/postgres.md#tenantsetting)). The value is the Tenancy caller's tenant id, or empty.
+- Tenancy passes the tenant in one setting, `tenancy.current_tenant`
+  ([`TenantSetting`](reference/postgres.md#tenantsetting)). The value is the Tenancy user's tenant id, or empty.
   The interceptor sets it in the same statement as the role and the claims
   ([Settings of your own](../row-level-security.md#custom-connection-settings)). An anonymous caller gets an empty value.
-- **For a signed-in user**, the setting names the tenant and never the seat. `caller_seat()` finds the seat of the
+- **For a signed-in user**, the setting names the tenant and never the seat. `current_seat()` finds the seat of the
   token's identity in that tenant, while the seat and the tenant are active. A wrong tenant finds no seat.
 - **System work in a tenant** runs as the scoped system role, with that tenant in the setting.
 
@@ -199,19 +199,19 @@ Green: the rows the query returns. Red: no seat found.
 flowchart TD
     request["<b>Request</b><br/><small>token and Tenant header</small>"]
     selection["<b>TenantSelection</b><br/><small>finds the user's seat in that tenant</small>"]
-    query["<b>Query</b><br/><small>role, claims and tenancy.caller_tenant</small>"]
-    callerSeat["<b>caller_seat()</b><br/><small>finds the seat again from the token</small>"]
+    query["<b>Query</b><br/><small>role, claims and tenancy.current_tenant</small>"]
+    currentSeat["<b>current_seat()</b><br/><small>finds the seat again from the token</small>"]
     rows["<b>Rows</b><br/><small>what that seat may read</small>"]
     nothing["<b>No rows</b><br/><small>no active seat in that tenant</small>"]
     request --> selection
     selection --> query
-    query --> callerSeat
-    callerSeat -->|seat found| rows
-    callerSeat -->|no seat| nothing
+    query --> currentSeat
+    currentSeat -->|seat found| rows
+    currentSeat -->|no seat| nothing
     classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
     classDef good fill:#1f8a5b26,stroke:#1f8a5b
     classDef bad fill:#c93c3c24,stroke:#c93c3c
-    class selection,callerSeat strong
+    class selection,currentSeat strong
     class rows good
     class nothing bad
 ```
@@ -230,7 +230,7 @@ app.Use(async (context, next) =>
         // ITenantSelection has no type parameters, so the middleware names no id types
         var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
             .ResolveAsync(user, context.Request.Headers["Tenant"], context.RequestAborted);
-        using (TenancyCallers.Begin(seat))
+        using (TenancyUsers.Begin(seat))
         {
             await next(context);
         }
@@ -238,12 +238,12 @@ app.Use(async (context, next) =>
 });
 ```
 
-The access file writes `caller_seat()` like this:
+The access file writes `current_seat()` like this:
 
-**20261027164316_access.tenants.ddd.sql**
+**20261028202433_access.tenants.ddd.sql**
 
 ```sql
-CREATE OR REPLACE FUNCTION "tenancy".caller_seat() RETURNS uuid
+CREATE OR REPLACE FUNCTION "tenancy".current_seat() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT s."Id" FROM "tenancy"."Seats" s
 JOIN "tenancy"."Tenants" t ON t."Id" = s."TenantId"
@@ -261,7 +261,7 @@ tenant then looks empty. Set the tenant too, in a transaction that you roll back
 ```sql
 begin;
 select set_config('request.jwt.claims', '{"sub":"<the user''s id>","role":"authenticated"}', true),
-       set_config('tenancy.caller_tenant', '<the tenant''s id>', true);
+       set_config('tenancy.current_tenant', '<the tenant''s id>', true);
 set local role authenticated;
 select * from tenancy."OrganizationUnits"; -- the rows the policies let that user's seat read
 rollback;
@@ -271,7 +271,7 @@ rollback;
 
 - **Seated token roles.** `TenantSelection` looks up seats for a token with the role `authenticated` (the default)
   or with no role. Add other token roles to `options.TenantSelection.SeatedTokenRoles`
-  ([`TenantSelectionOptions`](reference/callers.md#tenantselectionoptions)). A token role mapped to the database
+  ([`TenantSelectionOptions`](reference/access.md#tenantselectionoptions)). A token role mapped to the database
   role of a signed-in user counts as a signed-in user.
 - **Any other [token role](../row-level-security.md#token-roles)**, for example a reporting job's, has no seat in
   any tenant. `TenantSelection` resolves it as nobody with `tenancy.not-seated`, and `SeatsOfAsync` returns no
@@ -300,7 +300,7 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tenancy TO analyst_role;
 
 Only Tenancy's context reads Tenancy's tables. Every other reader calls a function. A function that runs as its
 owner reads past the policies. Most of these functions return only ids, permissions and dates. Three return more,
-and only about the caller. `caller_seat_row()` returns the row of the caller's seat. `identity_tenant_names()`
+and only about the caller. `current_seat_row()` returns the row of the caller's seat. `identity_tenant_names()`
 returns the names of the caller's tenants. `units_named(ids)` returns the names of units in the caller's tenant.
 
 | Reader | Reads through |
@@ -340,7 +340,7 @@ Replace a default with a read rule on your class. Write it like any
 
 | Your rule changes | Your rule leaves unchanged |
 |---|---|
-| Your queries, the seats that `SeatManager` reads, `tenant_seats()` and `ITenancyQueries.Seats()`. | Tenancy's queries about the caller and about rights (`caller_seat`, `seats_in_my_units`, `seats_holding_permission_at` …). These functions run as their owner. |
+| Your queries, the seats that `SeatManager` reads, `tenant_seats()` and `ITenancyQueries.Seats()`. | Tenancy's queries about the caller and about rights (`current_seat`, `seats_in_my_units`, `seats_holding_permission_at` …). These functions run as their owner. |
 | Your entities on the seat class. | Placements and grants. Every member still reads every seat's id and units. Your rule hides the seat's row (the identity and your fields), and other members still see that the seat exists. |
 | Checks that read the seats. [Membership](../membership/overview.md)'s member manager refuses a seat outside your rule with `member-not-active`, the same as a seat that does not exist. A module's rule on `tenant_seats()` does the same. | Writes, which stay Tenancy's. A [column rule](#who-may-change-a-seats-columns) still guards your fields. System work and operators. |
 
@@ -373,9 +373,9 @@ of your class. Each method runs once per statement.
 
 | You mean | Your rule says |
 |---|---|
-| In the caller's tenant | `seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()` |
-| The caller itself | `seat.Id == TenancyRowAccess.CallerSeatId<SeatId>()` |
-| A field of the caller's own seat | `TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee` |
+| In the caller's tenant | `seat.TenantId == TenancyRowAccess.CurrentTenant<TenantId>()` |
+| The caller itself | `seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>()` |
+| A field of the caller's own seat | `TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee` |
 | The people on the projects the caller is on | `PeopleOnMyProjects.Ids().Contains(seat.Id)` ([below](#restrictive-rules)) |
 | The person's own seats, in every tenant | `seat.Identity == user.Id` |
 | The seats placed at or below the caller's units (for a seat at the root, every placed seat) | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` |
@@ -390,7 +390,7 @@ The export joins your rule, limited to the tenant, with OR to the reads Tenancy 
 ```sql
 CREATE POLICY "Seats (select) for authenticated" ON "tenancy"."Seats" FOR SELECT TO authenticated
     USING (("Identity" = (SELECT auth.uid()) OR ( ... /* the seats, grants, units or roles managers */ ))
-           OR (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ("Id" = ANY (ARRAY(SELECT "tenancy".seats_in_my_units())))));
+           OR (("TenantId" = (SELECT "tenancy".current_tenant())) AND ("Id" = ANY (ARRAY(SELECT "tenancy".seats_in_my_units())))));
 ```
 
 </details>
@@ -431,7 +431,7 @@ public sealed partial class Seat
 public static partial class OnlyEmployeesReadTheOrganization
 {
     public static bool Allows(Organization organization, ICurrentUser user)
-        => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee;
+        => TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee;
 }
 ```
 
@@ -441,7 +441,7 @@ The export writes `OnlyEmployeesReadTheOrganization` like this, shortened:
 
 ```sql
 CREATE POLICY "Only employees read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
-    USING ((SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1) = 0);
+    USING ((SELECT q1."Kind" FROM "tenancy".current_seat_row() q1) = 0);
 -- and the same on "tenancy"."OrganizationUnits" and on "tenancy"."OrganizationUnitPaths"
 ```
 
@@ -452,10 +452,10 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
 - **The rule narrows Tenancy's own reads too.** On the seats, keep the person's own seats in the rule:
   `seat.Identity == user.Id || ...`. Tenancy finds the tenant picker's tenants and the request's seat from
   those seats.
-- **A field of the caller's own seat.** `CallerSeat<Seat>()` reads `caller_seat_row()`, which runs as its owner,
-  past your read rule. A caller without a seat gets null in every field, so no row passes. `CallerSeat<T>()` with
+- **A field of the caller's own seat.** `CurrentSeat<Seat>()` reads `current_seat_row()`, which runs as its owner,
+  past your read rule. A caller without a seat gets null in every field, so no row passes. `CurrentSeat<T>()` with
   another class than your seat class gives [DDD00101](../diagnostics.md#ddd00101). In a module that does not map the
-  seats, use `CallerSeatId` for the id alone.
+  seats, use `CurrentSeatId` for the id alone.
 - **System work and owner-run functions are not narrowed.** The restrictive policy applies to signed-in users, and
   owner-run functions read past every policy. The package's tests run every manager method under the rule above.
 - **A seat that the rule keeps out still reads:**
@@ -482,7 +482,7 @@ public static partial class PeopleOnMyProjects
 public static partial class EmployeesReadEveryoneExternalsTheirProjects
 {
     public static bool Allows(Seat seat, ICurrentUser user)
-        => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id);
+        => TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id);
 }
 ```
 
@@ -504,9 +504,9 @@ The policies and your rules call these SQL functions:
 
 | Function | Returns | Runs as | Used by |
 |---|---|---|---|
-| `caller_seat()` | The seat of the caller's identity in the tenant that the setting names, while the seat and the tenant are active. Otherwise null. | Owner | The policies, to find again the seat that `TenantSelection` picked. Also `CallerSeatId`. |
-| `caller_tenant()` | The tenant of that seat. Otherwise null. | Owner | `CallerTenant` |
-| `caller_seat_row()` | The row of that seat, with every column your seat class maps. No row without a seat. | Owner | `CallerSeat<Seat>()` |
+| `current_seat()` | The seat of the caller's identity in the tenant that the setting names, while the seat and the tenant are active. Otherwise null. | Owner | The policies, to find again the seat that `TenantSelection` picked. Also `CurrentSeatId`. |
+| `current_tenant()` | The tenant of that seat. Otherwise null. | Owner | `CurrentTenant` |
+| `current_seat_row()` | The row of that seat, with every column your seat class maps. No row without a seat. | Owner | `CurrentSeat<Seat>()` |
 | `system_tenant()` | The tenant that the setting names. For the scoped system role, this is the tenant of its work. For a signed-in user, it is the tenant where the access revision and the [access history](operators-and-history.md#access-history) are written. | Caller | `access.BeginSystemIn` |
 | `units_where_i_hold_permission(permission)` | The units where the seat holds the permission live, and every unit below. | Owner | `UnitsWhereIHold` |
 | `readable_units()` | The units where the seat is placed, and every unit below. | Owner | `ReadableUnits` |
@@ -571,7 +571,7 @@ public async Task<List<string>> VisibleProjectsAsync(CancellationToken cancellat
 
 | Function | Returns | Columns |
 |---|---|---|
-| `caller_permissions()` | The rights the caller may read. For a seat, its own rights. For system work in a tenant, the rights of that tenant. | `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"`, `"EndsAt"` |
+| `current_permissions()` | The rights the caller may read. For a seat, its own rights. For system work in a tenant, the rights of that tenant. | `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"`, `"EndsAt"` |
 | `tenant_unit_paths()` | The closure of the tenant's tree. | `"TenantId"`, `"AncestorId"`, `"DescendantId"`, `"Distance"` |
 | `tenant_units()` | The tenant's units. | `"Id"`, `"TenantId"`, `"ParentId"`, `"Status"` |
 | `tenant_roles_with_starter_roles()` | The tenant's roles, with the permissions as an array of text. | `"Id"`, `"TenantId"`, `"FromStarterRole"`, `"Status"`, `"Permissions"` |
@@ -602,7 +602,7 @@ public async Task<List<string>> VisibleProjectsAsync(CancellationToken cancellat
 ## Functions that take the tenant as an argument
 
 A file store or channel service with its own policies, such as Supabase Storage and Realtime, does not set
-`tenancy.caller_tenant`. For these services, five functions take the tenant as an argument. They run as their owner,
+`tenancy.current_tenant`. For these services, five functions take the tenant as an argument. They run as their owner,
 and only signed-in users may run them:
 
 | Function | Returns | Used by |
@@ -711,7 +711,7 @@ their owner, and only signed-in users may run them. A seat that does not match t
 | Function | Returns | Returned to |
 |---|---|---|
 | `tenant_administrators()` | The seats that administer the tenant, each with the role that makes it an administrator. | A seat that may read the grants at the root. |
-| `permissions_a_move_changes(parent, new_parent)` | The rights that a move between the two parents changes: the caller's own rights, and anyone's access-managing right that reaches one parent and not the other. | A seat with `tenancy.units.manage` at both parents. |
+| `permissions_a_unit_move_changes(parent, new_parent)` | The rights that a move between the two parents changes: the caller's own rights, and anyone's access-managing right that reaches one parent and not the other. | A seat with `tenancy.units.manage` at both parents. |
 | `seats_holding_permission_at(permission, unit)` | The active seats that hold the permission live at the unit or above. | Each holder whose grant there the caller may read. |
 
 - The store calls the first two, for the last administrator and for a move. `ITenancyQueries.SeatsHoldingPermissionAt`
@@ -821,13 +821,13 @@ tenant. Its column rule states the same rule to the database. The job title has 
 public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 {
     public static bool Allows(Seat seat, ICurrentUser user)
-        => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
+        => seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
 }
 ```
 
 The access file writes `seat_identity_is_fixed` like this, shortened:
 
-**20261027164316_access.tenants.ddd.sql**
+**20261028202433_access.tenants.ddd.sql**
 
 ```sql
 CREATE OR REPLACE FUNCTION "tenancy".seat_identity_is_fixed() RETURNS trigger
@@ -887,7 +887,7 @@ the whole tenant reads every grant, because a change of a role reaches every sea
   grant. Rhea gets no administrator back. For `projects.view` at North Coast, she gets only the holders at North and
   below. Every command that could remove an administrator requires a permission at the root, so that command reads
   every administrator.
-- Only `permissions_a_move_changes` returns rights beyond this limit. It returns a unit, a permission and an end
+- Only `permissions_a_unit_move_changes` returns rights beyond this limit. It returns a unit, a permission and an end
   date, and never whose right it is. The move check weighs what a move changes, wherever that right is held.
 
 ## Rules checked only in C#

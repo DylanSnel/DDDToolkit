@@ -20,7 +20,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task A_member_reads_its_documents_with_their_members_and_a_caller_who_is_no_member_reads_nothing()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
 
         Task<List<Document>> ReadAsync(CurrentUserSnapshot caller)
@@ -28,21 +28,21 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
 
         // Ben contributes to the minutes and owns the budget: both come with everybody on them, since the member
         // tables follow the document's own rule.
-        var ben = await ReadAsync(TestCallers.User(data.Ben));
+        var ben = await ReadAsync(TestUsers.User(data.Ben));
         ben.Select(document => document.Title).Should().Equal("Budget", "Minutes");
         ben[1].Shares.Select(share => share.MemberId).Should().BeEquivalentTo(data.Documents[0].Shares.Select(share => share.MemberId));
         ben[1].Shares.Single(share => share.MemberId == data.Fay).Roles.Should().HaveCount(2);
 
         // Dee is a member with no role, and sees what she is a member of; Eve's membership ended, Gil's has not started.
-        (await ReadAsync(TestCallers.User(data.Dee))).Select(document => document.Title).Should().Equal("Minutes");
-        (await ReadAsync(TestCallers.User(data.Eve))).Should().BeEmpty();
-        (await ReadAsync(TestCallers.User(data.Gil))).Should().BeEmpty();
+        (await ReadAsync(TestUsers.User(data.Dee))).Select(document => document.Title).Should().Equal("Minutes");
+        (await ReadAsync(TestUsers.User(data.Eve))).Should().BeEmpty();
+        (await ReadAsync(TestUsers.User(data.Gil))).Should().BeEmpty();
 
         // Hal is a member of nothing, and a caller who did not sign in is nobody: no row of a document, and none of its members.
-        (await ReadAsync(TestCallers.User(data.Hal))).Should().BeEmpty();
+        (await ReadAsync(TestUsers.User(data.Hal))).Should().BeEmpty();
         (await ReadAsync(CurrentUserSnapshot.Anonymous)).Should().BeEmpty();
 
-        await using var hal = await filing.SessionAsync(TestCallers.User(data.Hal));
+        await using var hal = await filing.SessionAsync(TestUsers.User(data.Hal));
         (await hal.ListAsync<long>(
             """SELECT (SELECT count(*) FROM filing."Documents") + (SELECT count(*) FROM filing."DocumentShares") + (SELECT count(*) FROM filing."DocumentShareRoles")"""))
             .Should().Equal(0);
@@ -54,33 +54,33 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task Staff_read_the_folders_they_are_on_and_a_member_of_documents_reads_no_folder()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
 
         Task<List<FolderId>> ReadAsync(CurrentUserSnapshot caller)
             => filing.Services.AsAsync(caller, provider => provider.GetRequiredService<FilingContext>().Folders.AsNoTracking().OrderBy(folder => folder.Id).Select(folder => folder.Id).ToListAsync(Cancellation));
 
-        (await ReadAsync(TestCallers.Staff(data.Clerk))).Should().Equal(data.Cabinet, data.Annex);
-        (await ReadAsync(TestCallers.Staff(data.Visitor))).Should().Equal(data.Cabinet);
-        (await ReadAsync(TestCallers.Staff(data.Temp))).Should().Equal([data.Cabinet], "on a folder with no role is on it all the same");
-        (await ReadAsync(TestCallers.Staff(data.Nobody))).Should().BeEmpty();
+        (await ReadAsync(TestUsers.Staff(data.Clerk))).Should().Equal(data.Cabinet, data.Annex);
+        (await ReadAsync(TestUsers.Staff(data.Visitor))).Should().Equal(data.Cabinet);
+        (await ReadAsync(TestUsers.Staff(data.Temp))).Should().Equal([data.Cabinet], "on a folder with no role is on it all the same");
+        (await ReadAsync(TestUsers.Staff(data.Nobody))).Should().BeEmpty();
 
         // Ada owns a document; her token carries no staff code, and a folder knows its members by nothing else.
-        (await ReadAsync(TestCallers.User(data.Ada))).Should().BeEmpty();
+        (await ReadAsync(TestUsers.User(data.Ada))).Should().BeEmpty();
 
         // And the keeper of a folder, who is on no document, reads none.
-        (await filing.Services.AsAsync(TestCallers.Staff(data.Keeper), provider => provider.GetRequiredService<FilingContext>().Documents.CountAsync(Cancellation))).Should().Be(0);
+        (await filing.Services.AsAsync(TestUsers.Staff(data.Keeper), provider => provider.GetRequiredService<FilingContext>().Documents.CountAsync(Cancellation))).Should().Be(0);
     }
 
     [Fact]
     public async Task The_access_questions_answer_under_the_policies_what_they_answer_without_them()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
 
         foreach (var user in data.Users)
         {
-            var caller = TestCallers.User(user);
+            var caller = TestUsers.User(user);
             var seen = data.DocumentsSeenBy(user);
 
             foreach (var permission in FilingScenario.DocumentPermissionsAsked)
@@ -104,8 +104,8 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         }
 
         // A folder's questions, asked by its staff under the folder's policy.
-        (await filing.Services.AsAsync(TestCallers.Staff(data.Clerk), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.HandOver, Cancellation)))!.Via.Should().Be(MemberVia.Members);
-        (await filing.Services.AsAsync(TestCallers.Staff(data.Visitor), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
+        (await filing.Services.AsAsync(TestUsers.Staff(data.Clerk), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.HandOver, Cancellation)))!.Via.Should().Be(MemberVia.Members);
+        (await filing.Services.AsAsync(TestUsers.Staff(data.Visitor), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         // The documents' read rule is the one the docs show, Seen(), and a rule of the host's lets a user add a
         // document that names it as its owner. The owner's share and its role are written in the same save, under
         // the document's rule: the document is read through what the caller sees, before the share is there.
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain, asCaller: true, seed: false);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain, asUser: true, seed: false);
         await filing.ExecuteAsync(FilingPostgres.AccessScript(rules:
         [
             .. FilingPostgres.Rules,
@@ -125,7 +125,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
 
         // This machine's moment, not the database's: the owner sees what it owns by the owner column, so a clock a
         // little ahead of the database's, which would put the share's start after the database's now, is no matter.
-        await filing.Services.AsAsync(TestCallers.User(data.Hal), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Hal), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             context.Documents.Add(new Document(notes, "Notes", data.Hal, DateTimeOffset.UtcNow.AddSeconds(5)));
@@ -135,22 +135,22 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         (await filing.ListAsync<long>($"""SELECT count(*) FROM filing."DocumentShares" WHERE "DocumentId" = '{notes.Value}' AND "MemberId" = '{data.Hal.Value}'"""))
             .Should().Equal([1L], "the owner's share was written with the document");
 
-        await using (var hal = await filing.SessionAsync(TestCallers.User(data.Hal)))
+        await using (var hal = await filing.SessionAsync(TestUsers.User(data.Hal)))
         {
             (await hal.ListAsync<Guid>("SELECT id FROM filing.documents_i_see() AS id")).Should().Equal([notes.Value], "the owner sees what it owns");
             (await hal.ListAsync<string>("""SELECT "Title" FROM filing."Documents" """)).Should().Equal(["Notes"]);
         }
 
-        var hold = await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(notes, DocumentPermissions.Share, Cancellation));
+        var hold = await filing.Services.AsAsync(TestUsers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(notes, DocumentPermissions.Share, Cancellation));
         hold!.Via.Should().Be(MemberVia.Members, "and holds every permission of it");
 
         // Nobody else sees it, and a user does not open a document in another's name.
-        await using (var cy = await filing.SessionAsync(TestCallers.User(data.Cy)))
+        await using (var cy = await filing.SessionAsync(TestUsers.User(data.Cy)))
         {
             (await cy.ListAsync<Guid>("SELECT id FROM filing.documents_i_see() AS id")).Should().BeEmpty();
         }
 
-        var inAnothersName = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Cy), async provider =>
+        var inAnothersName = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Cy), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             context.Documents.Add(new Document(DocumentId.CreateSequential(), "In his name", data.Hal, DateTimeOffset.UtcNow));
@@ -163,14 +163,14 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task Who_holds_a_permission_that_changes_the_document_writes_its_members_under_the_documents_own_rule_and_nobody_else_does()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
 
         // A few minutes back, so the database's clock, which its functions ask, need not agree with this machine's to the second.
         var now = DateTimeOffset.UtcNow.AddMinutes(-5);
 
         Task ShareAsync(UserId by, UserId with)
-            => filing.Services.AsAsync(TestCallers.User(by), async provider =>
+            => filing.Services.AsAsync(TestUsers.User(by), async provider =>
             {
                 var context = provider.GetRequiredService<FilingContext>();
                 var minutes = await context.Documents.SingleAsync(document => document.Id == data.Minutes, Cancellation);
@@ -188,7 +188,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         await ShareAsync(by: data.Ada, with: data.Hal);
         (await SharesAsync()).Should().Be(before + 1);
 
-        await using (var hal = await filing.SessionAsync(TestCallers.User(data.Hal)))
+        await using (var hal = await filing.SessionAsync(TestUsers.User(data.Hal)))
         {
             (await hal.ListAsync<Guid>("SELECT id FROM filing.documents_i_see() AS id")).Should().Equal([data.Minutes.Value], "a member from the moment the row is there");
         }
@@ -200,7 +200,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             .Which.Should().Match<Npgsql.PostgresException>(denied => denied.SqlState == Npgsql.PostgresErrorCodes.InsufficientPrivilege && denied.MessageText.Contains("DocumentShares"));
         (await SharesAsync()).Should().Be(before + 1, "a caller without a permission that changes the document adds no member to it");
 
-        await using var cy = await filing.SessionAsync(TestCallers.User(data.Cy));
+        await using var cy = await filing.SessionAsync(TestUsers.User(data.Cy));
         (await cy.ListAsync<long>($"""WITH gone AS (DELETE FROM filing."DocumentShares" WHERE "DocumentId" = '{data.Minutes.Value}' RETURNING 1) SELECT count(*) FROM gone"""))
             .Should().Equal([0L], "and removes none");
     }
@@ -208,7 +208,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task A_member_who_only_edits_writes_no_member_row_and_names_no_owner_past_the_application()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
         var minutes = data.Minutes.Value;
         var ben = data.Ben.Value;
@@ -217,7 +217,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         // document change it. He does not hold the permission that shares.
         async Task<List<Guid>> HeldByBenAsync(string permission)
         {
-            await using var session = await filing.SessionAsync(TestCallers.User(data.Ben));
+            await using var session = await filing.SessionAsync(TestUsers.User(data.Ben));
             return await session.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", permission);
         }
 
@@ -232,14 +232,14 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             SELECT m."DocumentId", m."Id", 'owner', pg_catalog.now() - interval '1 hour', NULL, NULL
             FROM filing."DocumentShares" m WHERE m."DocumentId" = $1 AND m."MemberId" = $2
             """;
-        await using (var session = await filing.SessionAsync(TestCallers.User(data.Ben)))
+        await using (var session = await filing.SessionAsync(TestUsers.User(data.Ben)))
         {
             (await FluentActions.Awaiting(() => session.ListAsync<object>(GiveMyselfTheOwnersRole, minutes, ben)).Should().ThrowAsync<Npgsql.PostgresException>())
                 .Which.Should().Match<Npgsql.PostgresException>(denied => denied.SqlState == Npgsql.PostgresErrorCodes.InsufficientPrivilege && denied.MessageText.Contains("DocumentShareRoles"));
         }
 
         // A share row for somebody else, and a role he holds made to last, or taken away: none of it.
-        await using (var session = await filing.SessionAsync(TestCallers.User(data.Ben)))
+        await using (var session = await filing.SessionAsync(TestUsers.User(data.Ben)))
         {
             (await FluentActions.Awaiting(() => session.ListAsync<object>(
                     """
@@ -250,7 +250,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
                 .Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.InsufficientPrivilege);
         }
 
-        await using (var session = await filing.SessionAsync(TestCallers.User(data.Ben)))
+        await using (var session = await filing.SessionAsync(TestUsers.User(data.Ben)))
         {
             (await session.ListAsync<long>(
                 """WITH changed AS (UPDATE filing."DocumentShareRoles" SET "RoleId" = 'owner' WHERE "DocumentId" = $1 RETURNING 1) SELECT count(*) FROM changed""", minutes))
@@ -261,7 +261,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         }
 
         // And the owner column: the host's rule lets him change the document, and the lock keeps its owner what it was.
-        await using (var session = await filing.SessionAsync(TestCallers.User(data.Ben)))
+        await using (var session = await filing.SessionAsync(TestUsers.User(data.Ben)))
         {
             (await FluentActions.Awaiting(() => session.ListAsync<object>("UPDATE filing.\"Documents\" SET \"OwnerId\" = $2 WHERE \"Id\" = $1", minutes, ben)).Should().ThrowAsync<Npgsql.PostgresException>())
                 .Which.Should().Match<Npgsql.PostgresException>(denied =>
@@ -269,7 +269,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         }
 
         // What he may do, he still does: the document's own columns are his to change, its owner as it was.
-        await using (var session = await filing.SessionAsync(TestCallers.User(data.Ben)))
+        await using (var session = await filing.SessionAsync(TestUsers.User(data.Ben)))
         {
             (await session.ListAsync<string>("UPDATE filing.\"Documents\" SET \"Title\" = 'Minutes, corrected', \"OwnerId\" = \"OwnerId\" WHERE \"Id\" = $1 RETURNING \"Title\"", minutes))
                 .Should().Equal("Minutes, corrected");
@@ -284,7 +284,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
 
         // The same through the application, as the caller: a handler reached without its check writes nothing either.
         var from = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ben), async provider =>
+        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var document = await context.Documents.SingleAsync(candidate => candidate.Id == data.Minutes, Cancellation);
@@ -296,7 +296,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         // And a save that changes the owner column and nothing else, as a handler that went round its own command
         // would: the lock refuses it, with the toolkit's hint, so the caller is told access.refused as for a policy,
         // and the lock's name is in the failure, for the warning that names it.
-        var handedOn = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ben), async provider =>
+        var handedOn = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var document = await context.Documents.SingleAsync(candidate => candidate.Id == data.Minutes, Cancellation);
@@ -312,14 +312,14 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task Who_holds_the_permissions_the_rules_name_changes_the_members_and_the_owner_through_the_application_as_the_caller()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
         var from = DateTimeOffset.UtcNow.AddMinutes(-5);
 
         // Ada owns the minutes, and so holds the permission that shares them. As herself, through the document's own
         // aggregate and the host's context under the policies: a share with a role, a role given, a role taken,
         // a share removed. Every row passes the lock.
-        await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var minutes = await context.Documents.SingleAsync(document => document.Id == data.Minutes, Cancellation);
@@ -339,7 +339,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         // them, through a role. He hands the minutes from Ada to Dee, as himself: Dee's role taken, the owner
         // column changed under the trigger, and the onlooker's role given to Ada are his to write, before the
         // owner changes and after.
-        await filing.Services.AsAsync(TestCallers.User(data.Ian), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ian), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var minutes = await context.Documents.SingleAsync(document => document.Id == data.Minutes, Cancellation);
@@ -354,12 +354,12 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         handed.GetInvariantViolations().Should().BeEmpty();
 
         // Dee is the owner now, and holds the permission by owning; Ada no longer does, and the database tells her so.
-        await using (var dee = await filing.SessionAsync(TestCallers.User(data.Dee)))
+        await using (var dee = await filing.SessionAsync(TestUsers.User(data.Dee)))
         {
             (await dee.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", DocumentPermissions.Share)).Should().Contain(data.Minutes.Value);
         }
 
-        await using var ada = await filing.SessionAsync(TestCallers.User(data.Ada));
+        await using var ada = await filing.SessionAsync(TestUsers.User(data.Ada));
         (await ada.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", DocumentPermissions.Share)).Should().NotContain(data.Minutes.Value);
         (await ada.ListAsync<long>(
             """WITH taken AS (UPDATE filing."Documents" SET "OwnerId" = $2 WHERE "Id" = $1 RETURNING 1) SELECT count(*) FROM taken""", data.Minutes.Value, data.Ada.Value))
@@ -369,7 +369,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task An_owner_that_holds_the_permissions_by_owning_alone_hands_its_own_resource_on_as_the_applications_own_work()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
         var from = DateTimeOffset.UtcNow.AddMinutes(-5);
 
@@ -378,7 +378,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         // policy asks what the caller holds when a statement runs, and after the owner changed he holds nothing:
         // what follows is not his to write, by the host's own rule and by the lock alike. The limit of a database
         // that checks every row, pinned here so it is known: nothing of the save stays.
-        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ben), async provider =>
+        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var budget = await context.Documents.SingleAsync(document => document.Id == data.Budget, Cancellation);
@@ -392,7 +392,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         untouched.Shares.Single(share => share.MemberId == data.Ben).Roles.Should().BeEmpty("the owner holds no role");
 
         // The host's command checks that he holds the permission, and then saves the hand-over as its own work.
-        var held = await filing.Services.AsAsync(TestCallers.User(data.Ben), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().RequireAsync(data.Budget, DocumentPermissions.Share, Cancellation));
+        var held = await filing.Services.AsAsync(TestUsers.User(data.Ben), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().RequireAsync(data.Budget, DocumentPermissions.Share, Cancellation));
         held.Via.Should().Be(MemberVia.Members);
         await filing.Services.ChangeAsync(data.Budget, budget => budget.HandOver(data.Ada, FormerOwner.StaysAs(DocumentMembership.Onlooker), from));
 
@@ -402,12 +402,12 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task A_member_who_takes_itself_off_without_the_permission_saves_its_own_place_as_the_applications_own_work_once_its_request_passed_the_door()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
 
         // Dee is a member of the minutes and holds no permission that changes their members. As herself, the lock keeps her own
         // member row too: the database asks for the permission the rules name, whoever the row is of. The limit, pinned here.
-        var asHerself = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Dee), async provider =>
+        var asHerself = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Dee), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var minutes = await context.Documents.SingleAsync(document => document.Id == data.Minutes, Cancellation);
@@ -419,15 +419,15 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
 
         // Sent as the request, [OrOwn] beside [OnResource]: the door lets her through for herself on a document she sees,
         // and the handler saves her own place as the application's own work, with the request in hand.
-        await filing.Services.SendAsync(TestCallers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee));
+        await filing.Services.SendAsync(TestUsers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee));
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Dee);
 
         // Whoever holds the permission takes another member off as the caller, and the lock lets that row go.
-        await filing.Services.SendAsync(TestCallers.User(data.Ada), new LeaveDocument(data.Minutes, data.Cy));
+        await filing.Services.SendAsync(TestUsers.User(data.Ada), new LeaveDocument(data.Minutes, data.Cy));
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Cy);
 
         // And a member without the permission takes nobody else off: the door refuses, and nothing is asked of the database.
-        var refused = await FluentActions.Awaiting(() => filing.Services.SendAsync(TestCallers.User(data.Ben), new LeaveDocument(data.Minutes, data.Fay)))
+        var refused = await FluentActions.Awaiting(() => filing.Services.SendAsync(TestUsers.User(data.Ben), new LeaveDocument(data.Minutes, data.Fay)))
             .Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
         ((IReadOnlyList<DDDToolkit.Exceptions.RefusalReason>)refused.Which.Arguments[DDDToolkit.Exceptions.ToolkitRefusals.ReasonsArgument]!)
             .Select(reason => reason.Code).Should().Equal(DDDToolkit.Exceptions.ToolkitRefusals.NotOwn, DocumentRefusals.Membership[MembershipRefusals.NotPermitted]);
@@ -436,7 +436,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task The_application_itself_and_the_tables_owner_are_not_held_by_the_lock()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
         var from = DateTimeOffset.UtcNow.AddMinutes(-5);
 
@@ -453,7 +453,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
 
         // A folder has no rule that lets a user change it, and its lock is for users and archivists alike: the keeper of the
         // cabinet holds the permission that hands it over, and the folder's own rules give nobody a way in. The lock adds none.
-        await using var keeper = await filing.SessionAsync(TestCallers.Staff(data.Keeper));
+        await using var keeper = await filing.SessionAsync(TestUsers.Staff(data.Keeper));
         (await keeper.ListAsync<long>(
             """WITH handed AS (UPDATE filing."Folders" SET "Keeper" = 'C-014' WHERE "Id" = 7 RETURNING 1) SELECT count(*) FROM handed"""))
             .Should().Equal([0L], "a restrictive policy and a trigger allow nothing by themselves");
@@ -465,7 +465,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         // A host that holds the tables' owner to their policies as well. The functions run as their owner, so
         // that owner has to be let past the policies of the tables they read: the role that runs the migrations
         // may bypass row level security, as Supabase's may.
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain, asCaller: true, seed: false);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain, asUser: true, seed: false);
         await FilingPostgres.ExecuteAsync(filing.Database.SuperuserConnectionString, $"ALTER ROLE {FilingPostgres.LoginRole} BYPASSRLS", Cancellation);
         await filing.ExecuteAsync(FilingPostgres.AccessScript(force: true));
         await filing.Scenario.SaveAsync(filing.Services);
@@ -483,33 +483,33 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             // The functions answer what the rules say read in memory, for everybody and every permission.
             foreach (var user in data.Users)
             {
-                await using var session = await filing.SessionAsync(TestCallers.User(user));
+                await using var session = await filing.SessionAsync(TestUsers.User(user));
                 (await session.ListAsync<Guid>("SELECT id FROM filing.documents_i_see() AS id")).Should().BeEquivalentTo(data.DocumentsSeenBy(user).Select(id => id.Value), "of what " + user + " sees");
                 foreach (var permission in FilingScenario.DocumentPermissionsAsked)
                 {
                     (await session.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", permission))
                         .Should().BeEquivalentTo(data.DocumentsHeldBy(user, permission).Select(id => id.Value), user + " holds " + permission);
-                    var hold = await filing.Services.AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(data.Minutes, permission, Cancellation));
+                    var hold = await filing.Services.AsAsync(TestUsers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(data.Minutes, permission, Cancellation));
                     (hold?.Via is not null).Should().Be(data.DocumentsHeldBy(user, permission).Contains(data.Minutes));
                 }
             }
 
             // And the lock holds: Ben edits and writes no role for himself; Ada shares as herself.
-            await using (var ben = await filing.SessionAsync(TestCallers.User(data.Ben)))
+            await using (var ben = await filing.SessionAsync(TestUsers.User(data.Ben)))
             {
                 (await FluentActions.Awaiting(() => ben.ListAsync<object>("UPDATE filing.\"Documents\" SET \"OwnerId\" = $2 WHERE \"Id\" = $1", data.Minutes.Value, data.Ben.Value)).Should().ThrowAsync<Npgsql.PostgresException>())
                     .Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.InsufficientPrivilege);
             }
 
             var from = DateTimeOffset.UtcNow.AddMinutes(-5);
-            await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+            await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
             {
                 var context = provider.GetRequiredService<FilingContext>();
                 var minutes = await context.Documents.SingleAsync(document => document.Id == data.Minutes, Cancellation);
                 minutes.ShareWith(data.Hal, DocumentMembership.Onlooker, MemberPeriod.Open(from), from, by: data.Ada);
                 await context.SaveChangesAsync(Cancellation);
             });
-            (await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().ViaAsync(data.Minutes, DocumentPermissions.View, Cancellation)))
+            (await filing.Services.AsAsync(TestUsers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().ViaAsync(data.Minutes, DocumentPermissions.View, Cancellation)))
                 .Should().Be(MemberVia.Members);
         }
         finally
@@ -522,7 +522,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     [Fact]
     public async Task A_role_that_ran_out_is_given_again_and_an_ended_membership_begun_again_in_one_save_under_the_policies()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
         var from = DateTimeOffset.UtcNow.AddMinutes(-5);
         var before = await filing.Services.ReadAsync(data.Minutes);
@@ -530,7 +530,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         // As Ada, who owns the minutes and so may share them. Fay's role as a contributor ended yesterday: giving it
         // again replaces the one hold of that role, the row the roles' permission allows once. Eve's membership ended
         // yesterday: she comes back in a new row, and the old one goes with the role held in it.
-        await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var minutes = await context.Documents.SingleAsync(document => document.Id == data.Minutes, Cancellation);
@@ -553,10 +553,10 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         (eve.EndsAt, eve.Roles.Count).Should().Be((null, 0));
 
         // And the database answers from the rows as they are now: Fay changes the minutes, Eve sees them and no more.
-        await using var asFay = await filing.SessionAsync(TestCallers.User(data.Fay));
+        await using var asFay = await filing.SessionAsync(TestUsers.User(data.Fay));
         (await asFay.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", DocumentPermissions.Edit)).Should().Equal(data.Minutes.Value);
 
-        await using var asEve = await filing.SessionAsync(TestCallers.User(data.Eve));
+        await using var asEve = await filing.SessionAsync(TestUsers.User(data.Eve));
         (await asEve.ListAsync<Guid>("SELECT id FROM filing.documents_i_see() AS id")).Should().Equal(data.Minutes.Value);
         (await asEve.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", DocumentPermissions.Edit)).Should().BeEmpty();
     }
@@ -566,7 +566,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     {
         // A host that lets the export write its tables' privileges: every privilege is taken back, and a role gets
         // what its policies allow. The functions read the member rows as their owner, so they need none of it.
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain, asCaller: true, seed: false);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain, asUser: true, seed: false);
         await filing.ExecuteAsync(FilingPostgres.AccessScript(writeGrants: true));
         await filing.Scenario.SaveAsync(filing.Services);
         var data = filing.Scenario;
@@ -574,13 +574,13 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(filing.Services.Provider, Cancellation);
 
         // Read under the policies, with the privileges the policies gave.
-        var seen = await filing.Services.AsAsync(TestCallers.User(data.Ben), provider => provider.GetRequiredService<FilingContext>().Documents.AsNoTracking().Select(document => document.Title).ToListAsync(Cancellation));
+        var seen = await filing.Services.AsAsync(TestUsers.User(data.Ben), provider => provider.GetRequiredService<FilingContext>().Documents.AsNoTracking().Select(document => document.Title).ToListAsync(Cancellation));
         seen.Should().BeEquivalentTo("Minutes", "Budget");
-        (await filing.Services.AsAsync(TestCallers.Staff(data.Visitor), provider => provider.GetRequiredService<FilingContext>().Folders.AsNoTracking().Select(folder => folder.Id).ToListAsync(Cancellation)))
+        (await filing.Services.AsAsync(TestUsers.Staff(data.Visitor), provider => provider.GetRequiredService<FilingContext>().Folders.AsNoTracking().Select(folder => folder.Id).ToListAsync(Cancellation)))
             .Should().Equal(data.Cabinet);
 
         // Written by who holds the permission that shares the document: its version, a member's row and its role's.
-        await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var minutes = await context.Documents.SingleAsync(document => document.Id == data.Minutes, Cancellation);
@@ -589,12 +589,12 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             minutes.ShareWith(data.Hal, DocumentMembership.Onlooker, MemberPeriod.Open(from), from, by: data.Ada);
             await context.SaveChangesAsync(Cancellation);
         });
-        (await filing.Services.AsAsync(TestCallers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().ViaAsync(data.Minutes, DocumentPermissions.View, Cancellation)))
+        (await filing.Services.AsAsync(TestUsers.User(data.Hal), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().ViaAsync(data.Minutes, DocumentPermissions.View, Cancellation)))
             .Should().Be(MemberVia.Members);
 
         // Who a share is of is written once: the privileges leave the column out, so not even who may share the
         // document moves Ben's share, with its role, to somebody else.
-        await using (var ada = await filing.SessionAsync(TestCallers.User(data.Ada)))
+        await using (var ada = await filing.SessionAsync(TestUsers.User(data.Ada)))
         {
             (await FluentActions.Awaiting(() => ada.ListAsync<long>(
                         """WITH moved AS (UPDATE filing."DocumentShares" SET "MemberId" = $1 WHERE "DocumentId" = $2 AND "MemberId" = $3 RETURNING 1) SELECT count(*) FROM moved""",
@@ -606,7 +606,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         }
 
         // A folder has no rule that changes it, so a signed-in user holds no privilege to: refused outright, not answered empty.
-        await using var clerk = await filing.SessionAsync(TestCallers.Staff(data.Clerk));
+        await using var clerk = await filing.SessionAsync(TestUsers.Staff(data.Clerk));
         (await FluentActions.Awaiting(() => clerk.ListAsync<long>("""WITH gone AS (DELETE FROM filing."FolderStaff" RETURNING 1) SELECT count(*) FROM gone""")).Should().ThrowAsync<Npgsql.PostgresException>())
             .Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.InsufficientPrivilege);
     }

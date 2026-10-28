@@ -178,10 +178,10 @@ internal static class KnownTypes
     public const string OrOwnAttribute = "DDDToolkit.Access.OrOwnAttribute";
 
     /// <summary>On a package's assembly: a type its handle says the caller's own of, or a template whose classes' ids it is.</summary>
-    public const string CallersOwnAttribute = "DDDToolkit.Access.CallersOwnAttribute";
+    public const string OwnedByCurrentUserAttribute = "DDDToolkit.Access.OwnedByCurrentUserAttribute";
 
     /// <summary>What says the caller's own value of a type: an application's handle is found by it.</summary>
-    public const string CallersOwnInterface = "DDDToolkit.Access.ICallersOwn`1";
+    public const string OwnedByCurrentUserInterface = "DDDToolkit.Access.IOwnedByCurrentUser`1";
 
     /// <summary>The core's requirement, whose static methods combine cases and make the caller's own.</summary>
     public const string AccessRequirementUsage = "global::DDDToolkit.Access.AccessRequirement";

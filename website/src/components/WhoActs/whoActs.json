@@ -17,7 +17,7 @@
       "recordedAs": "`system`",
       "recordedDetail": "Each event of the new tenant has `By`: the system, in the scope `tenancy`. The access history keeps these events.",
       "postgres": "`ddd_system_in`, scope `tenancy`, no tenant",
-      "postgresDetail": "The setting `tenancy.caller_tenant` is empty, so the policies show the role no row. `ProvisionAsync` then starts system work inside the new tenant, so its save runs with that tenant set.",
+      "postgresDetail": "The setting `tenancy.current_tenant` is empty, so the policies show the role no row. `ProvisionAsync` then starts system work inside the new tenant, so its save runs with that tenant set.",
       "kind": "system",
       "notes": [
         "Read `access.CurrentUser.Id` before the `using`. Inside it, `CurrentUser.IsSystem` is true and `Id` is null.",
@@ -150,7 +150,7 @@
       "recordedAs": "`operator`, with the operator's id",
       "recordedDetail": "The event `tenancy.tenant-suspended` has `By`: the operator, with the operator's id. The access history keeps it. A table of yours that calls `RecordsWhoChanged` gets `operator` in `ChangedByKind` and the id in `ChangedByIdentity`.",
       "postgres": "`ddd_system_in`, scope `tenancy`, that tenant",
-      "postgresDetail": "`tenancy.caller_tenant` holds Harbor Works. A query marked `[Operator]` starts no work, and reads every tenant through the database role that the operator's token role maps to.",
+      "postgresDetail": "`tenancy.current_tenant` holds Harbor Works. A query marked `[Operator]` starts no work, and reads every tenant through the database role that the operator's token role maps to.",
       "kind": "operator",
       "notes": [
         "The whole handler holds every permission in Harbor Works and none in another tenant. Keep an operator's handler to the operator's act.",
@@ -214,7 +214,7 @@
       "recordedAs": "`system`; the events name the acting seat",
       "recordedDetail": "Rhea's placement and grant name Ada as the seat that placed and granted them. The events' `By` is the system, for Ada. A table of yours that calls `RecordsWhoChanged` gets `system`, with no seat.",
       "postgres": "`ddd_system_in`, scope `tenancy`, that tenant",
-      "postgresDetail": "`tenancy.caller_tenant` holds Harbor Works. The role cannot bypass row level security, so the policies keep the work in that tenant.",
+      "postgresDetail": "`tenancy.current_tenant` holds Harbor Works. The role cannot bypass row level security, so the policies keep the work in that tenant.",
       "kind": "system",
       "notes": [
         "The work holds every permission in Harbor Works and none in Meadow Gardens.",
@@ -478,7 +478,7 @@
       "recordedAs": "`seat`, with the caller's seat",
       "recordedDetail": "The events' `By` is Ada's seat, and the access history keeps them. A table of yours that calls `RecordsWhoChanged` gets `seat`, and `…BySeat` holds Ada's seat.",
       "postgres": "`authenticated`, the caller's own role",
-      "postgresDetail": "`tenancy.caller_tenant` holds Harbor Works, and the policies find Ada's seat again from her token.",
+      "postgresDetail": "`tenancy.current_tenant` holds Harbor Works, and the policies find Ada's seat again from her token.",
       "kind": "seat",
       "notes": [
         "The managers check every new seat against Ada's rights, as for one seat added by hand.",

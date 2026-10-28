@@ -8,7 +8,7 @@
     <div class="request-line">
         <code>@Answer.Method @Answer.Path</code>
         <span class="text-body-secondary small">
-            @T["common.as", Answer.Caller] · @(Answer.Tenant is null ? T["answer.no-tenant-header"] : T["answer.tenant", Answer.Tenant]) · @Math.Round(Answer.Elapsed.TotalMilliseconds) ms
+            @T["common.as", Answer.CalledAs] · @(Answer.Tenant is null ? T["answer.no-tenant-header"] : T["answer.tenant", Answer.Tenant]) · @Math.Round(Answer.Elapsed.TotalMilliseconds) ms
         </span>
     </div>
     <div class="answer">

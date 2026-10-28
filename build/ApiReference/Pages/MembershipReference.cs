@@ -85,7 +85,7 @@ internal static class MembershipReference
                         ]),
                     new("Permissions", [new(Membership, Type: "OnAttribute"), new(Membership, Type: "ResourcePermission")]),
                     new("Reach from above", [new(Membership, Type: "ReachFromAbove")]),
-                    new("Who a member is", [new(Membership, Folder: "Access/Callers")], Lead: ["MemberSource", "MemberSourceKind", "ICallerMember"]),
+                    new("Who a member is", [new(Membership, Folder: "Access/Members")], Lead: ["MemberSource", "MemberSourceKind", "ICurrentMember"]),
                 ]),
             new(
                 "managers.md",

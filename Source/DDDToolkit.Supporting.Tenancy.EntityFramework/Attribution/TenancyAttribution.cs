@@ -61,8 +61,8 @@ public static class TenancyAttribution
     /// });
     /// </code>
     /// <para>
-    /// Tenancy's save interceptor, which <c>UseDDDToolkit</c> adds, fills them from the Tenancy caller of the save
-    /// (<see cref="TenancyCaller{TTenantId, TSeatId}.Actor"/>): both sets for a new row, and the last three for a
+    /// Tenancy's save interceptor, which <c>UseDDDToolkit</c> adds, fills them from the Tenancy user of the save
+    /// (<see cref="TenancyUser{TTenantId, TSeatId}.Actor"/>): both sets for a new row, and the last three for a
     /// row that changes. A row whose own columns did not change, because only a row of one of its entities in
     /// another table did, keeps who changed it last; an aggregate with a version changes its row with every
     /// change of its parts. The first three are fixed once the row is there: Entity Framework refuses a save that

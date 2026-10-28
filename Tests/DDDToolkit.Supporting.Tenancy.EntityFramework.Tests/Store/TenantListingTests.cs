@@ -47,7 +47,7 @@ public abstract class TenantListingTests(TestDatabases databases) : IAsyncLifeti
         var first = await PageAsync(after: null, size: 2);
 
         _services.Commands.Count.Should().Be(1, "a page is one statement, the seats counted where they are");
-        _services.Commands.Sent[0].TenancyCaller!.Kind.Should().Be(TenancyCallerKind.Nobody, "an operator acts in no tenant, and the read looks past the tenant filter");
+        _services.Commands.Sent[0].TenancyUser!.Kind.Should().Be(TenancyUserKind.Nobody, "an operator acts in no tenant, and the read looks past the tenant filter");
         first.Items.Select(Listed).Should().Equal(
             (anvil.Tenant, "anvil", "Anvil Works", TenantStatus.Active, 1),
             (harbor.Tenant, "harbor", "Harbor Works", TenantStatus.Active, 2));
@@ -72,7 +72,7 @@ public abstract class TenantListingTests(TestDatabases databases) : IAsyncLifeti
         _services.Commands.Reset();
         await using (var scope = _services.Scope())
         using (TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
-        using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat)))
         {
             await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => scope.ServiceProvider.GetRequiredService<TenantManager>().ListAsync(null, 10, Cancellation));
         }
@@ -90,7 +90,7 @@ public abstract class TenantListingTests(TestDatabases databases) : IAsyncLifeti
     {
         await using var scope = _services.Scope();
         using (TestUser.BeginAs(CurrentUserSnapshot.User(Odette, OperatorRole)))
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             return await scope.ServiceProvider.GetRequiredService<TenantManager>().ListAsync(after, size, Cancellation);
         }

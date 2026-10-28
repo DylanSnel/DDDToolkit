@@ -68,10 +68,10 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// with what to register, rather than read as something they are not:
     /// </para>
     /// <list type="bullet">
-    /// <item><b>Who a member is.</b> The caller's user id (<see cref="MemberSource.CallerId"/>), for a member
+    /// <item><b>Who a member is.</b> The caller's user id (<see cref="MemberSource.CurrentUserId"/>), for a member
     /// id over a <see cref="Guid"/>; a claim of its token (<see cref="MemberSource.Claim"/>), for one over a
     /// text; or what the application resolves for the caller (<see cref="MemberSource.Resolved"/>), which
-    /// needs an <see cref="ICallerMember{TResourceId, TMemberId}"/>.</item>
+    /// needs an <see cref="ICurrentMember{TResourceId, TMemberId}"/>.</item>
     /// <item><b>Where the roles come from.</b> The rules declare them, and a member holds them as
     /// <see cref="NamedRole"/>; or a customer makes them (<see cref="Roles.Custom"/>), as
     /// rows of the application's role class, which needs nothing registered: the context maps that class
@@ -163,7 +163,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(rules);
 
-        var asMember = CallerAsMember<TResource, TResourceId, TMemberId>(services, rules);
+        var asMember = CurrentUserAsMember<TResource, TResourceId, TMemberId>(services, rules);
         RequireRoles<TResource, TResourceId, TId, TMemberId, TRoleId>(services, rules);
         RequirePlacesReached<TResource, TResourceId>(services, rules);
 
@@ -235,7 +235,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// <typeparamref name="TPorts"/> is registered, one for each scope, and every port of this resource it
     /// implements is answered by that one instance:
     /// <list type="bullet">
-    /// <item><see cref="ICallerMember{TResourceId, TMemberId}"/>: who the caller is as a member, for rules with
+    /// <item><see cref="ICurrentMember{TResourceId, TMemberId}"/>: who the caller is as a member, for rules with
     /// <see cref="MemberSource.Resolved"/>.</item>
     /// <item><see cref="IRolesWithPermission{TResourceId, TRoleId}"/> and
     /// <see cref="IMemberRoles{TResourceId, TRoleId}"/>: which roles give a permission, and which roles there are, for
@@ -302,7 +302,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         [
             .. new[]
             {
-                typeof(ICallerMember<TResourceId, TMemberId>),
+                typeof(ICurrentMember<TResourceId, TMemberId>),
                 typeof(IRolesWithPermission<TResourceId, TRoleId>),
                 typeof(IMemberRoles<TResourceId, TRoleId>),
                 typeof(IMemberDirectory<TResourceId, TMemberId>),
@@ -316,7 +316,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         if (filled.Count == 0)
         {
             throw new ArgumentException(
-                typeof(TPorts).Name + " answers nothing of " + typeof(TResource).Name + ": it implements none of ICallerMember<" + typeof(TResourceId).Name + ", "
+                typeof(TPorts).Name + " answers nothing of " + typeof(TResource).Name + ": it implements none of ICurrentMember<" + typeof(TResourceId).Name + ", "
                 + typeof(TMemberId).Name + ">, IRolesWithPermission<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IMemberRoles<" + typeof(TResourceId).Name + ", "
                 + typeof(TRoleId).Name + ">, IPlacesReached<" + typeof(TResourceId).Name + ", TPlaceId>, IMemberDirectory<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
                 + ">, IMemberRolePolicy<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IOwnPlaceWork<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
@@ -462,13 +462,13 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// The rules take the members from a value the member id is not over, or from the application, which
     /// registered nothing that answers.
     /// </exception>
-    private static Func<CurrentUserSnapshot, TMemberId?>? CallerAsMember<TResource, TResourceId, TMemberId>(IServiceCollection services, MembershipRules rules)
+    private static Func<CurrentUserSnapshot, TMemberId?>? CurrentUserAsMember<TResource, TResourceId, TMemberId>(IServiceCollection services, MembershipRules rules)
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
         where TMemberId : struct, IEntityId, IEquatable<TMemberId>
     {
         switch (rules.Members.Kind)
         {
-            case MemberSourceKind.Inferred when IsRegistered(services, typeof(ICallerMember<TResourceId, TMemberId>)):
+            case MemberSourceKind.Inferred when IsRegistered(services, typeof(ICurrentMember<TResourceId, TMemberId>)):
                 // Something answers who the caller is as a member of this kind, an organization package's join for a seat among them:
                 // it is asked, about each caller.
                 return null;
@@ -478,20 +478,20 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                 var known = FromValue<TMemberId, Guid>()
                     ?? throw new ArgumentException(
                         "Who a caller is as a member of " + typeof(TResource).Name + " follows from what a member is known by, " + typeof(TMemberId).Name
-                        + ", and that is no id over a Guid, the caller's user id, and nothing answers it: no ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
+                        + ", and that is no id over a Guid, the caller's user id, and nothing answers it: no ICurrentMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
                         + "> is registered. Register the resource with the join the package that keeps the seats writes, where its members are an organization's seats; "
                         + "say members: MemberSource.Claim(path) for an id over a text a token carries; or "
-                        + HowToAnswer<TResource>("ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
+                        + HowToAnswer<TResource>("ICurrentMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
                         nameof(rules));
 
                 return user => user.Id is { } id ? known(id) : null;
             }
 
-            case MemberSourceKind.CallerId:
+            case MemberSourceKind.CurrentUserId:
             {
                 var known = FromValue<TMemberId, Guid>()
                     ?? throw new ArgumentException(
-                        "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CallerId, the caller's user id, and the members of " + typeof(TResource).Name
+                        "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CurrentUserId, the caller's user id, and the members of " + typeof(TResource).Name
                         + " are known by " + typeof(TMemberId).Name + ", which is not an id over a Guid. Declare it with [EntityId<Guid>], take the members from "
                         + "MemberSource.Claim(path) for an id over a text, or leave members out and register what answers who the caller is.",
                         nameof(rules));
@@ -505,7 +505,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                 var known = FromValue<TMemberId, string>()
                     ?? throw new ArgumentException(
                         "The rules '" + rules.Name + "' take the caller's member id from the claim '" + path + "', a text, and the members of " + typeof(TResource).Name
-                        + " are known by " + typeof(TMemberId).Name + ", which is not an id over a text. Declare it with [EntityId<string>], or take the members from MemberSource.CallerId for an id over a Guid.",
+                        + " are known by " + typeof(TMemberId).Name + ", which is not an id over a text. Declare it with [EntityId<string>], or take the members from MemberSource.CurrentUserId for an id over a Guid.",
                         nameof(rules));
 
                 return user => user.FindClaim(path) is { } claimed ? known(claimed) : null;
@@ -513,12 +513,12 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
 
             default:
                 // Asked of the application, about each caller: never read from the caller's own id instead.
-                return IsRegistered(services, typeof(ICallerMember<TResourceId, TMemberId>))
+                return IsRegistered(services, typeof(ICurrentMember<TResourceId, TMemberId>))
                     ? null
                     : throw new ArgumentException(
                         "The rules '" + rules.Name + "' have the application resolve who a caller is as a member (MemberSource.Resolved), and nothing answers that for "
-                        + typeof(TResource).Name + ": no ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + "> is registered. "
-                        + HowToAnswer<TResource>("ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
+                        + typeof(TResource).Name + ": no ICurrentMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + "> is registered. "
+                        + HowToAnswer<TResource>("ICurrentMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
                         nameof(rules));
         }
     }

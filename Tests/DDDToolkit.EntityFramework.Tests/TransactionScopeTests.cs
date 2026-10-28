@@ -27,7 +27,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 [Collection(SettingsPerTransaction.Name)]
 public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifetime
 {
-    private readonly CallerOfTheTest _caller = new();
+    private readonly UserOfTheTest _user = new();
     private readonly TenantSetting _tenant = new() { Current = "north" };
     private readonly string _pool = "scope-" + Guid.NewGuid().ToString("N")[..12];
 
@@ -63,7 +63,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         await database.WriteAsync(Alice, "Alice's");
         await database.WriteAsync(Bob, "Bob's");
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
 
         (await TextsAsync(context)).Should().Equal(["Alice's"], "the policy holds the query to the caller's rows");
@@ -73,7 +73,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         (await ScalarAsync(context, "SELECT auth.uid()::text")).Should().Be(Alice.ToString());
 
         // And for another caller on the same context, the next command.
-        _caller.Current = CurrentUserSnapshot.Anonymous;
+        _user.Current = CurrentUserSnapshot.Anonymous;
         _tenant.Current = null;
         (await BackendState.OfAsync(context, Cancellation)).Should().Be(new BackendState(state.Backend, "anon", LoginRole, """{"role":"anon"}""", "", ""));
     }
@@ -84,7 +84,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         database.Require();
         await database.WriteAsync(Alice, "Alice's");
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         (await TextsAsync(context)).Should().Equal("Alice's");
         var backend = await BackendAsync(context);
@@ -97,7 +97,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         var backend = await BackendAsync(context);
 
@@ -114,7 +114,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         int backend;
 
@@ -140,7 +140,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         var backend = await BackendAsync(context);
 
@@ -161,7 +161,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         var backend = await BackendAsync(context);
 
@@ -178,7 +178,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         int backend;
 
@@ -209,7 +209,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         await database.WriteAsync(Alice, "Alice's");
         await database.WriteAsync(Bob, "Bob's");
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
 
         // The connection stays open over the end of the transaction, so nothing but the server can say that
@@ -221,7 +221,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
             backend = await BackendAsync(context);
         }
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
         (await BackendState.OfAsync(context, Cancellation)).Should().Be(
             new BackendState(backend, "authenticated", LoginRole, ClaimsOf(Bob), "", "north"),
             "the settings of the transaction went with it, so the next command carries its own call, for the caller there is now");
@@ -238,7 +238,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         await database.WriteAsync(Alice, "Alice's");
         await database.WriteAsync(Bob, "Bob's");
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         var backend = await BackendAsync(context);
 
@@ -260,7 +260,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
 
         // Entity Framework asks this with ExecuteScalar: the first column of the first row, which the call has none of.
@@ -275,7 +275,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var first = Guarded();
         await using var second = Guarded();
 
@@ -306,7 +306,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
 
@@ -340,11 +340,11 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         // An interceptor that refuses a save after this one had its say, as the toolkit's own check of the
         // invariants does. Entity Framework tells no interceptor that such a save ended: it never began. So
         // nothing here may wait for the end of a save.
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         var refuses = new RefusesSaves();
         await using var context = new NotesContext(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql(Connection)
-            .AddInterceptors(PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant]), refuses)
+            .AddInterceptors(PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant]), refuses)
             .Options);
 
         context.Notes.Add(new PrivateNote { Id = Guid.CreateVersion7(), Text = "Alice's" });
@@ -368,7 +368,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         int backend;
 
@@ -409,7 +409,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         database.Require();
         await database.WriteAsync(Bob, "Bob's");
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         int backend;
 
@@ -440,7 +440,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         var backend = await BackendAsync(context);
 
@@ -504,7 +504,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         database.Require();
         await database.WriteAsync(Alice, "Alice's");
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         var backend = await BackendAsync(context);
 
@@ -537,7 +537,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
 
         // In a transaction, which the savepoints need, given up afterwards.
@@ -613,10 +613,10 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.SystemIn("tenancy");
+        _user.Current = CurrentUserSnapshot.SystemIn("tenancy");
         await using var context = PoolerFixture.Context(
             Connection,
-            PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, configure: options => options.SystemInRole = null));
+            PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, configure: options => options.SystemInRole = null));
 
         var begin = () => context.Database.BeginTransactionAsync(Cancellation);
 
@@ -633,10 +633,10 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         await database.AsOwnerAsync(
             "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'beyond_the_grants') THEN CREATE ROLE beyond_the_grants NOLOGIN NOINHERIT; END IF; END $$; SELECT 1");
 
-        _caller.Current = CurrentUserSnapshot.SystemIn("tenancy");
+        _user.Current = CurrentUserSnapshot.SystemIn("tenancy");
         await using (var context = PoolerFixture.Context(
             Connection,
-            PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant], configure: options => options.SystemInRole = "beyond_the_grants")))
+            PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant], configure: options => options.SystemInRole = "beyond_the_grants")))
         {
             var begin = () => context.Database.BeginTransactionAsync(Cancellation);
             (await begin.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
@@ -648,7 +648,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         }
 
         // The connection is as it was for whoever comes next.
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var next = Context();
         await ShouldBeCleanAsync(await BackendAsync(next));
     }
@@ -658,7 +658,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     {
         database.Require();
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
         await context.Database.OpenConnectionAsync(Cancellation);
         var connection = context.Database.GetDbConnection();
@@ -709,7 +709,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     [MemberData(nameof(HandedOnInConnectionScope))]
     public async Task The_transaction_pooler_is_allowed_in_transaction_scope_and_refused_in_connection_scope(string connectionString, string named)
     {
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         await using var perConnection = NeverConnecting(connectionString, RowLevelSecurityScope.Connection);
         var open = () => perConnection.Database.OpenConnectionAsync(Cancellation);
@@ -726,7 +726,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     [InlineData(RowLevelSecurityScope.Transaction, "row level security has not been proven on it")]
     public async Task Multiplexing_is_refused_in_both_scopes(RowLevelSecurityScope scope, string why)
     {
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = NeverConnecting("Host=db.example.test;Database=postgres;Multiplexing=true", scope);
 
         var open = () => context.Database.OpenConnectionAsync(Cancellation);
@@ -749,7 +749,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
         await using var context = OnDataSource(dataSource, scope);
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         (await TextsAsync(context)).Should().Equal("Alice's");
         var state = await BackendState.OfAsync(context, Cancellation);
         state.Should().Be(new BackendState(state.Backend, "authenticated", LoginRole, ClaimsOf(Alice), "", "north"));
@@ -757,7 +757,7 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
         context.Notes.Add(new PrivateNote { Id = Guid.CreateVersion7(), Text = "Alice's too" });
         (await context.SaveChangesAsync(Cancellation)).Should().Be(1);
 
-        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
         (await TextsAsync(context)).Should().Equal(["Bob's"], "the pool's one connection, and the next caller");
 
         // Code that takes a connection from the data source itself gets the same backend, and nothing of any caller.
@@ -789,53 +789,53 @@ public sealed class TransactionScopeTests(PoolerFixture database) : IAsyncLifeti
     [Fact]
     public void The_scope_is_said_in_the_options_and_read_once_when_the_interceptor_is_built()
     {
-        new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions()).Scope.Should().Be(RowLevelSecurityScope.Connection, "the default, as it always was");
+        new PostgresRowLevelSecurityInterceptor(_user, new PostgresRowLevelSecurityOptions()).Scope.Should().Be(RowLevelSecurityScope.Connection, "the default, as it always was");
 
         var options = new PostgresRowLevelSecurityOptions { Scope = RowLevelSecurityScope.Transaction };
-        var interceptor = new PostgresRowLevelSecurityInterceptor(_caller, options);
+        var interceptor = new PostgresRowLevelSecurityInterceptor(_user, options);
         options.Scope = RowLevelSecurityScope.Connection;
         interceptor.Scope.Should().Be(RowLevelSecurityScope.Transaction, "an option changed afterwards does not reach an interceptor half way");
 
-        using var services = new ServiceCollection().AddPostgresRowLevelSecurity<CallerOfTheTest>(configured => configured.Scope = RowLevelSecurityScope.Transaction).BuildServiceProvider();
+        using var services = new ServiceCollection().AddPostgresRowLevelSecurity<UserOfTheTest>(configured => configured.Scope = RowLevelSecurityScope.Transaction).BuildServiceProvider();
         services.GetRequiredService<PostgresRowLevelSecurityInterceptor>().Scope.Should().Be(RowLevelSecurityScope.Transaction);
 
         using var supabase = new ServiceCollection().AddSupabaseRowLevelSecurity(configured => configured.Scope = RowLevelSecurityScope.Transaction).BuildServiceProvider();
         supabase.GetRequiredService<PostgresRowLevelSecurityInterceptor>().Scope.Should().Be(RowLevelSecurityScope.Transaction, "Supabase's registration takes the same options");
 
-        var undefined = () => new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions { Scope = (RowLevelSecurityScope)7 });
+        var undefined = () => new PostgresRowLevelSecurityInterceptor(_user, new PostgresRowLevelSecurityOptions { Scope = (RowLevelSecurityScope)7 });
         undefined.Should().Throw<ArgumentOutOfRangeException>().WithParameterName(nameof(PostgresRowLevelSecurityOptions.Scope));
     }
 
     [Fact]
     public void The_setting_that_marks_a_transaction_is_the_toolkits_own()
     {
-        var build = () => new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions(), [new DeclaredSettings(["ddd.caller_mark"])]);
+        var build = () => new PostgresRowLevelSecurityInterceptor(_user, new PostgresRowLevelSecurityOptions(), [new DeclaredSettings(["ddd.current_user_mark"])]);
 
         build.Should().Throw<ArgumentException>().WithParameterName("settings")
-            .WithMessage($"{nameof(DeclaredSettings)} declares the setting 'ddd.caller_mark', which is the toolkit's own*");
+            .WithMessage($"{nameof(DeclaredSettings)} declares the setting 'ddd.current_user_mark', which is the toolkit's own*");
     }
 
     private NotesContext Context()
-        => PoolerFixture.Context(Connection, PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant]));
+        => PoolerFixture.Context(Connection, PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant]));
 
     private NotesContext OnDataSource(NpgsqlDataSource dataSource, RowLevelSecurityScope scope)
         => new(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql(dataSource)
-            .AddInterceptors(PoolerFixture.Interceptor(_caller, scope, [_tenant]))
+            .AddInterceptors(PoolerFixture.Interceptor(_user, scope, [_tenant]))
             .Options);
 
     /// <summary>The same table, with a note's text as its concurrency token.</summary>
     private GuardedNotesContext Guarded()
         => new(new DbContextOptionsBuilder<GuardedNotesContext>()
             .UseNpgsql(Connection)
-            .AddInterceptors(PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant]))
+            .AddInterceptors(PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant]))
             .Options);
 
     /// <summary>A context whose connection is never really opened: the interceptor decides, and then nothing connects.</summary>
     private NotesContext NeverConnecting(string connectionString, RowLevelSecurityScope scope)
         => new(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql(connectionString)
-            .AddInterceptors(PoolerFixture.Interceptor(_caller, scope), new NeverOpens())
+            .AddInterceptors(PoolerFixture.Interceptor(_user, scope), new NeverOpens())
             .Options);
 
     private static async Task<int> BackendAsync(DbContext context) => (await BackendState.OfAsync(context, Cancellation)).Backend;

@@ -301,7 +301,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 
         var watcher = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
         var grace = await services.SeatAtAsync(harbor, "Grace", harbor.RootUnit);
-        await services.RunAsync(HostCaller.SystemIn(harbor.Tenant, harbor.AdminSeat), scoped =>
+        await services.RunAsync(HostUser.SystemIn(harbor.Tenant, harbor.AdminSeat), scoped =>
             scoped.Seats().GrantAsync(grace, harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
             scoped.Seats().GrantAsync(grace, watcher, harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
@@ -412,7 +412,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
                 await store.AdministratorsAsync(harbor.Tenant, now.AddMinutes(1), TestContext.Current.CancellationToken),
                 await store.RightsAMoveChangesAsync(harbor.Tenant, grace, north, south, catalogue.AccessManagingPermissions, now.AddMinutes(1), TestContext.Current.CancellationToken));
             _services.Commands.Count.Should().Be(2, "one statement each");
-            _services.Commands.Commands.Should().OnlyContain(command => command.Contains("\"SeatRights\"") && !command.Contains("tenant_administrators") && !command.Contains("permissions_a_move_changes"));
+            _services.Commands.Commands.Should().OnlyContain(command => command.Contains("\"SeatRights\"") && !command.Contains("tenant_administrators") && !command.Contains("permissions_a_unit_move_changes"));
             return answered;
         });
 
@@ -424,13 +424,13 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         // of a permission that manages access at South, reaching South alone, which is where the move changes them; nothing of
         // the administrators' at the root, which reach both parents, wherever the unit hangs; and nothing of Hal's at
         // South, whose operator's permissions manage no access.
-        reaches.Where(reach => reach.OfCaller).Select(reach => (reach.UnitId, reach.Permission, reach.Parent)).Should().BeEquivalentTo(
+        reaches.Where(reach => reach.OfCurrentSeat).Select(reach => (reach.UnitId, reach.Permission, reach.Parent)).Should().BeEquivalentTo(
         [
             (north, TenancyPermissions.GrantsManage, north), (north, TenancyPermissions.SeatsManage, north), (north, TenancyPermissions.UnitsManage, north),
             (north, HostCatalogue.WidgetChange, north), (north, HostCatalogue.WidgetCreate, north), (north, HostCatalogue.WidgetRead, north),
             (north, HostCatalogue.WidgetRead, north),
         ], "the supervisor's permissions and the watcher's, each a right of its own");
-        reaches.Where(reach => !reach.OfCaller).Select(reach => (reach.UnitId, reach.Permission, reach.Parent)).Should().BeEquivalentTo(
+        reaches.Where(reach => !reach.OfCurrentSeat).Select(reach => (reach.UnitId, reach.Permission, reach.Parent)).Should().BeEquivalentTo(
             [(south, TenancyPermissions.GrantsManage, south), (south, TenancyPermissions.SeatsManage, south), (south, TenancyPermissions.UnitsManage, south)],
             "the supervisor's permissions that manage access, and not the administrators' at the root");
         reaches.Where(reach => reach.EndsAt != null).Should().HaveCount(3, "Ivy's, which have not ended")

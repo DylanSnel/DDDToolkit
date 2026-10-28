@@ -243,7 +243,7 @@ internal static class TenancyMapping
         }
         else
         {
-            read.Map(right, tables.Rights, TenancyFunctionNames.CallerPermissions);
+            read.Map(right, tables.Rights, TenancyFunctionNames.CurrentPermissions);
         }
 
         right.Property(row => row.Permission).HasMaxLength(Permission.MaxNameLength);
@@ -429,7 +429,7 @@ internal static class TenancyMapping
     }
 
     /// <summary>
-    /// The rights a move changes, as <see cref="TenancyFunctionNames.PermissionsAMoveChanges"/> answers them: mapped to
+    /// The rights a move changes, as <see cref="TenancyFunctionNames.PermissionsAUnitMoveChanges"/> answers them: mapped to
     /// nothing, and read from the SQL that asks the function, under the column names the function gives.
     /// </summary>
     internal static void MoveReaches<TUnitId>(EntityTypeBuilder<MoveReach<TUnitId>> reach)
@@ -440,7 +440,7 @@ internal static class TenancyMapping
         reach.Property(row => row.Permission).HasColumnName(nameof(MoveReach<TUnitId>.Permission));
         reach.Property(row => row.EndsAt).HasColumnName(nameof(MoveReach<TUnitId>.EndsAt)).HasConversion(new NullableUtcDateTimeOffsetConverter());
         reach.Property(row => row.Parent).HasColumnName(nameof(MoveReach<TUnitId>.Parent));
-        reach.Property(row => row.OfCaller).HasColumnName(nameof(MoveReach<TUnitId>.OfCaller));
+        reach.Property(row => row.OfCurrentSeat).HasColumnName(nameof(MoveReach<TUnitId>.OfCurrentSeat));
     }
 
     /// <summary>

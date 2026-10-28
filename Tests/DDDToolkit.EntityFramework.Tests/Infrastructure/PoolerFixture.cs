@@ -24,7 +24,7 @@ public sealed class SettingsPerTransaction : ICollectionFixture<PoolerFixture>
 
 /// <summary>
 /// A Postgres set up the way <see cref="SupabaseRowLevelSecurityDatabase"/> is, with the toolkit's own schema
-/// and its <c>ddd.use_caller</c> procedure added, and PgBouncer in transaction mode in front of it, on one
+/// and its <c>ddd.use_current_user</c> procedure added, and PgBouncer in transaction mode in front of it, on one
 /// network. The pooler keeps <b>one</b> server connection for the application's login role, so every client
 /// that connects through it as that role is handed the same backend, one transaction at a time: whatever one
 /// client leaves on the session, the next one reads.

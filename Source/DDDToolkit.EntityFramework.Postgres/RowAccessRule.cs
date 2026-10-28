@@ -53,7 +53,7 @@ public sealed class RowAccessRule
     /// <summary>What the rule lets a caller do with a row it allows.</summary>
     public RowOperations Operations { get; }
 
-    /// <summary>The SQL template the generator wrote: <c>{col:...}</c>, <c>{val:...}</c> and <c>{caller:...}</c> still to fill in.</summary>
+    /// <summary>The SQL template the generator wrote: <c>{col:...}</c>, <c>{val:...}</c> and <c>{user:...}</c> still to fill in.</summary>
     public string Sql { get; }
 
     /// <summary>

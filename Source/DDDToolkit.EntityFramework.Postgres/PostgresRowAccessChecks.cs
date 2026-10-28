@@ -24,7 +24,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// that runs them by hand, the switch first:
 /// </para>
 /// <code>
-/// await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, cancellationToken);
+/// await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync(context, cancellationToken);
 /// await PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, cancellationToken);
 /// await PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(context, cancellationToken);
 /// PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
@@ -53,10 +53,10 @@ public static class PostgresRowAccessChecks
 
     /// <summary>
     /// The start-up check that the role the host logs in as may become every caller of every context that runs as
-    /// its caller (<see cref="EnsureLoginRoleMaySwitchToCallersAsync"/>). It runs in the stage of the login, before
+    /// its caller (<see cref="EnsureLoginRoleMaySwitchToUserRolesAsync"/>). It runs in the stage of the login, before
     /// every check that asks as system work and so switches to the system role.
     /// </summary>
-    public const string LoginRoleMaySwitchToCallersCheck = "postgres.login-role-may-switch-to-callers";
+    public const string LoginRoleMaySwitchToUserRolesCheck = "postgres.login-role-may-switch-to-user-roles";
 
     /// <summary>
     /// The start-up check that the role the host logs in as owns and holds nothing in the schemas of every
@@ -213,7 +213,7 @@ public static class PostgresRowAccessChecks
             FROM pg_catalog.pg_roles r WHERE r.rolname = SESSION_USER::pg_catalog.text),
         procedure AS (
             SELECT (SELECT p.oid FROM pg_catalog.pg_proc p
-                    WHERE p.pronamespace = n.oid AND p.proname = 'use_caller' AND p.prokind = 'p'
+                    WHERE p.pronamespace = n.oid AND p.proname = 'use_current_user' AND p.prokind = 'p'
                       AND pg_catalog.oidvectortypes(p.proargtypes) = 'text, text, text[], text[]') AS oid,
                    n.oid AS schema
             FROM (SELECT (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'ddd') AS oid) n)
@@ -224,7 +224,7 @@ public static class PostgresRowAccessChecks
            OR NOT (login.rolsuper OR pg_catalog.pg_has_role(login.oid, reached.oid,
                    CASE WHEN pg_catalog.current_setting('server_version_num')::pg_catalog.int4 >= 160000 THEN 'SET' ELSE 'MEMBER' END))
         UNION ALL
-        SELECT NULL, '{PostgresRowAccess.UseCallerSignature}', procedure.oid IS NULL, login.rolname, login.name
+        SELECT NULL, '{PostgresRowAccess.UseCurrentUserSignature}', procedure.oid IS NULL, login.rolname, login.name
         FROM login CROSS JOIN procedure
         WHERE $2 AND CASE WHEN procedure.oid IS NULL THEN true
                           ELSE NOT (pg_catalog.has_function_privilege(login.oid, procedure.oid, 'EXECUTE')
@@ -317,7 +317,7 @@ public static class PostgresRowAccessChecks
     /// callers run as: the user's, the anonymous caller's, the scoped system role, the role system work runs
     /// as, and the role of every mapped token role, as its row level security interceptor was configured. Where the
     /// settings last one transaction (<see cref="RowLevelSecurityScope.Transaction"/>), it also throws unless the
-    /// login role may call <c>"ddd".use_caller</c>, which sets them.
+    /// login role may call <c>"ddd".use_current_user</c>, which sets them.
     /// <para>
     /// A role is switched to when a caller of that kind connects, not when the application starts. Without this,
     /// an application whose login role was never granted one of them starts, passes its other checks, and fails the
@@ -350,17 +350,17 @@ public static class PostgresRowAccessChecks
     /// call the procedure; the message names the login role, and each role or the procedure with the statement that
     /// fixes it.
     /// </exception>
-    public static async Task EnsureLoginRoleMaySwitchToCallersAsync(DbContext context, CancellationToken cancellationToken)
+    public static async Task EnsureLoginRoleMaySwitchToUserRolesAsync(DbContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         var options = InterceptorOf(context)?.Options ?? throw NotWired(context);
-        var callers = CallerRolesOf(options);
+        var roles = RunAsRolesOf(options);
 
         var findings = await AskAsLoginRoleAsync(
             context,
             SwitchFindings,
-            [callers.Select(caller => caller.Role).ToArray(), options.Scope == RowLevelSecurityScope.Transaction],
+            [roles.Select(role => role.Role).ToArray(), options.Scope == RowLevelSecurityScope.Transaction],
             cancellationToken).ConfigureAwait(false);
 
         // A scoped system role that does not exist is one no policy is for: the application does no scoped system
@@ -373,7 +373,7 @@ public static class PostgresRowAccessChecks
         }
 
         // In the order the roles were configured, and the procedure last: the database sorts names by its own collation.
-        var order = callers.Select(caller => caller.Role).ToList();
+        var order = roles.Select(role => role.Role).ToList();
         findings = [.. findings.OrderBy(finding => finding[0].Length == 0 ? order.Count : order.IndexOf(finding[0]))];
 
         var login = findings[0][4];
@@ -383,7 +383,7 @@ public static class PostgresRowAccessChecks
         foreach (var finding in findings)
         {
             var (name, missing) = (finding[1], finding[2] == bool.TrueString);
-            var (_, what, pair) = finding[0].Length == 0 ? default : callers.First(caller => caller.Role == finding[0]);
+            var (_, what, pair) = finding[0].Length == 0 ? default : roles.First(role => role.Role == finding[0]);
             message.Append("\n- ").Append(finding[0].Length == 0
                 ? missing
                     ? $"{name}, which sets the caller of each transaction, does not exist. Fix: apply the access files, or PostgresRowAccess.SetupScript(), which make it."
@@ -470,31 +470,31 @@ public static class PostgresRowAccessChecks
     internal static void AddStartupChecks(IServiceCollection services)
     {
         services.AddStartupCheck(new StartupCheck(RowLevelSecurityWiredCheck, StartupCheckStage.Services, (provider, cancellationToken) =>
-            EachContextAsync(provider, runsAsCaller: false, (context, _) =>
+            EachContextAsync(provider, runsAsUser: false, (context, _) =>
             {
                 EnsureRowLevelSecurityWired(context);
                 return Task.CompletedTask;
             }, cancellationToken)));
 
-        services.AddStartupCheck(new StartupCheck(LoginRoleMaySwitchToCallersCheck, StartupCheckStage.Login, (provider, cancellationToken) =>
-            EachContextAsync(provider, runsAsCaller: true, EnsureLoginRoleMaySwitchToCallersAsync, cancellationToken)));
+        services.AddStartupCheck(new StartupCheck(LoginRoleMaySwitchToUserRolesCheck, StartupCheckStage.Login, (provider, cancellationToken) =>
+            EachContextAsync(provider, runsAsUser: true, EnsureLoginRoleMaySwitchToUserRolesAsync, cancellationToken)));
 
         services.AddStartupCheck(new StartupCheck(LoginRoleOwnsNothingCheck, StartupCheckStage.Database, (provider, cancellationToken) =>
-            EachContextAsync(provider, runsAsCaller: false, EnsureLoginRoleOwnsNothingAsync, cancellationToken)));
+            EachContextAsync(provider, runsAsUser: false, EnsureLoginRoleOwnsNothingAsync, cancellationToken)));
 
         services.AddStartupCheck(new StartupCheck(DefinerOwnersBypassCheck, StartupCheckStage.Database, (provider, cancellationToken) =>
-            EachContextAsync(provider, runsAsCaller: false, EnsureDefinerOwnersBypassAsync, cancellationToken)));
+            EachContextAsync(provider, runsAsUser: false, EnsureDefinerOwnersBypassAsync, cancellationToken)));
     }
 
     /// <summary>
     /// Runs <paramref name="check"/> on every context <paramref name="services"/> register that is on Postgres, and
-    /// with <paramref name="runsAsCaller"/> only on those with the row level security interceptor: by the name of
+    /// with <paramref name="runsAsUser"/> only on those with the row level security interceptor: by the name of
     /// its type, in a scope of its own. Every context the container knows, not a list of them, so a module added
     /// later is checked without anyone remembering to add it. Entity Framework registers the options of each
     /// context once more as the non-generic <see cref="DbContextOptions"/>, and those name the context they are
     /// for.
     /// </summary>
-    private static async Task EachContextAsync(IServiceProvider services, bool runsAsCaller, Func<DbContext, CancellationToken, Task> check, CancellationToken cancellationToken)
+    private static async Task EachContextAsync(IServiceProvider services, bool runsAsUser, Func<DbContext, CancellationToken, Task> check, CancellationToken cancellationToken)
     {
         var scope = services.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
@@ -508,7 +508,7 @@ public static class PostgresRowAccessChecks
             foreach (var contextType in contextTypes)
             {
                 var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
-                if (context.Database.ProviderName == NpgsqlProvider && (!runsAsCaller || InterceptorOf(context) is not null))
+                if (context.Database.ProviderName == NpgsqlProvider && (!runsAsUser || InterceptorOf(context) is not null))
                 {
                     await check(context, cancellationToken).ConfigureAwait(false);
                 }
@@ -552,7 +552,7 @@ public static class PostgresRowAccessChecks
     /// and the system role's where there are those, and the roles of the mapped token roles. A role that is two of
     /// these is said as the first.
     /// </summary>
-    private static List<(string Role, string What, string Pair)> CallerRolesOf(PostgresRowLevelSecurityOptions options)
+    private static List<(string Role, string What, string Pair)> RunAsRolesOf(PostgresRowLevelSecurityOptions options)
     {
         List<(string Role, string What, string Pair)> roles =
         [

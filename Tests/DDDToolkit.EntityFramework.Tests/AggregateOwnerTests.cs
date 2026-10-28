@@ -51,7 +51,7 @@ public partial class Hub
 }
 
 /// <summary>The application's handle: the postman a caller is, by the id its token names.</summary>
-public sealed class CallersPostman : ICallersOwn<PostmanId>
+public sealed class CurrentPostman : IOwnedByCurrentUser<PostmanId>
 {
     public PostmanId? Find(ICurrentUser user) => user.Id is { } id ? new PostmanId(id) : null;
 }
@@ -294,7 +294,7 @@ public sealed class AggregateOwnerTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddDDDToolkitEntityFramework();
-        services.AddCallersOwn<PostmanId, CallersPostman>();
+        services.AddOwnedByCurrentUser<PostmanId, CurrentPostman>();
         services.AddAccessChecks<ILettersRequest>();
         return services;
     }

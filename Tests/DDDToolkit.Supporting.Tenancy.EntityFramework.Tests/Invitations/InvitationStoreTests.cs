@@ -103,7 +103,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         var writes = _services.Commands.Sent.Where(command => command.Writes).ToList();
         writes.Should().NotBeEmpty();
         writes.Select(command => command.Transaction).Distinct().Should().ContainSingle("everything an acceptance writes is one transaction").Which.Should().NotBeNull();
-        writes.Should().OnlyContain(command => command.TenancyCaller!.Kind == TenancyCallerKind.SystemInTenant && Equals(command.TenancyCaller.TenantId, _harbor.Tenant),
+        writes.Should().OnlyContain(command => command.TenancyUser!.Kind == TenancyUserKind.SystemInTenant && Equals(command.TenancyUser.TenantId, _harbor.Tenant),
             "it is written as system work in the invitation's tenant");
 
         var seat = await InAsync(_harbor.Tenant, context => context.Set<HostSeat>().AsNoTracking().AsSingleQuery().SingleAsync(row => row.Id == accepted.Seat.Id, Cancellation));
@@ -147,7 +147,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         DbContext? acceptors = null;
         await using (var scope = _services.Scope())
         using (TestUser.BeginAs(Wren))
-        using (TenancyCallers.BeginNone())
+        using (TenancyUsers.BeginNone())
         {
             acceptors = scope.ServiceProvider.TenancyContext();
             _services.Commands.Reset();
@@ -160,7 +160,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         lookup.Text.Should().NotContain("\"Address\"").And.NotContain("\"Digest\",", "it selects the tenant, the invitation and its issuer, and nothing else");
         lookup.Context.Should().NotBeNull().And.NotBeSameAs(acceptors, "it runs on a context of its own");
         lookup.Caller.Should().BeSameAs(CurrentUserSnapshot.System, "as the application itself, where nothing but the save keeps tenants apart");
-        lookup.TenancyCaller.Should().BeNull();
+        lookup.TenancyUser.Should().BeNull();
         lookup.Writes.Should().BeFalse();
 
         // And it found Meadow's: the seat is there, and Harbor's invitation is as it was.
@@ -215,7 +215,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         // Wren's acceptance has decided, and is about to save, when somebody else's commits.
         await using (var scope = _services.Scope())
         using (TestUser.BeginAs(Wren))
-        using (TenancyCallers.BeginNone())
+        using (TenancyUsers.BeginNone())
         {
             _services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => _services.AcceptAsync(other, issued.Token, displayName: "Lark"));
 

@@ -32,7 +32,7 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
         GRANT anon, authenticated, service_role, ddd_system_in TO shop_app;
         """;
 
-    /// <summary>What each database has: Supabase's caller functions and the notes.</summary>
+    /// <summary>What each database has: Supabase's current user functions and the notes.</summary>
     private const string Setup = """
         CREATE SCHEMA auth;
         CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
@@ -101,7 +101,7 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
     }
 
     /// <summary>
-    /// Makes a fresh server what this fixture is: the roles, Supabase's caller functions and the notes, over
+    /// Makes a fresh server what this fixture is: the roles, Supabase's current user functions and the notes, over
     /// <paramref name="owner"/>, a superuser's connection to the database the tests use. For a fixture that
     /// starts its own container, behind a pooler for one.
     /// </summary>
@@ -182,11 +182,11 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
 /// Whoever the test says is calling: the host's answer where nothing was begun, and a current user that asks it, so a
 /// test hands it to an interceptor or registers it as the host's source.
 /// </summary>
-public sealed class CallerOfTheTest : ICurrentUserSource, ICurrentUser
+public sealed class UserOfTheTest : ICurrentUserSource, ICurrentUser
 {
     private readonly CurrentUser _user;
 
-    public CallerOfTheTest() => _user = new CurrentUser(source: this);
+    public UserOfTheTest() => _user = new CurrentUser(source: this);
 
     /// <summary>The user the host answers where nothing was begun.</summary>
     public CurrentUserSnapshot Current { get; set; } = CurrentUserSnapshot.System;

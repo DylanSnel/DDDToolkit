@@ -606,7 +606,7 @@ trigger goes in a migration of your own:
 create function ordering.touch_row() returns trigger language plpgsql as $$
 begin
     new."UpdatedAt" := now();
-    new."UpdatedBy" := ddd.caller_id();   -- auth.uid() on Supabase
+    new."UpdatedBy" := ddd.current_user_id();   -- auth.uid() on Supabase
     new."CreatedAt" := old."CreatedAt";   -- an update never changes the creation columns
     new."CreatedBy" := old."CreatedBy";
     return new;
@@ -623,7 +623,7 @@ old value after a save:
 modelBuilder.Entity<Order>(order =>
 {
     order.Property<DateTimeOffset>("CreatedAt").HasDefaultValueSql("now()");
-    order.Property<Guid?>("CreatedBy").HasDefaultValueSql("ddd.caller_id()");
+    order.Property<Guid?>("CreatedBy").HasDefaultValueSql("ddd.current_user_id()");
     order.Property<DateTimeOffset?>("UpdatedAt").ValueGeneratedOnAddOrUpdate();
     order.Property<Guid?>("UpdatedBy").ValueGeneratedOnAddOrUpdate();
 });

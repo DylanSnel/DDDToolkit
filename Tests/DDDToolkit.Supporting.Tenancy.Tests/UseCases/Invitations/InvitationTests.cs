@@ -295,7 +295,7 @@ public class InvitationTests
 
         await harness.Accept(Wren, issued.Token);
 
-        // The token is looked up as the person who sent it, with no Tenancy caller; everything after it acts in
+        // The token is looked up as the person who sent it, with no Tenancy user; everything after it acts in
         // that one tenant, as the toolkit's scoped system caller, and is saved as system work for the issuer.
         var calls = harness.Store.Observed.Skip(before).ToList();
         calls[0].Name.Should().Be(nameof(InMemoryTenancyStore.FindByDigestAsync));
@@ -304,7 +304,7 @@ public class InvitationTests
         calls.Skip(1).Should().NotBeEmpty().And.OnlyContain(call =>
             Equals(call.Tenancy!.TenantId, harness.Tenant) && call.Core!.Kind == CurrentUserKind.SystemIn && call.Core.SystemScope == TenancyWork.SystemScope);
         var saved = calls.Should().ContainSingle(call => call.Name == nameof(InMemoryTenancyStore.SaveAsync)).Which;
-        saved.Tenancy!.Kind.Should().Be(TenancyCallerKind.SystemInTenant);
+        saved.Tenancy!.Kind.Should().Be(TenancyUserKind.SystemInTenant);
         saved.Tenancy.SeatId.Should().Be(harness.Administrator, "the work is done for the seat that issued the invitation");
         harness.Store.SeatsIn(new TenantId(2)).Should().ContainSingle("nothing of the other tenant changed");
     }
@@ -585,7 +585,7 @@ public class InvitationTests
 
         // The rights asked about are the issuer's, while the work stays the application's.
         harness.Store.Observed.Skip(before).Should().Contain(call =>
-            call.Tenancy != null && call.Tenancy.Kind == TenancyCallerKind.Seat && Equals(call.Tenancy.SeatId, hana) && call.Core!.Kind == CurrentUserKind.SystemIn);
+            call.Tenancy != null && call.Tenancy.Kind == TenancyUserKind.Seat && Equals(call.Tenancy.SeatId, hana) && call.Core!.Kind == CurrentUserKind.SystemIn);
         harness.Store.Seat(accepted.Seat.Id).Placements.Single().Grants.Single().GrantedBy.Should().Be(hana);
     }
 
@@ -699,8 +699,8 @@ public class InvitationTests
 
         // Another tenant's are not among them, whoever asks there.
         var quarry = harness.Seed(2, "quarry");
-        (await harness.Run(HostCaller.InSeat(quarry.Tenant.Id, quarry.Administrator.Id), use => use.Invitations.ListOpenAsync(Cancellation))).Should().BeEmpty();
-        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(HostCaller.Nobody(TenancyRefusals.NotSeated), use => use.Invitations.ListOpenAsync(Cancellation)));
+        (await harness.Run(HostUser.InSeat(quarry.Tenant.Id, quarry.Administrator.Id), use => use.Invitations.ListOpenAsync(Cancellation))).Should().BeEmpty();
+        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(HostUser.Nobody(TenancyRefusals.NotSeated), use => use.Invitations.ListOpenAsync(Cancellation)));
     }
 
     [Fact]
@@ -718,7 +718,7 @@ public class InvitationTests
         await Refused.WithCodeAsync(TenancyRefusals.InvitationNotFound, () => harness.As(supervisor, use => use.Invitations.CancelAsync(south.Invitation.Id, Cancellation)));
         await Refused.WithCodeAsync(TenancyRefusals.InvitationNotFound, () => harness.As(watcher, use => use.Invitations.CancelAsync(coast.Invitation.Id, Cancellation)));
         await Refused.WithCodeAsync(TenancyRefusals.InvitationNotFound,
-            () => harness.Run(HostCaller.InSeat(quarry.Tenant.Id, quarry.Administrator.Id), use => use.Invitations.CancelAsync(coast.Invitation.Id, Cancellation)));
+            () => harness.Run(HostUser.InSeat(quarry.Tenant.Id, quarry.Administrator.Id), use => use.Invitations.CancelAsync(coast.Invitation.Id, Cancellation)));
         await Refused.WithCodeAsync(TenancyRefusals.InvitationNotFound, () => harness.As(harness.Administrator, use => use.Invitations.CancelAsync(InvitationId.CreateSequential(), Cancellation)));
 
         // Whoever manages seats there cancels it, whoever issued it.

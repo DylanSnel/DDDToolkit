@@ -4,7 +4,7 @@ using DDDToolkit.Abstractions.Interfaces;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// Turns the toolkit's current user and the tenant a request names into a Tenancy caller: the caller's active seat
+/// Turns the toolkit's current user and the tenant a request names into a Tenancy user: the caller's active seat
 /// in that tenant, or nobody and why.
 /// <para>
 /// The request names the tenant by its slug only. The tenant's id and the seat's id always come from the
@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <see cref="TenancyWork"/>, never inherited from a request.
 /// </para>
 /// <para>
-/// A host's middleware, which only makes the Tenancy caller it is answered current, asks the same of
+/// A host's middleware, which only makes the Tenancy user it is answered current, asks the same of
 /// <see cref="ITenantSelection"/>, the very instance without its id types, and names no id.
 /// </para>
 /// <para>
@@ -26,7 +26,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <para>
 /// An operator of the application, a user whose token carries one of <paramref name="operators"/>, holds no seat either.
 /// The tenant its request names is looked up by its slug alone, and the answer is nobody with that tenant kept
-/// (<see cref="TenancyCaller{TTenantId, TSeatId}.OperatorNaming"/>). A command marked
+/// (<see cref="TenancyUser{TTenantId, TSeatId}.OperatorNaming"/>). A command marked
 /// <c>[Operator(Tenant = OperatorTenant.FromRequest)]</c> acts in that tenant. A request that names no tenant is nobody with
 /// <c>tenancy.tenant-required</c>, and one that names a tenant nobody has is nobody with <c>tenancy.not-seated</c>.
 /// </para>
@@ -46,20 +46,20 @@ public sealed class TenantSelection<TTenantId, TSeatId>(
     private readonly IReadOnlyList<string> _operators = operators?.TokenRoles ?? [];
 
     /// <summary>
-    /// The Tenancy caller for <paramref name="user"/> in the tenant <paramref name="tenantSlug"/> names.
+    /// The Tenancy user for <paramref name="user"/> in the tenant <paramref name="tenantSlug"/> names.
     /// Every refusal comes back as nobody, with the refusal's code; nothing is thrown for a caller Tenancy
     /// does not let in.
     /// </summary>
     /// <param name="user">Who is calling, as the toolkit's current user answers.</param>
     /// <param name="tenantSlug">The tenant the request names, by its slug; trimmed and lowercased here.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    public async Task<TenancyCaller<TTenantId, TSeatId>> ResolveAsync(CurrentUserSnapshot user, string? tenantSlug, CancellationToken cancellationToken)
+    public async Task<TenancyUser<TTenantId, TSeatId>> ResolveAsync(CurrentUserSnapshot user, string? tenantSlug, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(user);
 
         if (user.Kind != CurrentUserKind.User || user.Id is not { } identity)
         {
-            return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
+            return TenancyUser<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
         }
 
         // An operator reads every tenant, so the tenant its request names is found by its slug alone, and kept for its
@@ -73,48 +73,48 @@ public sealed class TenantSelection<TTenantId, TSeatId>(
         // seat learns nothing about the tenants, not even that a slug is missing.
         if (!_options.Seats(user.Role))
         {
-            return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
+            return TenancyUser<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
         }
 
         var slug = tenantSlug?.Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(slug))
         {
-            return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.TenantRequired);
+            return TenancyUser<TTenantId, TSeatId>.Nobody(TenancyRefusals.TenantRequired);
         }
 
         // No such tenant and someone else's tenant answer the same, so a slug tells nobody whether it exists.
         var seat = await seats.FindAsync(identity, slug, cancellationToken).ConfigureAwait(false);
         if (seat is null)
         {
-            return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
+            return TenancyUser<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
         }
 
         if (seat.TenantStatus != TenantStatus.Active)
         {
-            return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.TenantInactive);
+            return TenancyUser<TTenantId, TSeatId>.Nobody(TenancyRefusals.TenantInactive);
         }
 
         return seat.SeatStatus != SeatStatus.Active
-            ? TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.SeatSuspended)
-            : TenancyCaller<TTenantId, TSeatId>.InSeat(seat.Tenant, seat.Seat);
+            ? TenancyUser<TTenantId, TSeatId>.Nobody(TenancyRefusals.SeatSuspended)
+            : TenancyUser<TTenantId, TSeatId>.InSeat(seat.Tenant, seat.Seat);
     }
 
     /// <summary>The operator's answer: nobody, with the tenant the slug names kept where there is one.</summary>
-    private async Task<TenancyCaller<TTenantId, TSeatId>> OperatorNamingAsync(string? tenantSlug, CancellationToken cancellationToken)
+    private async Task<TenancyUser<TTenantId, TSeatId>> OperatorNamingAsync(string? tenantSlug, CancellationToken cancellationToken)
     {
         var slug = tenantSlug?.Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(slug))
         {
-            return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.TenantRequired);
+            return TenancyUser<TTenantId, TSeatId>.Nobody(TenancyRefusals.TenantRequired);
         }
 
         return await seats.FindTenantAsync(slug, cancellationToken).ConfigureAwait(false) is { } tenant
-            ? TenancyCaller<TTenantId, TSeatId>.OperatorNaming(tenant)
-            : TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
+            ? TenancyUser<TTenantId, TSeatId>.OperatorNaming(tenant)
+            : TenancyUser<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
     }
 
     /// <inheritdoc />
-    async Task<ITenancyCaller> ITenantSelection.ResolveAsync(CurrentUserSnapshot user, string? tenantSlug, CancellationToken cancellationToken)
+    async Task<ITenancyUser> ITenantSelection.ResolveAsync(CurrentUserSnapshot user, string? tenantSlug, CancellationToken cancellationToken)
         => await ResolveAsync(user, tenantSlug, cancellationToken).ConfigureAwait(false);
 
     /// <summary>

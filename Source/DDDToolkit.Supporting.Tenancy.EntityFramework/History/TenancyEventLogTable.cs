@@ -44,7 +44,7 @@ public static class TenancyEventLogTable
     /// </code>
     /// <para>
     /// Every row says which tenant its event is about, taken from the event itself, which every event of Tenancy's
-    /// carries, and who acted, from the Tenancy caller of the save: a seat, an operator, the system or a token
+    /// carries, and who acted, from the Tenancy user of the save: a seat, an operator, the system or a token
     /// (<see cref="TenancyActedByAccessor"/>). An event of the application's own that names no tenant gets the
     /// tenant the save runs in. The payload is the event as the outbox stores it: ids, permissions and dates, who made
     /// the change, and never what a tenant, a unit, a seat or a role is called.
@@ -104,7 +104,7 @@ public static class TenancyEventLogTable
 /// tenant the kept event names, or, for an event that names none, the tenant the save runs in. A log without
 /// that column is not its business, and is left as it is.
 /// <para>
-/// A singleton, as every <see cref="IEventLogFields"/> is: it reads the event and the ambient Tenancy caller,
+/// A singleton, as every <see cref="IEventLogFields"/> is: it reads the event and the ambient Tenancy user,
 /// keeps nothing of either, and takes no scoped service.
 /// </para>
 /// </summary>
@@ -130,10 +130,10 @@ internal sealed class TenancyEventLogFields : IEventLogFields
 
         // The save check has let the save through, so whatever is saved here is of the caller's tenant.
         column.CurrentValue = named
-            ?? (TenancyCallers.CurrentTenantOrNull() is { } current && current.GetType() == tenantType ? current : null)
+            ?? (TenancyUsers.CurrentTenantOrNull() is { } current && current.GetType() == tenantType ? current : null)
             ?? throw new InvalidOperationException(
                 "The event " + domainEvent.GetType().Name + " goes into Tenancy's access history, and neither names a tenant, as a property TenantId of type "
-                + tenantType.Name + ", nor is saved by a Tenancy caller that acts in one. Give the event its tenant, or keep it out of the log with KeepEventLog(log => log.Keep<...>()).");
+                + tenantType.Name + ", nor is saved by a Tenancy user that acts in one. Give the event its tenant, or keep it out of the log with KeepEventLog(log => log.Keep<...>()).");
     }
 
     /// <summary>

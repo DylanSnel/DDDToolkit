@@ -14,7 +14,7 @@ public sealed class SupabaseMigrationOptions
 
     private RowAccessRoleNames _roles = SupabaseRowLevelSecurity.DefaultRoles;
 
-    private PostgresCallerFunctions _callerFunctions = SupabaseRowLevelSecurity.CallerFunctions;
+    private PostgresCurrentUserFunctions _currentUserFunctions = SupabaseRowLevelSecurity.CurrentUserFunctions;
 
     private string? _loginRole;
 
@@ -91,15 +91,15 @@ public sealed class SupabaseMigrationOptions
     }
 
     /// <summary>
-    /// How a policy asks about the caller: <see cref="SupabaseRowLevelSecurity.CallerFunctions"/> by default,
+    /// How a policy asks about the caller: <see cref="SupabaseRowLevelSecurity.CurrentUserFunctions"/> by default,
     /// <c>auth.uid()</c>, <c>auth.role()</c> and <c>auth.jwt()</c>. The build takes them from the
-    /// <c>SupabaseCallerFunctions</c> property of the project that runs the export.
+    /// <c>SupabaseCurrentUserFunctions</c> property of the project that runs the export.
     /// </summary>
     /// <exception cref="ArgumentNullException">Set to null.</exception>
-    public PostgresCallerFunctions CallerFunctions
+    public PostgresCurrentUserFunctions CurrentUserFunctions
     {
-        get => _callerFunctions;
-        set => _callerFunctions = value ?? throw new ArgumentNullException(nameof(value));
+        get => _currentUserFunctions;
+        set => _currentUserFunctions = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     /// <summary>

@@ -87,7 +87,7 @@ public partial class Order { }
 | [Tenancy API: aggregates and entities](docs/tenancy/reference/aggregates.md) | Generated from the code: the templates of tenant, organization, unit, seat, role and invitation, with their value objects, invariants and events |
 | [Tenancy API: managers](docs/tenancy/reference/managers.md) | Generated from the code: `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager` and `InvitationManager`, the stores a storage package implements, and the registration a host calls |
 | [Tenancy API: catalogue and starter roles](docs/tenancy/reference/catalogue.md) | Generated from the code: permissions, the catalogue, starter roles and their sync |
-| [Tenancy API: access manager and callers](docs/tenancy/reference/callers.md) | Generated from the code: `TenancyAccessManager`, the Tenancy caller, actors, tenant selection and the requirement attributes, `[Operator]` among them |
+| [Tenancy API: access manager and users](docs/tenancy/reference/access.md) | Generated from the code: `TenancyAccessManager`, the Tenancy user, actors, tenant selection and the requirement attributes, `[Operator]` among them |
 | [Tenancy API: queries and row access](docs/tenancy/reference/queries.md) | Generated from the code: `db.Tenancy()` and its queries, the read model, the projection and the row access rules |
 | [Tenancy API: refusals](docs/tenancy/reference/refusals.md) | Generated from the code: every refusal code and what it means |
 | [Tenancy API: Entity Framework](docs/tenancy/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package, with `[OfTenant]` and the mapping of a context |

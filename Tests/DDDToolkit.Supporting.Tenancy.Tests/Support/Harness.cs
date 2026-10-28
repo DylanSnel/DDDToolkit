@@ -82,27 +82,27 @@ public sealed class Harness
     public RoleId RoleFromStarterRole(string starterRole) => Harbor.RolesByStarterRole[starterRole].Id;
 
     /// <summary>A seat of Harbor, as a caller.</summary>
-    public HostCaller SeatCaller(SeatId seat) => HostCaller.InSeat(Tenant, seat);
+    public HostUser SeatUser(SeatId seat) => HostUser.InSeat(Tenant, seat);
 
     /// <summary>System work in Harbor, as a caller.</summary>
-    public HostCaller SystemCaller(SeatId? actingSeat = null) => HostCaller.SystemIn(Tenant, actingSeat);
+    public HostUser SystemUser(SeatId? actingSeat = null) => HostUser.SystemIn(Tenant, actingSeat);
 
     /// <summary>Runs <paramref name="act"/> as a seat of Harbor, in a new unit of work.</summary>
-    public Task<T> As<T>(SeatId seat, Func<Harness, Task<T>> act) => Run(SeatCaller(seat), act);
+    public Task<T> As<T>(SeatId seat, Func<Harness, Task<T>> act) => Run(SeatUser(seat), act);
 
     /// <summary>Runs <paramref name="act"/> as a seat of Harbor, in a new unit of work.</summary>
-    public Task As(SeatId seat, Func<Harness, Task> act) => Run(SeatCaller(seat), act);
+    public Task As(SeatId seat, Func<Harness, Task> act) => Run(SeatUser(seat), act);
 
     /// <summary>Runs <paramref name="act"/> as system work in Harbor, in a new unit of work.</summary>
-    public Task<T> BySystemWork<T>(Func<Harness, Task<T>> act) => Run(SystemCaller(), act);
+    public Task<T> BySystemWork<T>(Func<Harness, Task<T>> act) => Run(SystemUser(), act);
 
     /// <summary>Runs <paramref name="act"/> as system work in Harbor, in a new unit of work.</summary>
-    public Task BySystemWork(Func<Harness, Task> act) => Run(SystemCaller(), act);
+    public Task BySystemWork(Func<Harness, Task> act) => Run(SystemUser(), act);
 
     /// <summary>Runs <paramref name="act"/> as <paramref name="caller"/>, in a new unit of work.</summary>
-    public async Task<T> Run<T>(ITenancyCaller caller, Func<Harness, Task<T>> act)
+    public async Task<T> Run<T>(ITenancyUser caller, Func<Harness, Task<T>> act)
     {
-        using (TenancyCallers.Begin(caller))
+        using (TenancyUsers.Begin(caller))
         {
             Store.BeginUnitOfWork();
             return await act(this);
@@ -110,7 +110,7 @@ public sealed class Harness
     }
 
     /// <summary>Runs <paramref name="act"/> as <paramref name="caller"/>, in a new unit of work.</summary>
-    public Task Run(ITenancyCaller caller, Func<Harness, Task> act)
+    public Task Run(ITenancyUser caller, Func<Harness, Task> act)
         => Run(caller, async harness =>
         {
             await act(harness);
@@ -119,7 +119,7 @@ public sealed class Harness
 
     /// <summary>
     /// Accepts an invitation as a person signed in with <paramref name="identity"/>, who names no tenant and has no
-    /// Tenancy caller: the toolkit's caller is all there is, as in a request, in a new unit of work. The new seat is
+    /// Tenancy user: the toolkit's current user is all there is, as in a request, in a new unit of work. The new seat is
     /// given <paramref name="displayName"/> in the use case's callback, as the host application names its seats.
     /// </summary>
     public async Task<InvitationManager.AcceptedInvitation> Accept(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)

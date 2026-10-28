@@ -24,4 +24,4 @@ global using Xunit;
 
 // The caller closed over the application's ids, once, as an application does. The managers are SeatManager and the
 // others, which the toolkit's generator writes into the test host that declares the classes, under the package's names.
-global using CampusCaller = DDDToolkit.Supporting.Tenancy.Access.TenancyCaller<Campus.Tenants.TenantId, Campus.Tenants.SeatId>;
+global using CampusUser = DDDToolkit.Supporting.Tenancy.Access.TenancyUser<Campus.Tenants.TenantId, Campus.Tenants.SeatId>;

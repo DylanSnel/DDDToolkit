@@ -277,14 +277,14 @@ public class MembershipWithTenancyGeneratorTests
             "TenancyAccessManager<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _access;");
 
         // Every question is forwarded: who the caller is, who can be made a member, and where a permission is held.
-        result.ShouldContain(File, "return current.Kind == global::DDDToolkit.Supporting.Tenancy.Access.TenancyCallerKind.Seat ? current.Seat : null;");
+        result.ShouldContain(File, "return current.Kind == global::DDDToolkit.Supporting.Tenancy.Access.TenancyUserKind.Seat ? current.Seat : null;");
         result.ShouldContain(File, "=> _access.CurrentTenant.Require();");
         result.ShouldContain(File, "seat => seat.Id.Equals(member) && seat.Status == global::DDDToolkit.Supporting.Tenancy.SeatStatus.Active,");
         result.ShouldContain(File, "? queries.UnitsWhereIHold(permission)");
 
         RegistrationsOf(result).Should().BeEquivalentTo(["AddCourseMembershipWithTenancy<TContext>"]);
         PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().BeEquivalentTo(
-            ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1"],
+            ["ICurrentMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1"],
             "a course's roles are kept for it, so nothing is answered about which roles there are: the package reads them where they are kept");
         result.ShouldNotContain(File, "RolesWithPermission");
 
@@ -306,7 +306,7 @@ public class MembershipWithTenancyGeneratorTests
 
         const string File = "GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy";
         PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().BeEquivalentTo(
-            "ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1", "IRolesWithPermission`2", "IMemberRoles`2");
+            "ICurrentMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1", "IRolesWithPermission`2", "IMemberRoles`2");
 
         // Which roles give a permission, and which roles there are: the tenant's, asked of Tenancy. None is the owner's.
         result.ShouldContain(File, "? queries.RolesWithPermission(permission)");
@@ -778,7 +778,7 @@ public class MembershipWithTenancyGeneratorTests
         services.Should().ContainSingle(descriptor => descriptor.ServiceType == written).Which.Lifetime.Should().Be(ServiceLifetime.Scoped);
         services.Where(descriptor => written.GetInterfaces().Contains(descriptor.ServiceType)).Select(descriptor => descriptor.ServiceType.Name)
             .Should().BeEquivalentTo(
-                ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1"],
+                ["ICurrentMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1"],
                 "what the rules and the managers ask of the organization is answered by the written class, one for a scope");
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<>).MakeGenericType(emitted.Type("Campus.Courses.Course")));
 
@@ -820,7 +820,7 @@ public class MembershipWithTenancyGeneratorTests
         // accepted by the resource's own registration, and read a user for a seat. Here that is a mistake, and said.
         var emitted = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), (Courses, "Courses.cs"))).Emit();
 
-        foreach (var (members, said) in new[] { (MemberSource.CallerId, "MemberSource.CallerId"), (MemberSource.Claim("app_metadata.seat"), "MemberSource.Claim") })
+        foreach (var (members, said) in new[] { (MemberSource.CurrentUserId, "MemberSource.CurrentUserId"), (MemberSource.Claim("app_metadata.seat"), "MemberSource.Claim") })
         {
             var services = new ServiceCollection();
 

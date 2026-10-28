@@ -120,8 +120,8 @@ public static partial class SupabaseMigrations
     /// for a role no caller runs as. The role the application logs in as is never one of them: it switches to
     /// them, and whoever reaches its connection could otherwise be every caller at once without switching.
     /// </summary>
-    internal static string? CallerRoleNamed(string role, RowAccessRoleNames roles)
-        => CallerRoles(roles).FirstOrDefault(caller => string.Equals(caller.Role, role, StringComparison.Ordinal))?.Key;
+    internal static string? RunAsRoleNamed(string role, RowAccessRoleNames roles)
+        => RunAsRoles(roles).FirstOrDefault(each => string.Equals(each.Role, role, StringComparison.Ordinal))?.Key;
 
     /// <summary>
     /// The file that makes <paramref name="options"/>' login role: unchanged when the newest one for that role says
@@ -139,7 +139,7 @@ public static partial class SupabaseMigrations
             .OrderBy(path => Path.GetFileName(path), StringComparer.Ordinal)
             .LastOrDefault();
 
-        var granted = CallerRoles(options.Roles);
+        var granted = RunAsRoles(options.Roles);
         var previous = newest is null ? "" : Normalize(File.ReadAllText(newest));
         var revoked = GrantedBy(previous, login).Except(granted.Select(role => role.Identifier), StringComparer.Ordinal).ToList();
         var sql = LoginRoleScript(login, granted, revoked);
@@ -188,7 +188,7 @@ public static partial class SupabaseMigrations
     /// <param name="login">The role the application logs in as, a plain lowercase identifier.</param>
     /// <param name="granted">The roles callers run as, in the order the file grants them.</param>
     /// <param name="revoked">The roles the file before this one granted and this one does not, as it spelled them.</param>
-    private static string LoginRoleScript(string login, IReadOnlyList<CallerRole> granted, IReadOnlyList<string> revoked)
+    private static string LoginRoleScript(string login, IReadOnlyList<RunAsRole> granted, IReadOnlyList<string> revoked)
     {
         var width = granted.Max(role => role.Identifier.Length) + 2;
         var sql = new StringBuilder()
@@ -326,7 +326,7 @@ public static partial class SupabaseMigrations
     /// server's, and before Postgres 16 the slower of two such grants fails on the catalog's unique index: this one
     /// then finds it granted.
     /// </summary>
-    private static string GrantedWhereMissing(string login, CallerRole role)
+    private static string GrantedWhereMissing(string login, RunAsRole role)
         => new StringBuilder()
             .Append("    IF NOT pg_catalog.pg_has_role(").Append(Literal(login)).Append("::pg_catalog.name, ").Append(Literal(role.Role)).Append("::pg_catalog.name,").Append('\n')
             .Append("            CASE WHEN pg_catalog.current_setting('server_version_num')::integer >= 160000 THEN 'SET' ELSE 'MEMBER' END) THEN").Append('\n')
@@ -343,9 +343,9 @@ public static partial class SupabaseMigrations
     /// signed-in user's, the scoped system role, the bookkeeping role where there is one, and the roles of the
     /// mapped token roles. A token role mapped to the user's role is that role.
     /// </summary>
-    private static List<CallerRole> CallerRoles(RowAccessRoleNames roles)
+    private static List<RunAsRole> RunAsRoles(RowAccessRoleNames roles)
     {
-        List<CallerRole> callers =
+        List<RunAsRole> runAs =
         [
             new(roles.Anonymous, "anonymous", "a caller without a token", Made: false),
             new(roles.User, "user", "a signed-in user", Made: false),
@@ -354,7 +354,7 @@ public static partial class SupabaseMigrations
 
         if (roles.System is { } system)
         {
-            callers.Add(new(system, "system", "the toolkit's bookkeeping: the outbox, the inbox and which migrations ran", Made: true));
+            runAs.Add(new(system, "system", "the toolkit's bookkeeping: the outbox, the inbox and which migrations ran", Made: true));
         }
 
         foreach (var mapped in roles.TokenRoles
@@ -363,14 +363,14 @@ public static partial class SupabaseMigrations
                      .OrderBy(group => group.Key, StringComparer.Ordinal))
         {
             var tokenRoles = mapped.Select(pair => pair.Key).Order(StringComparer.Ordinal).ToList();
-            callers.Add(new(
+            runAs.Add(new(
                 mapped.Key,
                 "token:" + tokenRoles[0],
                 $"a signed-in user whose token carries the role {string.Join(" or ", tokenRoles)}",
                 Made: true));
         }
 
-        return [.. callers.DistinctBy(caller => caller.Role, StringComparer.Ordinal)];
+        return [.. runAs.DistinctBy(role => role.Role, StringComparer.Ordinal)];
     }
 
     /// <summary>
@@ -431,7 +431,7 @@ public static partial class SupabaseMigrations
     /// <param name="Key">What maps it, as a key of <c>SupabaseRowAccessRoles</c>.</param>
     /// <param name="What">Who runs as it, as the file's comment says.</param>
     /// <param name="Made">Whether the toolkit makes it, as the access files do, rather than the project or Supabase.</param>
-    private sealed record CallerRole(string Role, string Key, string What, bool Made)
+    private sealed record RunAsRole(string Role, string Key, string What, bool Made)
     {
         /// <summary>The role as a statement names it.</summary>
         public string Identifier { get; } = SupabaseMigrations.Identifier(Role);

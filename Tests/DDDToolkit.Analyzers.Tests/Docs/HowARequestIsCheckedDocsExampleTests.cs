@@ -51,7 +51,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
         """;
 
     /// <summary>
-    /// What the sample declares elsewhere and the page's requests name: the ids, the unit and the seat its commands answer,
+    /// What the sample declares elsewhere and the page's requests name: the ids, the unit, the seat and the tenant its commands answer,
     /// the organization manager's record of a unit and a kind of unit, the
     /// projects' permissions, and the module interfaces in the sample's namespaces, with the line that says which ids are
     /// Tenancy's, so the project gets the access manager the page's check takes. And what a test adds to run the
@@ -86,6 +86,8 @@ public partial class HowARequestIsCheckedDocsExampleTests
             public sealed class OrganizationUnit;
 
             public sealed class Seat;
+
+            public sealed class Tenant;
 
             public static class OrganizationManager
             {
@@ -544,12 +546,12 @@ public partial class HowARequestIsCheckedDocsExampleTests
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 
-    /// <summary>Makes a seat of <paramref name="tenant"/> the Tenancy caller until disposed, as tenant selection does for a request.</summary>
+    /// <summary>Makes a seat of <paramref name="tenant"/> the Tenancy user until disposed, as tenant selection does for a request.</summary>
     private static IDisposable AsSeatOf(EmittedAssembly emitted, object tenant)
     {
-        var caller = typeof(TenancyCaller<,>).MakeGenericType(emitted.Type("Examples.Tenancy.TenantId"), emitted.Type("Examples.Tenancy.SeatId"));
+        var caller = typeof(TenancyUser<,>).MakeGenericType(emitted.Type("Examples.Tenancy.TenantId"), emitted.Type("Examples.Tenancy.SeatId"));
         var seat = emitted.New("Examples.Tenancy.SeatId", Guid.NewGuid());
-        return TenancyCallers.Begin((ITenancyCaller)caller.GetMethod("InSeat")!.Invoke(null, [tenant, seat])!);
+        return TenancyUsers.Begin((ITenancyUser)caller.GetMethod("InSeat")!.Invoke(null, [tenant, seat])!);
     }
 
     /// <summary>Asks the boards' checks about <paramref name="request"/> in a scope of its own, and throws what they throw.</summary>

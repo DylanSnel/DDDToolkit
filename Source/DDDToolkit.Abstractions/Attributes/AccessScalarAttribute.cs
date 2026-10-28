@@ -4,18 +4,18 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// Marks a <c>static partial</c> method of an <see cref="AccessFunctionsAttribute"/> class as a question an
 /// SQL function answers with one value, such as the caller's team:
 /// <code>
-/// [AccessScalar("caller_team")]
-/// public static partial string CallerTeam();
+/// [AccessScalar("current_team")]
+/// public static partial string CurrentTeam();
 ///
 /// // in a rule
-/// =&gt; ticket.Team == Questions.CallerTeam();
+/// =&gt; ticket.Team == Questions.CurrentTeam();
 /// </code>
 /// Without an argument that reads the row, the policy asks it once per statement,
-/// <c>(SELECT &lt;schema&gt;.caller_team())</c>, in the schema of the context that defines the function.
+/// <c>(SELECT &lt;schema&gt;.current_team())</c>, in the schema of the context that defines the function.
 /// </summary>
 /// <remarks>
 /// The function answers <c>NULL</c> for a caller it does not know, and a comparison with its answer is SQL's
-/// own, <c>"Team" = (SELECT &lt;schema&gt;.caller_team())</c>: null then, whether it is <c>==</c>, <c>!=</c> or
+/// own, <c>"Team" = (SELECT &lt;schema&gt;.current_team())</c>: null then, whether it is <c>==</c>, <c>!=</c> or
 /// either one negated, which a policy counts as no. A caller the question knows nothing about never passes a
 /// comparison built on it.
 /// </remarks>

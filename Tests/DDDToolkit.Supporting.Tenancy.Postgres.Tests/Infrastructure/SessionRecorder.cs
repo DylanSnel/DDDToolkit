@@ -68,7 +68,7 @@ public sealed class SessionRecorder : DbCommandInterceptor
 /// Says who is calling as the flow of work began it, as a host that requires an explicit current user does, and
 /// remembers every snapshot it gave with the part of a test it gave it in: who every connection of that part ran as.
 /// </summary>
-public sealed class ObservedCallers : ICurrentUser
+public sealed class ObservedUsers : ICurrentUser
 {
     private readonly ICurrentUser _inner = new CurrentUser(new CurrentUserOptions { RequireExplicitCurrentUser = true });
     private readonly ConcurrentQueue<(string During, CurrentUserSnapshot Caller)> _answered = new();

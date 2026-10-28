@@ -34,7 +34,7 @@ public static class SupabaseRowLevelSecurity
     public const string DefaultSystemRole = "ddd_system";
 
     /// <summary><c>auth.uid()</c>, <c>auth.role()</c> and <c>auth.jwt()</c>: how a Supabase policy asks about the caller.</summary>
-    public static PostgresCallerFunctions CallerFunctions { get; } = new("auth.uid()", "auth.role()", "auth.jwt()");
+    public static PostgresCurrentUserFunctions CurrentUserFunctions { get; } = new("auth.uid()", "auth.role()", "auth.jwt()");
 
     /// <summary>
     /// The roles the export writes the policies for, and the roles <c>AddSupabaseRowLevelSecurity</c> switches to,

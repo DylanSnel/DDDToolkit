@@ -53,7 +53,7 @@ public abstract class PermissionSetFunctionTests(TenancyPostgres postgres, Tenan
                 orderby widget.Name, pair.Permission
                 select new { widget.Name, pair.Permission }).ToListAsync(Cancellation);
             recorder.Sent.Should().ContainSingle("the question is a part of the module's statement");
-            recorder.Sent[0].Text.Should().Contain(TenancyFunctionNames.CallerPermissions).And.NotContain(names.Of("SeatRights"), "a module reads Tenancy through its functions, and names no table of it");
+            recorder.Sent[0].Text.Should().Contain(TenancyFunctionNames.CurrentPermissions).And.NotContain(names.Of("SeatRights"), "a module reads Tenancy through its functions, and names no table of it");
             abilities.Select(row => (row.Name, row.Permission)).Should().Equal(
                 ("Pump", TenancyPermissions.UnitsManage), ("Pump", HostCatalogue.WidgetChange),
                 ("Valve", TenancyPermissions.UnitsManage), ("Valve", HostCatalogue.WidgetChange));

@@ -256,7 +256,7 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
     private static async Task<JsonElement> AskWithoutASeatAsync(SampleFactory host, IRequestExecutor executor, string document)
     {
         using (TestUser.BeginAs(DemoPeople.Rhea.Id))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.Nobody(TenancyRefusals.NotSeated)))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.Nobody(TenancyRefusals.NotSeated)))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var answer = await executor.ExecuteAsync(OperationRequestBuilder.New().SetDocument(document).SetServices(scope.ServiceProvider).Build(), Cancellation);

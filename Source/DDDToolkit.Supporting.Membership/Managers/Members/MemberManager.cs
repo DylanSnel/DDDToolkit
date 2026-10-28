@@ -320,7 +320,7 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
     /// <exception cref="ConcurrencyConflictException">The resource is not at <paramref name="expectedVersion"/>, or changed while this was saved.</exception>
     public async Task<TResource> LeaveAsync(TResourceId resource, CancellationToken cancellationToken, long? expectedVersion = null)
     {
-        _access.RequireCaller();
+        _access.RequireCurrentUser();
         if (!CheckedInHand<TResourceId>.Read(resource)
             && await _access.HoldAsync(resource, Rules.Permissions[0].Name, cancellationToken).ConfigureAwait(false) is null)
         {
@@ -401,7 +401,7 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
     /// <exception cref="RefusalException">The caller's own refusal when it is nobody; <c>not-found</c> for a resource it does not see.</exception>
     public async Task<IReadOnlyList<TMember>> ListAsync(TResourceId resource, CancellationToken cancellationToken)
     {
-        _access.RequireCaller();
+        _access.RequireCurrentUser();
         var read = await _store.ReadAsync([resource], _access.ReachSeen(), cancellationToken).ConfigureAwait(false);
         return read.Count == 0 ? throw Rules.Codes.Refuse(MembershipRefusals.NotFound) : Ordered(read[0]);
     }
@@ -434,7 +434,7 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
                 nameof(resources));
         }
 
-        _access.RequireCaller();
+        _access.RequireCurrentUser();
         if (about.Count == 0)
         {
             return new Dictionary<TResourceId, IReadOnlyList<TMember>>();

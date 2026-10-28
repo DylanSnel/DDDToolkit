@@ -16,9 +16,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <summary>
 /// Tenancy's part of every save, in Tenancy's own context and in every context with an entity kept to a tenant:
 /// the save check. Every row the save adds, changes or deletes that belongs to a tenant must belong to the
-/// current Tenancy caller's, so a handler that loaded or made the wrong row cannot write it.
+/// current Tenancy user's, so a handler that loaded or made the wrong row cannot write it.
 /// <list type="table">
-/// <listheader><term>Caller</term><description>What the check does</description></listheader>
+/// <listheader><term>Tenancy user</term><description>What the check does</description></listheader>
 /// <item><term>A seat, or system work in a tenant</term><description>Refuses a row of another tenant with <c>tenancy.other-tenant</c>.</description></item>
 /// <item><term>Nobody</term><description>Refuses every such row with <c>tenancy.not-seated</c>.</description></item>
 /// <item><term>System work outside any tenant</term><description>Refuses every such row with <c>tenancy.other-tenant</c>: it acts in no tenant, and provisioning saves as system work in the tenant it makes.</description></item>
@@ -29,7 +29,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// tenant filter.
 /// <para>
 /// Once the check has let the save through, it fills in who changed each row of an entity type that keeps it
-/// (<see cref="TenancyAttribution.RecordsWhoChanged"/>): the actor of the Tenancy caller the save runs as, on a
+/// (<see cref="TenancyAttribution.RecordsWhoChanged"/>): the actor of the Tenancy user the save runs as, on a
 /// new row as who wrote it first and who changed it last, on a changed row as who changed it last.
 /// </para>
 /// <para>
@@ -107,7 +107,7 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
     }
 
     /// <summary>
-    /// Checks every row of <paramref name="context"/> the save would write against the current Tenancy caller.
+    /// Checks every row of <paramref name="context"/> the save would write against the current Tenancy user.
     /// </summary>
     /// <exception cref="Exceptions.RefusalException"><c>tenancy.other-tenant</c> or <c>tenancy.not-seated</c>.</exception>
     /// <exception cref="InvalidOperationException">
@@ -171,7 +171,7 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
     private static void RecordWhoChanged(DbContext context)
     {
         // The check let the save through, so the caller acts in a tenant, and has an actor.
-        if (TenancyCallers.Ambient?.Actor is not { } actor)
+        if (TenancyUsers.Ambient?.Actor is not { } actor)
         {
             return;
         }

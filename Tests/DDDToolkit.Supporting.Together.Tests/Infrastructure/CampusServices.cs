@@ -109,7 +109,7 @@ public sealed class CampusServices : IDisposable
 
     /// <summary>
     /// Asks something as <paramref name="person"/> in the college <paramref name="college"/> names, in a scope
-    /// of its own, as a request does: the toolkit's caller is the signed-in user, and the Tenancy caller is
+    /// of its own, as a request does: the toolkit's current user is the signed-in user, and the Tenancy user is
     /// what tenant selection finds for that user there, a seat or nobody.
     /// </summary>
     public async Task<T> AsAsync<T>(CampusPerson person, string? college, Func<IServiceProvider, Task<T>> ask)
@@ -119,7 +119,7 @@ public sealed class CampusServices : IDisposable
         {
             await using var scope = Provider.CreateAsyncScope();
             var seat = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(caller, college, TestContext.Current.CancellationToken);
-            using (TenancyCallers.Begin(seat))
+            using (TenancyUsers.Begin(seat))
             {
                 return await ask(scope.ServiceProvider);
             }

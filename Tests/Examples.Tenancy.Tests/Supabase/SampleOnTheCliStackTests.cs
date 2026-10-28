@@ -198,7 +198,7 @@ public sealed class SampleOnTheCliStackTests(SupabaseCliStack stack) : IClassFix
         await RunAsync(asRhea, $$"""
             SET ROLE authenticated;
             SELECT set_config('request.jwt.claims', '{"sub":"{{DemoPeople.Rhea.Id}}","role":"authenticated"}', false);
-            SELECT set_config('tenancy.caller_tenant', '{{Harbor.Id.Value}}', false);
+            SELECT set_config('tenancy.current_tenant', '{{Harbor.Id.Value}}', false);
             """);
 
         string Opening(string number, string unit) => $"""

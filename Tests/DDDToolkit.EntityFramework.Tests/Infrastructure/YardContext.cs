@@ -49,7 +49,7 @@ public sealed class YardContext(DbContextOptions<YardContext> options) : DbConte
 public static class YardRules
 {
     public static readonly RowAccessRule Owners = RowAccessRule.For<Crate>(
-        "Owners have their crates", RowOperations.All, "({caller:signedin} AND ({col:Owner} IS NOT DISTINCT FROM {caller:uid}))");
+        "Owners have their crates", RowOperations.All, "({user:signedin} AND ({col:Owner} IS NOT DISTINCT FROM {user:uid}))");
 
     public static readonly RowAccessRule OwnerlessExpress = RowAccessRule.For<ExpressCrate>(
         "Ownerless express crates are open", RowOperations.Read | RowOperations.Change, "({col:Owner} IS NULL)");

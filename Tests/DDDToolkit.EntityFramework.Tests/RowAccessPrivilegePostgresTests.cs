@@ -17,7 +17,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// nothing: every rule of the apiary runs with exactly them, and whatever no rule allows is refused by the
 /// database before a policy is asked.
 /// </summary>
-public sealed class RowAccessPrivilegePostgresTests(ExplicitCallersPostgres postgres)
+public sealed class RowAccessPrivilegePostgresTests(ExplicitCurrentUserPostgres postgres)
 {
     private const string Hives = ApiaryContext.Schema + ".\"Hives\"";
 

@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 
 /// <summary>
 /// Who wrote a row first and who changed it last, kept on the row: an entity kept to a tenant that calls
-/// <c>RecordsWhoChanged</c> gets six columns, which every save fills from the Tenancy caller it runs as. A seat is
+/// <c>RecordsWhoChanged</c> gets six columns, which every save fills from the Tenancy user it runs as. A seat is
 /// recorded as the seat, an operator by its identity, the application's own work by its kind alone, and who wrote
 /// the row first never changes.
 /// <para>
@@ -47,7 +47,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
     [Fact]
     public async Task A_new_row_records_its_writer_as_creator_and_changer()
     {
-        var pump = await AddAsync(HostCaller.InSeat(_harbor.Tenant, _grace), "Pump");
+        var pump = await AddAsync(HostUser.InSeat(_harbor.Tenant, _grace), "Pump");
 
         (await RecordedAsync(pump)).Should().Be(new Recorded(_grace, "seat", null, _grace, "seat", null));
     }
@@ -55,10 +55,10 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
     [Fact]
     public async Task A_change_records_only_who_changed_it()
     {
-        var pump = await AddAsync(HostCaller.InSeat(_harbor.Tenant, _grace), "Pump");
+        var pump = await AddAsync(HostUser.InSeat(_harbor.Tenant, _grace), "Pump");
 
         _services.Commands.Reset();
-        await RenameAsync(HostCaller.InSeat(_harbor.Tenant, _lin), pump, "Big pump");
+        await RenameAsync(HostUser.InSeat(_harbor.Tenant, _lin), pump, "Big pump");
 
         (await RecordedAsync(pump)).Should().Be(new Recorded(_grace, "seat", null, _lin, "seat", null), "Grace wrote it first, and Lin changed it last");
 
@@ -88,7 +88,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
     [Fact]
     public async Task An_operator_is_recorded_by_identity_and_no_seat()
     {
-        var pump = await AddAsync(HostCaller.InSeat(_harbor.Tenant, _grace), "Pump");
+        var pump = await AddAsync(HostUser.InSeat(_harbor.Tenant, _grace), "Pump");
         Guid valve;
 
         // An operator's command runs as operator work, which names the operator.
@@ -138,7 +138,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
     [Fact]
     public async Task Who_wrote_a_row_first_is_fixed()
     {
-        var pump = await AddAsync(HostCaller.InSeat(_harbor.Tenant, _grace), "Pump");
+        var pump = await AddAsync(HostUser.InSeat(_harbor.Tenant, _grace), "Pump");
 
         await _services.BySeat(_harbor.Tenant, _lin, async services =>
         {
@@ -214,21 +214,21 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
         parcels.GetService<IRelationalDatabaseCreator>().CreateTables();
 
         var parcel = new Parcel { Id = Guid.NewGuid(), TenantId = _harbor.Tenant, Label = new Label { Text = "Fragile" } };
-        using (TenancyCallers.Begin(HostCaller.InSeat(_harbor.Tenant, _grace)))
+        using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _grace)))
         {
             parcels.Add(parcel);
             await parcels.SaveChangesAsync(Cancellation);
         }
 
         // Lin changes the label alone: a part of the parcel's row, which Entity Framework tracks on its own.
-        using (TenancyCallers.Begin(HostCaller.InSeat(_harbor.Tenant, _lin)))
+        using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _lin)))
         {
             parcel.Label.Text = "This side up";
             await parcels.SaveChangesAsync(Cancellation);
         }
 
         parcels.ChangeTracker.Clear();
-        using (TenancyCallers.Begin(HostCaller.SystemIn(_harbor.Tenant)))
+        using (TenancyUsers.Begin(HostUser.SystemIn(_harbor.Tenant)))
         {
             var read = await parcels.Set<Parcel>()
                 .Select(row => new
@@ -257,14 +257,14 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
         crate.Slats.Add(new Slat { Id = Guid.NewGuid(), Wood = "Pine" });
         var pallet = new Pallet { Id = Guid.NewGuid(), TenantId = _harbor.Tenant };
         pallet.Planks.Add(new Slat { Id = Guid.NewGuid(), Wood = "Pine" });
-        using (TenancyCallers.Begin(HostCaller.InSeat(_harbor.Tenant, _grace)))
+        using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _grace)))
         {
             crates.AddRange(crate, pallet);
             await crates.SaveChangesAsync(Cancellation);
         }
 
         // Lin changes a slat of each, and nothing of the crate or the pallet themselves.
-        using (TenancyCallers.Begin(HostCaller.InSeat(_harbor.Tenant, _lin)))
+        using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _lin)))
         {
             crate.Slats[0].Wood = "Oak";
             pallet.Planks[0].Wood = "Oak";
@@ -272,7 +272,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
         }
 
         crates.ChangeTracker.Clear();
-        using (TenancyCallers.Begin(HostCaller.SystemIn(_harbor.Tenant)))
+        using (TenancyUsers.Begin(HostUser.SystemIn(_harbor.Tenant)))
         {
             var ofTheCrate = await crates.Set<Crate>()
                 .Select(row => new
@@ -313,7 +313,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
 
         // A sealed parcel that keeps who changed it, in the table of all parcels, which do not: the other rows of
         // that table would keep nothing, and under Postgres' trigger could not be written at all.
-        using (TenancyCallers.Begin(HostCaller.InSeat(_harbor.Tenant, _grace)))
+        using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _grace)))
         {
             derived.Add(new SealedParcel { Id = Guid.NewGuid(), TenantId = _harbor.Tenant, Seal = "Wax" });
 
@@ -329,7 +329,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
         TenancyModel.RecordsWhoChanged(rooted.Model.FindEntityType(typeof(SealedParcel))!).Should().BeTrue("a type keeps what the type it derives from keeps");
         rooted.GetService<IRelationalDatabaseCreator>().CreateTables();
         var wax = new SealedParcel { Id = Guid.NewGuid(), TenantId = _harbor.Tenant, Seal = "Wax" };
-        using (TenancyCallers.Begin(HostCaller.InSeat(_harbor.Tenant, _lin)))
+        using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _lin)))
         {
             rooted.Add(wax);
             await rooted.SaveChangesAsync(Cancellation);
@@ -345,8 +345,8 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
         await using var scope = _services.Scope();
         await using var unscoped = new UnscopedContext(Wired<UnscopedContext>(scope.ServiceProvider));
 
-        // Who changed a row is the Tenancy caller of the save, which only a tenant's row is sure to have.
-        using (TenancyCallers.Begin(HostCaller.InSeat(_harbor.Tenant, _grace)))
+        // Who changed a row is the Tenancy user of the save, which only a tenant's row is sure to have.
+        using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _grace)))
         {
             unscoped.Add(new Parcel { Id = Guid.NewGuid(), TenantId = _harbor.Tenant, Label = new Label { Text = "Loose" } });
 
@@ -364,7 +364,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
         await using var scope = _services.Scope();
         await using var mistyped = new MistypedContext(Wired<MistypedContext>(scope.ServiceProvider));
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(_harbor.Tenant, _grace)))
+        using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _grace)))
         {
             mistyped.Add(new Parcel { Id = Guid.NewGuid(), TenantId = _harbor.Tenant, Label = new Label { Text = "Mislabeled" } });
 
@@ -379,7 +379,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
 
     private Widget NewWidget(string name) => new() { Id = Guid.NewGuid(), TenantId = _harbor.Tenant, UnitId = _harbor.RootUnit, Name = name };
 
-    private Task<Guid> AddAsync(HostCaller caller, string name)
+    private Task<Guid> AddAsync(HostUser caller, string name)
         => _services.RunAsync(caller, async services =>
         {
             var widgets = services.Widgets();
@@ -388,7 +388,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
             return widget.Id;
         });
 
-    private Task RenameAsync(HostCaller caller, Guid widget, string name)
+    private Task RenameAsync(HostUser caller, Guid widget, string name)
         => _services.RunAsync(caller, async services =>
         {
             var widgets = services.Widgets();

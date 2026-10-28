@@ -164,7 +164,7 @@ public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : I
 }
 
 [SignedIn]
-public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest;
+public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest;
 ```
 
 Each attribute stands for one method call, and the property can return the same call. Written with the property, the
@@ -195,7 +195,7 @@ public sealed record AddCrewMember(ProjectId Project, SeatId Seat, ProjectRoleId
     AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(ProjectPermissionNames.ManageCrew, Project, ExpectedVersion);
 }
 
-public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest
+public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
 }
@@ -428,7 +428,7 @@ switch (requirement)
             throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
         return;
     case IOwnedRequirement owned:                                // the request names the value, never whose it is
-        if (!owned.IsTheCallers(user, services))
+        if (!owned.IsTheCurrentUsers(user, services))
             throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);
         return;
 }
@@ -466,7 +466,7 @@ public bool Decides(AccessRequirement requirement) => IsOperatorCase(requirement
 if (!options.IsOperator(user.Snapshot))                         // the token's role, never a seat
     throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
 if (requirement is TenancyRequirement.OperatorIn<TTenantId> required
-    && TenancyCallers.Current<TTenantId, TSeatId>().NamedTenant is { } named && !named.Equals(required.Tenant))
+    && TenancyUsers.Current<TTenantId, TSeatId>().NamedTenant is { } named && !named.Equals(required.Tenant))
     throw TenancyRefusals.Refuse(TenancyRefusals.TenantMismatch);   // the request names another tenant
 
 // BeginWork, once the request was let through: operator work around a command's handler
@@ -580,7 +580,7 @@ SELECT p."Version",
                              INNER JOIN "projects"."ProjectRoles" AS k ON h."RoleId" = k."Id"
                              WHERE h."CrewMemberId" = m."Id" AND k."Status" = 'Active' AND @permission = ANY (k."Permissions")))
          OR p."OwnerSeatId" = @seat AS "AsMember",                                 -- or its owner
-       p."UnitId" IN (SELECT path."DescendantId" FROM "tenancy".caller_permissions() AS r   -- or the permission where it sits
+       p."UnitId" IN (SELECT path."DescendantId" FROM "tenancy".current_permissions() AS r   -- or the permission where it sits
                       INNER JOIN "tenancy".tenant_unit_paths() AS path ON r."UnitId" = path."AncestorId"
                       WHERE r."SeatId" = @seat AND r."Permission" = @permission) AS "FromAbove"
 FROM "projects"."Projects" AS p
@@ -597,8 +597,8 @@ SELECT p."Version" FROM "projects"."Projects" AS p WHERE p."Id" = @project LIMIT
 
 The crew part leaves out the time periods. A crew member and a role count from their start to their end, compared
 with now, as a grant does. The Projects module reads Tenancy through functions, such as
-`"tenancy".caller_permissions()`, instead of reading Tenancy's tables
-([Modules read through functions](tenancy/postgres.md#read-functions-for-modules)). `caller_permissions()` runs as
+`"tenancy".current_permissions()`, instead of reading Tenancy's tables
+([Modules read through functions](tenancy/postgres.md#read-functions-for-modules)). `current_permissions()` runs as
 the caller, so a seat reads only its own permissions.
 
 </details>
@@ -608,7 +608,7 @@ the caller, so a seat reads only its own permissions.
 Before a statement runs, the connection is set to the caller. When a request comes in, the host starts two things:
 
 - the toolkit's current user, from the validated token;
-- Tenancy's caller: the seat of that identity in the tenant the request names.
+- Tenancy's user: the seat of that identity in the tenant the request names.
 
 When a context opens a connection, the RLS interceptor sends one statement. The statement sets the
 database role, the token's claims (as PostgREST does for each request) and Tenancy's tenant. Behind a pooler that
@@ -637,41 +637,41 @@ The policies read these settings:
 - `auth.uid()` and `auth.jwt()` read the claims.
 - The role decides which policies Postgres applies.
 - `"tenancy".system_tenant()` reads Tenancy's tenant setting.
-- `"tenancy".caller_seat()` finds the seat from the verified identity and that tenant. It returns only an active seat
+- `"tenancy".current_seat()` finds the seat from the verified identity and that tenant. It returns only an active seat
   in an active tenant, so a wrong tenant finds no seat.
 
 ```sql shortened
 -- the caller on the connection, as the interceptor sets it for each of the six; … is the rest of the statement
-SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<Ada>","role":"authenticated",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);
-SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<Juno>","role":"authenticated",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);
-SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<the new sign-in>","role":"authenticated",…}', false), …, set_config('tenancy.caller_tenant', '', false);
-SELECT set_config('role', 'tenancy_operator', false), set_config('request.jwt.claims', '{"sub":"<Orla>","role":"tenancy_operator",…}', false), …, set_config('tenancy.caller_tenant', '', false);
-SELECT set_config('role', 'anon', false), set_config('request.jwt.claims', '{"role":"anon"}', false), …, set_config('tenancy.caller_tenant', '', false);
-SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{"role":"ddd_system_in","scope":"tenancy"}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);
+SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<Ada>","role":"authenticated",…}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);
+SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<Juno>","role":"authenticated",…}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);
+SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<the new sign-in>","role":"authenticated",…}', false), …, set_config('tenancy.current_tenant', '', false);
+SELECT set_config('role', 'tenancy_operator', false), set_config('request.jwt.claims', '{"sub":"<Orla>","role":"tenancy_operator",…}', false), …, set_config('tenancy.current_tenant', '', false);
+SELECT set_config('role', 'anon', false), set_config('request.jwt.claims', '{"role":"anon"}', false), …, set_config('tenancy.current_tenant', '', false);
+SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{"role":"ddd_system_in","scope":"tenancy"}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);
 ```
 
 <details>
-<summary>Show the code: where the user and the Tenancy caller start, and the function that finds the seat</summary>
+<summary>Show the code: where the user and the Tenancy user start, and the function that finds the seat</summary>
 
 ```csharp shortened
-// The sample's TenantHeader.UseTenantSelection, shortened: the user and the Tenancy caller begun for the request
+// The sample's TenantHeader.UseTenantSelection, shortened: the user and the Tenancy user begun for the request
 var requestUser = context.GetSupabaseUser();                      // from the validated token, or anonymous
 using (currentUser.BeginAs(requestUser))                          // currentUser is the application's ICurrentUser
 {
     var seat = await selection.ResolveAsync(requestUser, context.Request.Headers["Tenant"], context.RequestAborted);
-    using (TenancyCallers.Begin(seat))                            // the seat in harbor, or nobody and why
+    using (TenancyUsers.Begin(seat))                            // the seat in harbor, or nobody and why
     {
         await next(context);
     }
 }
 ```
 
-```sql title="20261027164316_access.tenants.ddd.sql, the caller's seat and tenant, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the caller's seat and tenant, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".system_tenant() RETURNS uuid
     LANGUAGE sql STABLE SET search_path = '' AS $function$
-SELECT nullif(pg_catalog.current_setting('tenancy.caller_tenant', true), '')::pg_catalog.uuid
+SELECT nullif(pg_catalog.current_setting('tenancy.current_tenant', true), '')::pg_catalog.uuid
 $function$;
-CREATE OR REPLACE FUNCTION "tenancy".caller_seat() RETURNS uuid
+CREATE OR REPLACE FUNCTION "tenancy".current_seat() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT s."Id" FROM "tenancy"."Seats" s
 JOIN "tenancy"."Tenants" t ON t."Id" = s."TenantId"
@@ -679,9 +679,9 @@ WHERE s."Identity" = (SELECT auth.uid())
   AND s."TenantId" = (SELECT "tenancy".system_tenant())
   AND s."Status" = 'Active' AND t."Status" = 'Active'
 $function$;
-CREATE OR REPLACE FUNCTION "tenancy".caller_tenant() RETURNS uuid
+CREATE OR REPLACE FUNCTION "tenancy".current_tenant() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-SELECT s."TenantId" FROM "tenancy"."Seats" s WHERE s."Id" = (SELECT "tenancy".caller_seat())
+SELECT s."TenantId" FROM "tenancy"."Seats" s WHERE s."Id" = (SELECT "tenancy".current_seat())
 $function$;
 ```
 
@@ -770,9 +770,9 @@ The policies below are copied from the sample's export. The toolkit quotes schem
 insert policy on the units allows a new unit below a parent where the caller holds the permission that manages units.
 This is the same permission at the same unit that the check tested:
 
-```sql title="20261027164316_access.tenants.ddd.sql, the units' insert policy, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the units' insert policy, shortened"
 CREATE POLICY "Unit managers add below their units (insert) for authenticated" ON "tenancy"."OrganizationUnits" FOR INSERT TO authenticated
-    WITH CHECK (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ("ParentId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('tenancy.units.manage')))));
+    WITH CHECK (("TenantId" = (SELECT "tenancy".current_tenant())) AND ("ParentId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('tenancy.units.manage')))));
 ```
 
 The Supabase export writes each table's privileges from the same policies
@@ -788,16 +788,16 @@ In both cases Postgres refuses the statement with 42501, `permission denied`, be
 <details>
 <summary>Show the code: the policies and functions the export writes for the units, the seats, the crew and the audit log</summary>
 
-```sql title="20261027164316_access.tenants.ddd.sql, the units' other policies and the function they ask, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the units' other policies and the function they ask, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".units_where_i_hold_permission(permission text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT p."DescendantId" FROM "tenancy"."SeatRights" r
 JOIN "tenancy"."OrganizationUnitPaths" p ON p."AncestorId" = r."UnitId" AND p."TenantId" = r."TenantId"
-WHERE r."SeatId" = (SELECT "tenancy".caller_seat()) AND r."Permission" = $1 AND "tenancy".permission_is_live($1)
+WHERE r."SeatId" = (SELECT "tenancy".current_seat()) AND r."Permission" = $1 AND "tenancy".permission_is_live($1)
   AND r."StartsAt" <= pg_catalog.now() AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
 $function$;
 CREATE POLICY "Members read the units (select) for authenticated" ON "tenancy"."OrganizationUnits" FOR SELECT TO authenticated
-    USING ("TenantId" = (SELECT "tenancy".caller_tenant()));
+    USING ("TenantId" = (SELECT "tenancy".current_tenant()));
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON "tenancy"."OrganizationUnits" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT "tenancy".system_tenant()));
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON "tenancy"."OrganizationUnits" FOR SELECT TO tenancy_operator
@@ -809,17 +809,17 @@ CREATE POLICY "Closed to anonymous callers (all) for anon" ON "tenancy"."Organiz
     WITH CHECK (false);
 ```
 
-```sql title="20261027164316_access.tenants.ddd.sql, the seats and the name's column rule, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the seats and the name's column rule, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".holds_at_tenant(permission text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT EXISTS (SELECT 1 FROM "tenancy"."SeatRights" r
                JOIN "tenancy"."OrganizationUnits" u ON u."Id" = r."UnitId" AND u."TenantId" = r."TenantId"
-               WHERE r."SeatId" = (SELECT "tenancy".caller_seat()) AND r."Permission" = $1 AND "tenancy".permission_is_live($1) AND r."StartsAt" <= pg_catalog.now() AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
+               WHERE r."SeatId" = (SELECT "tenancy".current_seat()) AND r."Permission" = $1 AND "tenancy".permission_is_live($1) AND r."StartsAt" <= pg_catalog.now() AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
                  AND u."ParentId" IS NULL)
 $function$;
 CREATE POLICY "Managers and the seat change it (update) for authenticated" ON "tenancy"."Seats" FOR UPDATE TO authenticated
-    USING (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage')) OR "Id" = (SELECT "tenancy".caller_seat())))
-    WITH CHECK (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage')) OR "Id" = (SELECT "tenancy".caller_seat())));
+    USING (("TenantId" = (SELECT "tenancy".current_tenant())) AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage')) OR "Id" = (SELECT "tenancy".current_seat())))
+    WITH CHECK (("TenantId" = (SELECT "tenancy".current_tenant())) AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage')) OR "Id" = (SELECT "tenancy".current_seat())));
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON "tenancy"."Seats" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT "tenancy".system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT "tenancy".system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
@@ -827,7 +827,7 @@ CREATE OR REPLACE FUNCTION "tenancy".seats_displayname_column_rule() RETURNS tri
     LANGUAGE plpgsql SET search_path = '' AS $body$
 BEGIN
     IF CURRENT_USER = 'authenticated' THEN
-        IF ((OLD."Id" = (SELECT "tenancy".caller_seat())) OR (SELECT "tenancy".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND ((NEW."Id" = (SELECT "tenancy".caller_seat())) OR (SELECT "tenancy".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN
+        IF ((OLD."Id" = (SELECT "tenancy".current_seat())) OR (SELECT "tenancy".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND ((NEW."Id" = (SELECT "tenancy".current_seat())) OR (SELECT "tenancy".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN
             RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Name changes by the seat or with the seats permission'' does not let this caller change "DisplayName" of "tenancy"."Seats".';
         END IF;
     ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN
@@ -841,14 +841,14 @@ CREATE TRIGGER seats_displayname_column_rule BEFORE UPDATE OF "DisplayName" ON "
     EXECUTE FUNCTION "tenancy".seats_displayname_column_rule();
 ```
 
-```sql title="20261027164317_access.projects.ddd.sql, the crew and the function it asks, shortened"
+```sql title="20261028202434_access.projects.ddd.sql, the crew and the function it asks, shortened"
 CREATE OR REPLACE FUNCTION "projects".projects_where_i_hold(text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT holding.id FROM "projects".projects_as_member_with($1) AS holding(id)
 UNION
 SELECT joined.id FROM "projects".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'
 UNION
-SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r."OwnerSeatId" = (SELECT "tenancy".caller_seat())
+SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r."OwnerSeatId" = (SELECT "tenancy".current_seat())
 UNION
 SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IS NOT NULL AND r."UnitId" IN (SELECT reached.place FROM "tenancy".units_where_i_hold_permission($1) AS reached(place))
 UNION
@@ -859,8 +859,8 @@ CREATE POLICY "System work in its tenant (insert) for ddd_system_in" ON "project
 CREATE POLICY "Members change with the permission (insert) for authenticated" ON "projects"."ProjectCrewMembers" AS RESTRICTIVE FOR INSERT TO authenticated
     WITH CHECK ("ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.crew.manage') AS held(id)) OR "ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.owner.change') AS held(id)));
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "projects"."ProjectCrewMembers" AS RESTRICTIVE FOR ALL TO authenticated
-    USING (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".caller_tenant())))
-    WITH CHECK (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".caller_tenant())));
+    USING (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".current_tenant())))
+    WITH CHECK (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".current_tenant())));
 ```
 
 The audit log is not part of the sample. Its two alternatives have two row rules on its table: one for the operators'
@@ -877,8 +877,8 @@ CREATE POLICY "Seat managers read the audit log (select) for authenticated" ON "
     USING ((SELECT "tenancy".holds_at_tenant('tenancy.seats.manage')));
 -- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "audit"."AuditEntries" AS RESTRICTIVE FOR ALL TO authenticated
-    USING ("TenantId" = (SELECT "tenancy".caller_tenant()))
-    WITH CHECK ("TenantId" = (SELECT "tenancy".caller_tenant()));
+    USING ("TenantId" = (SELECT "tenancy".current_tenant()))
+    WITH CHECK ("TenantId" = (SELECT "tenancy".current_tenant()));
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON "audit"."AuditEntries" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 -- ... and the same for update and delete
@@ -933,7 +933,7 @@ For the six requests, this is what a refused caller gets when they send the stat
 | Juno, `RenameSeat` of Leo's seat | `UPDATE "tenancy"."Seats" SET "DisplayName" = ...` | `UPDATE 0`. The update policy hides Leo's row from her, so nothing changes. |
 | Orla, `OrganizationUnits` | `SELECT * FROM "tenancy"."OrganizationUnits"` | Every unit of every tenant. Operators may read every tenant, although the request requires a seat. |
 | Orla, any request that writes | `INSERT` or `UPDATE` on a table that belongs to a tenant | Refused, 42501, `permission denied`. No permissive policy lets her role write, so the role has only `SELECT`. Tenancy's restrictive policy `Operators only read` would also refuse every row. |
-| The new sign-in, `OrganizationUnits` | The same `SELECT` | No rows. `caller_tenant()` finds no seat, so no unit is in the caller's tenant. |
+| The new sign-in, `OrganizationUnits` | The same `SELECT` | No rows. `current_tenant()` finds no seat, so no unit is in the caller's tenant. |
 | Any anonymous caller | Any statement | Refused, 42501, `permission denied`. No permissive policy is for `anon`, so `anon` cannot use the schemas of a module that belongs to a tenant. A restrictive policy also closes every table in them. |
 
 ## System work
@@ -984,8 +984,8 @@ its handler refuses everyone else ([System work](access-requirements.md#system-w
 
 ```csharp shortened
 // RegisterOrganization's handler, from Tenancy's page, shortened
-var caller = access.CurrentUser.Snapshot;                         // read before the system work begins
-if (caller.Id is not { } administrator || caller.FindClaim("is_anonymous") == "true")
+var user = access.CurrentUser.Snapshot;                           // read before the system work begins
+if (user.Id is not { } administrator || user.FindClaim("is_anonymous") == "true")
 {
     throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
 }
@@ -994,11 +994,11 @@ using (access.BeginSystem())                                      // system work
 {
     var tenant = await tenants.ProvisionAsync(new TenantToProvision(
         command.Slug, command.Name, TenantShape.Flat, command.Name, administrator), cancellationToken);
-    return tenant.Id;
-}                                                                 // the caller before it is current again
+    return tenant;
+}                                                                 // the user before it is current again
 ```
 
-```sql title="20261027164316_access.tenants.ddd.sql, the tenant the provisioning writes, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the tenant the provisioning writes, shortened"
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON "tenancy"."Tenants" FOR INSERT TO ddd_system_in
     WITH CHECK (("Id" = (SELECT "tenancy".system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 ```
@@ -1123,7 +1123,7 @@ These tables give the walk-through's answers, request by request. The columns:
 |---|---|---|---|---|
 | Ada | let through, because she has a seat in harbor | nothing, because the seat was found when the request came in | every unit of harbor. She is placed at the root, and the directory lists the units she is placed at and every unit below them. | – |
 | Juno | let through | nothing | North Coast only, where she is placed. Tenancy's policy would let her read every unit of harbor. | – |
-| the new sign-in | `tenancy.not-seated`, 403 | nothing | none, because the handler does not run | no row, because `caller_tenant()` finds no seat, so no unit is in the caller's tenant |
+| the new sign-in | `tenancy.not-seated`, 403 | nothing | none, because the handler does not run | no row, because `current_tenant()` finds no seat, so no unit is in the caller's tenant |
 | Orla | `tenancy.not-seated`, 403 | nothing | none | every unit of every tenant. Operators may read every tenant, although the request requires a seat. |
 | Anonymous | `tenancy.not-seated`, 403 | nothing | none | refused, 42501. `anon` cannot use Tenancy's schema, and a restrictive policy also closes every table in it. |
 | System work | let through, because system work in harbor counts as working in the tenant | nothing | every unit of harbor, allowed by the policy for system work in its tenant | – |

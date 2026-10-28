@@ -762,7 +762,7 @@ public sealed class RolesACustomerMakesTests
 
         async Task<MemberHold<PlotId>?> HoldAsync(UserId user, PlotId plot, string permission)
         {
-            using (TestUser.BeginAs(TestCallers.User(user)))
+            using (TestUser.BeginAs(TestUsers.User(user)))
             {
                 await using var scope = provider.CreateAsyncScope();
                 commands.Reset();
@@ -817,7 +817,7 @@ public sealed class RolesACustomerMakesTests
     /// What a host answers for plots that stand beside something of its own: who the caller is as a gardener,
     /// which is nobody for somebody it let go, and at which gardens the caller holds a permission.
     /// </summary>
-    private sealed class Wardens(UserId letGo) : ICallerMember<PlotId, UserId>, IPlacesReached<PlotId, GardenId>
+    private sealed class Wardens(UserId letGo) : ICurrentMember<PlotId, UserId>, IPlacesReached<PlotId, GardenId>
     {
         public UserId? Find(CurrentUserSnapshot caller) => caller.Id is { } user && user != letGo.Value ? new UserId(user) : null;
 

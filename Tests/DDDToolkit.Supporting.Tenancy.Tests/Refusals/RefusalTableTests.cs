@@ -205,13 +205,13 @@ public partial class RefusalTableTests
         async Task<IReadOnlyDictionary<string, object?>> Refusing(string code, Func<Harness, Task> act)
             => (await Refused.WithCodeAsync(code, () => harness.BySystemWork(act))).Arguments;
 
-        // The tenants' directory answers an operator, who is the toolkit's caller and nobody to Tenancy.
+        // The tenants' directory answers an operator, who is the toolkit's current user and nobody to Tenancy.
         harness.Options.OperatorTokenRoles.Add("operator");
         async Task<IReadOnlyDictionary<string, object?>> RefusingAnOperator(string code, Func<Harness, Task> act)
         {
             using (TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid(), "operator")))
             {
-                return (await Refused.WithCodeAsync(code, () => harness.Run(HostCaller.Nobody(TenancyRefusals.NotSeated), act))).Arguments;
+                return (await Refused.WithCodeAsync(code, () => harness.Run(HostUser.Nobody(TenancyRefusals.NotSeated), act))).Arguments;
             }
         }
 
@@ -237,7 +237,7 @@ public partial class RefusalTableTests
         };
 
         // A slug is a value object, so a wrong one is a validation failure with the same code, and it names its input too.
-        var slug = (await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(
+        var slug = (await FluentActions.Awaiting(() => harness.Run(HostUser.System, h => h.Tenants.ProvisionAsync(
                 new TenantToProvision("-wharf", "Wharf", TenantShape.Flat, "Wharf", Guid.NewGuid()), default)))
             .Should().ThrowAsync<InvalidValueObjectException>()).Which.Errors.Should().ContainSingle().Which;
         slug.Code.Should().Be(TenancyRefusals.InvalidSlug);

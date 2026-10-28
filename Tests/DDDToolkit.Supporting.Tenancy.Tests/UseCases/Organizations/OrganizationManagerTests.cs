@@ -126,9 +126,9 @@ public class OrganizationManagerTests
     public async Task A_flat_tenant_refuses_adding_until_its_shape_changes()
     {
         var harness = new Harness(New.Catalogue());
-        var provisioned = await harness.Run(HostCaller.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue,
+        var provisioned = await harness.Run(HostUser.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue,
             new TenantToProvision("kiosk", "Kiosk", TenantShape.Flat, "Kiosk", Guid.NewGuid()), default));
-        var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+        var administrator = HostUser.InSeat(provisioned.Tenant, provisioned.AdminSeat);
 
         await Refused.WithCodeAsync(TenancyRefusals.FlatTenant,
             () => harness.Run(administrator, h => h.Organization.AddUnitAsync(provisioned.RootUnit, "Workshop", default)));

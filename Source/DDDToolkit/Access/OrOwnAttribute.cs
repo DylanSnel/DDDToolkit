@@ -18,7 +18,7 @@ namespace DDDToolkit.Access;
 /// <remarks>
 /// The caller's own is asked first, since it reads nothing, and the permission only where it is not. A caller for whom neither
 /// holds is refused with one <c>access.refused</c>, which carries both reasons. The member is of a type something says
-/// the caller's own of (<see cref="ICallersOwn{TValue}"/>): a <see cref="Guid"/>, the caller's verified identity, of the
+/// the caller's own of (<see cref="IOwnedByCurrentUser{TValue}"/>): a <see cref="Guid"/>, the caller's verified identity, of the
 /// core's; Tenancy's seat id; an application's own kind with a handle it registers. On another type it is DDD00086.
 /// <para>
 /// Not beside <c>[AtUnit]</c>: the unit says where the permission is checked, and a caller who may act on its own would send

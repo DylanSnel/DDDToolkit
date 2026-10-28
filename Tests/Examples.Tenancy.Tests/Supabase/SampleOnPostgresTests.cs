@@ -99,8 +99,8 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
         // System work in a tenant cannot leave it, and nobody without a seat asks what Tenancy answers about one.
         ["a function of Tenancy's the anonymous role may ask"] = (
-            $"GRANT EXECUTE ON FUNCTION {TenantsContext.Schema}.caller_seat() TO anon",
-            $"anon may execute {RowAccessModel.Schema(TenantsContext.Schema)}.caller_seat()",
+            $"GRANT EXECUTE ON FUNCTION {TenantsContext.Schema}.current_seat() TO anon",
+            $"anon may execute {RowAccessModel.Schema(TenantsContext.Schema)}.current_seat()",
             TenancyPostgresChecks.SystemInRoleConfinedCheck),
 
         // The few reads across tenants are the application's own, and no signed-in user's.
@@ -174,6 +174,30 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await login.OpenAsync(Cancellation);
         (await RefusedAsync(login, "SELECT count(*) FROM projects.\"Projects\"")).Should().Be(PostgresErrorCodes.InsufficientPrivilege);
         (await RefusedAsync(login, "SELECT count(*) FROM tenancy.\"Seats\"")).Should().Be(PostgresErrorCodes.InsufficientPrivilege);
+    }
+
+    [Fact]
+    public async Task The_files_leave_no_function_procedure_or_trigger_under_a_name_that_says_caller()
+    {
+        await using var sample = await StartedAsync();
+
+        // Earlier access files made Tenancy's functions, the attribution trigger and the procedure that sets the user
+        // under names that said caller. Later access files make the same under the new names. The file written by
+        // hand after them drops what is left of the old ones.
+        var left = await sample.AsOwnerAsync<string>(
+            """
+            SELECT coalesce(string_agg(name, ', ' ORDER BY name), '') FROM (
+                SELECT n.nspname || '.' || p.proname AS name
+                FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname IN ('ddd', 'tenancy', 'projects', 'inspections') AND p.proname LIKE '%caller%'
+                UNION ALL
+                SELECT c.relname || '.' || t.tgname
+                FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+                WHERE NOT t.tgisinternal AND t.tgname LIKE '%caller%') named
+            """,
+            Cancellation);
+
+        left.Should().BeEmpty();
     }
 
     [Fact]
@@ -342,7 +366,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await RunAsync(tove, $$"""
             SET ROLE authenticated;
             SELECT set_config('request.jwt.claims', '{"sub":"{{DemoPeople.Tove.Id}}","role":"authenticated"}', false);
-            SELECT set_config('tenancy.caller_tenant', '{{Harbor.Id.Value}}', false);
+            SELECT set_config('tenancy.current_tenant', '{{Harbor.Id.Value}}', false);
             """);
 
         async Task<(bool OnTheCrew, bool SeesThroughTheCrew)> AskAsync()
@@ -401,7 +425,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             await RunAsync(connection, $$"""
                 SET ROLE authenticated;
                 SELECT set_config('request.jwt.claims', '{"sub":"{{person.Id}}","role":"authenticated"}', false);
-                SELECT set_config('tenancy.caller_tenant', '{{Harbor.Id.Value}}', false);
+                SELECT set_config('tenancy.current_tenant', '{{Harbor.Id.Value}}', false);
                 """);
             return connection;
         }
@@ -681,7 +705,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
         async Task RenameAsync(DemoPerson by, string name)
         {
-            using (SampleCallers.BeginSeatOf(by, Harbor))
+            using (SampleUsers.BeginSeatOf(by, Harbor))
             {
                 await using var scope = sample.Host.Services.CreateAsyncScope();
                 var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
@@ -859,7 +883,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await RunAsync(connection, $$"""
             SET ROLE authenticated;
             SELECT set_config('request.jwt.claims', '{"sub":"{{DemoPeople.Vic.Id}}","role":"authenticated"}', false);
-            SELECT set_config('tenancy.caller_tenant', '{{Harbor.Id.Value}}', false);
+            SELECT set_config('tenancy.current_tenant', '{{Harbor.Id.Value}}', false);
             """);
 
         // He renames the project: editing is his.
@@ -1362,7 +1386,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await RunAsync(connection, $$"""
             SET ROLE authenticated;
             SELECT set_config('request.jwt.claims', '{"sub":"{{person.Id}}","role":"authenticated"}', false);
-            SELECT set_config('tenancy.caller_tenant', '{{tenant.Id.Value}}', false);
+            SELECT set_config('tenancy.current_tenant', '{{tenant.Id.Value}}', false);
             """);
         return connection;
     }

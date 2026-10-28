@@ -33,7 +33,7 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
     where TContext : DbContext
 {
     /// <inheritdoc />
-    public async Task<SeatOfCaller<TTenantId, TSeatId>?> FindAsync(Guid identity, string tenantSlug, CancellationToken cancellationToken)
+    public async Task<SeatOfUser<TTenantId, TSeatId>?> FindAsync(Guid identity, string tenantSlug, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tenantSlug);
 
@@ -41,7 +41,7 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return found?.ToSeatOfCaller();
+        return found?.ToSeatOfUser();
     }
 
     /// <inheritdoc />
@@ -156,7 +156,7 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
         TSeatId Seat,
         SeatStatus SeatStatus)
     {
-        public SeatOfCaller<TTenantId, TSeatId> ToSeatOfCaller()
+        public SeatOfUser<TTenantId, TSeatId> ToSeatOfUser()
             => new(Tenant, Slug.Value, OrganizationName ?? Slug.Value, TenantStatus, Seat, SeatStatus);
     }
 }

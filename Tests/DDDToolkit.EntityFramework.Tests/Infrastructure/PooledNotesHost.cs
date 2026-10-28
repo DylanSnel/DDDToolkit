@@ -36,7 +36,7 @@ public sealed class PooledNotesHost : IAsyncDisposable
         services.AddDDDToolkitEntityFramework();
         services.AddPostgresRowLevelSecurity(options => options.SystemRole = SupabaseRowLevelSecurity.ServiceRole);
         services.RequireExplicitCurrentUser();
-        services.AddRowLevelSecuritySettings<TeamOfTheCaller>();
+        services.AddRowLevelSecuritySettings<TeamOfTheUser>();
         services.AddPooledDbContextFactory<NotesContext>((provider, options) => options
             .UseNpgsql(connectionString)
             .UseDDDToolkit(provider)
@@ -48,7 +48,7 @@ public sealed class PooledNotesHost : IAsyncDisposable
     /// <summary>Rents from the pool, with no scope.</summary>
     public IDbContextFactory<NotesContext> Factory => _provider.GetRequiredService<IDbContextFactory<NotesContext>>();
 
-    /// <summary>A signed-in user, optionally in a team, which <see cref="TeamOfTheCaller"/> turns into a setting.</summary>
+    /// <summary>A signed-in user, optionally in a team, which <see cref="TeamOfTheUser"/> turns into a setting.</summary>
     public static CurrentUserSnapshot User(Guid id, string? team = null)
         => CurrentUserSnapshot.FromClaims(team is null
             ? $$"""{"sub":"{{id}}","role":"authenticated"}"""
@@ -63,7 +63,7 @@ public sealed class PooledNotesHost : IAsyncDisposable
     {
         // SQL the tests write themselves; nothing in it comes from outside.
         var from = hold is { } time ? FormattableString.Invariant($" FROM pg_sleep({time.TotalSeconds:0.###})") : string.Empty;
-        var sql = $"""SELECT coalesce(auth.uid()::text, 'none') || '|' || current_user || '|' || coalesce(current_setting('{TeamOfTheCaller.Setting}', true), '') AS "Value"{from}""";
+        var sql = $"""SELECT coalesce(auth.uid()::text, 'none') || '|' || current_user || '|' || coalesce(current_setting('{TeamOfTheUser.Setting}', true), '') AS "Value"{from}""";
 
         return await context.Database.SqlQueryRaw<string>(sql).SingleAsync(cancellationToken);
     }
@@ -85,7 +85,7 @@ public sealed class PooledNotesHost : IAsyncDisposable
 /// A setting that follows the caller: the team their token names, or nothing. A singleton, like every
 /// settings provider, that keeps nothing between two calls.
 /// </summary>
-public sealed class TeamOfTheCaller : IRowLevelSecuritySettings
+public sealed class TeamOfTheUser : IRowLevelSecuritySettings
 {
     public const string Setting = "test.team";
 
