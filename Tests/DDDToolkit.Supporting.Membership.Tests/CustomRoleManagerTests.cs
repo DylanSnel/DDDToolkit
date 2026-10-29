@@ -34,7 +34,7 @@ public sealed class CustomRoleManagerTests
             store.Kept.Should().BeEmpty();
         }
 
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             var made = await roles.CreateAsync(new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Pruner", null, [PlotPermissions.Plant])), Cancellation);
             store.Kept.Should().Equal(made);
@@ -71,7 +71,7 @@ public sealed class CustomRoleManagerTests
     {
         var store = new StubRoleStore<PlotRole, PlotRoleId>();
         var roles = Plots(store);
-        using var system = TestAccess.BeginSystem();
+        using var system = TestAccess.BeginSystemBypassingRowAccess();
 
         // The starter roles the rules declare, each through the host's constructor, which says whose it is.
         var made = await roles.CreateStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), Meadow, draft), Cancellation, scope: role => role.GardenId == Meadow);
@@ -100,7 +100,7 @@ public sealed class CustomRoleManagerTests
     {
         var store = new StubRoleStore<PlotRole, PlotRoleId>();
         var roles = Plots(store);
-        using var system = TestAccess.BeginSystem();
+        using var system = TestAccess.BeginSystemBypassingRowAccess();
         var pruner = await roles.CreateAsync(new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Pruner", null, [PlotPermissions.Plant])), Cancellation);
 
         (await roles.RenameAsync(pruner.Id, " Hedger ", "Trims.", Cancellation)).Should().BeSameAs(pruner);

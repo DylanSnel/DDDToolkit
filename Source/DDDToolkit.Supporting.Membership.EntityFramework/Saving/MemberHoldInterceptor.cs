@@ -27,7 +27,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// <list type="table">
 /// <listheader><term>The save changes a resource</term><description>What happens</description></listheader>
 /// <item><term>that the request in hand was checked on</term><description>It is saved only at the version the check read: one changed since is a <see cref="ConcurrencyConflictException"/>, a lost race. The save compares that version, as it compares every version.</description></item>
-/// <item><term>with no hold for it, as the application's own work</term><description>Saved: system work that trusted code began, <c>access.BeginSystem()</c> or a scope the resource's rules name, needs no check.</description></item>
+/// <item><term>with no hold for it, as the application's own work</term><description>Saved: system work that trusted code began needs no check. That is <c>access.BeginSystem(scope)</c> in a scope the resource's rules name, or <c>access.BeginSystemBypassingRowAccess()</c>.</description></item>
 /// <item><term>any other way</term><description>Refused with an <see cref="InvalidOperationException"/>, and nothing is saved: a handler called directly, a transport that runs it around the checks, a save that runs after the request's handling returned, or a handler that changes another resource than its request names.</description></item>
 /// </list>
 /// A new resource needs no hold: nothing was there to check. A request's handler that saves the same resource
@@ -226,7 +226,8 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
 
     /// <summary>
     /// Whether the save is system work on the resource: the current user answers it, and trusted code began it for
-    /// this flow, with <see cref="AccessManager.BeginSystem"/> or a supporting domain's own way. A flow that began no
+    /// this flow, with <see cref="AccessManager.BeginSystem"/>, <see cref="AccessManager.BeginSystemBypassingRowAccess"/>
+    /// or a supporting domain's own way. A flow that began no
     /// user is not, even where the host answers system work for it.
     /// </summary>
     private bool IsOwnWork(MembershipRules rules)
@@ -239,7 +240,7 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
         var what = $"{name} {resource.IdOf(entity)}";
         var how =
             $"Under UseMemberHolds a resource with members is saved for the request whose access check read it (MemberAccess.On(permission, {name.ToLowerInvariant()})), "
-            + "or as system work that trusted code began (AccessManager.BeginSystem()). Nothing was saved.";
+            + "or as system work that trusted code began (AccessManager.BeginSystem(scope) in a scope the resource's rules name, or BeginSystemBypassingRowAccess()). Nothing was saved.";
 
         return RequestInHand.Current is not { } inHand
             ? $"{what} was changed with no request in hand: no request's access checks let one through in the flow of work this save runs in. "

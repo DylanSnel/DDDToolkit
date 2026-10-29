@@ -91,7 +91,7 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
         // change with it, what the accessor answers does.
         _app.MapGet("/who-under-the-system", (HttpContext context, ICurrentUser callers) =>
         {
-            using (TestAccess.BeginSystem())
+            using (TestAccess.BeginSystemBypassingRowAccess())
             {
                 return Results.Text($"{context.GetSupabaseUser()}|{callers.Snapshot}");
             }
@@ -100,7 +100,7 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
         // A step a request takes on the application's behalf, on purpose: a caller begun in code wins.
         _app.MapGet("/notes/count-as-the-system", async (NotesContext notes, CancellationToken cancellationToken) =>
         {
-            using (TestAccess.BeginSystem())
+            using (TestAccess.BeginSystemBypassingRowAccess())
             {
                 return Results.Ok(await notes.Notes.CountAsync(cancellationToken));
             }

@@ -110,7 +110,7 @@ public sealed class ModuleIntegrationEvents<TContext> where TContext : DbContext
     /// user begun there is the user of the inbox's read, the handler's work, the save and the inbox row.
     /// <code>
     /// module.Around((services, message, contract) => services.GetRequiredService&lt;AccessManager&gt;().BeginSystem("shipping"));
-    /// module.Around(IntegrationEventScopes.System);   // system work without a scope, on purpose
+    /// module.Around(IntegrationEventScopes.SystemBypassingRowAccess);   // past every row access rule, on purpose
     /// </code>
     /// May be called more than once, here or in another call for the same context: the scopes nest in the
     /// order they were added, the first outermost, and end in the opposite order. Each handler of the module
@@ -292,5 +292,5 @@ internal sealed class ModuleIntegrationEventConsumer<TContext>(
     private string NoScope(string consumer)
         => $"The handlers of {Module} begin no user, and this host requires one (RequireExplicitCurrentUser), so {consumer} did not run. " +
            "Say what they run as where the module registers them: module.Around((services, message, contract) => services.GetRequiredService<AccessManager>().BeginSystem(\"<module>\")) " +
-           "for scoped system work the policies hold, or module.Around(IntegrationEventScopes.System) for system work without a scope.";
+           "for scoped system work the policies hold, or module.Around(IntegrationEventScopes.SystemBypassingRowAccess) for system work past every row access rule.";
 }

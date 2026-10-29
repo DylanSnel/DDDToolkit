@@ -93,8 +93,8 @@ its stage names that check in `RunsBefore`. For example, Tenancy's three checks 
 - A check that names a check of an earlier stage in `RunsBefore` stops the start. Checks that name each other in a
   circle stop the start too.
 
-Each check runs as system work, `CurrentUserSnapshot.System`, like the toolkit's own bookkeeping. The runner begins
-that work for each check separately. Without it, a host that
+Each check runs as system work past the row access rules, `CurrentUserSnapshot.System`, like the toolkit's own
+bookkeeping. The runner begins that work for each check separately, with `access.BeginSystemBypassingRowAccess()`. Without it, a host that
 [requires an explicit current user](row-level-security.md#requiring-an-explicit-current-user) would refuse the first connection of a
 check. The checks read the catalogs of the database and change nothing.
 
@@ -261,7 +261,7 @@ public sealed class PostgresStartupCheck(IServiceProvider services) : IHostedSer
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        using var system = services.GetRequiredService<AccessManager>().BeginSystem();
+        using var system = services.GetRequiredService<AccessManager>().BeginSystemBypassingRowAccess();
 
         await using (var scope = services.CreateAsyncScope())
         {

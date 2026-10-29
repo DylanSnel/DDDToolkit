@@ -93,8 +93,9 @@ internal static class TenancyReference
                 "access.md",
                 "Access manager and users",
                 "`TenancyAccessManager` says who acts (`CurrentUser`, the toolkit's `ICurrentUser`) and which tenant and seat the "
-                + "work acts in (`CurrentTenant`). It derives from the core's `AccessManager`, whose `CurrentUser`, `BeginAs` and "
-                + "`BeginNone` it has as they are. Its `BeginSystem`, `BeginSystemIn` and `BeginTokenIn` start system work. "
+                + "work acts in (`CurrentTenant`). It derives from the core's `AccessManager`, whose `CurrentUser`, `BeginAs`, "
+                + "`BeginSystemBypassingRowAccess` and `BeginNone` it has as they are. Its `BeginSystem`, `BeginSystemIn` and "
+                + "`BeginTokenIn` start system work, which the row access rules hold. "
                 + "Below it: the Tenancy user it reads, the actor a change "
                 + "records, the selection of a seat in the tenant a request names, and the requirements a request states with "
                 + "an attribute, `[Operator]` among them.\n\n"

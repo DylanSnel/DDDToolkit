@@ -119,8 +119,9 @@ public sealed partial class ShopSeat
    `TenancyAccessManager` says who acts and begins the work that is not the caller's own. It derives from the core's
    `AccessManager`, so a Tenancy application takes this one: `access.CurrentUser`, the
    toolkit's `ICurrentUser` (`Id`, `IsAuthenticated`, `IsSystem`, `Role`), `access.CurrentTenant` (`Id`, `Seat`, `IsAvailable`,
-   `Require()`), `access.BeginAs(...)` and `access.BeginNone()` (the core's, which leave the tenant as it is),
-   `access.BeginSystem(scope?)` (outside every tenant, always scoped, `tenancy` by default),
+   `Require()`), `access.BeginAs(...)`, `access.BeginSystemBypassingRowAccess()` and `access.BeginNone()` (the core's,
+   which leave the tenant as it is), `access.BeginSystem()` (outside every tenant, in Tenancy's scope `tenancy`, for
+   provisioning), `access.BeginSystem(scope)` (outside every tenant, in that scope),
    `access.BeginSystemIn(tenant, actingSeat, scope)`,
    `access.BeginTokenIn(tenant, seat, scope)` and `access.TenantsToSweepAsync(scope, ct)`. A module that sees only
    Tenancy's ids says which they are once, in its application project,

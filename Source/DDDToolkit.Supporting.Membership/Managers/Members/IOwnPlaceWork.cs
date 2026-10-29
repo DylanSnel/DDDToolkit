@@ -9,7 +9,8 @@ namespace DDDToolkit.Supporting.Membership.Managers;
 /// scope, for the request in hand whose check read the resource, when the unit of work holds nothing else.
 /// <para>
 /// Optional. Without one the manager begins system work in that scope for the current user,
-/// <c>access.BeginSystem(scope)</c> on the core's <c>AccessManager</c>. The join with an organization's package registers one that begins it in the caller's
+/// <c>access.BeginSystem(scope)</c> on the core's <c>AccessManager</c>. For rules that name no scope it begins
+/// <c>access.BeginSystemBypassingRowAccess()</c>. The join with an organization's package registers one that begins it in the caller's
 /// organization, for the caller's seat.
 /// </para>
 /// </summary>
@@ -23,7 +24,7 @@ public interface IOwnPlaceWork<TResourceId, TMemberId>
     /// <param name="member">The caller, as a member of the resource.</param>
     /// <param name="scope">
     /// The scope of the resource's own work, one its rules name; <see langword="null"/> for rules that name none, whose
-    /// own work is the application's without a scope.
+    /// own work is the application's, past every row access rule.
     /// </param>
     /// <returns>What ends the work when disposed.</returns>
     IDisposable Begin(TMemberId member, string? scope);

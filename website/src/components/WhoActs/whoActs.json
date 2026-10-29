@@ -22,7 +22,7 @@
       "notes": [
         "Read `access.CurrentUser.Id` before the `using`. Inside it, `CurrentUser.IsSystem` is true and `Id` is null.",
         "Put only the `ProvisionAsync` call inside the `using`.",
-        "`TenancyAccessManager` derives from the core's `AccessManager`. Its `BeginSystem()` begins Tenancy's scope, `tenancy`. The core's `BeginSystem()` begins system work without a scope, which row level security lets past every policy.",
+        "`TenancyAccessManager` derives from the core's `AccessManager`. Its `BeginSystem()` begins Tenancy's scope, `tenancy`. The core's `BeginSystem(scope)` always takes a scope. Only `BeginSystemBypassingRowAccess()` begins system work that row level security lets past every policy.",
         "Tove becomes the administrator. Her new seat is placed at the root and holds the administrators' role there.",
         "A seat that calls `ProvisionAsync` gets `access.system-only`. A caller without a seat gets the refusal that tenant selection gave it."
       ],

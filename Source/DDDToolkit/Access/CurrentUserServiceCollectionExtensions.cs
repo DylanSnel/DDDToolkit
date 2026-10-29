@@ -26,8 +26,8 @@ public static class CurrentUserServiceCollectionExtensions
     /// Makes every flow of work say who it runs as: registers <see cref="CurrentUserOptions"/> with
     /// <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/> on. <see cref="CurrentUser"/> then throws
     /// <see cref="NoCurrentUserException"/> where nothing was begun and the host knows no user, instead of answering
-    /// system work. The toolkit's background work begins system work around its own bookkeeping only, and the handlers
-    /// it calls run with nobody begun until something begins a user for them.
+    /// system work that no row access rule holds. The toolkit's background work begins that system work around its own
+    /// bookkeeping only, and the handlers it calls run with nobody begun until something begins a user for them.
     /// <code>
     /// builder.Services.RequireExplicitCurrentUser();
     /// builder.Services.AddModuleIntegrationEvents&lt;ShippingContext&gt;(module => module

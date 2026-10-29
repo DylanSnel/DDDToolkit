@@ -16,9 +16,10 @@ namespace DDDToolkit.Startup;
 /// <remarks>
 /// One runner per host, registered where the host asks for its checks, by
 /// <see cref="StartupCheckServiceCollectionExtensions.RunStartupChecks"/>. It runs the checks one after
-/// the other, each as system work (<see cref="AccessManager.BeginSystem"/>), begun for that check alone. A host that
-/// requires every flow of work to begin its user would otherwise refuse the first connection a check makes, and a
-/// check is the application's own bookkeeping. What a check throws stops the start as it was thrown; the log names the check,
+/// the other, each as system work that no row access rule holds
+/// (<see cref="AccessManager.BeginSystemBypassingRowAccess"/>), begun for that check alone. A host that requires every
+/// flow of work to begin its user would otherwise refuse the first connection a check makes. A check is the
+/// application's own bookkeeping. What a check throws stops the start as it was thrown; the log names the check,
 /// and the exception carries its name in <see cref="Exception.Data"/>, under <see cref="StartupChecks.FailedCheckKey"/>.
 /// </remarks>
 internal sealed class StartupCheckRunner(StartupChecks checks, IServiceProvider services, ILogger<StartupCheckRunner>? logger = null) : IHostedLifecycleService
@@ -64,7 +65,7 @@ internal sealed class StartupCheckRunner(StartupChecks checks, IServiceProvider 
                 // Begun for each check, not once around them all: a check that runs without awaiting anything runs
                 // in this method's flow, so a user it begins and leaves behind would otherwise be the user of every
                 // check after it. Ending this one puts back the user from before it, whatever the check did.
-                using (access.BeginSystem())
+                using (access.BeginSystemBypassingRowAccess())
                 {
                     await check.RunAsync(services, cancellationToken).ConfigureAwait(false);
                 }

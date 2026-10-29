@@ -56,7 +56,7 @@ public class ClosedOverTheIdsTests
     {
         AccessManager core = Access;
 
-        using (core.BeginSystem())
+        using (Access.BeginSystem())
         {
             BegunUser!.Kind.Should().Be(CurrentUserKind.SystemIn, "system work a Tenancy application begins stays under the policies");
             BegunUser.SystemScope.Should().Be(TenancyWork.SystemScope, "Tenancy's own scope where none is given");
@@ -67,15 +67,21 @@ public class ClosedOverTheIdsTests
         {
             BegunUser!.SystemScope.Should().Be("billing");
             var tenancy = TenancyUsers.Current<TenantId, SeatId>();
-            tenancy.Kind.Should().Be(TenancyUserKind.System, "a module's system work acts in no tenant either");
+            tenancy.Kind.Should().Be(TenancyUserKind.System, "a module's system work acts in no tenant either, begun through the core's type too");
             tenancy.Actor.Should().Be(TenancyActor<SeatId>.OfSystem("billing"), "and is recorded as the system in its scope");
         }
 
-        // BeginAs and BeginNone are the core's: they leave Tenancy's user as it is.
+        // BeginAs, BeginSystemBypassingRowAccess and BeginNone are the core's: they leave Tenancy's user as it is.
         using (TenancyUsers.Begin(HostUser.InSeat(Harbor, Ada)))
         {
             using (Access.BeginAs(Guid.NewGuid()))
             {
+                Access.CurrentTenant.Seat.Should().Be(Ada);
+            }
+
+            using (Access.BeginSystemBypassingRowAccess())
+            {
+                BegunUser!.Kind.Should().Be(CurrentUserKind.System, "its name says that no row access rule holds it");
                 Access.CurrentTenant.Seat.Should().Be(Ada);
             }
 
@@ -86,6 +92,7 @@ public class ClosedOverTheIdsTests
         }
 
         FluentActions.Invoking(() => Access.BeginSystem("Billing!")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => core.BeginSystem(null!)).Should().Throw<ArgumentNullException>();
         BegunUser.Should().BeNull("a scope that is no scope begins nothing");
         TenancyUsers.Ambient.Should().BeNull();
     }

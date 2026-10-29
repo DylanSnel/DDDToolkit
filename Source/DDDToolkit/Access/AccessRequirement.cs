@@ -32,7 +32,7 @@ namespace DDDToolkit.Access;
 /// are equal, and a test can hold every request to the requirement it is meant to declare.
 /// <para>
 /// A requirement says who may send a request. What the work runs with is begun on purpose. The application's own work
-/// is no requirement but a scope, begun by trusted code around the work with <c>access.BeginSystem()</c> on
+/// is no requirement but a scope, begun by trusted code around the work with <c>access.BeginSystem(scope)</c> on
 /// <see cref="AccessManager"/>, or on a supporting domain's manager that derives from it, such as Tenancy's, after which
 /// the caller before it is current again. A check may begin work around the handler of a request it let through
 /// (<see cref="IBeginsWork"/>), as Tenancy's does for a command an operator sends. And it says what is asked, never who may: it carries a permission and the ids the request

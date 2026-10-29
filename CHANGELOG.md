@@ -754,7 +754,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **A scope around each inbound handler.** `ModuleIntegrationEvents<TContext>.Around(scope)` begins an
   `IntegrationEventScope` around each delivery to the module's handlers: before the inbox reads whether the
   message was applied, until its transaction committed, so the inbox's read, the handler's work and the
-  inbox row run as one user. `IntegrationEventScopes.System` runs them as system work without a scope. With
+  inbox row run as one user. `IntegrationEventScopes.SystemBypassingRowAccess` runs them as system work past every
+  row access rule. With
   `RequireExplicitCurrentUser`, a module without a scope does not run its handlers: the delivery fails with a
   `NoCurrentUserException` naming the module, and is tried again. See
   [Who the handlers run as](docs/integration-events.md#who-the-handlers-run-as).
@@ -769,7 +770,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   as a factory that chooses a data source by who is calling, sees the poller's rental as system work. An in-process
   handler that leaves changes unsaved on the outbox processor's context fails the message instead of having them
   saved with the mark as system work. The interceptor refuses system work without a scope unless code began it with
-  `access.BeginSystem()`, whichever source answered it. `PostgresRowLevelSecurityInterceptor.RequireExplicitCurrentUser`
+  `access.BeginSystemBypassingRowAccess()`, whichever source answered it. `PostgresRowLevelSecurityInterceptor.RequireExplicitCurrentUser`
   says whether the interceptor the contexts use was built with the option, for a start-up check. Without the option
   nothing changes. See
   [Requiring an explicit current user](docs/row-level-security.md#requiring-an-explicit-current-user).
@@ -777,7 +778,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   name. It runs as `PostgresRowLevelSecurityOptions.SystemInRole`, `ddd_system_in`, with the claims
   `{"role":"ddd_system_in","scope":"…"}`, so a policy can ask whose work it is. Its kind is
   `CurrentUserKind.SystemIn`. `CurrentUserKind.System` is system work without a scope, which runs past the policies.
-  With `SystemInRole` set to `null`, scoped system work fails before its query connects. See
+  `access.BeginSystemBypassingRowAccess()` begins it. `BeginSystem` always takes a scope. With `SystemInRole` set to `null`, scoped system work fails before its query connects. See
   [The scoped system role](docs/row-level-security.md#the-scoped-system-role).
 - **The scoped system role.** `ddd_system_in`, `PostgresRowLevelSecurityOptions.SystemInRole`, is a role
   that can neither log in nor bypass row level security, for the application's own work that should stay
@@ -1375,9 +1376,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `access.CurrentTenant` says which tenant the work acts in, and the seat in it: `Id`, `Seat` and `IsAvailable`.
     `Require()` returns the tenant, the seat and whether the work is system work (`BySystem`). It refuses a caller who
     is nobody with the refusal that caller was given, such as `tenancy.not-seated`.
-  - `access.BeginSystem()` begins system work outside any tenant, for provisioning. It overrides the core's
-    `AccessManager.BeginSystem(scope)`, from which the access manager derives, and is always scoped. Where no scope is
-    given it begins Tenancy's own, `tenancy`. `access.BeginSystemIn(tenant,
+  - `access.BeginSystem()` begins system work outside any tenant, for provisioning, in Tenancy's own scope, `tenancy`.
+    `access.BeginSystem(scope)` overrides the core's `AccessManager.BeginSystem(scope)`, from which the access manager
+    derives, and begins system work outside any tenant in that scope. `access.BeginSystemIn(tenant,
     actingSeat, scope)` begins system work in one tenant. `access.BeginTokenIn(tenant, seat, scope)` begins system work
     that answers a link carrying a token a seat made. Each lasts until its `using` ends.
   - `access.TenantsToSweepAsync(scope, cancellationToken)` reads the ids of the active and the suspended tenants, for a
@@ -1904,9 +1905,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     work outside any tenant there.
   - Tenancy's own commands that only system work may call, provisioning a tenant and suspending, reactivating or
     closing one, refuse everyone else with `access.system-only`.
-  - Every name for system work in the C# API follows the core's `AccessManager.BeginSystem()`: `BeginSystem(scope)`,
-    Tenancy's `access.BeginSystem()` and `access.BeginSystemIn(...)`, and `TenancyWork.BeginSystem` and
-    `TenancyWork.BeginSystemIn` for code generic over the ids. The database roles `ddd_system` and `ddd_system_in` keep their names.
+  - Every name for system work in the C# API follows the core's `AccessManager.BeginSystem(scope)`:
+    `BeginSystemBypassingRowAccess()`, Tenancy's `access.BeginSystem()` and `access.BeginSystemIn(...)`, and
+    `TenancyWork.BeginSystem` and `TenancyWork.BeginSystemIn` for code generic over the ids. The database roles `ddd_system` and `ddd_system_in` keep their names.
   - `services.AddTenancyAccess<TRequests, TContext>()`, in `DDDToolkit.Supporting.Tenancy.EntityFramework`, adds the
     checks that decide the cases to the checks of one module's request interface. It is generated closed over the
     application's four ids in the module that declares Tenancy's classes, and in a module with
@@ -2184,7 +2185,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   statement is sent. Which permission adds a member or gives a role is the application's to decide: it marks one of
   its own `ManagesMembers`, and the package has no rule about who gives what beyond it. The access manager says until when its caller holds that permission (`HoldAsync`, `MemberHold.Until`, no
   end for the owner and for system work), for a rule the application writes itself, such as that nobody gives a role
-  for longer than they hold the permission. System work without a scope (`access.BeginSystem()`) holds every permission.
+  for longer than they hold the permission. System work past the row access rules
+  (`access.BeginSystemBypassingRowAccess()`) holds every permission.
   System work in a scope (`access.BeginSystem(scope)`) holds every permission on a resource whose rules let that scope
   through, the scope of
   the resource's own module unless `systemScopes` names others, and nothing on any other. Refusals carry the
@@ -3163,9 +3165,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       `AddSupabaseRowLevelSecurity<TSource>()`, which register the source.
     - `AmbientCallerAccessor`: `CurrentUser`, which asks the host's source where nothing was begun.
     - `Callers.Begin(Caller.User(id))`: `access.BeginAs(id)`, on the `AccessManager` code takes.
-      `Callers.Begin(Caller.System)`: `access.BeginSystem()`. `Callers.Begin(Caller.SystemIn(scope))`:
+      `Callers.Begin(Caller.System)`: `access.BeginSystemBypassingRowAccess()`. `Callers.Begin(Caller.SystemIn(scope))`:
       `access.BeginSystem(scope)`. `Callers.Begin(caller)`: `access.BeginAs(snapshot)`. `Callers.BeginNone()`:
       `access.BeginNone()`. `ICurrentUser` only answers, and has no `Begin` method.
+    - `access.BeginSystem(scope)` takes a scope always, and the row access rules hold the work. A null scope throws
+      `ArgumentNullException`, and nothing is begun. System work past every row access rule has a name of its own,
+      `access.BeginSystemBypassingRowAccess()`, which says so where it is called. It is the system work the host answers
+      where nothing was begun. On Postgres it runs as the host's system role, and Membership gives it every permission.
+    - `IntegrationEventScopes.System`: `IntegrationEventScopes.SystemBypassingRowAccess`.
+    - The texts that told you to call `BeginSystem()` name `BeginSystem(scope)` and `BeginSystemBypassingRowAccess()`:
+      `NoCurrentUserException.DefaultMessage`, the refusals of `PostgresRowLevelSecurityInterceptor`, of
+      `GetSupabaseUser()` in Azure Functions and of `UseMemberHolds`, and the message of a module without a scope.
     - `Callers.Ambient`: `user.IsBegun`, and `user.Snapshot` for what was begun. `Callers.FromClaims(claims)`:
       `CurrentUserSnapshot.FromClaims(claims)`. `Callers.RequireSystemWork(callers)`: `user.RequireSystemWork()`.
     - A row access rule takes `ICurrentUser user` where it took `Caller caller`:
@@ -3187,10 +3197,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       registers it.
     - Tenancy: `TenancyAccessManager` derives from the core's `AccessManager`, so a Tenancy application takes one
       class. Its `CurrentUser` is the core's `ICurrentUser`, and Tenancy's own `CurrentUser` class is gone. Its
-      `BeginAs` and `BeginNone` are the core's and leave Tenancy's user as it is. Its `BeginSystem()` is
-      `BeginSystem(scope = null)`, which overrides the core's. It begins system work outside every tenant in
-      `scope`, Tenancy's own `tenancy` where none is given, so it never begins system work without a scope as the
-      core's does. `TenancyWork.BeginSystem<TTenantId, TSeatId>()` takes the same optional scope. The core's
+      `BeginAs`, `BeginSystemBypassingRowAccess` and `BeginNone` are the core's and leave Tenancy's user as it is. Its
+      `BeginSystem()` begins system work outside every tenant in Tenancy's own scope, `tenancy`, as before. Its new
+      `BeginSystem(scope)` overrides the core's, and begins system work outside every tenant in that scope. Neither
+      begins system work past the row access rules. `TenancyWork.BeginSystem<TTenantId, TSeatId>()` takes an optional
+      scope. The core's
       `AccessManager` resolves in a Tenancy application too, a singleton for code without a scope, such as a host's
       middleware. `ITenantSelection.ResolveAsync`, `TenantSelection.SeatsOfAsync` and `TenancyOptions.IsOperator`
       take a `CurrentUserSnapshot`. `TenantManager` and `InvitationManager` take an `ICurrentUser`. The start-up check
@@ -3250,7 +3261,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `Examples/ModularMonolith.Supabase/supabase/migrations`.
   - **Upgrading.** Rebuild, and rename as the list says. A handler that took `ICallerAccessor callers` takes
     `ICurrentUser user` and reads `user.Id` where it read `callers.Current.UserId`. Code that began work with
-    `Callers.Begin(...)` takes `AccessManager access` and calls `access.BeginAs(...)` or `access.BeginSystem(...)`. A
+    `Callers.Begin(...)` takes `AccessManager access` and calls `access.BeginAs(...)` or `access.BeginSystem(scope)`.
+    Code that began `Caller.System` calls `access.BeginSystemBypassingRowAccess()`, or `access.BeginSystem(scope)` with
+    the module's scope where the module's policies hold that scope. A
     Tenancy application calls them on the `TenancyAccessManager` it takes. A rule changes its second parameter
     and its members. A host that turned off `tenancy.explicit-callers` by name turns off
     `tenancy.explicit-current-user`, and one that turned off `postgres.login-role-may-switch-to-callers` turns off
@@ -3667,7 +3680,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     a
     permission of Tenancy's was refused with `tenancy.not-seated`, since Tenancy's check asks its own caller, and one of
     `AccessRequirement.AllowAnonymous()` was let through. Begin the user in that work, `access.BeginAs(...)`,
-    `access.BeginSystem(...)` or a supporting domain's own way, as such a host requires everywhere else. A set of checks
+    `access.BeginSystem(scope)`, `access.BeginSystemBypassingRowAccess()` or a supporting domain's own way, as such a host requires everywhere else. A set of checks
     made by hand asks it of the `CurrentUserAccessCheck` it holds; one without it asks nobody.
   - `Checked<T>.KeepFor` called by the check of a case of a combination keeps nothing until the combination let the
     caller through, and `TakeFor` throws where the cases of one kept several of `T`, pointing at the new `TakeAllFor`.

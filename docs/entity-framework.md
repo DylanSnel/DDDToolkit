@@ -1497,7 +1497,7 @@ occurred and when it was recorded, the aggregate that raised it, and who acted:
 | The current user | `ActedByKind` | `ActedById` |
 |---|---|---|
 | A signed-in user | `user` | the user's id, or the token's `sub` where that is not a `uuid` |
-| System work | `system` | `null` |
+| System work past the row access rules, `access.BeginSystemBypassingRowAccess()` | `system` | `null` |
 | System work inside a scope, `access.BeginSystem("ordering")` | `system` | the scope |
 | A request without a user | `anonymous` | `null` |
 

@@ -22,7 +22,9 @@ namespace DDDToolkit.Abstractions.Access;
 /// <b>Where the answer comes from.</b> Work begun with the access manager's <c>BeginAs</c> or <c>BeginSystem</c> runs as
 /// what was begun. Other work runs as the user the host says: in ASP.NET Core with
 /// <c>DDDToolkit.Auth.Supabase.AspNetCore</c>, the user of the request's validated token, or somebody who has not signed in.
-/// Outside a request it is system work, unless the host requires every flow of work to begin its user. Then it throws.
+/// Outside a request it is system work that no row access rule holds, the work the access manager's
+/// <c>BeginSystemBypassingRowAccess()</c> begins. A host that requires every flow of work to begin its user throws there
+/// instead.
 /// </para>
 /// <para>
 /// <b>Work without a request.</b> A job, a queue-triggered function or a test begins the user it runs as on the access
@@ -112,8 +114,9 @@ public interface ICurrentUser
     CurrentUserSnapshot Snapshot { get; }
 
     /// <summary>
-    /// Whether code began the current user for this flow of work, with the access manager's <c>BeginAs</c> or
-    /// <c>BeginSystem</c>. False where the host answers, and inside <c>BeginNone()</c>. It never throws.
+    /// Whether code began the current user for this flow of work, with the access manager's <c>BeginAs</c>,
+    /// <c>BeginSystem</c> or <c>BeginSystemBypassingRowAccess</c>. False where the host answers, and inside
+    /// <c>BeginNone()</c>. It never throws.
     /// </summary>
     bool IsBegun { get; }
 
@@ -129,8 +132,9 @@ public interface ICurrentUser
     string? FindClaim(string path);
 
     /// <summary>
-    /// Refuses everyone but system work that code began for this flow with the access manager's <c>BeginSystem</c>, with
-    /// or without a scope. A handler or a use case that only system work may run calls it first.
+    /// Refuses everyone but system work that code began for this flow with the access manager's
+    /// <c>BeginSystem(scope)</c> or <c>BeginSystemBypassingRowAccess()</c>. A handler or a use case that only system
+    /// work may run calls it first.
     /// <code>
     /// public async Task HandleAsync(ImportPrices command, CancellationToken cancellationToken)
     /// {

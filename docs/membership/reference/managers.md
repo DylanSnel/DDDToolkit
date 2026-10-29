@@ -648,7 +648,7 @@ public interface IOwnPlaceWork<TResourceId, TMemberId>
 
 Begins the resource's own work for the save of a change to the caller's own place on it: a role it takes from itself, itself taken off, leaving, or handing on the resource it owns. Such a change can take away the very right the save needs where a database checks every row, so the member manager saves it as the resource's own work in its scope, for the request in hand whose check read the resource, when the unit of work holds nothing else.
 
-Optional. Without one the manager begins system work in that scope for the current user, `access.BeginSystem(scope)` on the core's `AccessManager`. The join with an organization's package registers one that begins it in the caller's organization, for the caller's seat.
+Optional. Without one the manager begins system work in that scope for the current user, `access.BeginSystem(scope)` on the core's `AccessManager`. For rules that name no scope it begins `access.BeginSystemBypassingRowAccess()`. The join with an organization's package registers one that begins it in the caller's organization, for the caller's seat.
 
 **Type parameters**
 
@@ -670,7 +670,7 @@ Begins the resource's own work in `scope`, for `member`, the caller.
 **Parameters**
 
 - `member`: The caller, as a member of the resource.
-- `scope`: The scope of the resource's own work, one its rules name; `null` for rules that name none, whose own work is the application's without a scope.
+- `scope`: The scope of the resource's own work, one its rules name; `null` for rules that name none, whose own work is the application's, past every row access rule.
 
 **Returns**: What ends the work when disposed.
 

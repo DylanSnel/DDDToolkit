@@ -7,7 +7,7 @@ sidebar_label: Access manager and users
 
 # Tenancy API: Access manager and users
 
-`TenancyAccessManager` says who acts (`CurrentUser`, the toolkit's `ICurrentUser`) and which tenant and seat the work acts in (`CurrentTenant`). It derives from the core's `AccessManager`, whose `CurrentUser`, `BeginAs` and `BeginNone` it has as they are. Its `BeginSystem`, `BeginSystemIn` and `BeginTokenIn` start system work. Below it: the Tenancy user it reads, the actor a change records, the selection of a seat in the tenant a request names, and the requirements a request states with an attribute, `[Operator]` among them.
+`TenancyAccessManager` says who acts (`CurrentUser`, the toolkit's `ICurrentUser`) and which tenant and seat the work acts in (`CurrentTenant`). It derives from the core's `AccessManager`, whose `CurrentUser`, `BeginAs`, `BeginSystemBypassingRowAccess` and `BeginNone` it has as they are. Its `BeginSystem`, `BeginSystemIn` and `BeginTokenIn` start system work, which the row access rules hold. Below it: the Tenancy user it reads, the actor a change records, the selection of a seat in the tenant a request names, and the requirements a request states with an attribute, `[Operator]` among them.
 
 Your code takes `TenancyAccessManager` with no type arguments. The generator writes it into the global namespace of the project that declares the application's Tenancy classes. A project of another module says which of its ids are Tenancy's with `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`, and gets the class in its root namespace. The class derives from `TenancyAccessManager<…>` closed over the four ids:
 
@@ -49,7 +49,7 @@ The project that declares Tenancy's classes gets that class in the global namesp
 
 It keeps no state of its own. `AccessManager.CurrentUser` and [`CurrentTenant`](#currenttenant) read the current flow of work each time they are asked, so they follow every `Begin` made after the manager was handed out.
 
-[`BeginSystem`](#beginsystemstring), [`BeginSystemIn`](#beginsysteminttenantid-tseatid-string) and [`BeginTokenIn`](#begintokeninttenantid-tseatid-string) each start work that is not the caller's own, for one `using`. Each begins the tenant the work acts in, or none, and the kind of work together: the kind decides how the work is recorded, and which database role it runs as. When the result is disposed, the user before it is current again. Begin as narrow as possible: around the one call that needs it. `AccessManager.BeginAs`, with a user's id or a snapshot, and `AccessManager.BeginNone` are the core's, and leave the tenant as it is.
+`BeginSystem()`, `BeginSystem(scope)`, [`BeginSystemIn`](#beginsysteminttenantid-tseatid-string) and [`BeginTokenIn`](#begintokeninttenantid-tseatid-string) each start work that is not the caller's own, for one `using`. Each begins the tenant the work acts in, or none, and the kind of work together: the kind decides how the work is recorded, and which database role it runs as. The row access rules hold each of them. When the result is disposed, the user before it is current again. Begin as narrow as possible: around the one call that needs it. `AccessManager.BeginAs`, with a user's id or a snapshot, `AccessManager.BeginSystemBypassingRowAccess` and `AccessManager.BeginNone` are the core's, and leave the tenant as it is.
 
 Tenancy's queries for the current caller come from the context you query: `db.Tenancy()`, which `DDDToolkit.Supporting.Tenancy.EntityFramework` writes for your ids. A read source that is not Entity Framework asks [`In`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor).
 
@@ -64,7 +64,8 @@ Tenancy's queries for the current caller come from the context you query: `db.Te
 |---|---|
 | [`TenancyAccessManager(TenancyCatalogue, TimeProvider, IServiceProvider)`](#tenancyaccessmanagertenancycatalogue-timeprovider-iserviceprovider) | The access manager over the application's services. |
 | [`CurrentTenant`](#currenttenant) | The tenant the current work acts in, and the seat in it. |
-| [`BeginSystem(string?)`](#beginsystemstring) | Begins system work outside any tenant, always in a scope, Tenancy's own `tenancy` where none is given. |
+| [`BeginSystem()`](#beginsystem) | Begins system work outside any tenant in Tenancy's own scope, `tenancy`. |
+| [`BeginSystem(string)`](#beginsystemstring) | Begins system work outside any tenant in `scope`, such as a module's import that makes no tenant's rows. |
 | [`BeginSystemIn(TTenantId, TSeatId?, string)`](#beginsysteminttenantid-tseatid-string) | Begins system work inside one tenant: seeding, an import, a job per tenant, or a right your code grants after a condition. |
 | [`BeginTokenIn(TTenantId, TSeatId, string)`](#begintokeninttenantid-tseatid-string) | Begins system work inside one tenant that answers a link carrying a token a seat made, such as a feed only its owner knows the address of. |
 | [`TenantsToSweepAsync(string, CancellationToken)`](#tenantstosweepasyncstring-cancellationtoken) | The ids of the tenants a round of system work visits: the active and the suspended ones, in no order. |
@@ -105,27 +106,19 @@ The tenant the current work acts in, and the seat in it. It reads the current fl
 var current = access.CurrentTenant.Require();   // current.Id is the tenant, current.Seat the caller's seat
 ```
 
-#### `BeginSystem(string?)`
+#### `BeginSystem()`
 
 ```csharp
-public override IDisposable BeginSystem(string? scope = null)
+public IDisposable BeginSystem()
 ```
 
-Begins system work outside any tenant, always in a scope, Tenancy's own `tenancy` where none is given. It is for provisioning a tenant, when no tenant exists yet, so there is no tenant to begin in and no seat whose rights could do it. Of Tenancy's managers, only provisioning accepts it. The work reads nothing inside a tenant, and is recorded as the system in its scope. It ends when the result is disposed.
-
-**Parameters**
-
-- `scope`: The scope of the work: lower case letters, digits, `_` and `-`. `null` for Tenancy's own, the one provisioning writes Tenancy's tables in.
+Begins system work outside any tenant in Tenancy's own scope, `tenancy`. It is for provisioning a tenant, when no tenant exists yet, so there is no tenant to begin in and no seat whose rights could do it. Of Tenancy's managers, only provisioning accepts it. The work reads nothing inside a tenant, and is recorded as the system in Tenancy's scope. It ends when the result is disposed.
 
 **Returns**: The work, which ends when it is disposed. The user before it is current again then.
 
-**Exceptions**
-
-- `ArgumentException`: `scope` is not a scope. Nothing is begun then.
-
 **Remarks**
 
-It is the core's `AccessManager.BeginSystem` with Tenancy's user besides, system work outside every tenant. It does what [`TenancyWork.BeginSystem<TTenantId, TSeatId>`](#beginsystemstring-1) does. Without a scope the core begins system work that row level security lets past every policy. This one begins Tenancy's scope instead, so system work begun on it stays under the policies. On Postgres the work runs as the toolkit's scoped system work. Under Tenancy's policies, work in the scope `tenancy` reads and writes nothing until provisioning narrows it to the tenant it makes. A module's own work outside every tenant passes the module's name.
+It is [`BeginSystem`](#beginsystemstring) with Tenancy's scope. It does what [`TenancyWork.BeginSystem<TTenantId, TSeatId>`](#beginsystemstring-1) does without a scope. The row access rules hold the work. On Postgres it runs as the toolkit's scoped system work. Under Tenancy's policies, work in the scope `tenancy` reads and writes nothing until provisioning narrows it to the tenant it makes.
 
 **Example**
 
@@ -138,6 +131,38 @@ using (access.BeginSystem())
     var tenant = await tenants.ProvisionAsync(
         new TenantToProvision("harbor-works", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", ada),
         cancellationToken);
+}
+```
+
+#### `BeginSystem(string)`
+
+```csharp
+public override IDisposable BeginSystem(string scope)
+```
+
+Begins system work outside any tenant in `scope`, such as a module's import that makes no tenant's rows. The work reads nothing inside a tenant, and is recorded as the system in its scope. It ends when the result is disposed.
+
+**Parameters**
+
+- `scope`: The scope of the work, such as the module's name: lower case letters, digits, `_` and `-`.
+
+**Returns**: The work, which ends when it is disposed. The user before it is current again then.
+
+**Exceptions**
+
+- `ArgumentNullException`: `scope` is null. Nothing is begun then.
+- `ArgumentException`: `scope` is not a scope. Nothing is begun then.
+
+**Remarks**
+
+It is the core's `AccessManager.BeginSystem` with Tenancy's user besides, system work outside every tenant. It does what [`TenancyWork.BeginSystem<TTenantId, TSeatId>`](#beginsystemstring-1) does. The row access rules hold the work. On Postgres it runs as the toolkit's scoped system work. A module's own work outside every tenant passes the module's name. Provisioning takes Tenancy's own scope, [`BeginSystem`](#beginsystem).
+
+**Example**
+
+```csharp
+using (access.BeginSystem("imports"))
+{
+    await imports.ReadCatalogueAsync(cancellationToken);
 }
 ```
 
@@ -661,11 +686,11 @@ using (TenancyWork.BeginSystemIn(tenant, actingSeat))
 }
 ```
 
-Every method is generic over the application's tenant and seat ids. C# infers both where both are arguments, as above. Where one is not, as for [`BeginSystem<TTenantId, TSeatId>`](#beginsystemstring-1) or system work in a tenant for no seat, the ids are written: `TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant)`. An application calls the same methods closed over its ids on the access manager its code takes, `access.BeginSystem()` and `access.BeginSystemIn(tenant)` ([`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid)), and writes no id. Its `BeginSystem(scope)` overrides the core's, so system work a Tenancy application begins always says it is outside every tenant.
+Every method is generic over the application's tenant and seat ids. C# infers both where both are arguments, as above. Where one is not, as for [`BeginSystem<TTenantId, TSeatId>`](#beginsystemstring-1) or system work in a tenant for no seat, the ids are written: `TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant)`. An application calls the same methods closed over its ids on the access manager its code takes, `access.BeginSystem()` and `access.BeginSystemIn(tenant)` ([`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid)), and writes no id. Its `BeginSystem(scope)` overrides the core's, so system work begun with it always says it is outside every tenant. The core's `BeginSystemBypassingRowAccess()` begins no Tenancy user.
 
 Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system work here itself, in trusted code, whatever its request requires: `[AllowAnonymous]` for a registration form anyone may fill in, `[SignedIn]` for a signed-in user who registers an organization. A tool only the application runs is trusted code itself: it begins the work here and calls the manager, or sends its request inside it. The requirement decides who gets as far as the handler; what the work may then do is what is begun here, and nothing of the caller's. System work is no requirement a request declares: it is this scope, and once its result is disposed the user before it is current again.
 
-Each method begins two things, and ends both when its result is disposed. The Tenancy user says in which tenant the work acts. The toolkit's scoped system work, the core's `AccessManager.BeginSystem(scope)`, says what kind of work it is. Keeping them in one scope keeps them from drifting apart. Neither begins system work without a scope, which row level security lets past every policy, while system work in a tenant must stay inside that tenant. On Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to it. Tenancy's own policies come with `DDDToolkit.Supporting.Tenancy.Postgres`.
+Each method begins two things, and ends both when its result is disposed. The Tenancy user says in which tenant the work acts. The toolkit's scoped system work, the core's `AccessManager.BeginSystem(scope)`, says what kind of work it is. Keeping them in one scope keeps them from drifting apart. None of them begins the system work that no row access rule holds, the core's `BeginSystemBypassingRowAccess()`. System work in a tenant must stay inside that tenant. On Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to it. Tenancy's own policies come with `DDDToolkit.Supporting.Tenancy.Postgres`.
 
 They are not the only way. [`TenancyUsers.Begin`](#beginitenancyuser) with a user made by [`TenancyUser.System`](#tenancyuserttenantid-tseatid), `SystemIn` or `SystemBy` begins Tenancy's user alone, a handle for tests and for code that begins the toolkit's current user itself. It leaves the toolkit's current user, and so the role the database runs as, as it is.
 

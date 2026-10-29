@@ -624,7 +624,7 @@ public static class PostgresRowAccessChecks
     private static async Task<List<string[]>> AskAsync(DbContext context, string sql, CancellationToken cancellationToken)
     {
         using var suppressed = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
-        using var system = Access.BeginSystem();
+        using var system = Access.BeginSystemBypassingRowAccess();
 
         await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         try

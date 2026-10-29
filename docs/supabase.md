@@ -601,7 +601,7 @@ PostgREST does for each request:
 | A request with a valid Supabase access token | `authenticated`, with the token's claims as they were signed | the user's id |
 | A request without a valid token, or signed in another way | `anon`, with the claims `{"role":"anon"}` | `null` |
 | System work inside a scope, `access.BeginSystem("projects")` | `ddd_system_in`, with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
-| System work outside any request, such as a hosted service of yours | `ddd_system`, the toolkit's bookkeeping role. `system=<role>` in `SupabaseRowAccessRoles` names another role, and `system=none` names the role the application logged in as. Where the host requires an explicit current user, this work runs as nobody. The toolkit's pollers then begin system work for their bookkeeping only. | `null` |
+| System work outside any request, such as a hosted service of yours, or inside `access.BeginSystemBypassingRowAccess()` | `ddd_system`, the toolkit's bookkeeping role. `system=<role>` in `SupabaseRowAccessRoles` names another role, and `system=none` names the role the application logged in as. Where the host requires an explicit current user, this work runs as nobody. The toolkit's pollers then begin system work for their bookkeeping only. | `null` |
 | Code inside `using (access.BeginAs(userId))` | that user, whatever the request says | the user's |
 
 So `auth.uid()`, `auth.jwt()` and every policy on every table the context touches apply to the context's queries. A
@@ -1077,7 +1077,7 @@ The policies are written for one database role per kind of caller, and they use 
 | `user` | a signed-in user | `authenticated` |
 | `anonymous` | a caller without a token | `anon` |
 | `system-in` | system work under the policies, `access.BeginSystem(scope)` | `ddd_system_in` |
-| `system` | system work outside a request: the toolkit's bookkeeping | `ddd_system` |
+| `system` | system work outside a request: the toolkit's bookkeeping, `access.BeginSystemBypassingRowAccess()` | `ddd_system` |
 | `token:<role>` | a signed-in user whose token carries that role | none mapped |
 
 A project with other roles or current user functions sets them once, in the project file that turns the export on. The

@@ -5,7 +5,8 @@ namespace DDDToolkit.Access;
 
 /// <summary>
 /// The toolkit's <see cref="ICurrentUser"/>. It answers from the user begun for the current flow of work, then from the
-/// host's <see cref="ICurrentUserSource"/>, and otherwise with system work. With
+/// host's <see cref="ICurrentUserSource"/>, and otherwise with system work that no row access rule holds, the work
+/// <see cref="AccessManager.BeginSystemBypassingRowAccess"/> begins. With
 /// <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/> on, it throws <see cref="NoCurrentUserException"/>
 /// instead of answering system work.
 /// </summary>

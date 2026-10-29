@@ -488,7 +488,7 @@ public sealed class StartupCheckRunnerTests
     {
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            using var system = TestAccess.BeginSystem();
+            using var system = TestAccess.BeginSystemBypassingRowAccess();
             await check(services, cancellationToken);
         }
 

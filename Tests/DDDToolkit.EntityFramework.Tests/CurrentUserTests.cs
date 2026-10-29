@@ -114,7 +114,7 @@ public sealed class CurrentUserTests
 
         _strict.IsBegun.Should().BeFalse("asking whether anything was begun never throws");
         ask.Should().Throw<NoCurrentUserException>()
-            .WithMessage("*RequireExplicitCurrentUser*BeginSystem()*")
+            .WithMessage("*RequireExplicitCurrentUser*BeginSystem(scope)*BeginSystemBypassingRowAccess()*")
             .Which.Should().BeAssignableTo<InvalidOperationException>("code that caught what the toolkit threw before still catches it");
     }
 
@@ -127,10 +127,33 @@ public sealed class CurrentUserTests
             _strict.Snapshot.Should().BeSameAs(Alice);
         }
 
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             _strict.Snapshot.Should().BeSameAs(CurrentUserSnapshot.System, "the system's work is allowed, once somebody said so");
         }
+    }
+
+    [Fact]
+    public void BeginSystem_always_has_a_scope_and_the_bypass_has_a_name_of_its_own()
+    {
+        using (_access.BeginSystemBypassingRowAccess())
+        {
+            BegunUser.Should().BeSameAs(CurrentUserSnapshot.System, "it is the system work the host answers where nothing was begun");
+            _accessor.Kind.Should().Be(CurrentUserKind.System, "no row access rule holds it");
+            _accessor.SystemScope.Should().BeNull();
+
+            using (_access.BeginSystem("billing"))
+            {
+                _accessor.Kind.Should().Be(CurrentUserKind.SystemIn, "BeginSystem begins system work the row access rules hold");
+                _accessor.SystemScope.Should().Be("billing");
+            }
+
+            _accessor.Kind.Should().Be(CurrentUserKind.System, "once the scoped work ends, the work before it is current again");
+        }
+
+        BegunUser.Should().BeNull();
+        ((Func<IDisposable>)(() => _access.BeginSystem(null!))).Should().Throw<ArgumentNullException>("the scope is required").WithParameterName("scope");
+        BegunUser.Should().BeNull("a missing scope begins nothing");
     }
 
     [Fact]

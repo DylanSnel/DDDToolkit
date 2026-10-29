@@ -36,7 +36,7 @@ public sealed class HandlerUserTests(ExplicitCurrentUserPostgres postgres)
         row.Attempts.Should().Be(1);
         row.LastError.Should().Contain("The handlers of UserInboxContext begin no user")
             .And.Contain("callers.receipt-log did not run")
-            .And.Contain("module.Around(IntegrationEventScopes.System)");
+            .And.Contain("module.Around(IntegrationEventScopes.SystemBypassingRowAccess)");
         work.Seen.Callers.Should().BeEmpty();
         commands.Count.Should().Be(0, "the inbox was not asked anything");
         (await work.InboxAsync()).Should().BeEmpty();
@@ -47,7 +47,7 @@ public sealed class HandlerUserTests(ExplicitCurrentUserPostgres postgres)
     public async Task RunAsSystem_must_be_explicit()
     {
         // Said where the handlers are registered: the system, the login role, past row level security.
-        await using (var system = await DeliverOnceAsync(IntegrationEventScopes.System))
+        await using (var system = await DeliverOnceAsync(IntegrationEventScopes.SystemBypassingRowAccess))
         {
             system.Seen.Callers.Should().Equal([CurrentUserSnapshot.System]);
             (await system.InboxAsync()).Should().ContainSingle().Which.By.Should().Be("postgres");
@@ -136,7 +136,7 @@ public sealed class HandlerUserTests(ExplicitCurrentUserPostgres postgres)
             sendToModules: false,
             configure: options => options.DispatchInProcess(async (services, events, cancellationToken) =>
             {
-                using (TestAccess.BeginSystem())
+                using (TestAccess.BeginSystemBypassingRowAccess())
                 {
                     await Stage(services, "saved by the handler");
                     await services.GetRequiredService<UserOutboxContext>().SaveChangesAsync(cancellationToken);

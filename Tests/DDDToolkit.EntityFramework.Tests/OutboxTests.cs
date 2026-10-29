@@ -56,7 +56,7 @@ public sealed class OutboxTests(ExplicitCurrentUserPostgres postgres) : IDisposa
         var cancellation = TestContext.Current.CancellationToken;
         await using var work = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(cancellation),
-            module => module.Around(IntegrationEventScopes.System).Handle<ShelfOpenedV3, ReceiptWatch>(),
+            module => module.Around(IntegrationEventScopes.SystemBypassingRowAccess).Handle<ShelfOpenedV3, ReceiptWatch>(),
             services: services => services.AddOutboxBackgroundService<UserOutboxContext>(TimeSpan.FromMinutes(1)));
         await work.QueueAsync("Fiction");
         await work.QueueAsync("Poetry");

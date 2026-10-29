@@ -489,9 +489,11 @@ services.AddModuleIntegrationEvents<ShippingContext>(module => module
 - Every way a message reaches a module goes through the scopes: the module sink, and the receivers of pgmq, Wolverine
   and MassTransit.
 
-`IntegrationEventScopes.System` runs the handlers as system work without a scope, which RLS lets past every policy.
-Where the host [requires an explicit current user](row-level-security.md#requiring-an-explicit-current-user), this scope is the only way to
-run handlers as system work, so the choice is written where the handlers are registered. In such a host, a module
+`IntegrationEventScopes.SystemBypassingRowAccess` runs the handlers as system work that no row access rule holds, which
+RLS lets past every policy. It begins `access.BeginSystemBypassingRowAccess()`. Prefer the module's own scope, as above,
+which the module's policies hold. Where the host
+[requires an explicit current user](row-level-security.md#requiring-an-explicit-current-user), the handlers run as
+system work only where the module says so, so the choice is written where the handlers are registered. In such a host, a module
 without a scope does not run its handlers. The delivery fails with a `NoCurrentUserException` that names the module, before
 the module's inbox is read, and the outbox or the transport retries it.
 

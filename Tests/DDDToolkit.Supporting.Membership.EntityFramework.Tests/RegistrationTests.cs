@@ -341,7 +341,7 @@ public sealed class RegistrationTests
         await using var provider = services.BuildServiceProvider();
 
         var data = new DepotScenario(clock.Now);
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             await using var seeding = provider.CreateAsyncScope();
             var context = seeding.ServiceProvider.GetRequiredService<DepotContext>();

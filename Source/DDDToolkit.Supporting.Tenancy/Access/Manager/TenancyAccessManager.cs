@@ -33,11 +33,13 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// flow of work each time they are asked, so they follow every <c>Begin</c> made after the manager was handed out.
 /// </para>
 /// <para>
-/// <see cref="BeginSystem"/>, <see cref="BeginSystemIn"/> and <see cref="BeginTokenIn"/> each start work that is not the
-/// caller's own, for one <c>using</c>. Each begins the tenant the work acts in, or none, and the kind of work together:
-/// the kind decides how the work is recorded, and which database role it runs as. When the result is disposed, the user before it is current again.
+/// <c>BeginSystem()</c>, <c>BeginSystem(scope)</c>, <see cref="BeginSystemIn"/> and
+/// <see cref="BeginTokenIn"/> each start work that is not the caller's own, for one <c>using</c>. Each begins the tenant
+/// the work acts in, or none, and the kind of work together: the kind decides how the work is recorded, and which
+/// database role it runs as. The row access rules hold each of them. When the result is disposed, the user before it is current again.
 /// Begin as narrow as possible: around the one call that needs it. <see cref="AccessManager.BeginAs(Guid)"/>, with a
-/// user's id or a snapshot, and <see cref="AccessManager.BeginNone"/> are the core's, and leave the tenant as it is.
+/// user's id or a snapshot, <see cref="AccessManager.BeginSystemBypassingRowAccess"/> and
+/// <see cref="AccessManager.BeginNone"/> are the core's, and leave the tenant as it is.
 /// </para>
 /// <para>
 /// Tenancy's queries for the current caller come from the context you query: <c>db.Tenancy()</c>, which
@@ -95,25 +97,18 @@ public class TenancyAccessManager<
     public CurrentTenant<TTenantId, TSeatId> CurrentTenant { get; }
 
     /// <summary>
-    /// Begins system work outside any tenant, always in a scope, Tenancy's own <c>tenancy</c> where none is given. It
-    /// is for provisioning a tenant, when no tenant exists yet, so there is no tenant to begin in and no seat whose
-    /// rights could do it. Of Tenancy's managers, only provisioning accepts it. The work reads nothing inside a tenant,
-    /// and is recorded as the system in its scope. It ends when the result is disposed.
+    /// Begins system work outside any tenant in Tenancy's own scope, <c>tenancy</c>. It is for provisioning a tenant,
+    /// when no tenant exists yet, so there is no tenant to begin in and no seat whose rights could do it. Of Tenancy's
+    /// managers, only provisioning accepts it. The work reads nothing inside a tenant, and is recorded as the system in
+    /// Tenancy's scope. It ends when the result is disposed.
     /// </summary>
     /// <remarks>
-    /// It is the core's <see cref="AccessManager.BeginSystem"/> with Tenancy's user besides, system work outside every
-    /// tenant. It does what <see cref="TenancyWork.BeginSystem{TTenantId, TSeatId}"/> does. Without a scope the core
-    /// begins system work that row level security lets past every policy. This one begins Tenancy's scope instead, so
-    /// system work begun on it stays under the policies. On Postgres the work runs as the toolkit's scoped system work.
-    /// Under Tenancy's policies, work in the scope <c>tenancy</c> reads and writes nothing until provisioning narrows it
-    /// to the tenant it makes. A module's own work outside every tenant passes the module's name.
+    /// It is <see cref="BeginSystem(string)"/> with Tenancy's scope. It does what
+    /// <see cref="TenancyWork.BeginSystem{TTenantId, TSeatId}"/> does without a scope. The row access rules hold the
+    /// work. On Postgres it runs as the toolkit's scoped system work. Under Tenancy's policies, work in the scope
+    /// <c>tenancy</c> reads and writes nothing until provisioning narrows it to the tenant it makes.
     /// </remarks>
-    /// <param name="scope">
-    /// The scope of the work: lower case letters, digits, <c>_</c> and <c>-</c>. <see langword="null"/> for Tenancy's
-    /// own, the one provisioning writes Tenancy's tables in.
-    /// </param>
     /// <returns>The work, which ends when it is disposed. The user before it is current again then.</returns>
-    /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is begun then.</exception>
     /// <example>
     /// Read the signed-in user's id before the work begins. Inside it, <see cref="AccessManager.CurrentUser"/> reports
     /// system work and has no id.
@@ -127,8 +122,37 @@ public class TenancyAccessManager<
     /// }
     /// </code>
     /// </example>
-    public override IDisposable BeginSystem(string? scope = null)
-        => TenancyWork.BeginSystem<TTenantId, TSeatId>(scope ?? TenancyWork.SystemScope);
+    public IDisposable BeginSystem() => BeginSystem(TenancyWork.SystemScope);
+
+    /// <summary>
+    /// Begins system work outside any tenant in <paramref name="scope"/>, such as a module's import that makes no
+    /// tenant's rows. The work reads nothing inside a tenant, and is recorded as the system in its scope. It ends when
+    /// the result is disposed.
+    /// </summary>
+    /// <remarks>
+    /// It is the core's <see cref="AccessManager.BeginSystem(string)"/> with Tenancy's user besides, system work outside
+    /// every tenant. It does what <see cref="TenancyWork.BeginSystem{TTenantId, TSeatId}"/> does. The row access rules
+    /// hold the work. On Postgres it runs as the toolkit's scoped system work. A module's own work outside every tenant
+    /// passes the module's name. Provisioning takes Tenancy's own scope, <see cref="BeginSystem()"/>.
+    /// </remarks>
+    /// <param name="scope">The scope of the work, such as the module's name: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <returns>The work, which ends when it is disposed. The user before it is current again then.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="scope"/> is null. Nothing is begun then.</exception>
+    /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is begun then.</exception>
+    /// <example>
+    /// <code>
+    /// using (access.BeginSystem("imports"))
+    /// {
+    ///     await imports.ReadCatalogueAsync(cancellationToken);
+    /// }
+    /// </code>
+    /// </example>
+    public override IDisposable BeginSystem(string scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        return TenancyWork.BeginSystem<TTenantId, TSeatId>(scope);
+    }
 
     /// <summary>
     /// Begins system work inside one tenant: seeding, an import, a job per tenant, or a right your code grants after a

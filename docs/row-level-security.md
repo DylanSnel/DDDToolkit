@@ -73,22 +73,24 @@ Some contexts need a different call:
 | A signed-in user | `authenticated`, with the token's claims. When the token carries a role of its own, the role that its [token role](#token-roles) maps to. | the user's id |
 | A request without a user | `anon`, with the claims `{"role":"anon"}` | `null` |
 | System work inside a scope, `access.BeginSystem("projects")` | [`ddd_system_in`](#the-scoped-system-role), with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
-| No request, such as a hosted service of yours | `SystemRole`, or else the role the application logged in as. Where the host [requires an explicit current user](#requiring-an-explicit-current-user), there is no user and the work fails. The toolkit's pollers begin system work for their bookkeeping only. | `null` |
+| System work past the row access rules, `access.BeginSystemBypassingRowAccess()` | `SystemRole`, or else the role the application logged in as | `null` |
+| No request, such as a hosted service of yours | As `access.BeginSystemBypassingRowAccess()`. Where the host [requires an explicit current user](#requiring-an-explicit-current-user), there is no user and the work fails. The toolkit's pollers begin system work for their bookkeeping only. | `null` |
 | Code inside `using (access.BeginAs(userId))` | that user, whatever the request says | the user's id |
 
 The roles are PostgREST's by default. Change them with `AddPostgresRowLevelSecurity(options => ...)`.
 
 **The current user** is what `ICurrentUser` answers. Your code takes `ICurrentUser` from dependency injection and asks
-it. Code that begins work takes `AccessManager` instead. Its `BeginAs`, `BeginSystem` and `BeginNone` begin a user for
-the flow of work, and its `CurrentUser` is the `ICurrentUser`. Every registration of the toolkit that needs them adds
+it. Code that begins work takes `AccessManager` instead. Its `BeginAs`, `BeginSystem`, `BeginSystemBypassingRowAccess`
+and `BeginNone` begin a user for the flow of work, and its `CurrentUser` is the `ICurrentUser`. Every registration of the toolkit that needs them adds
 both, as singletons. The toolkit's implementation of `ICurrentUser`, `CurrentUser`, answers in this order:
 
-1. A user that code began for the flow of work, with `BeginAs` or `BeginSystem` on `AccessManager`. A begun user always
+1. A user that code began for the flow of work, with a `Begin` method of `AccessManager`. A begun user always
    wins. `DDDToolkit.Auth.Supabase.AzureFunctions` begins the user of each HTTP-triggered invocation this way.
 2. The host's `ICurrentUserSource`, which answers the request's user. `AddSupabaseJwtBearer` from
    `DDDToolkit.Auth.Supabase.AspNetCore` registers one that reads the user from the request. A host with another way
    to know its users registers its own with `AddPostgresRowLevelSecurity<TSource>()`.
-3. Otherwise, system work. A worker service or a test needs this.
+3. Otherwise, system work that no row access rule holds, as `access.BeginSystemBypassingRowAccess()` begins. A worker
+   service or a test needs this.
 
 What `ICurrentUser` answers at one moment is a `CurrentUserSnapshot`. A snapshot comes from the claims of a validated
 token, with `CurrentUserSnapshot.FromClaims(claims)`. You begin a user in code by id, with `access.BeginAs(id)`. For a
@@ -103,8 +105,8 @@ using (access.BeginAs(CurrentUserSnapshot.FromClaims(job.Claims)))
 ```
 
 A begun user flows across `await` and `Task.Run`, as an `AsyncLocal` does. A user begun in code wins over the
-request's user. This also works the other way. A step that a request takes on the application's behalf starts
-`access.BeginSystem()`.
+request's user. This also works the other way. A step that a request takes on the application's behalf starts system
+work in the module's scope, `access.BeginSystem("projects")`.
 
 **Background work** runs as `SystemRole`. When `SystemRole` is not set, background work runs as the role the
 application logged in as. That role is usually the owner, and the owner sees every row. To keep the application from
@@ -289,7 +291,8 @@ pooler that does not reset it, would decide who the statement runs as.
 
 ### Requiring an explicit current user
 
-Outside a request, where nothing began a user, the current user is system work. On most databases system work runs
+Outside a request, where nothing began a user, the current user is system work that no row access rule holds. It is
+the work `access.BeginSystemBypassingRowAccess()` begins. On most databases system work runs
 as the tables' owner, which passes every policy. A 3.x host gets this by default. So work that never begins a user
 runs as system work, and passes every policy. On Supabase system work runs as `ddd_system`, unless the project names
 another role. `ddd_system` reaches only the toolkit's bookkeeping tables, so on Supabase the database refuses such
@@ -307,13 +310,13 @@ With this line:
   Supabase source for ASP.NET Core knows no user outside a request, and `GetSupabaseUser()` in Azure Functions throws
   outside an HTTP trigger.
 - The interceptor refuses system work without a scope when your own `ICurrentUserSource` returns it. Such work runs
-  only inside `access.BeginSystem()`.
+  only inside `access.BeginSystemBypassingRowAccess()`.
 - A request still has its user: the signed-in user, or `anon`.
 
 The toolkit's own work begins its user. Reading, marking and deleting outbox rows, receiving from a transport,
 checking the migrations and preparing a sample's database are bookkeeping. They run as system work without a scope,
-`CurrentUserSnapshot.System`. The handlers that this work calls run with nobody begun, inside `BeginNone()`, until
-something begins a user for them.
+`CurrentUserSnapshot.System`, begun with `BeginSystemBypassingRowAccess()`. The handlers that this work calls run
+with nobody begun, inside `BeginNone()`, until something begins a user for them.
 
 | Work | Without `RequireExplicitCurrentUser` | With it |
 |---|---|---|
@@ -333,7 +336,7 @@ A domain event handler that the outbox dispatches in process saves its own work:
 - A transaction that you begin on the processor's context yourself is joined. Begin it as system work too.
 
 A module states what its handlers run as where it registers them, with a scope around each delivery. The scope is
-scoped system work that the module's policies hold, or, chosen on purpose, system work without a scope:
+scoped system work that the module's policies hold, or, chosen on purpose, system work past every row access rule:
 
 ```csharp
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
@@ -342,7 +345,7 @@ services.AddModuleIntegrationEvents<ShippingContext>(module => module
 
 // or, where the handlers may see every row:
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
-    .Around(IntegrationEventScopes.System)
+    .Around(IntegrationEventScopes.SystemBypassingRowAccess)
     .Handle<OrderPlacedV1, BookShipment>());
 ```
 

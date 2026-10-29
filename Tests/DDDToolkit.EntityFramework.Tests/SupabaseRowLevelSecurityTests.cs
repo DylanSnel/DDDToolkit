@@ -589,7 +589,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         (await read.Should().ThrowAsync<NoCurrentUserException>()).WithMessage($"{nameof(UserOfTheTest)} answered system work that nothing began*RequireExplicitCurrentUser*");
         context.Database.GetDbConnection().State.Should().Be(ConnectionState.Closed, "it failed before connecting");
 
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             (await ScalarAsync(context, "SELECT current_user")).Should().Be(LoginRole, "begun on purpose, the system runs as the login role");
         }

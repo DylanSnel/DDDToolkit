@@ -116,7 +116,7 @@ public class CurrentUserRequirementTests
 
         using (TestAccess.BeginAs(Signed))
         {
-            using (TestAccess.BeginSystem())
+            using (TestAccess.BeginSystemBypassingRowAccess())
             {
                 await Checks(scope).RequireAsync(anyone, TestContext.Current.CancellationToken);
                 (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(signedIn, TestContext.Current.CancellationToken).AsTask())
@@ -316,7 +316,7 @@ public class CurrentUserRequirementTests
         user.Snapshot.Should().Be(CurrentUserSnapshot.System, "that is the 3.x default, which this test is about");
         RefusedAsSystemOnly(() => user.RequireSystemWork(), "nothing began a user for the flow");
 
-        using (access.BeginSystem())
+        using (access.BeginSystemBypassingRowAccess())
         {
             user.RequireSystemWork().Should().BeSameAs(CurrentUserSnapshot.System);
 
@@ -335,7 +335,7 @@ public class CurrentUserRequirementTests
         RefusedAsSystemOnly(() => new CurrentUser(source: new Answering(CurrentUserSnapshot.System)).RequireSystemWork(), "the host's answer is a default, not work anybody began");
 
         // System work begun beside a host that answers somebody else is system work: a begun user wins over the host's answer.
-        using (access.BeginSystem())
+        using (access.BeginSystemBypassingRowAccess())
         {
             new CurrentUser(source: new Answering(Signed)).RequireSystemWork().Should().BeSameAs(CurrentUserSnapshot.System, "a begun user wins over the host's answer");
         }

@@ -140,7 +140,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
     public async Task Pgmq_consumes_with_explicit_callers_required()
     {
         var shelves = new ShelfCounter();
-        await using (var host = await HostAsync("strict_q", shelves, requireExplicitCurrentUser: true, around: IntegrationEventScopes.System))
+        await using (var host = await HostAsync("strict_q", shelves, requireExplicitCurrentUser: true, around: IntegrationEventScopes.SystemBypassingRowAccess))
         {
             await host.SendAsync(Message());
             (await host.Consumer.ConsumeOnceAsync(Cancellation)).Should().Be(1);
@@ -261,7 +261,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
 
         var provider = services.BuildServiceProvider();
         await using (var scope = provider.CreateAsyncScope())
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             await scope.ServiceProvider.GetRequiredService<PgmqContext>().Database.EnsureCreatedAsync(Cancellation);
         }

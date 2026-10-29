@@ -108,7 +108,7 @@ public static partial class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
 
         await using var scope = services.CreateAsyncScope();
-        using var system = new AccessManager(new CurrentUser()).BeginSystem();
+        using var system = new AccessManager(new CurrentUser()).BeginSystemBypassingRowAccess();
         var pending = new List<(string Context, IReadOnlyList<string> Migrations)>();
         var elsewhere = new List<string>();
         var sources = services.GetSupabaseMigrationSources();

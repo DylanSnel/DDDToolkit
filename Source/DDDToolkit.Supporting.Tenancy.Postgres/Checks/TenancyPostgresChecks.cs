@@ -889,7 +889,7 @@ public static class TenancyPostgresChecks
     private static async Task AsSystemAsync(IServiceProvider services, Func<DbConnection, TenancyTables, Task> check, CancellationToken cancellationToken)
     {
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using (new AccessManager(new CurrentUser()).BeginSystem())
+        using (new AccessManager(new CurrentUser()).BeginSystemBypassingRowAccess())
         {
             await using var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var (context, tenancy) = TenancyContextOf(scope.ServiceProvider);

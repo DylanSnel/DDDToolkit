@@ -21,8 +21,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <c>TenancyWork.BeginSystemIn&lt;TenantId, SeatId&gt;(tenant)</c>. An application calls the same methods closed over its
 /// ids on the access manager its code takes, <c>access.BeginSystem()</c> and <c>access.BeginSystemIn(tenant)</c>
 /// (<see cref="TenancyAccessManager{TTenantId, TSeatId, TUnitId, TRoleId}"/>), and writes no id. Its
-/// <c>BeginSystem(scope)</c> overrides the core's, so system work a Tenancy application begins always says it is outside
-/// every tenant.
+/// <c>BeginSystem(scope)</c> overrides the core's, so system work begun with it always says it is outside every tenant.
+/// The core's <c>BeginSystemBypassingRowAccess()</c> begins no Tenancy user.
 /// </para>
 /// <para>
 /// Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system
@@ -36,8 +36,9 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <para>
 /// Each method begins two things, and ends both when its result is disposed. The Tenancy user says in which
 /// tenant the work acts. The toolkit's scoped system work, the core's <c>AccessManager.BeginSystem(scope)</c>, says what
-/// kind of work it is. Keeping them in one scope keeps them from drifting apart. Neither begins system work without a scope,
-/// which row level security lets past every policy, while system work in a tenant must stay inside that tenant. On
+/// kind of work it is. Keeping them in one scope keeps them from drifting apart. None of them begins the system work that
+/// no row access rule holds, the core's <c>BeginSystemBypassingRowAccess()</c>. System work in a tenant must stay inside
+/// that tenant. On
 /// Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to
 /// it. Tenancy's own policies come with <c>DDDToolkit.Supporting.Tenancy.Postgres</c>.
 /// </para>

@@ -208,7 +208,7 @@ public sealed class MemberManagerTests
                 .Message.Should().Contain("NamesOwner");
         }
 
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             await manager.AddAsync(shed.Id, Reader, null, null, Cancellation);
         }

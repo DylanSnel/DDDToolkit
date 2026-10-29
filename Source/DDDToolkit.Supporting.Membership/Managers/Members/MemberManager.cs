@@ -492,7 +492,7 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
             AddPartsOf(resource, parts);
             if (_store.ChangedBesides(parts).Count == 0)
             {
-                using (_ownPlace?.Begin(me, scope) ?? _work.BeginSystem(scope))
+                using (_ownPlace?.Begin(me, scope) ?? (scope is null ? _work.BeginSystemBypassingRowAccess() : _work.BeginSystem(scope)))
                 {
                     await _store.SaveAsync(cancellationToken).ConfigureAwait(false);
                 }
@@ -506,7 +506,7 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
 
     /// <summary>
     /// The scope of the resource's own work: its module's, where its rules name it, or the first they name; or none, the
-    /// application's own work without a scope, for rules that name no scope.
+    /// application's own work that no row access rule holds, for rules that name no scope.
     /// </summary>
     private string? OwnScope()
         => TResource.MembershipScope is { } own && Rules.SystemScopes.Contains(own, StringComparer.Ordinal)

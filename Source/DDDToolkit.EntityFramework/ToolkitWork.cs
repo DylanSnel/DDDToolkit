@@ -6,8 +6,9 @@ namespace DDDToolkit.EntityFramework;
 /// <summary>
 /// Who the toolkit's own background work runs as. Without <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/>
 /// nothing is begun, so a host's work runs as it always did: where nothing was begun, the current user answers
-/// system work, and the handlers inherit whatever is current. With it, the toolkit's bookkeeping runs as system work
-/// and the handlers it calls run with nobody begun, until something begins a user for them.
+/// system work that no row access rule holds, and the handlers inherit whatever is current. With it, the toolkit's
+/// bookkeeping runs as that system work, begun with <see cref="AccessManager.BeginSystemBypassingRowAccess"/>. The
+/// handlers it calls run with nobody begun, until something begins a user for them.
 /// </summary>
 internal static class ToolkitWork
 {
@@ -24,7 +25,7 @@ internal static class ToolkitWork
     /// conversions, the upcasters and the transport sinks run inside it too, a host's own included: they are part of
     /// publishing a row, not handlers of it.
     /// </summary>
-    public static IDisposable? BeginBookkeeping(bool required) => required ? Access.BeginSystem() : null;
+    public static IDisposable? BeginBookkeeping(bool required) => required ? Access.BeginSystemBypassingRowAccess() : null;
 
     /// <summary>Nobody begun around a handler the toolkit calls, when the host requires a begun user; otherwise nothing.</summary>
     public static IDisposable? BeginHandler(bool required) => required ? Access.BeginNone() : null;

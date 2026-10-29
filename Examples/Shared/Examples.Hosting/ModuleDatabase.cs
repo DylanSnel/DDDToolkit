@@ -188,8 +188,8 @@ public abstract record ModuleDatabase
     /// <summary>
     /// Creates or migrates the module's database before anything else starts, the outbox poller and the
     /// seeding included: <c>StartingAsync</c> runs for every lifecycle service before any hosted
-    /// service's <c>StartAsync</c>. It is system work, so it says so, which a host that requires an explicit current
-    /// user needs.
+    /// service's <c>StartAsync</c>. It is system work past every row access rule, so it says so, which a host that
+    /// requires an explicit current user needs. A migration changes the tables themselves, which no module's scope holds.
     /// </summary>
     private sealed class PrepareDatabase<TContext>(IServiceScopeFactory scopes, bool migrate) : IHostedLifecycleService
         where TContext : DbContext
@@ -197,7 +197,7 @@ public abstract record ModuleDatabase
         public async Task StartingAsync(CancellationToken cancellationToken)
         {
             await using var scope = scopes.CreateAsyncScope();
-            using var system = scope.ServiceProvider.GetRequiredService<AccessManager>().BeginSystem();
+            using var system = scope.ServiceProvider.GetRequiredService<AccessManager>().BeginSystemBypassingRowAccess();
             var database = scope.ServiceProvider.GetRequiredService<TContext>().Database;
 
             if (migrate)

@@ -39,7 +39,8 @@ public sealed class CurrentUserSnapshot
 
     /// <summary>
     /// System work with no scope, such as the outbox. Row access rules apply to users, so this work is not subject to
-    /// them. On Postgres it runs as the host's system role.
+    /// them. On Postgres it runs as the host's system role. The access manager's <c>BeginSystemBypassingRowAccess()</c>, in
+    /// the <c>DDDToolkit</c> package, begins it.
     /// </summary>
     public static CurrentUserSnapshot System { get; } = new(CurrentUserKind.System, id: null, role: null, claims: null, claim: null);
 

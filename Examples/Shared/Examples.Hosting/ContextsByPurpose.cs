@@ -6,7 +6,8 @@ namespace Examples.Hosting;
 
 /// <summary>
 /// One factory over two context pools, one per data source of <see cref="PostgresPools"/>: a context rented while
-/// code began system work without a scope comes from the background pool, every other from the requests pool.
+/// code began system work past every row access rule (<c>BeginSystemBypassingRowAccess()</c>) comes from the
+/// background pool, every other from the requests pool.
 /// Who is calling is read at each rental, never kept.
 /// </summary>
 /// <typeparam name="TContext">The context both pools hold.</typeparam>

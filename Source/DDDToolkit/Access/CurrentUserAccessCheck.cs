@@ -33,7 +33,7 @@ namespace DDDToolkit.Access;
 /// </para>
 /// <para>
 /// System work is no case of it. Trusted code begins system work around the work, with
-/// <c>access.BeginSystem()</c> on <see cref="AccessManager"/>, or on a supporting domain's manager such as Tenancy's. A request that
+/// <c>access.BeginSystem(scope)</c> on <see cref="AccessManager"/>, or on a supporting domain's manager such as Tenancy's. A request that
 /// system work sends declares who may send it like any other request. A supporting domain's use case that only system
 /// work may call refuses everyone else with <see cref="ToolkitRefusals.SystemOnly"/>. System work has no sign-in and no
 /// own value, so this check refuses it as it refuses a caller who did not sign in.

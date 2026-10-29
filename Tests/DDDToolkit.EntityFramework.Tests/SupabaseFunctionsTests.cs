@@ -106,7 +106,7 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
         ((Func<CurrentUserSnapshot>)(() => queued.GetSupabaseUser())).Should().Throw<NoCurrentUserException>()
             .WithMessage("*not an HTTP request and began no user*RequireExplicitCurrentUser*");
 
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             queued.GetSupabaseUser().Should().BeSameAs(CurrentUserSnapshot.System, "a function that begins a caller runs as it");
         }

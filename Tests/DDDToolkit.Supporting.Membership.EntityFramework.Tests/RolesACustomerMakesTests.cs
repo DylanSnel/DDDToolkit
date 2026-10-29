@@ -390,7 +390,7 @@ public sealed class RolesACustomerMakesTests
 
         // What the admission asks about the roles is read on a context of the factory's, under the host's rule
         // all the same: the garden a request is in is not kept in a context.
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         using (GardenOfTheRequest.Begin(data.Meadow))
         {
             await using var scope = provider.CreateAsyncScope();
@@ -744,7 +744,7 @@ public sealed class RolesACustomerMakesTests
         services.AddMembership<PlotGardener, PlotGardenerId, UserId, PlotRoleId, GardensWithWardens, Plot, PlotId, Wardens>(rules);
         await using var provider = services.BuildServiceProvider();
 
-        using (TestAccess.BeginSystem())
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             await using var seeding = provider.CreateAsyncScope();
             var context = seeding.ServiceProvider.GetRequiredService<GardensWithWardens>();

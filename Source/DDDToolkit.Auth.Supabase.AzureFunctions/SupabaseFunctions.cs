@@ -67,7 +67,8 @@ public static class SupabaseFunctions
         return options is { RequireExplicitCurrentUser: true }
             ? throw new NoCurrentUserException(
                 "This invocation is not an HTTP request and began no user, and this host requires one (RequireExplicitCurrentUser). " +
-                "Begin a user in the function with AccessManager: BeginSystem() for system work, or BeginAs(userId) for the user a queued message names.")
+                "Begin a user in the function with AccessManager: BeginSystem(scope) for a module's system work, BeginSystemBypassingRowAccess() for system work past every row access rule, " +
+                "or BeginAs(userId) for the user a queued message names.")
             : CurrentUserSnapshot.System;
     }
 }

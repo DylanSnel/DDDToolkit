@@ -1100,14 +1100,15 @@ alternatives for each row:
 A requirement says who may send a request. It says nothing about the user the work then runs as. System work is not
 a requirement. It is a scope that trusted code starts explicitly around the work, with one of these calls:
 
-- `access.BeginSystem()` on the core's `AccessManager`, system work without a scope;
-- `access.BeginSystem(scope)`, system work in a module's scope;
+- `access.BeginSystem(scope)` on the core's `AccessManager`, system work in a module's scope, which the row access
+  rules hold;
+- `access.BeginSystemBypassingRowAccess()` on the core's `AccessManager`, system work that no row access rule holds;
 - a call of a supporting domain's access manager, which derives from `AccessManager`, such as `access.BeginSystem()`
   and `access.BeginSystemIn(tenant)` on Tenancy's `TenancyAccessManager`.
 
 When the result is disposed, the previous user is current again. `ICurrentUser` only answers who the work runs as. It
-begins nothing. Tenancy's `BeginSystem()` begins system work outside every tenant in Tenancy's scope, never system work
-without a scope.
+begins nothing. Tenancy's `BeginSystem()` begins system work outside every tenant in Tenancy's scope. No `BeginSystem`
+call begins system work past the row access rules. Only `BeginSystemBypassingRowAccess()` does.
 
 The pipeline begins one kind of system work itself: the operator work of a command marked `[Operator]`
 ([An operator's request](#an-operators-request)). The operator sends a request, and the access check lets only an
@@ -1186,7 +1187,7 @@ public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessMan
     }
 }
 
-// A module without Tenancy: an import a job sends inside access.BeginSystem()
+// A module without Tenancy: an import a job sends inside access.BeginSystem("billing")
 [AllowAnonymous]                                                              // system work is nobody's sign-in
 public sealed record ImportPrices(string File) : ICommand, IBillingRequest;
 

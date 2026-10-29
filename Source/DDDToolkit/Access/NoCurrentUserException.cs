@@ -9,7 +9,8 @@ public sealed class NoCurrentUserException : InvalidOperationException
     /// <summary>What went wrong, and the ways to put it right.</summary>
     public const string DefaultMessage =
         "Nothing said who this work runs as, and this host requires it (RequireExplicitCurrentUser). Begin the work with AccessManager: " +
-        "BeginSystem() for system work, BeginSystem(scope) for a module's scoped system work, or BeginAs(userId) for a user.";
+        "BeginSystem(scope) for a module's system work, which the row access rules hold, BeginSystemBypassingRowAccess() for system work past every rule, " +
+        "or BeginAs(userId) for a user.";
 
     /// <summary>An exception with <see cref="DefaultMessage"/>.</summary>
     public NoCurrentUserException()

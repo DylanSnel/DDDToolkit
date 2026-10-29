@@ -101,11 +101,12 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// system clock and the toolkit's <see cref="CurrentUser"/> are used.
     /// </para>
     /// <para>
-    /// The current user answers system work where nothing began a user, and the application
-    /// itself holds every permission on every resource. An application whose work always begins its user says so,
+    /// The current user answers system work that no row access rule holds where nothing began a user, the work
+    /// <see cref="AccessManager.BeginSystemBypassingRowAccess"/> begins. That work holds every permission on every
+    /// resource. An application whose work always begins its user says so,
     /// with <c>services.RequireExplicitCurrentUser()</c>, and a request that reaches the questions with no user
     /// then fails rather than passes as the application. Work in a scope
-    /// (<see cref="AccessManager.BeginSystem"/> with a scope) holds nothing on a resource unless the rules name that scope
+    /// (<see cref="AccessManager.BeginSystem"/>) holds nothing on a resource unless the rules name that scope
     /// (<see cref="MembershipRules.SystemScopes"/>).
     /// </para>
     /// <para>

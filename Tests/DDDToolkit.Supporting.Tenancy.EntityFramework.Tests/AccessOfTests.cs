@@ -5,7 +5,7 @@ using DDDToolkit.Access;
 
 /// <summary>
 /// The access manager these tests begin work with, outside any service provider: <c>TestAccess.BeginAs(id)</c>,
-/// <c>TestAccess.BeginSystem()</c>. What it begins follows the flow of work, so every <see cref="ICurrentUser"/> sees it.
+/// <c>TestAccess.BeginSystem(scope)</c>. What it begins follows the flow of work, so every <see cref="ICurrentUser"/> sees it.
 /// </summary>
 internal static class AccessOfTests
 {

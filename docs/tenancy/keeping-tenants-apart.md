@@ -145,14 +145,15 @@ closed over your ids ([Calls closed over your ids](your-module.md#calls-closed-o
 type. `AddTenancy` registers it per scope.
 
 `TenancyAccessManager` derives from the core's `AccessManager`, so a Tenancy application takes this one class.
-`CurrentUser`, `BeginAs` and `BeginNone` are the core's. They leave Tenancy's user as it is. `BeginSystem` overrides
-the core's. Without a scope, the core's begins system work that row level security lets past every policy. Tenancy's
-begins its own scope, `tenancy`, instead. The core's `AccessManager` resolves in a Tenancy application too, for code
+`CurrentUser`, `BeginAs`, `BeginSystemBypassingRowAccess` and `BeginNone` are the core's. They leave Tenancy's user as
+it is. `BeginSystem(scope)` overrides the core's, and begins system work outside every tenant in that scope.
+`BeginSystem()` without a scope begins Tenancy's own scope, `tenancy`. Only the core's `BeginSystemBypassingRowAccess()`
+begins system work that row level security lets past every policy. The core's `AccessManager` resolves in a Tenancy application too, for code
 such as a host's middleware, which has no scope to take `TenancyAccessManager` from.
 
 | Call | Tenancy's user | The toolkit's current user, begun by the core's `AccessManager` |
 |---|---|---|
-| `access.BeginSystem(scope)` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `BeginSystem(scope)`, `"tenancy"` by default |
+| `access.BeginSystem()`, `access.BeginSystem(scope)` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `BeginSystem(scope)`, `"tenancy"` by default |
 | `access.BeginSystemIn(tenant, actingSeat, scope)` | Works inside the tenant. It holds every permission there and none elsewhere. | `BeginSystem(scope)`, `"tenancy"` by default |
 | `access.BeginTokenIn(tenant, seat, scope)` | Works like `BeginSystemIn`. The work is recorded as a link's token and the seat the token stands for. | `BeginSystem(scope)`. The scope is required. |
 | `[Operator]` on a command | Your code calls nothing. The access check starts the work around the handler. It works like `BeginSystem`, or like `BeginSystemIn` in the tenant the command names. The work is recorded as the operator who sent the command ([Operators](operators-and-history.md#operators)). | `BeginSystem(scope)`, `"tenancy"` by default |
@@ -190,8 +191,8 @@ shows what the work holds, how Tenancy records it, and which database role it ru
 
 ### Scoped system work
 
-- No `Begin…` call of Tenancy's begins system work without a scope (the core's `BeginSystem()` without a scope). Row
-  level security lets that work past every policy. On Postgres scoped system work runs as a database role that cannot bypass the
+- No `Begin…` call of Tenancy's begins system work past the row access rules (the core's
+  `BeginSystemBypassingRowAccess()`). Row level security lets that work past every policy. On Postgres scoped system work runs as a database role that cannot bypass the
   policies, and the policies decide which rows it reaches
   ([The scoped system role](../row-level-security.md#the-scoped-system-role)).
 - The scope names whose work the system work is:
@@ -216,7 +217,8 @@ shows what the work holds, how Tenancy records it, and which database role it ru
   - Tenancy's system-only manager methods refuse every other caller with `access.system-only`. These are
     `TenantManager.ProvisionAsync`, `SuspendAsync`, `ReactivateAsync` and `CloseAsync`.
 - Code that runs without a started Tenancy user is nobody to Tenancy. This holds where the toolkit's current user is
-  system work without a scope, and in a host that does not
+  system work past the row access rules. That is work begun with the core's `BeginSystemBypassingRowAccess()`, and the
+  host's answer where nothing was begun in a host that does not
   [require an explicit current user](../row-level-security.md#requiring-an-explicit-current-user). Tenancy's managers refuse a
   caller that is nobody with `tenancy.not-seated`.
 

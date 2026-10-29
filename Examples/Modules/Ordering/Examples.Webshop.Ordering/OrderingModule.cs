@@ -34,7 +34,7 @@ public static class OrderingModule
 
         // Who is asking, for the customer an order is placed in the name of. A host that knows its users, the
         // Supabase monolith with signed-in customers, says so with its ICurrentUserSource; everywhere else nobody
-        // signs in, the current user is system work, and every order is a guest's.
+        // signs in, the current user is system work past every row access rule, and every order is a guest's.
         services.AddCurrentUser();
 
         // Who may send what, for the one request that asks: ShipElsewhere, about the customer's own order. The
