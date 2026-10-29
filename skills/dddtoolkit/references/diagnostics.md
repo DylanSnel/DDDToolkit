@@ -251,7 +251,7 @@ of a typed id and properties of a value object), constants, `user.Id`, `user.IsA
 functions, `[AccessFunctions]` questions and the `Ids` of a `[ResourceAccessContract]`, compared with `==`, `!=`, `<`, `<=`, `>`, `>=` and combined
 with `&&`, `||`, `!`. A set-shaped question is asked only with `.Contains(...)`. Replace method calls,
 locals and other objects: store the value as a property of the aggregate, or read it from a claim in
-`app_metadata`.
+`app_metadata`. `user.RequireId()` and `user.RequireSystemWork()` are calls too, so a rule compares `user.Id`.
 
 ## DDD00040
 

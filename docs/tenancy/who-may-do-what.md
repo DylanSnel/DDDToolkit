@@ -284,8 +284,9 @@ public sealed class RegisterOrganizationHandler(TenantManager tenants, TenancyAc
     public async ValueTask<Tenant> Handle(RegisterOrganization command, CancellationToken cancellationToken)
     {
         // Read the user before the system work begins. Inside the system work, the current user is system work.
-        if (access.CurrentUser.Id is not { } administrator
-            || string.Equals(access.CurrentUser.FindClaim("is_anonymous"), "true", StringComparison.OrdinalIgnoreCase))
+        // [SignedIn] guarantees the id. An anonymous sign-in has one too, so the handler refuses that claim itself.
+        var administrator = access.CurrentUser.RequireId();
+        if (string.Equals(access.CurrentUser.FindClaim("is_anonymous"), "true", StringComparison.OrdinalIgnoreCase))
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
         }

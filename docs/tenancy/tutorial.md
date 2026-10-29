@@ -841,7 +841,8 @@ administrators' starter role at the root.
   without a seat.
 - **The access manager**: `TenancyAccessManager`, which the generator wrote in step 2, says who acts and in which
   tenant. A handler takes it in its constructor, as `access`. `access.CurrentUser.Id` is the user id of the signed-in
-  caller, such as Ada's.
+  caller, such as Ada's. `[SignedIn]` guarantees that the caller has this id, and `access.CurrentUser.RequireId()`
+  returns it.
 - **System work**: a seat cannot create a tenant, because the tenant has no seats yet. Creating a tenant is **system
   work**. The handler starts system work with `using (access.BeginSystem())`. It lasts until the `using`
   ends. Inside it, the system is the caller, and `access.CurrentUser.Id` is `null`.
@@ -885,7 +886,7 @@ public sealed class ProvisionTenantHandler(TenantManager tenants, TenancyAccessM
     public async ValueTask<Tenant> Handle(ProvisionTenant command, CancellationToken cancellationToken)
     {
         // The caller becomes the administrator. Read the id before BeginSystem(): inside it, the system is the caller.
-        var admin = access.CurrentUser.Id ?? throw new InvalidOperationException("[SignedIn] lets only a signed-in user through.");
+        var admin = access.CurrentUser.RequireId();
 
         using (access.BeginSystem())
         {
@@ -997,9 +998,10 @@ app.Run();
 - `ICommand<T>` and `ICommandHandler<TCommand, T>`: Mediator's interfaces for a command that returns a `T`, and for
   its handler. A query uses `IQuery<T>` and `IQueryHandler<TQuery, T>` instead (step 7).
 - `TenantManager`: Tenancy's manager of tenants, generated for your classes in step 2.
-- `TenancyAccessManager`: who acts and in which tenant. `access.CurrentUser.Id` is the user id of the signed-in
-  caller. The handler reads it before `BeginSystem()`, because inside system work the caller is the system and the id
-  is `null`.
+- `TenancyAccessManager`: who acts and in which tenant.
+- `access.CurrentUser.RequireId()`: `[SignedIn]` guarantees that the caller has a user id, and `RequireId()` returns
+  it. The handler reads it before `BeginSystem()`, because inside system work the caller is the system, which has no
+  id.
 - `using Harbor.Tenancy.Domain;`: your classes, `Tenant` among them, are in the domain project's root namespace.
 - `access.BeginSystem()`: the code inside the `using` runs as system work. After the `using`, the caller is the same
   as before.

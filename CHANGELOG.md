@@ -613,6 +613,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `modelBuilder.Metadata.RequireContextPart(...)`, as a mapping does on `IMutableModel`.
 
   See [A marker mapped by a convention](docs/writing-a-supporting-domain.md#a-marker-mapped-by-a-convention).
+- **`ICurrentUser.RequireId()` returns the id of the signed-in user.** A handler behind `[SignedIn]` reads the id with
+  `var admin = access.CurrentUser.RequireId();` and writes no check of its own. For a caller who is no signed-in
+  user it throws the refusal `[SignedIn]` gives, `access.not-signed-in` (`ToolkitRefusals.NotSignedIn`), so a
+  handler that runs without the access check refuses that caller in the same way and does not fail with a server
+  error. In a host that requires an explicit current user, work that began no user fails with
+  `NoCurrentUserException`, as with the other members. `CurrentUser` implements it, so an implementation of
+  `ICurrentUser` of your own adds it. A row access rule cannot call it. The generator reports DDD00039 on the call,
+  as for `RequireSystemWork()`, and a rule compares `user.Id`.
+- **`IsAuthenticated` tells the compiler that `Id` has a value.** `IsAuthenticated` on `ICurrentUser` and on
+  `CurrentUserSnapshot` carries `[MemberNotNullWhen(true, nameof(Id))]`. Where both cases happen, such as behind
+  `[AllowAnonymous]`, code reads `user.Id.Value` after `if (user.IsAuthenticated)` without CS8629. The
+  `netstandard2.0` build of `DDDToolkit.Abstractions` declares the attribute internally. The docs, the Tenancy
+  tutorial, the samples and the skill read the id with `RequireId()` where they threw on a missing id behind
+  `[SignedIn]`. See [The id of the signed-in user](docs/access-requirements.md#the-id-of-the-signed-in-user).
 
 #### Entity Framework and row level security
 

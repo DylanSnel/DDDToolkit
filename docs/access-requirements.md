@@ -299,7 +299,8 @@ request of `[AllowAnonymous]`.
   a visitor who has not registered, also names a user. Its token has the `is_anonymous` claim. A handler that accepts
   only a registered user with a verified identity refuses that claim itself. The registration that
   [provisions a tenant](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) does this, and so does Tenancy's
-  acceptance of an invitation. System work is not a signed-in user, so `[SignedIn]` refuses it.
+  acceptance of an invitation. System work is not a signed-in user, so `[SignedIn]` refuses it. The handler reads the
+  caller's id with `user.RequireId()` ([The id of the signed-in user](#the-id-of-the-signed-in-user)).
 - **No requirement exists for system work.** System work is a scope that trusted code starts.
   [System work](#system-work) shows how to write a request that system work sends, and a handler that needs system
   work.
@@ -313,6 +314,31 @@ Each call is a static method on the class of the package that decides it, so req
 - Each package declares what its attributes stand for, with a core attribute on the attribute's class:
   `[StatesRequirement]` or `[PermissionMarker]`. The generator knows no attribute by name. A module declares an
   attribute for its own case the same way ([Writing your own supporting domain](writing-a-supporting-domain.md)).
+
+### The id of the signed-in user
+
+A handler behind `[SignedIn]` reads the caller's id with `user.RequireId()` on `ICurrentUser`. The access check has
+refused every caller without an id, so the handler writes no check of its own.
+
+- **`RequireId()` returns the id as a `Guid`.** For a caller who is no signed-in user, it throws
+  `access.not-signed-in`, the refusal of `[SignedIn]`. So a handler that runs without the access check, such as one a
+  test calls directly, refuses that caller in the same way. It does not fail with a server error.
+- **`IsAuthenticated` narrows `Id`.** Where both cases happen, such as behind `[AllowAnonymous]`, test
+  `user.IsAuthenticated`. After it is true, the compiler knows that `user.Id` has a value, so `user.Id.Value` gives
+  no warning CS8629. `CurrentUserSnapshot.IsAuthenticated` does the same for a snapshot.
+- **A row access rule compares `user.Id`.** `RequireId()` has no SQL, so a rule that calls it gets
+  [DDD00039](diagnostics.md#ddd00039).
+
+```csharp
+// Behind [SignedIn], the access check let only a signed-in user through.
+var customer = user.RequireId();
+
+// Behind [AllowAnonymous], a guest and a signed-in user both get here.
+if (user.IsAuthenticated)
+{
+    var id = user.Id.Value;          // no CS8629, because IsAuthenticated is true only when Id has a value
+}
+```
 
 ### Where the permission is held
 

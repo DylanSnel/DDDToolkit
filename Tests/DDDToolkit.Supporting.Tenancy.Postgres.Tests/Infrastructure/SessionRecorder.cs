@@ -115,5 +115,8 @@ public sealed class ObservedUsers : ICurrentUser
     public string? FindClaim(string path) => _inner.FindClaim(path);
 
     /// <inheritdoc />
+    public Guid RequireId() => _inner.RequireId();
+
+    /// <inheritdoc />
     public CurrentUserSnapshot RequireSystemWork() => _inner.RequireSystemWork();
 }

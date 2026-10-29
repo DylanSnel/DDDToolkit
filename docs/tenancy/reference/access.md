@@ -122,10 +122,10 @@ It is [`BeginSystem`](#beginsystemstring) with Tenancy's scope. It does what [`T
 
 **Example**
 
-Read the signed-in user's id before the work begins. Inside it, `AccessManager.CurrentUser` reports system work and has no id.
+Read the signed-in user's id before the work begins. Inside it, `AccessManager.CurrentUser` reports system work and has no id. Behind `[SignedIn]`, `RequireId()` returns the id.
 
 ```csharp
-var ada = access.CurrentUser.Id ?? throw new InvalidOperationException("[SignedIn] lets only a signed-in user through.");
+var ada = access.CurrentUser.RequireId();
 using (access.BeginSystem())
 {
     var tenant = await tenants.ProvisionAsync(

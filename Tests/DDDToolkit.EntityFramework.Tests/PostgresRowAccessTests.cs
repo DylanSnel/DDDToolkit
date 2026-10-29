@@ -326,7 +326,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
             await RunAsync(connection, PostgresRowAccess.Script(model, [rule]));
         }
 
-        var claims = caller.IsAuthenticated ? PostgresRowAccessDatabase.ClaimsOf(caller.Id!.Value, "north") : """{"role":"anon"}""";
+        var claims = caller.IsAuthenticated ? PostgresRowAccessDatabase.ClaimsOf(caller.Id.Value, "north") : """{"role":"anon"}""";
         await RunAsync(connection, $"SET LOCAL ROLE {(caller.IsAuthenticated ? "authenticated" : "anon")}; SELECT set_config('request.jwt.claims', '{claims}', true);");
 
         var titles = new List<string>();
@@ -352,7 +352,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
         await RunAsync(connection, $"CREATE FUNCTION desk.current_on_duty() RETURNS boolean LANGUAGE sql STABLE AS $function$ SELECT ddd.current_user_id() = '{PostgresRowAccessDatabase.Alice}'::uuid $function$;");
         await RunAsync(connection, script);
 
-        var claims = caller.IsAuthenticated ? PostgresRowAccessDatabase.ClaimsOf(caller.Id!.Value, "north") : """{"role":"anon"}""";
+        var claims = caller.IsAuthenticated ? PostgresRowAccessDatabase.ClaimsOf(caller.Id.Value, "north") : """{"role":"anon"}""";
         await RunAsync(connection, $"SET LOCAL ROLE {(caller.IsAuthenticated ? "authenticated" : "anon")}; SELECT set_config('request.jwt.claims', '{claims}', true);");
 
         await using var read = new NpgsqlCommand("""SELECT count(*) FROM desk."Tickets" """, connection);

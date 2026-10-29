@@ -984,8 +984,8 @@ its handler refuses everyone else ([System work](access-requirements.md#system-w
 
 ```csharp shortened
 // RegisterOrganization's handler, from Tenancy's page, shortened
-var user = access.CurrentUser.Snapshot;                           // read before the system work begins
-if (user.Id is not { } administrator || user.FindClaim("is_anonymous") == "true")
+var administrator = access.CurrentUser.RequireId();               // read before the system work begins
+if (access.CurrentUser.FindClaim("is_anonymous") == "true")
 {
     throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
 }

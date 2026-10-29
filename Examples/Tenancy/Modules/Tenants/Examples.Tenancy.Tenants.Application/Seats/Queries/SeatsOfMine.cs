@@ -37,13 +37,8 @@ public sealed class SeatsOfMineHandler(ICurrentUser user, ITenancyReads reads) :
     {
         // The one lookup by identity alone. The identity comes from the token, never from the request, and only
         // that verified identity is looked up: never an e-mail address. The request's requirement let only a
-        // signed-in user this far; the lookup asks again, as it needs the identity, and refuses as it did.
-        var current = user.Snapshot;
-        if (current is not { Kind: CurrentUserKind.User, Id: not null })
-        {
-            throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
-        }
-
-        return await reads.SeatsOfAsync(current, cancellationToken);
+        // signed-in user this far. RequireId() refuses anyone else with the requirement's own refusal.
+        user.RequireId();
+        return await reads.SeatsOfAsync(user.Snapshot, cancellationToken);
     }
 }

@@ -173,7 +173,7 @@ public sealed class DocumentHandlers(DocumentShareManager shares, ICurrentUser u
 {
     // The user who writes a document owns it: the manager adds the new document and saves it
     public Task<Document> WriteAsync(CancellationToken cancellationToken)
-        => shares.OpenAsync(new Document(DocumentId.Create(), new UserId(user.Id!.Value), clock.GetUtcNow()), cancellationToken);
+        => shares.OpenAsync(new Document(DocumentId.Create(), new UserId(user.RequireId()), clock.GetUtcNow()), cancellationToken);
 
     // Runs after the check let the request through: the manager loads the document at the version named,
     // checks the role, calls the hook, adds the share from now and saves

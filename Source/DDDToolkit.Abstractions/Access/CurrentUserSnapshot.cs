@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 #if NET
 using System.Text.Json;
 #endif
@@ -178,7 +179,11 @@ public sealed class CurrentUserSnapshot
     /// </summary>
     public Guid? Id { get; }
 
-    /// <summary>Whether a user signed in, which is <c>auth.uid() IS NOT NULL</c>. It is true when <see cref="Id"/> has a value.</summary>
+    /// <summary>
+    /// Whether a user signed in, which is <c>auth.uid() IS NOT NULL</c>. It is true when <see cref="Id"/> has a value.
+    /// After it answers true, the compiler treats <see cref="Id"/> as not null.
+    /// </summary>
+    [MemberNotNullWhen(true, nameof(Id))]
     public bool IsAuthenticated => Id.HasValue;
 
     /// <summary>

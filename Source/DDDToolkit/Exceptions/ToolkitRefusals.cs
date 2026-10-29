@@ -82,7 +82,8 @@ public static class ToolkitRefusals
     /// A request requires a signed-in user (<c>AccessRequirement.SignedIn()</c>), and the caller is not one: it
     /// did not sign in, or it is the application's own work, which is nobody's sign-in. It is
     /// <see cref="RefusalKind.NotPermitted"/>, and the same caller gets the same answer until it signs in. The
-    /// core's <c>CurrentUserAccessCheck</c> makes it, before the handler runs. No arguments.
+    /// core's <c>CurrentUserAccessCheck</c> makes it, before the handler runs. <see cref="Abstractions.Access.ICurrentUser.RequireId"/>
+    /// makes it too, in code that reads the id of a signed-in user. No arguments.
     /// </summary>
     public const string NotSignedIn = "access.not-signed-in";
 

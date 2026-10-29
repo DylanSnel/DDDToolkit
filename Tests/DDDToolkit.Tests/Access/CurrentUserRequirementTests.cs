@@ -12,7 +12,8 @@ namespace DDDToolkit.Tests.Access;
 /// them, so every module has them with no check of its own, and the same caller is let through or refused the same way
 /// in each. The application's own work is none of them: it is a scope trusted code begins around the work, a request
 /// it sends says who may send it like any other, and what only system work may do is refused past the door, with
-/// <see cref="ICurrentUser.RequireSystemWork"/>.
+/// <see cref="ICurrentUser.RequireSystemWork"/>. Past the door, <see cref="ICurrentUser.RequireId"/> answers the id of
+/// a signed-in user and refuses anyone else as <c>[SignedIn]</c> does.
 /// </summary>
 public class CurrentUserRequirementTests
 {
@@ -344,6 +345,56 @@ public class CurrentUserRequirementTests
         FluentActions.Invoking(() => new CurrentUser(new CurrentUserOptions { RequireExplicitCurrentUser = true }).RequireSystemWork())
             .Should().Throw<NoCurrentUserException>("such work is a mistake to fix, not a caller to refuse");
     }
+
+    // ------------------------------------------------------------------ past the door: the id of a signed-in user
+
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void Only_a_signed_in_user_has_an_id_to_require_and_anyone_else_is_refused_as_SignedIn_refuses(string kind, bool signedIn, bool system)
+    {
+        _ = system;
+        ICurrentUser user = new CurrentUser(source: new Answering(CallerOf(kind)));
+        var require = () => user.RequireId();
+
+        user.IsAuthenticated.Should().Be(signedIn);
+        if (user.IsAuthenticated)
+        {
+            // IsAuthenticated says that Id has a value, so reading it needs no '!'.
+            require().Should().Be(user.Id.Value, "it answers the id of the signed-in user");
+            return;
+        }
+
+        var refusal = require.Should().Throw<RefusalException>(kind).Which;
+        refusal.Code.Should().Be(ToolkitRefusals.NotSignedIn, "{0} is refused as [SignedIn] refuses it", kind);
+        refusal.Kind.Should().Be(RefusalKind.NotPermitted);
+        refusal.Message.Should().Be("Only a signed-in user can do this.");
+    }
+
+    [Fact]
+    public void A_flow_of_work_answers_the_id_of_the_user_begun_for_it()
+    {
+        // A host that requires nothing answers system work where nothing was begun, and system work is nobody's sign-in.
+        var user = new CurrentUser();
+        var access = new AccessManager(user);
+        RefusedAsNotSignedIn(() => user.RequireId(), "nothing began a user for the flow");
+
+        using (access.BeginAs(Signed))
+        {
+            user.RequireId().Should().Be(Signed.Id!.Value);
+
+            using (access.BeginSystem("billing"))
+            {
+                RefusedAsNotSignedIn(() => user.RequireId(), "system work in a scope is nobody's sign-in");
+            }
+        }
+
+        // A host that requires an explicit current user fails such work instead of refusing it.
+        FluentActions.Invoking(() => new CurrentUser(new CurrentUserOptions { RequireExplicitCurrentUser = true }).RequireId())
+            .Should().Throw<NoCurrentUserException>("such work is a mistake to fix, not a caller to refuse");
+    }
+
+    private static void RefusedAsNotSignedIn(Func<Guid> require, string because)
+        => require.Should().Throw<RefusalException>(because).Which.Code.Should().Be(ToolkitRefusals.NotSignedIn, because);
 
     private static void RefusedAsSystemOnly(Func<CurrentUserSnapshot> require, string because)
         => require.Should().Throw<RefusalException>(because).Which.Code.Should().Be(ToolkitRefusals.SystemOnly, because);
