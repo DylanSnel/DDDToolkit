@@ -5,6 +5,7 @@ using DDDToolkit.Messaging.Postgres;
 using DDDToolkit.Startup;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -67,6 +68,35 @@ public sealed class StartupCheckRegistrationTests : IDisposable
             .StartWith("The check that Supabase applied every migration asks each registered context for its history, and the application's services do not register '"
                        + typeof(SupabaseShelfContext).FullName + "'.")
             .And.Contain("with AddSupabaseMigrations<TContext, TFactory>() in place of AddSupabaseMigrations()");
+    }
+
+    [Fact]
+    public async Task The_migrations_check_says_how_to_register_a_context_the_application_does_not_use_yet_and_writes_out_the_calls_for_the_ones_it_does()
+    {
+        // A host that references a module whose registration comes later: the generated list has its context, and the
+        // application's services do not. The message names both ways out, and writes out the call for each context
+        // the application does register, with the factory the list builds it with.
+        await using var host = new ServiceCollection()
+            .AddDbContext<SupabaseShelfContext>(options => options.UseNpgsql("Host=nowhere.invalid;Database=unused"))
+            .AddSupabaseMigrations<SupabaseShelfContext, ShelfFactory>()
+            .AddSupabaseMigrations(SupabaseMigrationSource.For(() => SupabaseLedgerContext.Create()))
+            .BuildServiceProvider();
+
+        var check = () => host.EnsureSupabaseMigrationsAppliedAsync(Cancellation);
+
+        (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should()
+            .Contain("do not register '" + typeof(SupabaseLedgerContext).FullName + "'.")
+            .And.NotContain(typeof(SupabaseShelfContext).FullName!)
+            .And.Contain("Where the application uses the context, register it before the checks run, with AddDbContext<TContext>() or the registration of the module that keeps it.")
+            .And.Contain("Where it does not use the context, or not yet, register only the contexts it uses, one by one, with AddSupabaseMigrations<TContext, TFactory>() in place of AddSupabaseMigrations().")
+            .And.EndWith("For the contexts it registers now, the calls are:" + Environment.NewLine + "  services.AddSupabaseMigrations<SupabaseShelfContext, ShelfFactory>();");
+    }
+
+    /// <summary>The design-time factory a generated list builds the shelves' context with.</summary>
+    private sealed class ShelfFactory : IDesignTimeDbContextFactory<SupabaseShelfContext>
+    {
+        public SupabaseShelfContext CreateDbContext(string[] args)
+            => new(new DbContextOptionsBuilder<SupabaseShelfContext>().UseNpgsql("Host=nowhere.invalid").UseDDDToolkitDesignTime().Options);
     }
 
     [Fact]

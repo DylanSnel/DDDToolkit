@@ -105,6 +105,34 @@ public class CreateLedger : Migration
     }
 }
 
+/// <summary>
+/// A module's context without a migration yet, as a module is between writing its context and adding its first
+/// migration: tables in a schema of its own and an outbox, and nothing that makes them.
+/// </summary>
+public class SupabaseDraftContext(DbContextOptions<SupabaseDraftContext> options) : DbContext(options)
+{
+    public DbSet<SupabaseDraft> Drafts => Set<SupabaseDraft>();
+
+    public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("drafts");
+        modelBuilder.Entity<SupabaseDraft>().ToTable("Drafts");
+        modelBuilder.AddDomainEventOutbox(Database);
+    }
+
+    public static SupabaseDraftContext Create()
+        => new(new DbContextOptionsBuilder<SupabaseDraftContext>().UseNpgsql("Host=nowhere.invalid").Options);
+}
+
+public class SupabaseDraft
+{
+    public Guid Id { get; set; }
+
+    public string Title { get; set; } = "";
+}
+
 /// <summary>A context whose only migration has an id Supabase could not order.</summary>
 public class UntimedMigrationContext(DbContextOptions<UntimedMigrationContext> options) : DbContext(options)
 {

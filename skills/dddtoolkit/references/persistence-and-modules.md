@@ -39,7 +39,10 @@ without it). For a context whose migrations Supabase applies, write no factory: 
 context, and the build writes `OrderingContextDesignTimeFactory` beside it, which `dotnet ef` and the export use;
 the host registers every marked context for the start-up check with one `services.AddSupabaseMigrations()`, which
 the build writes into it, in the namespace named after the host's assembly (`using Shop.Host;` in a top-level
-`Program.cs`). A factory of the context's project's own wins, public where another project exports; so does one of
+`Program.cs`). That list follows the references, so the check refuses a marked context the host references and does
+not register: register it, or register the contexts the host uses one by one with
+`services.AddSupabaseMigrations<OrderingContext, OrderingContextDesignTimeFactory>()`. A marked context gets no
+access file until it has a migration; the build after its first one writes it. A factory of the context's project's own wins, public where another project exports; so does one of
 the host's own in the host, as `dotnet ef` with the host as its startup project takes it first. Write one for a
 context that needs more at design time than Npgsql and the toolkit (`MapEnum`, its own history table).
 

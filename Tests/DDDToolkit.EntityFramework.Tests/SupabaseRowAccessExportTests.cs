@@ -166,6 +166,50 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
     }
 
     [Fact]
+    public void The_first_file_sorts_after_the_newest_migration_of_its_module_whatever_the_clock_says()
+    {
+        Export(now: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero), ShelvesByName);
+
+        AccessFiles().Should().Equal(["20260915093001_access.supabaseshelf.ddd.sql"], "its policies are on the tables the migrations make, so it comes after them");
+    }
+
+    [Fact]
+    public void A_context_without_a_migration_gets_no_access_file_whatever_its_rules_and_contributions_say()
+    {
+        // Rules, a contribution and an outbox each have something to write, and no table of the module exists yet.
+        // A file now would make policies on tables nobody made, and sort before the module's first migration.
+        var options = Options(null, [RowAccessRule.For<SupabaseDraft>("Drafts by title", RowOperations.Read, "({col:Title} IS NOT DISTINCT FROM {user:claim:draft})")]);
+        options.RowAccessContributions.Add(Drafting());
+
+        using var context = SupabaseDraftContext.Create();
+        var report = SupabaseMigrations.Export(context, _directory, options);
+
+        report.Entries.Should().BeEmpty();
+        report.IsInSync.Should().BeTrue();
+        Directory.Exists(_directory).Should().BeFalse("nothing was written");
+        SupabaseMigrations.Compare(context, _directory, options).IsInSync.Should().BeTrue("a check in CI asks for no file either");
+    }
+
+    [Fact]
+    public void Exported_with_a_module_that_has_migrations_a_context_without_one_gets_no_access_file()
+    {
+        // The build exports every module the host references together: one with migrations gets its file, one whose
+        // context is written and whose first migration is not gets none, and the export is in sync.
+        var options = Options(null, [ShelvesByName, RowAccessRule.For<SupabaseDraft>("Drafts by title", RowOperations.Read, "({col:Title} IS NOT DISTINCT FROM {user:claim:draft})")]);
+        options.RowAccessContributions.Add(Drafting());
+
+        var reports = SupabaseMigrations.Export(
+            [SupabaseMigrationSource.For(() => SupabaseShelfContext.Create(), "shelves"), SupabaseMigrationSource.For(() => SupabaseDraftContext.Create(), "drafts")],
+            _directory,
+            options);
+
+        reports.Should().OnlyContain(report => report.IsInSync);
+        reports[1].Entries.Should().BeEmpty();
+        AccessFiles().Should().Equal("20260925160000_access.shelves.ddd.sql");
+        File.ReadAllText(Path.Combine(_directory, AccessFiles()[0])).Should().NotContain("\"drafts\"", "the file of one module says nothing of another's tables");
+    }
+
+    [Fact]
     public void A_rule_that_is_one_column_still_gets_the_parentheses_postgres_wants()
     {
         using var context = DeskContext.Create();
@@ -670,6 +714,14 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
             [new ContributedFunction("any_shelf", "", "boolean", $"SELECT EXISTS (SELECT 1 FROM {RowAccessModel.Table(SpotContribution.Of<SupabaseShelf>(context))})", SecurityDefiner: true, GrantTo: [RowAccessRoles.User])],
             [new ContributedPolicy(SpotContribution.Of<SupabaseShelf>(context), "Shelves are read by the signed in", "SELECT", RowAccessRoles.User, "{user:signedin}", null)],
             [])
+        : null);
+
+    /// <summary>
+    /// A contribution for the drafts, as a package's is for every table it keeps to a tenant: a restrictive policy on
+    /// the drafts' table.
+    /// </summary>
+    private static SpotContribution Drafting() => new("drafting", context => context is SupabaseDraftContext
+        ? new([], [new ContributedPolicy(SpotContribution.Of<SupabaseDraft>(context), "Drafts are closed to anonymous callers", "ALL", RowAccessRoles.Anonymous, "false", "false", Restrictive: true)], [])
         : null);
 
     [Fact]

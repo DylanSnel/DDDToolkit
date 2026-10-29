@@ -528,12 +528,18 @@ public static partial class SupabaseMigrations
     /// about it all the same: the guard of an event log, or, where the files write privileges, those of its
     /// outbox, inbox or event log, and the bookkeeping role's right to read its migration history, which the system
     /// caller reads as that role, <c>ddd_system</c> unless the project says otherwise.
+    /// <para>
+    /// Nothing either for a context without a migration, whatever its rules and contributions say. No migration
+    /// has made its tables yet, so the file's policies would name tables that do not exist. A file written now
+    /// would also sort before the module's first migration, which is added later and so has a later version. The
+    /// export after that migration writes the module's first file, after it.
+    /// </para>
     /// </summary>
     /// <param name="context">The context whose rules, access functions and contributions the file says; the access files whose first line names its type are its own.</param>
     /// <param name="module">The module the file is named after, <c>&lt;version&gt;_access.&lt;module&gt;.ddd.sql</c>.</param>
     /// <param name="directory">The Supabase migrations directory.</param>
     /// <param name="existing">The files in the directory, by version; a file written here is added to it.</param>
-    /// <param name="migrations">The context's migrations, written or not; an access file older than the newest of them is written again.</param>
+    /// <param name="migrations">The context's migrations, written or not; an access file older than the newest of them is written again, and none is written while there are none.</param>
     /// <param name="options">The rules, access functions and contributions to choose from, and how the file is written.</param>
     /// <param name="names">Where the access functions of every module live, by logical name.</param>
     /// <param name="script">The module's script, written with every other module's; null to write it knowing this module alone.</param>
@@ -551,6 +557,13 @@ public static partial class SupabaseMigrations
         bool write,
         List<RenamedResource> renamed)
     {
+        // A context without a migration has made no table: a file now would make policies on tables nobody made,
+        // and would sort before the migration that makes them.
+        if (migrations.Count == 0)
+        {
+            return null;
+        }
+
         var owner = context.GetType().Name;
         var rules = PostgresRowAccess.RulesOf(context, options.RowAccessRules);
         var functions = PostgresRowAccess.FunctionsOf(context, options.RowAccessFunctions);
@@ -589,7 +602,7 @@ public static partial class SupabaseMigrations
             renamed.AddRange(RenamedSince(before, sql));
         }
 
-        var newestMigration = migrations.Count == 0 ? "" : migrations.Max(file => file.Version)!;
+        var newestMigration = migrations.Max(file => file.Version)!;
         if (files.LastOrDefault() is { } latest
             && string.CompareOrdinal(VersionOf(latest), newestMigration) > 0
             && string.Equals(Normalize(File.ReadAllText(latest)), sql, StringComparison.Ordinal))

@@ -28,9 +28,10 @@ public sealed class SupabaseMigrationSource
     private readonly Func<DbContext> _createDesignTime;
     private readonly Func<IServiceProvider, DbContext?> _resolve;
 
-    private SupabaseMigrationSource(Type contextType, string? module, Func<DbContext> createDesignTime, Func<IServiceProvider, DbContext?> resolve)
+    private SupabaseMigrationSource(Type contextType, Type? factoryType, string? module, Func<DbContext> createDesignTime, Func<IServiceProvider, DbContext?> resolve)
     {
         ContextType = contextType;
+        FactoryType = factoryType;
         Module = module is null ? SupabaseMigrations.ModuleNameOf(contextType) : SupabaseMigrations.NormalizeModuleName(module);
         _createDesignTime = createDesignTime;
         _resolve = resolve;
@@ -38,6 +39,12 @@ public sealed class SupabaseMigrationSource
 
     /// <summary>The context whose migrations this is.</summary>
     public Type ContextType { get; }
+
+    /// <summary>
+    /// The design-time factory the context is built with for the export, or <see langword="null"/> for a source built
+    /// from a function. The start-up check names it where it shows how to register a context one by one.
+    /// </summary>
+    internal Type? FactoryType { get; }
 
     /// <summary>
     /// The module the files are named after, as in <c>20260922120000_AddOrders.ordering.ddd.sql</c>. The
@@ -56,7 +63,7 @@ public sealed class SupabaseMigrationSource
     public static SupabaseMigrationSource For<TContext, TFactory>(string? module = null)
         where TContext : DbContext
         where TFactory : IDesignTimeDbContextFactory<TContext>, new()
-        => new(typeof(TContext), module, static () => new TFactory().CreateDbContext([]), static services => services.GetService<TContext>());
+        => new(typeof(TContext), typeof(TFactory), module, static () => new TFactory().CreateDbContext([]), static services => services.GetService<TContext>());
 
     /// <summary>
     /// The context <typeparamref name="TContext"/>, built for the export by
@@ -68,7 +75,7 @@ public sealed class SupabaseMigrationSource
     public static SupabaseMigrationSource For<TContext>(Func<TContext> createDesignTime, string? module = null) where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(createDesignTime);
-        return new(typeof(TContext), module, createDesignTime, static services => services.GetService<TContext>());
+        return new(typeof(TContext), null, module, createDesignTime, static services => services.GetService<TContext>());
     }
 
     /// <summary>A new context for the export. The caller disposes it; it is never opened.</summary>
