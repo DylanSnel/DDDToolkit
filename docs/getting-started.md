@@ -28,8 +28,8 @@ dotnet add package Temp.DDDToolkit --prerelease
 Version 3.x is published under `Temp.` package ids for now. The package `DDDToolkit` on nuget.org is still 2.0.22,
 and these pages do not describe it. The namespaces are `DDDToolkit` in both. See [Packages](../README.md#packages).
 
-These pages describe 3.2.0, which is in preview. The current preview is 3.2.0-preview.5. Until 3.2.0 is released,
-add every `Temp.DDDToolkit.*` package with `--prerelease` or with `--version 3.2.0-preview.5`. Keep all the packages
+These pages describe 3.2.0, which is in preview. The current preview is 3.2.0-preview.6. Until 3.2.0 is released,
+add every `Temp.DDDToolkit.*` package with `--prerelease` or with `--version 3.2.0-preview.6`. Keep all the packages
 at the same version. A package of this release next to a 3.1.0 package fails in one of two ways:
 
 - Restore fails with NU1605, a package downgrade.
