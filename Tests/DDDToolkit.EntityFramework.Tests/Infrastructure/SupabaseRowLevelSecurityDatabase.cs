@@ -219,6 +219,9 @@ public sealed class UserOfTheTest : ICurrentUserSource, ICurrentUser
     public string? FindClaim(string path) => _user.FindClaim(path);
 
     /// <inheritdoc />
+    public Guid RequireId() => _user.RequireId();
+
+    /// <inheritdoc />
     public CurrentUserSnapshot RequireSystemWork() => _user.RequireSystemWork();
 }
 

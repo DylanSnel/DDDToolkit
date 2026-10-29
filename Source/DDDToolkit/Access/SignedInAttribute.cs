@@ -8,7 +8,8 @@ namespace DDDToolkit.Access;
 /// public sealed record MyInvoices : IBillingRequest;
 /// </code>
 /// Anyone else is refused with <see cref="Exceptions.ToolkitRefusals.NotSignedIn"/>: a caller who did not sign in,
-/// and the application's own work, which is nobody's sign-in.
+/// and the application's own work, which is nobody's sign-in. The handler reads the caller's id with
+/// <see cref="Abstractions.Access.ICurrentUser.RequireId"/>, which refuses anyone else with the same code.
 /// </summary>
 /// <remarks>
 /// The toolkit's generator turns it into <c>AccessRequirement.SignedIn()</c> at compile time, in the module's

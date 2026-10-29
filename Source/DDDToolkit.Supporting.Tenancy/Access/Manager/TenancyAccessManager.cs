@@ -111,9 +111,9 @@ public class TenancyAccessManager<
     /// <returns>The work, which ends when it is disposed. The user before it is current again then.</returns>
     /// <example>
     /// Read the signed-in user's id before the work begins. Inside it, <see cref="AccessManager.CurrentUser"/> reports
-    /// system work and has no id.
+    /// system work and has no id. Behind <c>[SignedIn]</c>, <c>RequireId()</c> returns the id.
     /// <code>
-    /// var ada = access.CurrentUser.Id ?? throw new InvalidOperationException("[SignedIn] lets only a signed-in user through.");
+    /// var ada = access.CurrentUser.RequireId();
     /// using (access.BeginSystem())
     /// {
     ///     var tenant = await tenants.ProvisionAsync(

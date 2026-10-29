@@ -60,6 +60,22 @@ public sealed class SupabaseMigrationBuildTests : IDisposable
     }
 
     [Fact]
+    public void A_module_without_a_migration_yet_gets_no_file_and_fails_neither_write_nor_check()
+    {
+        // A host that references a module whose context is written and whose first migration is not: the build writes
+        // the files of the module with migrations, and none of the other's, its access file included.
+        Directory.CreateDirectory(Path.Combine(_project, "src", "Host"));
+        var drafts = SupabaseMigrationSource.For(() => SupabaseDraftContext.Create(), "drafts");
+
+        var (exitCode, output) = Run("Write", Shelves, drafts);
+
+        exitCode.Should().Be(0);
+        output.Should().NotContain(".drafts.ddd.sql");
+        Directory.GetFiles(Migrations).Select(Path.GetFileName).Should().HaveCount(3).And.NotContain(name => name!.Contains("drafts", StringComparison.Ordinal));
+        Run("Check", Shelves, drafts).ExitCode.Should().Be(0, "nothing of the module is missing until it has a migration");
+    }
+
+    [Fact]
     public void Check_succeeds_once_the_files_are_there()
     {
         Directory.CreateDirectory(Path.Combine(_project, "src", "Host"));

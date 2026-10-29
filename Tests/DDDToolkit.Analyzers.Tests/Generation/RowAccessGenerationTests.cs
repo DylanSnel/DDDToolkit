@@ -572,6 +572,8 @@ public class RowAccessGenerationTests
     [InlineData("order.Team!.StartsWith(\"n\")", "order.Team!.StartsWith(\"n\")")]
     [InlineData("DateTime.UtcNow.Year > 2000", "DateTime.UtcNow.Year")]
     [InlineData("user.FindClaim(\"app_metadata.role\").Length > 0", "user.FindClaim(\"app_metadata.role\").Length")]
+    [InlineData("order.PlacedBy?.Value == user.RequireId()", "user.RequireId()")]
+    [InlineData("user.RequireSystemWork().IsSystem", "user.RequireSystemWork()")]
     public void What_the_database_cannot_check_is_an_error_on_that_expression_and_nothing_is_generated(string expression, string reported)
     {
         var result = Rule($"public static bool Allows(Order order, ICurrentUser user) => {expression};");

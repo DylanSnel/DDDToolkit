@@ -72,7 +72,8 @@ public abstract partial record AccessRequirement
     /// anything yet: accepting an invitation, listing the caller's own seats, registering a first tenant. Anyone
     /// else is refused with <see cref="Exceptions.ToolkitRefusals.NotSignedIn"/>: a caller who did not sign in,
     /// and the application's own work, which is nobody's sign-in. A request says it with
-    /// <see cref="SignedInAttribute"/> as well.
+    /// <see cref="SignedInAttribute"/> as well. The handler reads the caller's id with
+    /// <see cref="Abstractions.Access.ICurrentUser.RequireId"/>.
     /// </summary>
     /// <remarks>
     /// Signed in means that the caller's token names a user. An identity provider that signs a visitor in

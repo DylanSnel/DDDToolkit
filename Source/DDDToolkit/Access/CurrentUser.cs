@@ -54,6 +54,12 @@ public sealed class CurrentUser(CurrentUserOptions? options = null, ICurrentUser
     public string? FindClaim(string path) => Snapshot.FindClaim(path);
 
     /// <inheritdoc />
+    /// <exception cref="RefusalException"><see cref="ToolkitRefusals.NotSignedIn"/> for anyone but a signed-in user, as <see cref="CurrentUserAccessCheck"/> refuses them for <c>[SignedIn]</c>.</exception>
+    /// <exception cref="NoCurrentUserException">Nothing began a user for the work, and the host requires every flow of work to begin one.</exception>
+    public Guid RequireId()
+        => Snapshot.Id ?? throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
+
+    /// <inheritdoc />
     /// <exception cref="RefusalException"><see cref="ToolkitRefusals.SystemOnly"/> for anyone but begun system work.</exception>
     /// <exception cref="NoCurrentUserException">Nothing began a user for the work, and the host requires every flow of work to begin one.</exception>
     public CurrentUserSnapshot RequireSystemWork()

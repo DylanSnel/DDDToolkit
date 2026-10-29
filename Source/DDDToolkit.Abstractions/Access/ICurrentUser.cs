@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace DDDToolkit.Abstractions.Access;
 
 /// <summary>
@@ -9,7 +11,7 @@ namespace DDDToolkit.Abstractions.Access;
 /// {
 ///     public async ValueTask&lt;Unit&gt; Handle(PlaceOrder command, CancellationToken cancellationToken)
 ///     {
-///         var customer = user.Id ?? throw new InvalidOperationException("[SignedIn] lets only a signed-in user through.");
+///         var customer = user.RequireId();   // PlaceOrder requires [SignedIn], so a signed-in user sent it
 ///         // ...
 ///     }
 /// }
@@ -46,7 +48,8 @@ namespace DDDToolkit.Abstractions.Access;
 /// <para>
 /// <b>Row access rules.</b> A rule takes it as its second parameter, <c>Allows(Order order, ICurrentUser user)</c>. The
 /// generator translates <see cref="Id"/>, <see cref="IsAuthenticated"/>, <see cref="Role"/> and
-/// <see cref="FindClaim"/> into SQL, so a rule answers the same in C# as in the database.
+/// <see cref="FindClaim"/> into SQL, so a rule answers the same in C# as in the database. A rule that uses another
+/// member, such as <see cref="RequireId"/> or <see cref="RequireSystemWork"/>, gets DDD00039.
 /// </para>
 /// <para>
 /// The toolkit's implementation is <c>CurrentUser</c> in the <c>DDDToolkit</c> package, which every registration of the
@@ -74,10 +77,21 @@ public interface ICurrentUser
     /// <summary>
     /// Whether a user signed in. It is true when <see cref="Id"/> has a value. In a row access rule it is
     /// <c>auth.uid() IS NOT NULL</c>.
+    /// <para>
+    /// After it answers true, the compiler treats <see cref="Id"/> as not null, so <c>user.Id.Value</c> gives no
+    /// warning. A handler behind <c>[SignedIn]</c> reads the id with <see cref="RequireId"/> instead.
+    /// </para>
+    /// <code>
+    /// if (user.IsAuthenticated)              // a request that anyone may send
+    /// {
+    ///     var customer = user.Id.Value;
+    /// }
+    /// </code>
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <c>NoCurrentUserException</c>: nothing began a user for the work, and the host requires every flow of work to begin one.
     /// </exception>
+    [MemberNotNullWhen(true, nameof(Id))]
     bool IsAuthenticated { get; }
 
     /// <summary>
@@ -130,6 +144,32 @@ public interface ICurrentUser
     /// <c>NoCurrentUserException</c>: nothing began a user for the work, and the host requires every flow of work to begin one.
     /// </exception>
     string? FindClaim(string path);
+
+    /// <summary>
+    /// The signed-in user's id, for code that only a signed-in user may run. A handler behind <c>[SignedIn]</c> reads
+    /// the id with it and checks nothing itself.
+    /// <code>
+    /// public async Task HandleAsync(PlaceOrder command, CancellationToken cancellationToken)
+    /// {
+    ///     var customer = user.RequireId();   // access.not-signed-in for anyone else
+    ///     // ... the order
+    /// }
+    /// </code>
+    /// Anyone else is refused with <c>access.not-signed-in</c>, as <c>[SignedIn]</c> refuses them. So a handler that
+    /// runs without the access check refuses such a caller in the same way. Where both cases happen, such as behind
+    /// <c>[AllowAnonymous]</c>, code tests <see cref="IsAuthenticated"/> and then reads <see cref="Id"/>.
+    /// A row access rule cannot call it. The generator reports DDD00039 on the call, and a rule compares
+    /// <see cref="Id"/> instead.
+    /// </summary>
+    /// <returns>The value of <see cref="Id"/>.</returns>
+    /// <exception cref="Exception">
+    /// <c>RefusalException</c> with <c>access.not-signed-in</c> for somebody who has not signed in, for system work, and
+    /// for a token whose <c>sub</c> is no <see cref="Guid"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// <c>NoCurrentUserException</c>: nothing began a user for the work, and the host requires every flow of work to begin one.
+    /// </exception>
+    Guid RequireId();
 
     /// <summary>
     /// Refuses everyone but system work that code began for this flow with the access manager's

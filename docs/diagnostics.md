@@ -1430,7 +1430,8 @@ question only with `Contains`.
 A method call, a local variable or another object has no column and no claim to become. If the generator left it
 out, the database would answer differently from the C# method. So DDD00039 is an error, on the part that cannot
 be translated. Store what the rule needs as a property of the aggregate, or put it in the caller's
-`app_metadata`.
+`app_metadata`. The current user's other members, such as `user.RequireId()` and `user.RequireSystemWork()`, have
+no SQL either. A rule compares `user.Id` instead.
 
 ## DDD00040
 

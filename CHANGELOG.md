@@ -613,6 +613,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `modelBuilder.Metadata.RequireContextPart(...)`, as a mapping does on `IMutableModel`.
 
   See [A marker mapped by a convention](docs/writing-a-supporting-domain.md#a-marker-mapped-by-a-convention).
+- **`ICurrentUser.RequireId()` returns the id of the signed-in user.** A handler behind `[SignedIn]` reads the id with
+  `var admin = access.CurrentUser.RequireId();` and writes no check of its own. For a caller who is no signed-in
+  user it throws the refusal `[SignedIn]` gives, `access.not-signed-in` (`ToolkitRefusals.NotSignedIn`), so a
+  handler that runs without the access check refuses that caller in the same way and does not fail with a server
+  error. In a host that requires an explicit current user, work that began no user fails with
+  `NoCurrentUserException`, as with the other members. `CurrentUser` implements it, so an implementation of
+  `ICurrentUser` of your own adds it. A row access rule cannot call it. The generator reports DDD00039 on the call,
+  as for `RequireSystemWork()`, and a rule compares `user.Id`.
+- **`IsAuthenticated` tells the compiler that `Id` has a value.** `IsAuthenticated` on `ICurrentUser` and on
+  `CurrentUserSnapshot` carries `[MemberNotNullWhen(true, nameof(Id))]`. Where both cases happen, such as behind
+  `[AllowAnonymous]`, code reads `user.Id.Value` after `if (user.IsAuthenticated)` without CS8629. The
+  `netstandard2.0` build of `DDDToolkit.Abstractions` declares the attribute internally. The docs, the Tenancy
+  tutorial, the samples and the skill read the id with `RequireId()` where they threw on a missing id behind
+  `[SignedIn]`. See [The id of the signed-in user](docs/access-requirements.md#the-id-of-the-signed-in-user).
 
 #### Entity Framework and row level security
 
@@ -4327,7 +4341,27 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `<name>_fellow_members()`. No table changes; the next migration you add names Tenancy's new rows, `NamedUnit` and
     the tenant names the picker reads, in its snapshot.
 
+- **`supabase.migrations-applied` says how to register a context the host does not register yet.** The generated
+  `AddSupabaseMigrations()` lists every context marked `[SupabaseMigrations]` in the projects the host references.
+  The check still refuses a listed context that the application's services do not register, because it cannot read
+  the history of a context it cannot make. A host meets this when it references a module before it registers the
+  module's context, as a tutorial does between two steps. The message now names both ways out. Register the context
+  with `AddDbContext<TContext>()` or the registration of its module. Or register only the contexts the host uses, and
+  for those the message writes out each call, `services.AddSupabaseMigrations<TenancyContext, TenancyContextDesignTimeFactory>();`,
+  with the factory the generated list builds the context with. See
+  [Checking at start-up](docs/supabase.md#checking-at-start-up).
+
 ### Fixed
+
+- **The Supabase export writes no access file for a context without a migration.** A context marked
+  `[SupabaseMigrations]` whose first migration was not added yet got `{version}_access.{module}.ddd.sql` all the same,
+  whenever its rules, a contribution or its outbox had something to write. Tenancy's contribution has something for
+  every table kept to a tenant, so a module with such a table got one. The file turned on row level security and made
+  policies on tables no migration had made, so `supabase db reset` and `supabase migration up` failed on it. The
+  module's first migration, added later, also sorted after the file. The export now writes nothing for such a
+  context, and `Check` asks for nothing. The build after the first migration writes the module's access file, numbered
+  after that migration. The export has written these files since row access rules came to it in 3.0.0. See
+  [Row access rules in the build](docs/supabase.md#row-access-rules-in-the-build).
 
 - **Tenancy's messages about system work name a call that compiles.** System work asked about outside any tenant,
   or a tenant provisioned from inside one, told you to begin `TenancyWork.BeginSystemIn(tenant)` or

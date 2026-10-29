@@ -342,10 +342,31 @@ flowchart LR
   gets the method.
 
 The list is built from the project references, and the host's registrations do not change it. It holds every marked context of every project the
-host references, whether the host registers that context or not, and the check asks each one for its history. So a
-host that shares a project with a marked context it does not use, for example a worker next to an API, fails the
-check with a message that names the context. Such a host registers the contexts it uses one by one, with the factory
-`dotnet ef` uses: `services.AddSupabaseMigrations<OrderingContext, OrderingContextDesignTimeFactory>()`.
+host references, whether the host registers that context or not, and the check asks each one for its history. The
+check cannot make a context the host does not register, so it cannot read that history. It fails with a message that
+names the context. Two kinds of host meet this:
+
+- A host that shares a project with a marked context it does not use, for example a worker next to an API.
+- A host that references a module before it registers the module's context, for example between two steps of a
+  tutorial.
+
+The message names two ways out:
+
+- **Register the context** before the checks run, with `AddDbContext<TContext>()` or the registration of the
+  module that keeps it. This is the way out for a module the host will use.
+- **Register only the contexts the host uses**, one by one, with the factory `dotnet ef` uses:
+  `services.AddSupabaseMigrations<OrderingContext, OrderingContextDesignTimeFactory>()`. Call it in place of
+  `AddSupabaseMigrations()`. The message writes out this call for every context the host registers now.
+
+```text
+The check that Supabase applied every migration asks each registered context for its history, and the application's
+services do not register 'Shop.Shipping.Infrastructure.ShippingContext'. [...] Where the application uses the context,
+register it before the checks run, with AddDbContext<TContext>() or the registration of the module that keeps it.
+Where it does not use the context, or not yet, register only the contexts it uses, one by one, with
+AddSupabaseMigrations<TContext, TFactory>() in place of AddSupabaseMigrations(). For the contexts it registers now,
+the calls are:
+  services.AddSupabaseMigrations<OrderingContext, OrderingContextDesignTimeFactory>();
+```
 
 A host that had its own `AddSupabaseMigrations()` before the build wrote one keeps it. The build then writes only the
 list, `SupabaseMigrationsOfModules.All()`, and the host's method stays the one that is called.
@@ -894,6 +915,12 @@ separate access file, `{version}_access.{module}.ddd.sql`, for:
 
 - each module with rules. The file holds policies that use `auth.uid()` and `auth.jwt()`.
 - each module with an outbox, an inbox or an event log. The file holds the privileges of those tables.
+
+**A module without a migration gets no access file.** This holds whatever its rules, its contributions and its outbox
+say. No migration has made the module's tables yet, so a policy on them would fail when Supabase applies the file.
+The module's first migration would also sort after such a file, because Entity Framework names a migration after
+the time you add it. So the build writes nothing for the module, and `Check` asks for nothing. The build after the
+first migration writes the module's access file, numbered after that migration.
 
 The [access functions](row-level-security.md#access-functions) that a module's rules
 call go into the access file of the module that maps their aggregate, before its policies. That file comes before the

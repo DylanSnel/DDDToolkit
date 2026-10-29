@@ -97,6 +97,8 @@ public sealed class AmbientUserRecorder
 
         public string? FindClaim(string path) => inner.FindClaim(path);
 
+        public Guid RequireId() => inner.RequireId();
+
         public CurrentUserSnapshot RequireSystemWork() => inner.RequireSystemWork();
     }
 

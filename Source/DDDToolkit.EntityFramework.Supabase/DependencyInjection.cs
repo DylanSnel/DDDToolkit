@@ -1,3 +1,4 @@
+using System.Text;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Startup;
@@ -115,10 +116,10 @@ public static partial class DependencyInjection
 
         // A context the check cannot ask is a registration that does not match the container, which is said in the
         // toolkit's words before any connection is opened, rather than in the container's.
-        var unregistered = sources.Where(source => source.Resolve(scope.ServiceProvider) is null).Select(static source => source.ContextType).ToList();
+        var unregistered = sources.Where(source => source.Resolve(scope.ServiceProvider) is null).ToList();
         if (unregistered.Count > 0)
         {
-            throw new InvalidOperationException(Unregistered(unregistered));
+            throw new InvalidOperationException(Unregistered(unregistered, [.. sources.Where(source => !unregistered.Contains(source))]));
         }
 
         foreach (var source in sources)
@@ -144,15 +145,31 @@ public static partial class DependencyInjection
 
     /// <summary>
     /// What the check says of contexts registered as Supabase's that the application's services cannot resolve: most
-    /// likely a context <c>AddSupabaseMigrations()</c> found in a project the host references and does not use, since
-    /// the generated list follows the references, not the registrations.
+    /// likely a context <c>AddSupabaseMigrations()</c> found in a project the host references and does not use, or
+    /// does not use yet, since the generated list follows the references, not the registrations. It names both ways
+    /// out. The application registers the context, or it registers the contexts it does resolve one by one, and for
+    /// those the message writes each call out, with the factory the generated list builds the context with.
     /// </summary>
-    private static string Unregistered(IReadOnlyList<Type> contexts)
+    private static string Unregistered(IReadOnlyList<SupabaseMigrationSource> unregistered, IReadOnlyList<SupabaseMigrationSource> registered)
     {
-        var named = string.Join(", ", contexts.Select(static context => "'" + context.FullName + "'"));
-        return $"The check that Supabase applied every migration asks each registered context for its history, and the application's services do not register {named}. "
-               + "AddSupabaseMigrations() registers every context marked [SupabaseMigrations] in the projects the application references, whether the application uses it or not. "
-               + "Register the context where the application uses it, or register only the contexts it uses, one by one, with AddSupabaseMigrations<TContext, TFactory>() "
-               + "in place of AddSupabaseMigrations().";
+        var named = string.Join(", ", unregistered.Select(static source => "'" + source.ContextType.FullName + "'"));
+        var message = new StringBuilder()
+            .Append("The check that Supabase applied every migration asks each registered context for its history, and the application's services do not register ").Append(named).Append(". ")
+            .Append("AddSupabaseMigrations() registers every context marked [SupabaseMigrations] in the projects the application references, whether the application uses it or not. ")
+            .Append("Where the application uses the context, register it before the checks run, with AddDbContext<TContext>() or the registration of the module that keeps it. ")
+            .Append("Where it does not use the context, or not yet, register only the contexts it uses, one by one, with AddSupabaseMigrations<TContext, TFactory>() in place of AddSupabaseMigrations().");
+
+        if (registered.Count > 0)
+        {
+            message.Append(" For the contexts it registers now, the calls are:");
+            foreach (var source in registered)
+            {
+                message.AppendLine().Append("  ").Append(source.FactoryType is { } factory
+                    ? $"services.AddSupabaseMigrations<{source.ContextType.Name}, {factory.Name}>();"
+                    : $"services.AddSupabaseMigrations(SupabaseMigrationSource.For<{source.ContextType.Name}>(...));");
+            }
+        }
+
+        return message.ToString();
     }
 }
