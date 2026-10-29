@@ -828,7 +828,7 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// SQL a contribution wrote, with its <c>{fn:owner/name}</c> places the names the functions have in the
-    /// database and its <c>{caller:...}</c> places the caller functions; <c>{{</c> and <c>}}</c> are braces.
+    /// database and its <c>{user:...}</c> places the current user functions; <c>{{</c> and <c>}}</c> are braces.
     /// </summary>
     /// <exception cref="InvalidOperationException">It has a place contributed SQL cannot have, or asks a logical name nothing defines.</exception>
     private static string FillContributed(string what, string template, Writing writing)
@@ -856,7 +856,7 @@ public static partial class PostgresRowAccess
             filled.Append(parts switch
             {
                 ["fn", var name] when end >= 0 => FunctionName(what, name, writing),
-                ["caller", ..] when end >= 0 && parts.Length >= 2 => AboutTheCaller(parts, writing) ?? throw NotAPlace(what, token),
+                ["user", ..] when end >= 0 && parts.Length >= 2 => AboutTheCurrentUser(parts, writing) ?? throw NotAPlace(what, token),
                 _ => throw NotAPlace(what, token),
             });
             i = end;
@@ -866,7 +866,7 @@ public static partial class PostgresRowAccess
     }
 
     private static InvalidOperationException NotAPlace(string what, string token)
-        => new($"{Capitalized(what)} has '{{{token}}}', which contributed SQL cannot ask. It asks functions by {{fn:owner/name}} and the caller by {{caller:uid}}, {{caller:role}}, {{caller:claims}}, {{caller:signedin}} or {{caller:claim:path}}; write a brace itself as {{{{ or }}}}.");
+        => new($"{Capitalized(what)} has '{{{token}}}', which contributed SQL cannot ask. It asks functions by {{fn:owner/name}} and the caller by {{user:uid}}, {{user:role}}, {{user:claims}}, {{user:signedin}} or {{user:claim:path}}; write a brace itself as {{{{ or }}}}.");
 
     /// <summary>The functions <paramref name="sql"/> asks, by the names they have in the database.</summary>
     private static List<string> Asks(string sql, IReadOnlyDictionary<string, string> names)

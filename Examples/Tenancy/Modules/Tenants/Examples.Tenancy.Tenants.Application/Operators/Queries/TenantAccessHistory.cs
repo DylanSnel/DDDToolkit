@@ -14,7 +14,7 @@ namespace Examples.Tenancy.Tenants.Application.Operators.Queries;
 /// </remarks>
 /// <param name="Tenant">The tenant whose history is read.</param>
 /// <param name="Paging">Which page: how many rows, and after which marker.</param>
-[RequiresOperator]
+[Operator]
 public sealed record TenantAccessHistory(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AccessHistoryEntry>>, ITenantsRequest;
 
 /// <summary>Answers <see cref="TenantAccessHistory"/> on a context of the read's own.</summary>

@@ -9,7 +9,8 @@ namespace DDDToolkit.Access;
 /// that decide the cases its requests declare
 /// (<see cref="AccessCheckServiceCollectionExtensions.AddAccessCheck{TRequests, TCheck}"/>), and calls
 /// <see cref="RequireAsync"/> in front of every handler: from a pipeline behavior, an endpoint filter or its
-/// own dispatcher. Nothing here knows which of those it is.
+/// own dispatcher. Nothing here knows which of those it is. The handler then runs inside <see cref="BeginWork"/>, the
+/// work a check begins for it, such as operator work for an operator's command.
 /// <para>
 /// It fails closed. A request that declares nothing, and a requirement that none of the module's checks
 /// decides, stop the request with an <see cref="InvalidOperationException"/> rather than letting it through:
@@ -18,7 +19,7 @@ namespace DDDToolkit.Access;
 /// <para>
 /// The checks are asked in the order they were given, and the first that decides a requirement is the one that
 /// holds the caller to it. <see cref="AccessRequirement.AllowAnonymous"/> is decided here, by asking nobody. The
-/// set dependency injection makes asks the core's <see cref="CallerAccessCheck"/> first, for
+/// set dependency injection makes asks the core's <see cref="CurrentUserAccessCheck"/> first, for
 /// <see cref="AccessRequirement.SignedIn"/>, <see cref="AccessRequirement.Own{TValue}"/> and
 /// <see cref="AccessRequirement.OwnerOf{TId}"/>, and then the checks the module added.
 /// </para>
@@ -44,12 +45,12 @@ public sealed class AccessChecks<TRequests>
     private readonly IAccessCheck[] _checks;
 
     /// <summary>The core's check of who is calling, where the set holds one: asked who is calling before any check is.</summary>
-    private readonly CallerAccessCheck? _callers;
+    private readonly CurrentUserAccessCheck? _currentUser;
 
     /// <summary>
     /// A set of the given checks, asked in this order. Dependency injection makes one per scope, of the core's
-    /// <see cref="CallerAccessCheck"/> and then the checks registered for <typeparamref name="TRequests"/>; a test
-    /// makes one by hand, and gives it the <see cref="CallerAccessCheck"/> where its requests require a signed-in
+    /// <see cref="CurrentUserAccessCheck"/> and then the checks registered for <typeparamref name="TRequests"/>; a test
+    /// makes one by hand, and gives it the <see cref="CurrentUserAccessCheck"/> where its requests require a signed-in
     /// user.
     /// </summary>
     /// <param name="checks">The checks of the module, in the order they are asked.</param>
@@ -65,7 +66,7 @@ public sealed class AccessChecks<TRequests>
             throw new ArgumentException("A set of access checks holds no null.", nameof(checks));
         }
 
-        _callers = _checks.OfType<CallerAccessCheck>().FirstOrDefault();
+        _currentUser = _checks.OfType<CurrentUserAccessCheck>().FirstOrDefault();
     }
 
     /// <summary>
@@ -107,18 +108,18 @@ public sealed class AccessChecks<TRequests>
     /// The request declares nothing, or a requirement none of the checks registered for
     /// <typeparamref name="TRequests"/> decides.
     /// </exception>
-    /// <exception cref="NoCallerException">
+    /// <exception cref="NoCurrentUserException">
     /// Nobody is calling, and the host requires every flow of work to say who it runs as: asked of the set's
-    /// <see cref="CallerAccessCheck"/> before any check, whatever the request requires.
+    /// <see cref="CurrentUserAccessCheck"/> before any check, whatever the request requires.
     /// </exception>
     public ValueTask RequireAsync(TRequests request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         // Who is calling, before anything else: in a host that requires every flow of work to say who it runs as, work
-        // nobody began a caller for is a mistake in the calling code, and fails here whatever the request requires, a
+        // that began no user is a mistake in the calling code, and fails here whatever the request requires, a
         // case of a supporting domain's that asks its own caller, never the host's, included.
-        _callers?.AskWhoIsCalling();
+        _currentUser?.AskWhoIsCalling();
 
         // Read once: a request may make its requirement anew each time it is asked. A request that states it with
         // attributes answers it the same way, from the line the generator wrote into its module's interface.
@@ -141,6 +142,105 @@ public sealed class AccessChecks<TRequests>
         // asynchronous, so what it puts in hand reaches the caller, which runs the handler next; it counts once the
         // check let the request through. A request anyone may send is let through by asking nobody.
         return RequestInHand.Take(request, requirement, check, cancellationToken);
+    }
+
+    /// <summary>
+    /// Begins the work the checks that let <paramref name="request"/> through say its handler runs in, or answers
+    /// <see langword="null"/> where none does. Tenancy's check begins operator work for a command an operator sends. Call it
+    /// after <see cref="RequireAsync"/>, in the same method, and run the handler inside it, as the generated behavior does:
+    /// <code>
+    /// await checks.RequireAsync(request, cancellationToken);
+    /// using (checks.BeginWork(request, isQuery: request is IBaseQuery))
+    /// {
+    ///     await handler.HandleAsync(request, cancellationToken);
+    /// }
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// Each case of the request's requirement goes to the check that decides it, where that check begins work
+    /// (<see cref="IBeginsWork"/>), in the order the cases are written. What they begin ends in the opposite order when the
+    /// result is disposed. It is not <see langword="async"/>, so what a check begins reaches the handler that runs next.
+    /// </remarks>
+    /// <param name="request">The request the checks let through.</param>
+    /// <param name="isQuery">Whether the request is a query, which changes nothing. A check begins no work for a query that changes anything.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The request is not in hand in this flow of work: <see cref="RequireAsync"/> was not asked about it here, refused it, or
+    /// is still asking.
+    /// </exception>
+    public IDisposable? BeginWork(TRequests request, bool isQuery)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // The request in hand in this flow, let through: the very one, or, for a request that is a value, one equal to it,
+        // since a value is boxed anew each time it is handed over as the interface.
+        var hand = RequestInHand.Current is { } passed
+                   && (ReferenceEquals(passed.Request, request) || (request.GetType().IsValueType && passed.Request.Equals(request)))
+            ? passed
+            : throw new InvalidOperationException(
+                $"{NameOf(request.GetType())} is not in hand in this flow of work: begin its work after its access checks let it through, "
+                + "in the same method that awaited AccessChecks.RequireAsync for it.");
+
+        List<IDisposable>? begun = null;
+        try
+        {
+            foreach (var requirement in CasesOf(hand.Requirement))
+            {
+                if (CheckFor(requirement) is IBeginsWork check && check.BeginWork(requirement, request, isQuery) is { } work)
+                {
+                    (begun ??= []).Add(work);
+                }
+            }
+        }
+        catch
+        {
+            if (begun is not null)
+            {
+                new Begun(begun).Dispose();
+            }
+
+            throw;
+        }
+
+        return begun switch
+        {
+            null => null,
+            [var only] => only,
+            _ => new Begun(begun),
+        };
+    }
+
+    /// <summary>The cases of <paramref name="requirement"/> a check decides, each once, in the order they are written.</summary>
+    private static List<AccessRequirement> CasesOf(AccessRequirement requirement)
+    {
+        var found = new List<AccessRequirement>();
+        Add(requirement);
+        return found;
+
+        void Add(AccessRequirement each)
+        {
+            switch (each)
+            {
+                case AccessRequirement.Anyone:
+                    break;
+
+                case AccessRequirement.Combined combined:
+                    foreach (var part in combined.Cases)
+                    {
+                        Add(part);
+                    }
+
+                    break;
+
+                default:
+                    if (!found.Contains(each))
+                    {
+                        found.Add(each);
+                    }
+
+                    break;
+            }
+        }
     }
 
     /// <summary>The check of every case of <paramref name="combined"/>, its combinations' cases included, by case.</summary>
@@ -200,4 +300,24 @@ public sealed class AccessChecks<TRequests>
 
     /// <summary>A type as its author writes it, for a message a developer reads (<see cref="WrittenTypeNames.Of"/>).</summary>
     private static string NameOf(Type type) => WrittenTypeNames.Of(type);
+
+    /// <summary>What several checks began for one request: ended in the opposite order, once.</summary>
+    private sealed class Begun(List<IDisposable> begun) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            for (var index = begun.Count - 1; index >= 0; index--)
+            {
+                begun[index].Dispose();
+            }
+        }
+    }
 }

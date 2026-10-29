@@ -21,7 +21,7 @@ public sealed class MembershipRulesTests
     [
         new(View, EveryMember: true),
         new(Edit),
-        new(Sharing, InRoles: false, LocksMembers: true, LocksOwner: true),
+        new(Sharing, InRoles: false, ManagesMembers: true, NamesOwner: true),
     ];
 
     private static readonly DeclaredRole Drafter = new("drafter", [View, Edit]);
@@ -45,7 +45,7 @@ public sealed class MembershipRulesTests
         rules.Permissions.Select(permission => permission.Name).Should().Equal(DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share);
         rules.OwnerPermissions.Should().Equal(DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share);
         rules.EveryMemberPermission.Should().Be(DocumentPermissions.View);
-        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be((DocumentPermissions.Share, DocumentPermissions.Share));
+        (rules.ManagesMembersPermission, rules.NamesOwnerPermission).Should().Be((DocumentPermissions.Share, DocumentPermissions.Share));
         rules.SystemScopes.Should().BeEmpty("the documents' rules let no scope through, systemScopes: []");
     }
 
@@ -69,7 +69,7 @@ public sealed class MembershipRulesTests
         // same permissions. Nothing else is said, and nothing here names who may.
         typeof(MembershipRules).GetProperties().Select(property => property.Name).Should().BeEquivalentTo(
             "Resource", "Name", "Codes", "Functions", "Members", "Roles", "ReachFromAbove", "Permissions", "OwnerPermissions", "EveryMemberPermission", "RolePermissions",
-            "MembersLockPermission", "OwnerLockPermission", "SystemScopes");
+            "ManagesMembersPermission", "NamesOwnerPermission", "SystemScopes");
         typeof(MembershipRules).GetMethod(nameof(MembershipRules.For))!.GetParameters().Select(parameter => parameter.Name)
             .Should().Equal("roles", "members", "reachFromAbove", "systemScopes");
         typeof(MembershipRules).GetConstructors().Should().BeEmpty("rules are made through the resource's type");
@@ -92,7 +92,7 @@ public sealed class MembershipRulesTests
         rules.RolePermissions.Permissions.Should().Equal(FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff);
         rules.OwnerPermissions.Should().Equal(FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver);
         rules.EveryMemberPermission.Should().BeNull("no permission of a folder is held by every member");
-        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be((FolderPermissions.Staff, FolderPermissions.HandOver));
+        (rules.ManagesMembersPermission, rules.NamesOwnerPermission).Should().Be((FolderPermissions.Staff, FolderPermissions.HandOver));
         rules.Codes.Should().BeSameAs(FolderRefusals.Membership);
         rules.Functions.Should().Be(new MembershipFunctions("folders_as_member", "folders_as_member_with", "folders_i_see", "folders_where_i_hold", "folders_fellow_members"));
         rules.SystemScopes.Should().Equal(FolderMembership.Scope);
@@ -253,13 +253,13 @@ public sealed class MembershipRulesTests
     {
         Making(() => Notes([new(View, EveryMember: true), new(Edit, EveryMember: true)], Roles.Fixed([Bystander])))
             .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked EveryMember*'notes.view' and 'notes.edit'*");
-        Making(() => Notes([new(View, LocksMembers: true), new(Edit, LocksMembers: true)], Roles.Fixed([Bystander])))
-            .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked LocksMembers*");
-        Making(() => Notes([new(View, LocksOwner: true), new(Edit, LocksOwner: true)], Roles.Fixed([Bystander])))
-            .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked LocksOwner*");
+        Making(() => Notes([new(View, ManagesMembers: true), new(Edit, ManagesMembers: true)], Roles.Fixed([Bystander])))
+            .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked ManagesMembers*");
+        Making(() => Notes([new(View, NamesOwner: true), new(Edit, NamesOwner: true)], Roles.Fixed([Bystander])))
+            .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked NamesOwner*");
 
         // One permission may lock both, as a document's that decides who it is shared with does.
-        Notes([new(View, LocksMembers: true, LocksOwner: true)], Roles.Fixed([Bystander])).OwnerLockPermission.Should().Be(View);
+        Notes([new(View, ManagesMembers: true, NamesOwner: true)], Roles.Fixed([Bystander])).NamesOwnerPermission.Should().Be(View);
     }
 
     [Fact]
@@ -296,14 +296,14 @@ public sealed class MembershipRulesTests
     [Fact]
     public void A_lock_nobody_could_pass_is_refused()
     {
-        Making(() => Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, LocksMembers: true)], Roles.Fixed([Bystander])))
-            .Should().Throw<ArgumentException>().WithMessage("'notes.share' is marked LocksMembers, and nobody would hold it on Pad*");
-        Making(() => Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, LocksOwner: true)], Roles.Fixed([Bystander])))
-            .Should().Throw<ArgumentException>().WithMessage("'notes.share' is marked LocksOwner*");
+        Making(() => Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, ManagesMembers: true)], Roles.Fixed([Bystander])))
+            .Should().Throw<ArgumentException>().WithMessage("'notes.share' is marked ManagesMembers, and nobody would hold it on Pad*");
+        Making(() => Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, NamesOwner: true)], Roles.Fixed([Bystander])))
+            .Should().Throw<ArgumentException>().WithMessage("'notes.share' is marked NamesOwner*");
 
         // Held from above, it is passed by whoever holds it there.
-        Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, LocksOwner: true)], Roles.Fixed([Bystander]), reachFromAbove: true)
-            .OwnerLockPermission.Should().Be(Sharing);
+        Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, NamesOwner: true)], Roles.Fixed([Bystander]), reachFromAbove: true)
+            .NamesOwnerPermission.Should().Be(Sharing);
     }
 
     [Fact]
@@ -371,14 +371,14 @@ public sealed class MembershipRulesTests
     {
         var own = Notes(Permissions, Roles.Fixed([Drafter]), scope: "notes");
         own.SystemScopes.Should().Equal(["notes"], "the module's own scope unless the rules say otherwise");
-        own.IsOwnWork(Caller.System).Should().BeTrue("the application itself is above the rules, as everywhere");
-        own.IsOwnWork(Caller.SystemIn("notes")).Should().BeTrue("the module's own work");
-        own.IsOwnWork(Caller.SystemIn("tenancy")).Should().BeFalse("another module's work is not above this resource's rules");
-        own.IsOwnWork(Caller.SystemIn("note")).Should().BeFalse("a scope is compared whole");
+        own.IsOwnWork(CurrentUserSnapshot.System).Should().BeTrue("the application itself is above the rules, as everywhere");
+        own.IsOwnWork(CurrentUserSnapshot.SystemIn("notes")).Should().BeTrue("the module's own work");
+        own.IsOwnWork(CurrentUserSnapshot.SystemIn("tenancy")).Should().BeFalse("another module's work is not above this resource's rules");
+        own.IsOwnWork(CurrentUserSnapshot.SystemIn("note")).Should().BeFalse("a scope is compared whole");
 
         // Nobody else is ever the application's own work, whatever its token says.
-        own.IsOwnWork(Caller.Anonymous).Should().BeFalse();
-        own.IsOwnWork(Caller.User(Guid.NewGuid(), claim: path => path == "scope" ? "notes" : null)).Should().BeFalse();
+        own.IsOwnWork(CurrentUserSnapshot.Anonymous).Should().BeFalse();
+        own.IsOwnWork(CurrentUserSnapshot.User(Guid.NewGuid(), claim: path => path == "scope" ? "notes" : null)).Should().BeFalse();
         FluentActions.Invoking(() => own.IsOwnWork(null!)).Should().Throw<ArgumentNullException>();
 
         // A resource of no module has no scope of its own.
@@ -390,16 +390,16 @@ public sealed class MembershipRulesTests
     {
         var replaced = Notes(Permissions, Roles.Fixed([Drafter]), scope: "notes", systemScopes: ["imports"]);
         replaced.SystemScopes.Should().Equal(["imports"], "the scopes named and no other");
-        replaced.IsOwnWork(Caller.SystemIn("notes")).Should().BeFalse("the module's own is named among them to keep it");
+        replaced.IsOwnWork(CurrentUserSnapshot.SystemIn("notes")).Should().BeFalse("the module's own is named among them to keep it");
 
         var kept = Notes(Permissions, Roles.Fixed([Drafter]), scope: "notes", systemScopes: ["notes", "imports"]);
-        kept.IsOwnWork(Caller.SystemIn("notes")).Should().BeTrue();
-        kept.IsOwnWork(Caller.SystemIn("imports")).Should().BeTrue();
+        kept.IsOwnWork(CurrentUserSnapshot.SystemIn("notes")).Should().BeTrue();
+        kept.IsOwnWork(CurrentUserSnapshot.SystemIn("imports")).Should().BeTrue();
 
         var off = Notes(Permissions, Roles.Fixed([Drafter]), scope: "notes", systemScopes: []);
         off.SystemScopes.Should().BeEmpty();
-        off.IsOwnWork(Caller.SystemIn("notes")).Should().BeFalse("no system work in a scope at all");
-        off.IsOwnWork(Caller.System).Should().BeTrue("the application itself still is");
+        off.IsOwnWork(CurrentUserSnapshot.SystemIn("notes")).Should().BeFalse("no system work in a scope at all");
+        off.IsOwnWork(CurrentUserSnapshot.System).Should().BeTrue("the application itself still is");
     }
 
     [Theory]
@@ -410,7 +410,7 @@ public sealed class MembershipRulesTests
     public void A_scope_is_named_as_a_caller_is_begun_in_one(string scope)
     {
         Making(() => Notes(Permissions, Roles.Fixed([Drafter]), systemScopes: [scope]))
-            .Should().Throw<ArgumentException>().WithParameterName("systemScopes").WithMessage("*is not a scope*Caller.SystemIn*");
+            .Should().Throw<ArgumentException>().WithParameterName("systemScopes").WithMessage("*is not a scope*BeginSystem(scope)*");
     }
 
     [Fact]
@@ -427,7 +427,7 @@ public sealed class MembershipRulesTests
     {
         (MemberSource.Inferred.Kind, MemberSource.Inferred.ClaimPath, MemberSource.Inferred.Function).Should().Be((MemberSourceKind.Inferred, null, null));
         Notes(Permissions, Roles.Fixed([Drafter])).Members.Should().BeSameAs(MemberSource.Inferred);
-        Notes(Permissions, Roles.Fixed([Drafter]), members: MemberSource.CallerId).Members.Should().BeSameAs(MemberSource.CallerId);
+        Notes(Permissions, Roles.Fixed([Drafter]), members: MemberSource.CurrentUserId).Members.Should().BeSameAs(MemberSource.CurrentUserId);
     }
 
     [Fact]
@@ -437,8 +437,8 @@ public sealed class MembershipRulesTests
 
         (claim.Kind, claim.ClaimPath).Should().Be((MemberSourceKind.Claim, "app_metadata.staff"));
         claim.Should().Be(MemberSource.Claim("app_metadata.staff"), "a source is data: two that say the same are equal");
-        (MemberSource.CallerId.Kind, MemberSource.CallerId.ClaimPath).Should().Be((MemberSourceKind.CallerId, null));
-        (MemberSource.CallerId.Function, claim.Function).Should().Be((null, null), "a caller's own id and a claim are read from the caller, by no function of anybody's");
+        (MemberSource.CurrentUserId.Kind, MemberSource.CurrentUserId.ClaimPath).Should().Be((MemberSourceKind.CurrentUserId, null));
+        (MemberSource.CurrentUserId.Function, claim.Function).Should().Be((null, null), "a caller's own id and a claim are read from the caller, by no function of anybody's");
 
         // The path goes into what is asked of the database as well, so it is names and dots and nothing else.
         foreach (var path in new[] { "", " ", "app_metadata.", ".staff", "app metadata", "staff'; --", "9lives", "a..b" })
@@ -466,11 +466,11 @@ public sealed class MembershipRulesTests
     [Fact]
     public void A_member_the_application_resolves_is_asked_of_the_application_and_names_its_function_for_a_database_that_answers()
     {
-        var porter = new DatabaseFunction("depot", "caller_porter");
+        var porter = new DatabaseFunction("depot", "current_porter");
         var resolved = MemberSource.Resolved(porter);
 
         (resolved.Kind, resolved.ClaimPath, resolved.Function).Should().Be((MemberSourceKind.Resolved, null, porter));
-        resolved.Should().Be(MemberSource.Resolved(new DatabaseFunction("depot", "caller_porter")), "a source is data: two that say the same are equal");
+        resolved.Should().Be(MemberSource.Resolved(new DatabaseFunction("depot", "current_porter")), "a source is data: two that say the same are equal");
         resolved.Should().NotBe(MemberSource.Resolved(new DatabaseFunction("depot", "acting_porter")));
 
         // An application whose database answers nothing names no function, and says the rest all the same.
@@ -478,7 +478,7 @@ public sealed class MembershipRulesTests
     }
 
     [Theory]
-    [InlineData("depot", "caller_porter")]
+    [InlineData("depot", "current_porter")]
     [InlineData("second-depot-2", "caller_Porter_2")]
     [InlineData("a", "_b")]
     public void A_function_is_named_by_its_owner_and_its_name(string owner, string name)
@@ -491,15 +491,15 @@ public sealed class MembershipRulesTests
     }
 
     [Theory]
-    [InlineData("", "caller_porter", "owner")]
-    [InlineData("Depot", "caller_porter", "owner")]
-    [InlineData("-depot", "caller_porter", "owner")]
-    [InlineData("depot-", "caller_porter", "owner")]
-    [InlineData("depot.x", "caller_porter", "owner")]
+    [InlineData("", "current_porter", "owner")]
+    [InlineData("Depot", "current_porter", "owner")]
+    [InlineData("-depot", "current_porter", "owner")]
+    [InlineData("depot-", "current_porter", "owner")]
+    [InlineData("depot.x", "current_porter", "owner")]
     [InlineData("depot", "", "name")]
     [InlineData("depot", "9lives", "name")]
     [InlineData("depot", "caller porter", "name")]
-    [InlineData("depot", "caller_porter()", "name")]
+    [InlineData("depot", "current_porter()", "name")]
     [InlineData("depot", "x}; DROP TABLE y; --", "name")]
     [InlineData("depot", "caller/porter", "name")]
     public void What_is_not_the_name_of_a_function_is_refused_when_it_is_said(string owner, string name, string parameter)

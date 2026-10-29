@@ -72,7 +72,7 @@ public static partial class SupabaseMigrations
     /// The start-up check <c>AddSupabaseMigrations</c> brings, by the name a host turns it off with
     /// (<c>services.SkipStartupCheck(...)</c>): every registered context has every one of its migrations applied
     /// (<c>EnsureSupabaseMigrationsAppliedAsync</c>). It runs in the stage of the migrations, after the login role
-    /// was found to be able to switch to the system caller's role, which it asks as, and before the checks of the
+    /// was found to be able to switch to the system role, which it asks as, and before the checks of the
     /// database's policies and functions, which a missing migration would leave missing too.
     /// </summary>
     public const string AppliedCheck = "supabase.migrations-applied";
@@ -359,7 +359,7 @@ public static partial class SupabaseMigrations
 
         // Refused before anything is written: the role the application logs in as is no role a caller runs as.
         // Asked here rather than where it was set, since the roles may have been set after it.
-        if (options.LoginRole is { } login && CallerRoleNamed(login, options.Roles) is { } key)
+        if (options.LoginRole is { } login && RunAsRoleNamed(login, options.Roles) is { } key)
         {
             throw new InvalidOperationException(
                 $"The login role '{login}' is the role of {key} among the roles callers run as. The role the application logs in as only switches to those, and is a role of its own; name another, such as {ExampleLoginRole}.");
@@ -412,10 +412,10 @@ public static partial class SupabaseMigrations
     /// files can make; <see langword="null"/> when it is, when none is set, and while the files write no privileges.
     /// While they write them, every file makes that role and holds it to the policies, refusing, where it is applied,
     /// one that can log in or bypass row level security. Postgres's and Supabase's own roles are not the
-    /// application's to make, and the one a system caller most often runs as, <c>service_role</c>, bypasses row level
+    /// application's to make, and the one system work most often runs as, <c>service_role</c>, bypasses row level
     /// security: so such a name is refused before anything is written, rather than by every file at deployment.
     /// Without the privileges a file makes the role only where something of it is for the role by its symbol, as
-    /// <see cref="RowAccessExport"/> does, and a host whose system caller runs as a role of another kind gets the
+    /// <see cref="RowAccessExport"/> does, and a host whose system work runs as a role of another kind gets the
     /// files it always got.
     /// </summary>
     internal static string? NotAnOwnBookkeepingRole(SupabaseMigrationOptions options)
@@ -429,18 +429,18 @@ public static partial class SupabaseMigrations
         if (NotAnOwnBookkeepingRole(options) is { } problem)
         {
             throw new InvalidOperationException(
-                $"The bookkeeping role, Roles.System, is not one the access files can make. {problem} Set it to null where the system caller runs as service_role, as system=service_role in SupabaseRowAccessRoles does, or name a role of the application's own, such as ddd_system.");
+                $"The bookkeeping role, Roles.System, is not one the access files can make. {problem} Set it to null where system work runs as service_role, as system=service_role in SupabaseRowAccessRoles does, or name a role of the application's own, such as ddd_system.");
         }
     }
 
     /// <summary>
-    /// What the policies are written with: the options' roles, caller functions and contributions, where the
+    /// What the policies are written with: the options' roles, current user functions and contributions, where the
     /// functions of other modules live, and whether the files write privileges and force row level security.
     /// </summary>
     private static RowAccessExport ExportOf(SupabaseMigrationOptions options, IReadOnlyDictionary<string, string>? names)
         => new()
         {
-            CallerFunctions = options.CallerFunctions,
+            CurrentUserFunctions = options.CurrentUserFunctions,
             Roles = options.Roles,
             Contributions = [.. options.RowAccessContributions],
             Rules = [.. options.RowAccessRules],
@@ -579,7 +579,7 @@ public static partial class SupabaseMigrations
             // Every file says them, so roles that change write every module's file again, and the newest file
             // applied records what the newest export said.
             .Append('\n')
-            .Append(SupabaseCallerRoles.RecordStatement(options.Roles))
+            .Append(SupabaseUserRoles.RecordStatement(options.Roles))
             .ToString();
 
         if (files.LastOrDefault() is { } newest)
@@ -727,7 +727,7 @@ public static partial class SupabaseMigrations
     /// name, and the type after <c>RETURNS</c>, up to the first of the function's options. A contributed
     /// statement may write a whole function on that line, whose options and body are not its signature. Each is
     /// found by its name without double quotes, so a file written before the schemas were quoted, which names
-    /// <c>tenancy.caller_seat</c>, finds the function the next one names <c>"tenancy".caller_seat</c>.
+    /// <c>tenancy.current_seat</c>, finds the function the next one names <c>"tenancy".current_seat</c>.
     /// </summary>
     private static Dictionary<string, (string Name, string Parameters, string Returns)> FunctionHeaders(string sql)
     {

@@ -23,8 +23,8 @@ namespace Examples.Webshop.Ordering.Domain.Orders;
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
 public static partial class ACustomerHasTheirOrders
 {
-    public static bool Allows(Order order, Caller caller)
-        => order.PlacedBy == null || order.PlacedBy?.Value == caller.UserId;
+    public static bool Allows(Order order, ICurrentUser user)
+        => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 }
 
 /// <summary>
@@ -34,5 +34,5 @@ public static partial class ACustomerHasTheirOrders
 [RowAccess<Order>(RowOperations.Create)]
 public static partial class NobodyOrdersForSomebodyElse
 {
-    public static bool Allows(Order order, Caller caller) => order.PlacedBy?.Value == caller.UserId;
+    public static bool Allows(Order order, ICurrentUser user) => order.PlacedBy?.Value == user.Id;
 }

@@ -158,7 +158,7 @@ public sealed class PublishedKeyTokenTests(SampleHosts sample) : IClassFixture<S
     private static async Task<IEnumerable<string?>> TenantsSeatedInAsync(HttpClient client)
     {
         var seats = await client.GetFromJsonAsync<JsonElement>("/me/seats", Cancellation);
-        return [.. seats.EnumerateArray().Select(seat => seat.GetProperty("tenant").GetProperty("slug").GetString())];
+        return [.. seats.EnumerateArray().Select(seat => seat.GetProperty("slug").GetString())];
     }
 
     /// <summary>A listener on this machine that publishes <paramref name="key"/> where Auth publishes its keys, and counts how often it was asked.</summary>

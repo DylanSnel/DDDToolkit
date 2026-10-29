@@ -1,5 +1,3 @@
-using DDDToolkit.Access;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
@@ -22,34 +20,23 @@ public sealed record SetProjectRolePermissions(ProjectRoleId Id, IReadOnlyCollec
     public const string RequiredPermission = ProjectRoleListing.ManageRolesPermission;
 }
 
-/// <summary>Handles <see cref="SetProjectRolePermissions"/>: loads the role, sets its permissions and saves.</summary>
-/// <remarks>
-/// Nothing of a package's stands between this command and the role, and nothing else asks who may send it, so the
-/// handler asks again what its request declared, of the very checks the pipeline asks. It then decides the same
-/// wherever it runs, in a program that left the module's access behavior out of the pipeline as much as in the
-/// host, for the check's statement a second time on a command that is sent rarely.
-/// </remarks>
-/// <param name="store">Where project roles are loaded and saved.</param>
-/// <param name="membership">The projects' rules, which say what a crew role may give.</param>
+/// <summary>
+/// Handles <see cref="SetProjectRolePermissions"/>: refuses a permission the catalogue does not know, as Tenancy refuses
+/// it, then has the project role manager set the role's permissions and save.
+/// </summary>
+/// <param name="roles">The project role manager, which holds a role's permissions to what the projects' rules let a crew role give.</param>
 /// <param name="catalogue">The permissions the application knows.</param>
-/// <param name="checks">The module's access checks, which hold a request to what it declared.</param>
-public sealed class SetProjectRolePermissionsHandler(IProjectStore store, ProjectMembership membership, TenancyCatalogue catalogue, AccessChecks<IProjectsRequest> checks) : ICommandHandler<SetProjectRolePermissions>
+public sealed class SetProjectRolePermissionsHandler(ProjectRoleManager roles, TenancyCatalogue catalogue) : ICommandHandler<SetProjectRolePermissions>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>tenancy.not-permitted</c>, naming the permission, for a caller that does not hold it for the whole tenant;
-    /// <c>tenancy.unknown-permission</c>; <c>projects.role-not-found</c>, for a role of another tenant too;
+    /// <c>tenancy.unknown-permission</c>; <c>tenancy.not-permitted</c>, naming the permission, for a caller that does not
+    /// hold it for the whole tenant; <c>projects.role-not-found</c>, for a role of another tenant too;
     /// <c>projects.role-archived</c>, <c>projects.permission-not-for-members</c>.
     /// </exception>
     public async ValueTask<Unit> Handle(SetProjectRolePermissions command, CancellationToken cancellationToken)
     {
-        await checks.RequireAsync(command, cancellationToken);
-
-        var permissions = MakeProjectRole.Known(command.Permissions, catalogue);
-        var role = await store.LoadRoleAsync(command.Id, cancellationToken) ?? throw ProjectRefusals.Refuse(ProjectRefusals.RoleNotFound);
-
-        role.SetRolePermissions(permissions, membership.Rules);
-        await store.SaveAsync(cancellationToken);
+        await roles.SetPermissionsAsync(command.Id, MakeProjectRole.Known(command.Permissions, catalogue), cancellationToken);
         return Unit.Value;
     }
 }

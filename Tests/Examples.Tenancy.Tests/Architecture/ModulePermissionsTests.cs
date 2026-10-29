@@ -13,7 +13,7 @@ namespace Examples.Tenancy.Tests.Architecture;
 /// </summary>
 /// <remarks>
 /// Read from the host's registrations as it makes them, with no database behind it, and from the marks as the export
-/// reads them, so this holds in every build. That the two catalogues agree as a whole, packs and marks included, is
+/// reads them, so this holds in every build. That the two catalogues agree as a whole, starter roles and marks included, is
 /// <see cref="Host.StartupTests"/>' to say, with the host on Supabase.
 /// </remarks>
 public sealed class ModulePermissionsTests

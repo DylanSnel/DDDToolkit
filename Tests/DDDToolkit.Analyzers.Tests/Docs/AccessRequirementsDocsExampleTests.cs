@@ -132,12 +132,13 @@ public class AccessRequirementsDocsExampleTests
         var mine = emitted.New("Billing.MyInvoices");
 
         // The module added a check of its own and none of the core's: who is calling is the core's in every module.
-        using (Callers.Begin(Caller.User(Guid.NewGuid())))
+        var access = new AccessManager(new CurrentUser());
+        using (access.BeginAs(Guid.NewGuid()))
         {
             Await(require.Invoke(checks, [mine, CancellationToken.None])!);
         }
 
-        using (Callers.Begin(Caller.Anonymous))
+        using (access.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             FluentActions.Invoking(() => Await(require.Invoke(checks, [mine, CancellationToken.None])!))
                 .Should().Throw<RefusalException>().Which.Code.Should().Be("access.not-signed-in");

@@ -78,15 +78,20 @@ public sealed class RolePermissionsScenarios(SampleHosts sample) : IClassFixture
     }
 
     [Fact]
-    public async Task The_roles_a_seat_holds_itself_it_reads_with_their_permissions()
+    public async Task A_seat_reads_the_permissions_it_holds_itself_in_its_overview()
     {
-        // Rhea does not manage the tenant's roles, and holds one: an area manager's. What she holds is hers to read.
+        // Rhea does not manage the tenant's roles, and holds one: an area manager's. Her overview names the role, and
+        // lists every permission she holds through it, with where it reaches. A role's own list of permissions is for
+        // whoever manages the roles, in the overview too.
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
 
         var me = await rhea.GetFromJsonAsync<JsonElement>("/me", TestContext.Current.CancellationToken);
 
-        me.GetProperty("roles").EnumerateArray().Should().ContainSingle().Which
-            .GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()).Should().Contain(ProjectPermissionNames.ManageCrew);
+        var role = me.GetProperty("roles").EnumerateArray().Should().ContainSingle().Which;
+        role.GetProperty("fromStarterRole").GetString().Should().Be(SampleCatalogue.AreaManager);
+        role.TryGetProperty("permissions", out _).Should().BeFalse("the overview holds the role, whose permissions are for whoever manages the roles");
+        me.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetProperty("permission").GetString())
+            .Should().Contain(ProjectPermissionNames.ManageCrew);
     }
 
     [Fact]

@@ -11,8 +11,8 @@
   <!--
     No ASP.NET Core and no Functions SDK: a worker service, a function or a test can validate a token with
     this alone. The two hosts have packages of their own, so neither drags the other in. No Entity
-    Framework either: what comes out is the toolkit's Caller, which row level security reads through an
-    ICallerAccessor, and a host that only checks tokens has no database to bring. The admin client needs
+    Framework either: what comes out is the toolkit's CurrentUserSnapshot, which row level security reads through the
+    ICurrentUser, and a host that only checks tokens has no database to bring. The admin client needs
     nothing either: HttpClient and System.Text.Json come with the framework, and it deliberately does
     without IHttpClientFactory.
   -->

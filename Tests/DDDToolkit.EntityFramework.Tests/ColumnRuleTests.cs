@@ -21,7 +21,7 @@ public sealed class ColumnRuleTests
         Roles = RowAccessRoleNames.Default with { TokenRoles = new Dictionary<string, string> { ["auditor"] = "shelf_auditor" } },
     };
 
-    private static readonly RowAccessRule PackersChangeCrates = RowAccessRule.For<Crate>("Packers change crates", RowOperations.All, "{caller:signedin}");
+    private static readonly RowAccessRule PackersChangeCrates = RowAccessRule.For<Crate>("Packers change crates", RowOperations.All, "{user:signedin}");
 
     [Fact]
     public void A_column_rule_is_a_trigger_on_its_column_and_writes_no_policy()
@@ -39,8 +39,8 @@ public sealed class ColumnRuleTests
             "BEGIN\n" +
             "    -- The roles a caller's statement runs as are held; the application's own work and the tables' owner are not.\n" +
             "    IF CURRENT_USER IN ('anon', 'authenticated') THEN\n" +
-            "        IF (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))) IS NOT TRUE" +
-            " OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (NEW.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))) IS NOT TRUE THEN\n" +
+            "        IF (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))) IS NOT TRUE" +
+            " OR (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (NEW.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))) IS NOT TRUE THEN\n" +
             "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tickets_status_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Owners close their tickets'' does not let this caller change \"Status\" of \"desk\".\"Tickets\".';\n" +
             "        END IF;\n" +
             "    END IF;\n" +
@@ -69,12 +69,12 @@ public sealed class ColumnRuleTests
         script.Should().Contain("-- A change of \"Status\" of \"desk\".\"Tickets\" is held to the column rules 'Leads close the teams tickets' and 'Owners close their tickets': a change one of them allows is allowed.\n");
         script.Should().Contain(
             "    IF CURRENT_USER = 'anon' THEN\n" +
-            "        IF (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))) IS NOT TRUE",
+            "        IF (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))) IS NOT TRUE",
             "the leads' rule is for signed-in users alone, so a caller without a user is asked the owners' rule");
         script.Should().Contain(
             "    ELSIF CURRENT_USER = 'authenticated' THEN\n" +
-            "        IF ((((OLD.\"Team\" IS NOT NULL) AND (OLD.\"Team\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_claims() #>> '{app_metadata,team}'))) AND ((SELECT \"ddd\".caller_claims() #>> '{app_metadata,lead}') IS NOT DISTINCT FROM 'yes'))" +
-            " OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))) IS NOT TRUE",
+            "        IF ((((OLD.\"Team\" IS NOT NULL) AND (OLD.\"Team\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_claims() #>> '{app_metadata,team}'))) AND ((SELECT \"ddd\".current_user_claims() #>> '{app_metadata,lead}') IS NOT DISTINCT FROM 'yes'))" +
+            " OR (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())))) IS NOT TRUE",
             "a signed-in user is asked both, OR-ed together");
         script.Should().Contain("MESSAGE = 'None of the column rules ''Leads close the teams tickets'' and ''Owners close their tickets'' lets this caller change \"Status\" of \"desk\".\"Tickets\".';");
     }
@@ -134,8 +134,8 @@ public sealed class ColumnRuleTests
             shelf,
             [
                 PackersChangeCrates,
-                RowAccessRule.ForColumns<Crate>("Users close crates", [nameof(Crate.State)], "{caller:signedin}", RowAccessRoles.User),
-                RowAccessRule.ForColumns<Crate>("Auditors close crates", [nameof(Crate.State)], "{caller:signedin}", RowAccessRoles.Token("auditor")),
+                RowAccessRule.ForColumns<Crate>("Users close crates", [nameof(Crate.State)], "{user:signedin}", RowAccessRoles.User),
+                RowAccessRule.ForColumns<Crate>("Auditors close crates", [nameof(Crate.State)], "{user:signedin}", RowAccessRoles.Token("auditor")),
             ],
             null,
             Shelf);
@@ -168,7 +168,7 @@ public sealed class ColumnRuleTests
                 PackersChangeCrates,
                 RowAccessRule.For<Crate>("Clerks change crates", RowOperations.Read | RowOperations.Change, "TRUE", "shelf_clerk"),
                 RowAccessRule.For<Crate>("Counters read crates", RowOperations.Read, "TRUE", "shelf_counter"),
-                RowAccessRule.ForColumns<Crate>("Packers label crates", [nameof(Crate.Label)], "{caller:signedin}", RowAccessRoles.User),
+                RowAccessRule.ForColumns<Crate>("Packers label crates", [nameof(Crate.Label)], "{user:signedin}", RowAccessRoles.User),
             ],
             null,
             export);
@@ -210,14 +210,14 @@ public sealed class ColumnRuleTests
     {
         using var shelf = ShelfContext.Create();
 
-        var script = PostgresRowAccess.Script(shelf, [PackersChangeCrates, RowAccessRule.ForColumns<ColdCrate>("Cold keepers set the temperature", [nameof(ColdCrate.Temperature)], "{caller:signedin}")], null, Shelf);
+        var script = PostgresRowAccess.Script(shelf, [PackersChangeCrates, RowAccessRule.ForColumns<ColdCrate>("Cold keepers set the temperature", [nameof(ColdCrate.Temperature)], "{user:signedin}")], null, Shelf);
 
         Trigger(script, "crates_temperature_column_rule").Should().StartWith(
             "CREATE TRIGGER crates_temperature_column_rule BEFORE UPDATE OF \"Temperature\" ON \"shelf\".\"Crates\"\n" +
             "    FOR EACH ROW WHEN ((OLD.\"Temperature\" IS DISTINCT FROM NEW.\"Temperature\") AND (OLD.\"Kind\" = 'cold' OR NEW.\"Kind\" = 'cold'))\n",
             "the other crates in the table are no business of a rule about cold ones");
         Function(script, "crates_temperature_column_rule").Should().Contain(
-            "IF (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND OLD.\"Kind\" = 'cold') IS NOT TRUE OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND NEW.\"Kind\" = 'cold') IS NOT TRUE THEN",
+            "IF (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND OLD.\"Kind\" = 'cold') IS NOT TRUE OR (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND NEW.\"Kind\" = 'cold') IS NOT TRUE THEN",
             "a crate that stops being a cold one is no longer one the rule allows");
     }
 

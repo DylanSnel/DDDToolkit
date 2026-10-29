@@ -25,13 +25,13 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
     private static readonly Guid Wren = Guid.NewGuid();
 
     private TestServices _services = null!;
-    private HostTenancy.ProvisionedTenant _harbor = null!;
-    private HostTenancy.ProvisionedTenant _meadow = null!;
+    private ProvisionedTenant _harbor = null!;
+    private ProvisionedTenant _meadow = null!;
     private OrganizationUnitId _north;
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private RoleId Watcher => _harbor.RolesByPack[HostCatalogue.WatcherPack];
+    private RoleId Watcher => _harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
 
     public async ValueTask InitializeAsync()
     {
@@ -48,13 +48,13 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
     }
 
     /// <summary>Issues an invitation into North with the watchers' role, as Harbor's administrator.</summary>
-    private Task<HostTenancy.IssuedInvitation<InvitationId>> IssueAsync(string address = Address, DateTimeOffset? grantUntil = null)
+    private Task<InvitationManager.IssuedInvitation> IssueAsync(string address = Address, DateTimeOffset? grantUntil = null)
         => _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services =>
             services.Invitations().IssueAsync(address, _north, Watcher, grantUntil, lifetime: null, Cancellation));
 
     /// <summary>Reads through Tenancy's context as system work in a tenant, in a scope of its own.</summary>
     private Task<T> InAsync<T>(TenantId tenant, Func<TestTenancyContext, Task<T>> read)
-        => _services.BySystemIn(tenant, services => read(services.Tenancy()));
+        => _services.BySystemIn(tenant, services => read(services.TenancyContext()));
 
     [Fact]
     public async Task An_invitation_and_the_digest_of_its_token_are_two_rows_written_by_one_save()
@@ -69,24 +69,24 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         // The invitation holds what it offers, and nothing of the token.
         var invitation = await InAsync(_harbor.Tenant, context => context.Set<HostInvitation>().AsNoTracking().SingleAsync(Cancellation));
-        invitation.Id.Should().Be(issued.Id);
+        invitation.Id.Should().Be(issued.Invitation.Id);
         invitation.Address.Should().Be(Address);
         invitation.UnitId.Should().Be(_north);
         invitation.RoleId.Should().Be(Watcher);
         invitation.State.Should().Be(InvitationState.Open);
         invitation.IssuedBy.Should().Be(_harbor.AdminSeat);
-        invitation.ExpiresAt.Should().BeCloseTo(issued.ExpiresAt, TimeSpan.FromMilliseconds(1));
+        invitation.ExpiresAt.Should().BeCloseTo(issued.Invitation.ExpiresAt, TimeSpan.FromMilliseconds(1));
 
         // The digest is of the token's bytes, in the table next to it; the token itself is in no column of either.
         var kept = await InAsync(_harbor.Tenant, context => context.Set<TenancyInvitationDigest<InvitationId, TenantId>>().AsNoTracking().SingleAsync(Cancellation));
-        kept.InvitationId.Should().Be(issued.Id);
+        kept.InvitationId.Should().Be(issued.Invitation.Id);
         kept.TenantId.Should().Be(_harbor.Tenant);
         kept.Digest.Should().Equal(SHA256.HashData(Base64Url.DecodeFromChars(issued.Token)));
         _services.Commands.Sent.Should().NotContain(command => command.Text.Contains(issued.Token, StringComparison.Ordinal), "the token is no part of any statement");
 
         // Its event is in the outbox, with ids and no address; an invitation changes nobody's access, so the access history has no row of it.
         var stored = await InAsync(_harbor.Tenant, context => context.Set<OutboxMessage>().AsNoTracking().Where(message => message.EventName == "tenancy.invitation-issued").SingleAsync(Cancellation));
-        stored.Payload.Should().Contain(issued.Id.Value.ToString()).And.NotContain(Address).And.NotContain(issued.Token);
+        stored.Payload.Should().Contain(issued.Invitation.Id.Value.ToString()).And.NotContain(Address).And.NotContain(issued.Token);
         (await InAsync(_harbor.Tenant, context => context.Set<EventLogEntry>().AsNoTracking().CountAsync(entry => entry.EventName == "tenancy.invitation-issued", Cancellation))).Should().Be(0);
     }
 
@@ -98,15 +98,15 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         var accepted = await _services.AcceptAsync(Wren, issued.Token, displayName: "Wren Marsh", verifiedAddress: "WREN@example.test");
 
-        accepted.Tenant.Should().Be(_harbor.Tenant);
-        accepted.Slug.Should().Be("harbor");
+        accepted.Tenant.Id.Should().Be(_harbor.Tenant);
+        accepted.Tenant.Slug.Value.Should().Be("harbor");
         var writes = _services.Commands.Sent.Where(command => command.Writes).ToList();
         writes.Should().NotBeEmpty();
         writes.Select(command => command.Transaction).Distinct().Should().ContainSingle("everything an acceptance writes is one transaction").Which.Should().NotBeNull();
-        writes.Should().OnlyContain(command => command.TenancyCaller!.Kind == TenancyCallerKind.SystemInTenant && Equals(command.TenancyCaller.TenantId, _harbor.Tenant),
+        writes.Should().OnlyContain(command => command.TenancyUser!.Kind == TenancyUserKind.SystemInTenant && Equals(command.TenancyUser.TenantId, _harbor.Tenant),
             "it is written as system work in the invitation's tenant");
 
-        var seat = await InAsync(_harbor.Tenant, context => context.Set<HostSeat>().AsNoTracking().AsSingleQuery().SingleAsync(row => row.Id == accepted.Seat, Cancellation));
+        var seat = await InAsync(_harbor.Tenant, context => context.Set<HostSeat>().AsNoTracking().AsSingleQuery().SingleAsync(row => row.Id == accepted.Seat.Id, Cancellation));
         seat.Identity.Should().Be(Wren);
         seat.DisplayName.Should().Be("Wren Marsh");
         var placement = seat.Placements.Should().ContainSingle().Which;
@@ -117,11 +117,11 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         grant.RoleId.Should().Be(Watcher);
         grant.GrantedBy.Should().Be(_harbor.AdminSeat);
         grant.Reason.Should().Be("invitation");
-        (await _services.StoredRightsAsync(accepted.Seat)).Should().ContainSingle(right => right.Permission == HostCatalogue.WidgetRead && right.UnitId == _north);
+        (await _services.StoredRightsAsync(accepted.Seat.Id)).Should().ContainSingle(right => right.Permission == HostCatalogue.WidgetRead && right.UnitId == _north);
 
         var invitation = await InAsync(_harbor.Tenant, context => context.Set<HostInvitation>().AsNoTracking().SingleAsync(Cancellation));
         invitation.State.Should().Be(InvitationState.Accepted);
-        invitation.AcceptedAs.Should().Be(accepted.Seat);
+        invitation.AcceptedAs.Should().Be(accepted.Seat.Id);
         invitation.Address.Should().BeNull("the address is forgotten with the save that accepts");
 
         // The seat's own events are what the access history keeps of it; the invitation's is in the outbox alone.
@@ -142,14 +142,14 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
     {
         var issued = await IssueAsync();
         var elsewhere = await _services.BySystemIn(_meadow.Tenant, services =>
-            services.Invitations().IssueAsync("lark@example.test", _meadow.RootUnit, _meadow.RolesByPack[HostCatalogue.WatcherPack], null, null, Cancellation));
+            services.Invitations().IssueAsync("lark@example.test", _meadow.RootUnit, _meadow.RolesByStarterRole[HostCatalogue.WatcherStarterRole], null, null, Cancellation));
 
         DbContext? acceptors = null;
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.User(Wren)))
-        using (TenancyCallers.BeginNone())
+        using (TestAccess.BeginAs(Wren))
+        using (TenancyUsers.BeginNone())
         {
-            acceptors = scope.ServiceProvider.Tenancy();
+            acceptors = scope.ServiceProvider.TenancyContext();
             _services.Commands.Reset();
             await scope.ServiceProvider.Invitations().AcceptAsync(elsewhere.Token, verifiedAddress: null, Cancellation);
         }
@@ -159,14 +159,14 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         lookup.Text.Should().Contain("\"InvitationDigests\"").And.Contain("\"Digest\" =");
         lookup.Text.Should().NotContain("\"Address\"").And.NotContain("\"Digest\",", "it selects the tenant, the invitation and its issuer, and nothing else");
         lookup.Context.Should().NotBeNull().And.NotBeSameAs(acceptors, "it runs on a context of its own");
-        lookup.Caller.Should().BeSameAs(Caller.System, "as the application itself, where nothing but the save keeps tenants apart");
-        lookup.TenancyCaller.Should().BeNull();
+        lookup.Caller.Should().BeSameAs(CurrentUserSnapshot.System, "as the application itself, where nothing but the save keeps tenants apart");
+        lookup.TenancyUser.Should().BeNull();
         lookup.Writes.Should().BeFalse();
 
         // And it found Meadow's: the seat is there, and Harbor's invitation is as it was.
         (await InAsync(_meadow.Tenant, context => context.Set<HostSeat>().AsNoTracking().CountAsync(seat => seat.Identity == Wren, Cancellation))).Should().Be(1);
         (await InAsync(_harbor.Tenant, context => context.Set<HostSeat>().AsNoTracking().CountAsync(seat => seat.Identity == Wren, Cancellation))).Should().Be(0);
-        (await InAsync(_harbor.Tenant, context => context.Set<HostInvitation>().AsNoTracking().SingleAsync(row => row.Id == issued.Id, Cancellation))).State.Should().Be(InvitationState.Open);
+        (await InAsync(_harbor.Tenant, context => context.Set<HostInvitation>().AsNoTracking().SingleAsync(row => row.Id == issued.Invitation.Id, Cancellation))).State.Should().Be(InvitationState.Open);
 
         // A token nobody was given, and a text that is none, are answered alike.
         await Refused.WithCodeAsync(TenancyRefusals.InvitationNotFound, () => _services.AcceptAsync(Guid.NewGuid(), DDDToolkit.Security.BearerTokens.New().Token));
@@ -178,31 +178,31 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
     {
         var harbors = await IssueAsync();
         var meadows = await _services.BySystemIn(_meadow.Tenant, services =>
-            services.Invitations().IssueAsync("lark@example.test", _meadow.RootUnit, _meadow.RolesByPack[HostCatalogue.WatcherPack], null, null, Cancellation));
+            services.Invitations().IssueAsync("lark@example.test", _meadow.RootUnit, _meadow.RolesByStarterRole[HostCatalogue.WatcherStarterRole], null, null, Cancellation));
 
         var forAda = await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services => services.Invitations().ListOpenAsync(Cancellation));
         var forMeadow = await _services.BySystemIn(_meadow.Tenant, services => services.Invitations().ListOpenAsync(Cancellation));
 
-        forAda.Should().ContainSingle().Which.Should().BeEquivalentTo(new { harbors.Id, Address, UnitId = _north, RoleId = Watcher, IssuedBy = (SeatId?)_harbor.AdminSeat, IssuedAsSystem = false });
-        forMeadow.Should().ContainSingle().Which.Should().BeEquivalentTo(new { meadows.Id, Address = "lark@example.test", IssuedBy = (SeatId?)null, IssuedAsSystem = true });
+        forAda.Should().ContainSingle().Which.Should().BeEquivalentTo(new { harbors.Invitation.Id, Address, UnitId = _north, RoleId = Watcher, IssuedBy = (SeatId?)_harbor.AdminSeat, IssuedAsSystem = false });
+        forMeadow.Should().ContainSingle().Which.Should().BeEquivalentTo(new { meadows.Invitation.Id, Address = "lark@example.test", IssuedBy = (SeatId?)null, IssuedAsSystem = true });
 
         // Another tenant's invitation is not found, by its administrator or by system work there.
         await Refused.WithCodeAsync(TenancyRefusals.InvitationNotFound,
-            () => _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services => services.Invitations().CancelAsync(meadows.Id, Cancellation)));
+            () => _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services => services.Invitations().CancelAsync(meadows.Invitation.Id, Cancellation)));
         await Refused.WithCodeAsync(TenancyRefusals.InvitationNotFound,
-            () => _services.BySystemIn(_meadow.Tenant, services => services.Invitations().CancelAsync(harbors.Id, Cancellation)));
+            () => _services.BySystemIn(_meadow.Tenant, services => services.Invitations().CancelAsync(harbors.Invitation.Id, Cancellation)));
 
         // Cancelled by whoever manages seats at its unit, it is listed no more and its token is of no use.
-        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services => services.Invitations().CancelAsync(harbors.Id, Cancellation));
+        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services => services.Invitations().CancelAsync(harbors.Invitation.Id, Cancellation));
         (await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services => services.Invitations().ListOpenAsync(Cancellation))).Should().BeEmpty();
         await Refused.WithCodeAsync(TenancyRefusals.InvitationCancelled, () => _services.AcceptAsync(Wren, harbors.Token));
 
         // A row of another tenant is refused by the save check, whoever made it.
         await Refused.WithCodeAsync(TenancyRefusals.OtherTenant, () => _services.BySystemIn(_harbor.Tenant, async services =>
         {
-            services.Tenancy().Add(TenancyInstances.NewInvitation<HostInvitation, InvitationId, TenantId, OrganizationUnitId, RoleId, SeatId>(
+            services.TenancyContext().Add(TenancyInstances.NewInvitation<HostInvitation, InvitationId, TenantId, OrganizationUnitId, RoleId, SeatId>(
                 InvitationId.CreateSequential(), _meadow.Tenant, Address, _meadow.RootUnit, Watcher, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(1)));
-            await services.Tenancy().SaveChangesAsync(Cancellation);
+            await services.TenancyContext().SaveChangesAsync(Cancellation);
         }));
     }
 
@@ -214,10 +214,10 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         // Wren's acceptance has decided, and is about to save, when somebody else's commits.
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.User(Wren)))
-        using (TenancyCallers.BeginNone())
+        using (TestAccess.BeginAs(Wren))
+        using (TenancyUsers.BeginNone())
         {
-            _services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => _services.AcceptAsync(other, issued.Token, displayName: "Lark"));
+            _services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => _services.AcceptAsync(other, issued.Token, displayName: "Lark"));
 
             var conflict = await FluentActions.Awaiting(() => scope.ServiceProvider.Invitations().AcceptAsync(issued.Token, verifiedAddress: null, Cancellation))
                 .Should().ThrowAsync<ConcurrencyConflictException>();
@@ -241,8 +241,8 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         await _services.BySystemIn(_harbor.Tenant, async services =>
         {
-            var context = services.Tenancy();
-            var invitation = await context.Set<HostInvitation>().SingleAsync(row => row.Id == issued.Id, Cancellation);
+            var context = services.TenancyContext();
+            var invitation = await context.Set<HostInvitation>().SingleAsync(row => row.Id == issued.Invitation.Id, Cancellation);
 
             // The class has no method that changes it; a change made past the class is refused by the model.
             context.Entry(invitation).Property(nameof(HostInvitation.UnitId)).CurrentValue = _harbor.RootUnit;

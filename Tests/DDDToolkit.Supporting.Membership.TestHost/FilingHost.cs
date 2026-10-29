@@ -34,7 +34,7 @@ public static class FilingHost
         services.AddFolderMemberAccess<IFilingRequest>();
 
         // What the caller's own UserId is, for a request about the caller's own: the host's to say, for its own kind.
-        services.AddCallersOwn<UserId, CallersUser>();
+        services.AddOwnedByCurrentUser<UserId, CurrentUserId>();
 
         // Who may change the members is the host's to decide, so the handlers that do are the host's own.
         services.TryAddScoped<ShareDocumentHandler>();

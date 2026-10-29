@@ -15,7 +15,7 @@ namespace Examples.Tenancy.Inspections.Application.Operators.Queries;
 /// </remarks>
 /// <param name="Tenant">The tenant the project is of.</param>
 /// <param name="Project">The project.</param>
-[RequiresOperator]
+[Operator]
 public sealed record TenantProjectInspections(TenantId Tenant, ProjectId Project) : IQuery<IReadOnlyList<InspectionOverview>>, IInspectionsRequest;
 
 /// <summary>Answers <see cref="TenantProjectInspections"/> in one statement, on a context of this query's own.</summary>

@@ -8,7 +8,7 @@ namespace DDDToolkit.EntityFramework.Tests.Infrastructure;
 
 /// <summary>
 /// A plain Postgres with the help desk on it, set up the way an application off Supabase sets itself up:
-/// <see cref="PostgresRowAccess.SetupScript"/> for the roles and the caller functions, the schema from the
+/// <see cref="PostgresRowAccess.SetupScript"/> for the roles and the current user functions, the schema from the
 /// model, owned by the application's login role, and the desk's rules as policies from
 /// <see cref="PostgresRowAccess.Script"/>. Nothing of Supabase's is there.
 /// </summary>
@@ -75,7 +75,7 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
         }
 
         // As the application itself, which owns the tables: the rules are for callers.
-        await using var seed = CreateContext(Caller.System);
+        await using var seed = CreateContext(CurrentUserSnapshot.System);
         seed.Tickets.AddRange(
             Ticket("Alice's, open for the north", Alice, "north", TicketStatus.Open, isPublic: false, "On Alice's"),
             Ticket("Bob's own, closed", Bob, "north", TicketStatus.Closed, isPublic: false, "On Bob's"),
@@ -94,11 +94,11 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
             $"No Docker here, so '{PgmqDatabase.Image}' could not be started. Row level security on Postgres is not covered on this machine.");
 
     /// <summary>A context as the application logs in, running as <paramref name="caller"/>.</summary>
-    public DeskContext CreateContext(Caller caller)
-        => DeskContext.Create(ApplicationConnectionString, new PostgresRowLevelSecurityInterceptor(new Fixed(caller), new PostgresRowLevelSecurityOptions()));
+    public DeskContext CreateContext(CurrentUserSnapshot caller)
+        => DeskContext.Create(ApplicationConnectionString, new PostgresRowLevelSecurityInterceptor(new CurrentUser(source: new Fixed(caller)), new PostgresRowLevelSecurityOptions()));
 
     /// <summary>Every ticket <paramref name="caller"/> may read.</summary>
-    public async Task<List<Ticket>> TicketsAsync(Caller caller, CancellationToken cancellationToken)
+    public async Task<List<Ticket>> TicketsAsync(CurrentUserSnapshot caller, CancellationToken cancellationToken)
     {
         await using var context = CreateContext(caller);
         return await context.Tickets.AsNoTracking().ToListAsync(cancellationToken);
@@ -108,7 +108,7 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
     /// The titles of every ticket <paramref name="caller"/> may read, by SQL that names no other column, so it
     /// still answers after a test dropped one the model maps.
     /// </summary>
-    public async Task<List<string>> TitlesAsync(Caller caller, CancellationToken cancellationToken)
+    public async Task<List<string>> TitlesAsync(CurrentUserSnapshot caller, CancellationToken cancellationToken)
     {
         await using var context = CreateContext(caller);
         return await context.Database.SqlQueryRaw<string>("""SELECT "Title" AS "Value" FROM desk."Tickets" """).ToListAsync(cancellationToken);
@@ -128,7 +128,7 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
         }.ConnectionString;
 
     /// <summary>Every comment <paramref name="caller"/> may read, asked of the comments' own table.</summary>
-    public async Task<List<string>> CommentsAsync(Caller caller, CancellationToken cancellationToken)
+    public async Task<List<string>> CommentsAsync(CurrentUserSnapshot caller, CancellationToken cancellationToken)
     {
         await using var context = CreateContext(caller);
         return await context.Database.SqlQueryRaw<string>("""SELECT "Text" AS "Value" FROM desk."TicketComment" """).ToListAsync(cancellationToken);
@@ -175,7 +175,7 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
     /// client of the Data API would, with <c>{0}</c>, <c>{1}</c> for <paramref name="parameters"/>, and
     /// returns the number of rows it affected.
     /// </summary>
-    public async Task<int> RunAsAsync(Caller caller, string sql, CancellationToken cancellationToken, params object[] parameters)
+    public async Task<int> RunAsAsync(CurrentUserSnapshot caller, string sql, CancellationToken cancellationToken, params object[] parameters)
     {
         await using var context = CreateContext(caller);
         return await context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
@@ -225,8 +225,8 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
         return ticket;
     }
 
-    private sealed class Fixed(Caller caller) : ICallerAccessor
+    private sealed class Fixed(CurrentUserSnapshot caller) : ICurrentUserSource
     {
-        public Caller Current => caller;
+        public CurrentUserSnapshot? Current => caller;
     }
 }

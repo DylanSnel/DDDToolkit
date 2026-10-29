@@ -98,14 +98,14 @@ public partial class TicketWatcher
 [AccessFunction<Ticket>("desk.is_watcher")]
 public static partial class TicketWatchers
 {
-    public static bool Allows(Ticket ticket, Caller caller) => ticket.Watchers.Any(watcher => watcher.User == caller.UserId);
+    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Watchers.Any(watcher => watcher.User == user.Id);
 }
 
 /// <summary>A watcher reads the tickets they watch.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
 public static partial class WatchersReadTheirTickets
 {
-    public static bool Allows(Ticket ticket, Caller caller) => TicketWatchers.Allows(ticket, caller);
+    public static bool Allows(Ticket ticket, ICurrentUser user) => TicketWatchers.Allows(ticket, user);
 }
 
 /// <summary>
@@ -117,14 +117,14 @@ public static partial class WatchersReadTheirTickets
 [AccessFunctions(Owner = "desk")]
 public static partial class TicketsIWatch
 {
-    public static bool Allows(Ticket ticket, Caller caller) => ticket.Watchers.Any(watcher => watcher.User == caller.UserId);
+    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Watchers.Any(watcher => watcher.User == user.Id);
 }
 
 /// <summary>The tickets of a team, only the open ones when asked: a set-shaped function that takes more than the caller.</summary>
 [AccessFunction<Ticket>("desk.tickets_for_team", Shape = AccessFunctionShape.Set)]
 public static partial class TicketsForTeam
 {
-    public static bool Allows(Ticket ticket, Caller caller, string team, bool openOnly)
+    public static bool Allows(Ticket ticket, ICurrentUser user, string team, bool openOnly)
         => ticket.Team == team && (!openOnly || ticket.Status == TicketStatus.Open);
 }
 
@@ -135,8 +135,8 @@ public static partial class TicketsForTeam
 [AccessFunction<Ticket>("desk.tickets_i_reacted_in", Shape = AccessFunctionShape.Set)]
 public static partial class TicketsIReactedIn
 {
-    public static bool Allows(Ticket ticket, Caller caller)
-        => ticket.Comments.Any(comment => comment.Reactions.Any(reaction => reaction.User == caller.UserId));
+    public static bool Allows(Ticket ticket, ICurrentUser user)
+        => ticket.Comments.Any(comment => comment.Reactions.Any(reaction => reaction.User == user.Id));
 }
 
 /// <summary>
@@ -146,15 +146,15 @@ public static partial class TicketsIReactedIn
 [AccessFunction<Ticket>("desk.reacted_to_comment")]
 public static partial class ReactedToComment
 {
-    public static bool Allows(Ticket ticket, Caller caller, string text)
-        => ticket.IsPublic || ticket.Comments.Any(comment => comment.Text == text && comment.Reactions.Any(reaction => reaction.User == caller.UserId));
+    public static bool Allows(Ticket ticket, ICurrentUser user, string text)
+        => ticket.IsPublic || ticket.Comments.Any(comment => comment.Text == text && comment.Reactions.Any(reaction => reaction.User == user.Id));
 }
 
 /// <summary>A watcher reads the tickets they watch, asked as a set, once per statement.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
 public static partial class WatchersReadTheTicketsTheyWatch
 {
-    public static bool Allows(Ticket ticket, Caller caller) => TicketsIWatch.Ids().Contains(ticket.Id);
+    public static bool Allows(Ticket ticket, ICurrentUser user) => TicketsIWatch.Ids().Contains(ticket.Id);
 }
 
 /// <summary>What the desk knows of a caller, which a function it creates itself answers.</summary>
@@ -162,55 +162,55 @@ public static partial class WatchersReadTheTicketsTheyWatch
 public static partial class DeskQuestions
 {
     /// <summary>The caller's seat at the desk, or null for a caller who has none.</summary>
-    [AccessScalar("desk.caller_seat")]
-    public static partial Guid CallerSeat();
+    [AccessScalar("desk.current_seat")]
+    public static partial Guid CurrentSeat();
 
     /// <summary>Whether the caller is on duty at the desk, or null for a caller the desk does not know.</summary>
-    [AccessScalar("desk.caller_on_duty")]
-    public static partial bool CallerOnDuty();
+    [AccessScalar("desk.current_on_duty")]
+    public static partial bool CurrentOnDuty();
 }
 
 /// <summary>Whoever is on duty does anything with every ticket: a rule that is one question and nothing else.</summary>
 [RowAccess<Ticket>(RowOperations.All)]
 public static partial class OnDutyHandleEveryTicket
 {
-    public static bool Allows(Ticket ticket, Caller caller) => DeskQuestions.CallerOnDuty();
+    public static bool Allows(Ticket ticket, ICurrentUser user) => DeskQuestions.CurrentOnDuty();
 }
 
 /// <summary>A ticket is read from the seat that owns it.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
-public static partial class TicketsOfTheCallersSeat
+public static partial class TicketsOfTheCurrentSeat
 {
-    public static bool Allows(Ticket ticket, Caller caller) => ticket.Owner == DeskQuestions.CallerSeat();
+    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Owner == DeskQuestions.CurrentSeat();
 }
 
 /// <summary>A ticket is read from every seat but the one that owns it.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
 public static partial class TicketsOfAnotherSeat
 {
-    public static bool Allows(Ticket ticket, Caller caller) => ticket.Owner != DeskQuestions.CallerSeat();
+    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Owner != DeskQuestions.CurrentSeat();
 }
 
 /// <summary>A ticket is read from every seat but the one that owns it, written as not owning it.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
-public static partial class TicketsNotOfTheCallersSeat
+public static partial class TicketsNotOfTheCurrentSeat
 {
-    public static bool Allows(Ticket ticket, Caller caller) => !(ticket.Owner == DeskQuestions.CallerSeat());
+    public static bool Allows(Ticket ticket, ICurrentUser user) => !(ticket.Owner == DeskQuestions.CurrentSeat());
 }
 
 /// <summary>An owner does anything with their own tickets.</summary>
 [RowAccess<Ticket>(RowOperations.All)]
 public static partial class OwnersHaveTheirTickets
 {
-    public static bool Allows(Ticket ticket, Caller caller) => caller.IsSignedIn && ticket.Owner == caller.UserId;
+    public static bool Allows(Ticket ticket, ICurrentUser user) => user.IsAuthenticated && ticket.Owner == user.Id;
 }
 
 /// <summary>A teammate reads the team's tickets while they are open.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
 public static partial class TeammatesReadOpenTickets
 {
-    public static bool Allows(Ticket ticket, Caller caller)
-        => ticket.Team != null && ticket.Team == caller.Claim("app_metadata.team") && ticket.Status == TicketStatus.Open;
+    public static bool Allows(Ticket ticket, ICurrentUser user)
+        => ticket.Team != null && ticket.Team == user.FindClaim("app_metadata.team") && ticket.Status == TicketStatus.Open;
 }
 
 /// <summary>
@@ -220,37 +220,37 @@ public static partial class TeammatesReadOpenTickets
 [RowAccess<Ticket>(RowOperations.Create)]
 public static partial class TeammatesFileTicketsForTheTeam
 {
-    public static bool Allows(Ticket ticket, Caller caller)
-        => ticket.Owner == null && ticket.Team != null && ticket.Team == caller.Claim("app_metadata.team");
+    public static bool Allows(Ticket ticket, ICurrentUser user)
+        => ticket.Owner == null && ticket.Team != null && ticket.Team == user.FindClaim("app_metadata.team");
 }
 
 /// <summary>Anybody reads a public ticket.</summary>
 [RowAccess<Ticket>(RowOperations.Read)]
 public static partial class PublicTicketsAreEveryones
 {
-    public static bool Allows(Ticket ticket, Caller caller) => ticket.IsPublic;
+    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.IsPublic;
 }
 
 /// <summary>A teammate works on the team's tickets: reads and changes them, whichever column, as far as the rules for the row go.</summary>
 [RowAccess<Ticket>(RowOperations.Read | RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class TeammatesWorkOnTheTeamsTickets
 {
-    public static bool Allows(Ticket ticket, Caller caller) => ticket.Team != null && ticket.Team == caller.Claim("app_metadata.team");
+    public static bool Allows(Ticket ticket, ICurrentUser user) => ticket.Team != null && ticket.Team == user.FindClaim("app_metadata.team");
 }
 
 /// <summary>Only its owner closes a ticket or opens it again: a column rule, one condition more for a change of its status.</summary>
 [RowAccess<Ticket>(RowOperations.Change, Columns = [nameof(Ticket.Status)])]
 public static partial class OwnersCloseTheirTickets
 {
-    public static bool Allows(Ticket ticket, Caller caller) => caller.IsSignedIn && ticket.Owner == caller.UserId;
+    public static bool Allows(Ticket ticket, ICurrentUser user) => user.IsAuthenticated && ticket.Owner == user.Id;
 }
 
 /// <summary>A team's lead closes the team's tickets as well: a second column rule on the same column.</summary>
 [RowAccess<Ticket>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Ticket.Status)])]
 public static partial class LeadsCloseTheTeamsTickets
 {
-    public static bool Allows(Ticket ticket, Caller caller)
-        => ticket.Team != null && ticket.Team == caller.Claim("app_metadata.team") && caller.Claim("app_metadata.lead") == "yes";
+    public static bool Allows(Ticket ticket, ICurrentUser user)
+        => ticket.Team != null && ticket.Team == user.FindClaim("app_metadata.team") && user.FindClaim("app_metadata.lead") == "yes";
 }
 
 /// <summary>The desk's rules, each as the export takes it and as C# asks it.</summary>
@@ -282,11 +282,11 @@ public static class DeskRules
 
     public static readonly RowAccessRule WatchersBySet = RowAccessRule.For<Ticket>("Watchers read the tickets they watch", RowOperations.Read, WatchersReadTheTicketsTheyWatch.RowAccessSql);
 
-    public static readonly RowAccessRule OfTheCallersSeat = RowAccessRule.For<Ticket>("Tickets of the callers seat", RowOperations.Read, TicketsOfTheCallersSeat.RowAccessSql);
+    public static readonly RowAccessRule OfTheCurrentSeat = RowAccessRule.For<Ticket>("Tickets of the callers seat", RowOperations.Read, TicketsOfTheCurrentSeat.RowAccessSql);
 
     public static readonly RowAccessRule OfAnotherSeat = RowAccessRule.For<Ticket>("Tickets of another seat", RowOperations.Read, TicketsOfAnotherSeat.RowAccessSql);
 
-    public static readonly RowAccessRule NotOfTheCallersSeat = RowAccessRule.For<Ticket>("Tickets not of the callers seat", RowOperations.Read, TicketsNotOfTheCallersSeat.RowAccessSql);
+    public static readonly RowAccessRule NotOfTheCurrentSeat = RowAccessRule.For<Ticket>("Tickets not of the callers seat", RowOperations.Read, TicketsNotOfTheCurrentSeat.RowAccessSql);
 
     public static readonly RowAccessRule OnDuty = RowAccessRule.For<Ticket>("On duty handle every ticket", RowOperations.All, OnDutyHandleEveryTicket.RowAccessSql);
 
@@ -297,11 +297,14 @@ public static class DeskRules
     public static readonly RowAccessRule LeadsClose = RowAccessRule.ForColumns<Ticket>("Leads close the teams tickets", [nameof(Ticket.Status)], LeadsCloseTheTeamsTickets.RowAccessSql, RowAccessRoles.User);
 
     /// <summary>Whether the rules that let a caller read let <paramref name="caller"/> read <paramref name="ticket"/>, in C#.</summary>
-    public static bool Reads(Ticket ticket, Caller caller, bool withPublic = true)
-        => OwnersHaveTheirTickets.Allows(ticket, caller)
-            || TeammatesReadOpenTickets.Allows(ticket, caller)
-            || WatchersReadTheirTickets.Allows(ticket, caller)
-            || (withPublic && PublicTicketsAreEveryones.Allows(ticket, caller));
+    public static bool Reads(Ticket ticket, CurrentUserSnapshot caller, bool withPublic = true)
+    {
+        var user = Answering(caller);
+        return OwnersHaveTheirTickets.Allows(ticket, user)
+            || TeammatesReadOpenTickets.Allows(ticket, user)
+            || WatchersReadTheirTickets.Allows(ticket, user)
+            || (withPublic && PublicTicketsAreEveryones.Allows(ticket, user));
+    }
 }
 
 public sealed class DeskContext(DbContextOptions<DeskContext> options) : DbContext(options)

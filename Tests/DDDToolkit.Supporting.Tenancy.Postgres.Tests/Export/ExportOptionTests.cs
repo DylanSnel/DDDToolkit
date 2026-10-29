@@ -42,7 +42,7 @@ public sealed class ExportOptionTests(TenancyPostgres postgres)
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
         }
 
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ListAsync<string>(Forced, Cancellation)).Should().BeEmpty();
         }
@@ -54,7 +54,7 @@ public sealed class ExportOptionTests(TenancyPostgres postgres)
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
         }
 
-        await using var after = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var after = await AsUser.OwnerAsync(database, Cancellation);
         (await after.ListAsync<string>(Forced, Cancellation)).Should().Equal(secured);
     }
 
@@ -74,9 +74,9 @@ public sealed class ExportOptionTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database);
         await TenancySeed.SeedAsync(services, await TenancySeed.DatabaseNowAsync(database.ConnectionString, Cancellation), Cancellation);
         await EveryUseCase.RunAsync(services, Cancellation);
-        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation))).Seat.Id.Should().Be(Ada.Seat);
+        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation))).Seat.Id.Should().Be(Ada.Seat);
 
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         async Task<bool> MayAsync(string role, string table, string privilege)
             => await owner.ScalarAsync<bool>($"SELECT pg_catalog.has_table_privilege('{role}', '{table}', '{privilege}')", Cancellation);
         async Task<bool> MayChangeAsync(string role, string table, string column)

@@ -45,12 +45,12 @@ public sealed class AccessHistoryScenarios(SampleHosts sample) : IClassFixture<S
         // Hana gives leo a role, and takes it away again.
         using (var given = await hana.PostAsJsonAsync(grant, new { unitId = coast, roleId = observer, reason = "Follows the projects on the coast" }, Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var taken = await hana.DeleteAsync($"{grant}/{coast}/{observer}", Cancellation))
         {
-            taken.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            taken.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Maud, an access admin, reads the two newest rows: what happened last comes first, and each says hana's

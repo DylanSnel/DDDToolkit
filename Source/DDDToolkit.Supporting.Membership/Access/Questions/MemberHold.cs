@@ -1,19 +1,19 @@
-using DDDToolkit.Abstractions.Interfaces;
-
 namespace DDDToolkit.Supporting.Membership.Access;
 
 /// <summary>
-/// What the access questions read of one resource the caller may see: how the caller holds the permission asked
-/// about and until when, and the version the resource was at.
+/// What the access manager read of one resource the caller may see: how the caller holds the permission asked
+/// about and until when, and the version the resource was at. It names the resource as it was asked about: the
+/// resource itself where the question was given the resource (a <c>MemberHold&lt;Board&gt;</c>), its id where it was
+/// given an id (a <c>MemberHold&lt;BoardId&gt;</c>).
 /// </summary>
 /// <remarks>
-/// <see cref="MemberAccessCheck{TResource, TResourceId}"/> keeps the one it read for a request, in
-/// <see cref="DDDToolkit.Access.Checked{T}"/>, for the expert hold: a context that asks for it holds every save
-/// of the resource to <see cref="Version"/>. A handler on the default path takes nothing from there. A rule of
-/// its own that reads <see cref="Via"/> or <see cref="Until"/> asks the questions for a hold
-/// (<see cref="IMemberQuestions{TResourceId}.HoldAsync"/>).
+/// <see cref="MemberAccessCheck{TResource, TResourceId}"/> keeps the one it read for a request, by the resource's id,
+/// in <see cref="DDDToolkit.Access.Checked{T}"/>, for the expert hold: a context that asks for it holds every save of
+/// the resource to <see cref="Version"/>. A handler on the default path takes nothing from there. A rule of its own
+/// that reads <see cref="Via"/> or <see cref="Until"/> asks the access manager for a hold
+/// (<see cref="MembershipAccessManager{TResource}.HoldAsync"/>).
 /// </remarks>
-/// <param name="Resource">The resource that was read.</param>
+/// <param name="Resource">The resource that was read, as it was asked about: the resource, or its id.</param>
 /// <param name="Via">
 /// How the caller holds the permission on it, or <see langword="null"/> when the caller sees the resource without
 /// holding the permission. So never <see langword="null"/> on a hold the permission's requirement let through
@@ -44,6 +44,6 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// gives a role for longer than they hold the permission they give it with.
 /// </para>
 /// </param>
-/// <typeparam name="TResourceId">The resource's id.</typeparam>
-public sealed record MemberHold<TResourceId>(TResourceId Resource, MemberVia? Via, long Version, DateTimeOffset? Until)
-    where TResourceId : struct, IEntityId, IEquatable<TResourceId>;
+/// <typeparam name="TResource">The resource as it was asked about: the application's aggregate, or its id.</typeparam>
+public sealed record MemberHold<TResource>(TResource Resource, MemberVia? Via, long Version, DateTimeOffset? Until)
+    where TResource : notnull;

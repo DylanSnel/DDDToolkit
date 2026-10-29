@@ -14,7 +14,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </summary>
 /// <param name="User">The role a signed-in user's queries run as.</param>
 /// <param name="Anonymous">The role the queries of a request without a user run as.</param>
-/// <param name="SystemIn">The role a scoped system caller's queries run as: the application's own work that stays inside the policies.</param>
+/// <param name="SystemIn">The role the queries of scoped system work run as: the application's own work that stays inside the policies.</param>
 /// <exception cref="ArgumentException">
 /// A role is empty, <c>PUBLIC</c>, <c>none</c>, symbolic itself, one of Postgres's own <c>pg_</c> roles, has a <c>$</c>
 /// or is longer than Postgres keeps a name, or <paramref name="SystemIn"/> is the user's or the anonymous
@@ -66,7 +66,7 @@ public sealed record RowAccessRoleNames(string User, string Anonymous, string Sy
     }
 
     /// <summary>
-    /// The role a scoped system caller's queries run as, the application's own work that stays inside the
+    /// The role the queries of scoped system work run as, the application's own work that stays inside the
     /// policies: <see cref="RowAccessRoles.SystemIn"/> in a rule. A script whose policies name it makes it where the
     /// database does not have it, and refuses one that could log in or bypass row level security.
     /// </summary>
@@ -92,9 +92,9 @@ public sealed record RowAccessRoleNames(string User, string Anonymous, string Sy
 
     /// <summary>
     /// The role the application's own bookkeeping runs as, <see cref="RowAccessRoles.System"/> in a rule or a
-    /// contribution, where the role the application logs in as holds nothing: the role the system caller
+    /// contribution, where the role the application logs in as holds nothing: the role system work
     /// switches to, <see cref="PostgresRowLevelSecurityOptions.SystemRole"/>. <see langword="null"/> by default,
-    /// and then a script says nothing about it: the system caller is the login role itself, or a role of the
+    /// and then a script says nothing about it: system work is the login role itself, or a role of the
     /// host's own making.
     /// <para>
     /// A script that names it, because <see cref="RowAccessExport.WriteGrants"/> is on or a rule or a
@@ -107,7 +107,7 @@ public sealed record RowAccessRoleNames(string User, string Anonymous, string Sy
     /// </para>
     /// <para>
     /// It is a role of its own: never the user's, the anonymous caller's or the scoped system role, and never
-    /// a role a token role is mapped to, which is checked where a script names it. A host whose system caller
+    /// a role a token role is mapped to, which is checked where a script names it. A host whose system work
     /// runs as a role that bypasses row level security, Supabase's <c>service_role</c> for one, leaves this
     /// <see langword="null"/>: <c>RowAccessRoleNames.From(options) with { System = null }</c>.
     /// </para>
@@ -216,7 +216,7 @@ public sealed record RowAccessRoleNames(string User, string Anonymous, string Sy
     /// <summary>
     /// Why <see cref="System"/> cannot be the bookkeeping role of a script; <see langword="null"/> when it can, and
     /// when none is set. It holds the outbox, the inbox and the migration history, so it is no role a caller runs
-    /// as. Asked where a script names the role, so a host whose system caller runs as a role of another kind is
+    /// as. Asked where a script names the role, so a host whose system work runs as a role of another kind is
     /// not refused a script that never mentions it.
     /// </summary>
     internal string? NotABookkeepingRole()

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
 using FluentAssertions;
@@ -366,8 +367,10 @@ public class AccessChecksTests
             .AddAccessCheck<IBillingRequest, BillingAccessCheck>()
             .AddAccessCheck<IBillingRequest, BillingAccessCheck>();
 
-        services.Should().HaveCount(4, "the check, its place in the set, the set, and what a check keeps for a handler");
-        services.Should().OnlyContain(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped);
+        services.Should().HaveCount(6, "the check, its place in the set, the set, what a check keeps for a handler, the current user and the access manager");
+        services.Where(descriptor => descriptor.ServiceType != typeof(ICurrentUser) && descriptor.ServiceType != typeof(AccessManager)).Should().OnlyContain(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped);
+        services.Single(descriptor => descriptor.ServiceType == typeof(ICurrentUser)).Lifetime.Should().Be(ServiceLifetime.Singleton, "the current user reads the flow of work each time");
+        services.Single(descriptor => descriptor.ServiceType == typeof(AccessManager)).Lifetime.Should().Be(ServiceLifetime.Singleton, "the access manager keeps no state, as the current user keeps none");
     }
 
     [Fact]
@@ -407,11 +410,11 @@ public class AccessChecksTests
             .AddAccessChecks<IBillingRequest>()
             .AddAccessChecks<IBillingRequest>();
 
-        services.Should().HaveCount(2, "the set, and what a check keeps for a handler");
-        services.Should().OnlyContain(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped);
+        services.Should().HaveCount(4, "the set, what a check keeps for a handler, the current user and the access manager");
+        services.Where(descriptor => descriptor.ServiceType != typeof(ICurrentUser) && descriptor.ServiceType != typeof(AccessManager)).Should().OnlyContain(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped);
 
         services.AddAccessChecks<IShippingRequest>();
-        services.Should().HaveCount(3, "each request interface has a set of its own");
+        services.Should().HaveCount(5, "each request interface has a set of its own");
         FluentActions.Invoking(() => AccessCheckServiceCollectionExtensions.AddAccessChecks<IBillingRequest>(null!)).Should().Throw<ArgumentNullException>();
     }
 

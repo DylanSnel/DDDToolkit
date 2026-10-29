@@ -262,8 +262,9 @@ public class TemplateDefaultsTests
         result.ShouldHaveDiagnostic("DDD00067", at: "TenantId").GetMessage().Should().StartWith(
             "'TenantId' has no public static Create(), and 'Tenant' is declared with [TenantAggregate], whose package makes each new TenantId with TenantId.Create()");
         ParentOf(result, "DDDToolkit.Sample.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<DDDToolkit.Sample.Contracts.TenantId>");
-        result.HintNames.Should().NotContain("TemplateFacade", "the class the use cases are named through is closed over the id");
-        result.CompilationErrors.Should().BeEmpty("nothing closed over the id is written, so the compiler has nothing to say in code nobody wrote");
+        result.HintNames.Should().NotContain("SeatManager.TemplateFacade", "the managers are closed over the id");
+        result.ShouldHaveGenerated("TenancyAccessManager.TemplateFacade");
+        result.CompilationErrors.Should().BeEmpty("nothing that makes a new id is written, so the compiler has nothing to say in code nobody wrote; the access manager makes none");
         result.ShouldNotCrash();
     }
 
@@ -291,7 +292,7 @@ public class TemplateDefaultsTests
         result.ShouldHaveDiagnostic("DDD00067", at: "DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses")
             .Properties.Should().Contain("IdMetadataName", "Shop.Contracts.TenantId");
         ParentOf(result, "Shop.Domain.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<Shop.Contracts.TenantId>");
-        result.HintNames.Should().NotContain("TemplateFacade");
+        result.HintNames.Should().NotContain("SeatManager.TemplateFacade");
         result.CompilationErrors.Should().BeEmpty();
     }
 
@@ -353,11 +354,11 @@ public class TemplateDefaultsTests
                 }
             }
 
-            public sealed class Handler(TenancyUseCases.SeatCommands seats)
+            public sealed class Handler(SeatManager seats)
             {
-                public TenancyUseCases.SeatCommands Seats => seats;
+                public SeatManager Seats => seats;
 
-                public TenancyUseCases.SeatOverview? Last { get; set; }
+                public SeatManager.SeatOverview? Last { get; set; }
             }
             """;
 
@@ -374,7 +375,7 @@ public class TemplateDefaultsTests
         }
 
         result.ShouldContain("TenancyModelBuilderExtensions.AddTenancy.Registration", "AddTenancy<global::DDDToolkit.Sample.Tenant, global::DDDToolkit.Sample.TenantId, global::DDDToolkit.Sample.Organization");
-        result.ShouldContain("TenancyUseCases.TemplateFacade", "public abstract class TenancyUseCases : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<global::DDDToolkit.Sample.Tenant,");
+        result.ShouldContain("SeatManager.TemplateFacade", "public sealed class SeatManager : global::DDDToolkit.Supporting.Tenancy.Managers.SeatManager<global::DDDToolkit.Sample.Tenant,");
         result.ShouldContain("OrganizationUnit.EntityFramework", "[global::Microsoft.EntityFrameworkCore.Owned]");
     }
 
@@ -619,7 +620,7 @@ public class TemplateDefaultsTests
         }
 
         ParentOf(result, "Shop.Domain.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<Shop.Contracts.TenantId>");
-        result.ShouldHaveGenerated("TenancyUseCases.TemplateFacade");
+        result.ShouldHaveGenerated("SeatManager.TemplateFacade");
     }
 
     [Fact]
@@ -640,9 +641,9 @@ public class TemplateDefaultsTests
                 protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) => configurationBuilder.AddDDDToolkitConventions();
             }
 
-            public sealed class Handler(TenancyUseCases.SeatCommands seats, Shop.Domain.Seat? seat)
+            public sealed class Handler(SeatManager seats, Shop.Domain.Seat? seat)
             {
-                public TenancyUseCases.SeatCommands Seats => seats;
+                public SeatManager Seats => seats;
 
                 public Shop.Domain.Seat? Seat => seat;
             }

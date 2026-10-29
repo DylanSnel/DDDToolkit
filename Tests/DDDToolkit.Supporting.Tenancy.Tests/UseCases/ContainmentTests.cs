@@ -26,8 +26,8 @@ public class ContainmentTests
         => Harness.OfHarbor(TenancyCatalogue.Build(HostCatalogue.Application with { ContainAccessManagingPermissions = contained }, []));
 
     /// <summary>A role of the tenant's own that holds <paramref name="permissions"/> alone, made by system work.</summary>
-    private static Task<RoleId> Desk(Harness harness, string name, params string[] permissions)
-        => harness.BySystemWork(use => use.Roles.CreateAsync(name, "Holds what the test needs", permissions, Cancellation));
+    private static async Task<RoleId> Desk(Harness harness, string name, params string[] permissions)
+        => (await harness.BySystemWork(use => use.Roles.CreateAsync(name, "Holds what the test needs", permissions, Cancellation))).Id;
 
     /// <summary>Ben, with the Grant desk at North until <paramref name="until"/>, or for good.</summary>
     private static async Task<SeatId> Ben(Harness harness, OrganizationUnitId? at = null, DateTimeOffset? until = null)
@@ -35,7 +35,7 @@ public class ContainmentTests
         var unit = at ?? harness.Harbor.North;
         var desk = await Desk(harness, "Grant desk", TenancyPermissions.GrantsManage);
         var ben = await harness.SeatAt("Ben", unit);
-        await harness.BySystemWork(use => use.Seats.GrantAsync(ben, unit, desk, until, reason: null, Cancellation));
+        await harness.BySystemWork(use => use.Seats.GrantAsync(ben, desk, unit, until, reason: null, Cancellation));
         return ben;
     }
 
@@ -45,18 +45,18 @@ public class ContainmentTests
         var harness = Harbor(contained: true);
         var ben = await Ben(harness);
         var di = await harness.SeatAt("Di", harness.Harbor.North);
-        var supervisors = harness.RoleFromPack(HostCatalogue.SupervisorPack);
+        var supervisors = harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole);
 
         var toDi = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
-            () => harness.As(ben, use => use.Seats.GrantAsync(di, harness.Harbor.North, supervisors, null, null, Cancellation)));
+            () => harness.As(ben, use => use.Seats.GrantAsync(di, supervisors, harness.Harbor.North, null, null, Cancellation)));
         toDi.Arguments["Missing"].Should().Be(TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage);
         await Refused.WithCodeAsync(TenancyRefusals.SelfAppointment,
-            () => harness.As(ben, use => use.Seats.GrantAsync(ben, harness.Harbor.North, supervisors, null, null, Cancellation)));
+            () => harness.As(ben, use => use.Seats.GrantAsync(ben, supervisors, harness.Harbor.North, null, null, Cancellation)));
         harness.Store.Seat(di).Placements.Single().Grants.Should().BeEmpty();
 
         // A role that manages no access goes to anyone, for as long as he says, as it does either way.
-        await harness.As(ben, use => use.Seats.GrantAsync(di, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.OperatorPack), null, null, Cancellation));
-        harness.Store.Seat(di).Placements.Single().Grants.Select(grant => grant.RoleId).Should().Equal(harness.RoleFromPack(HostCatalogue.OperatorPack));
+        await harness.As(ben, use => use.Seats.GrantAsync(di, harness.RoleFromStarterRole(HostCatalogue.OperatorStarterRole), harness.Harbor.North, null, null, Cancellation));
+        harness.Store.Seat(di).Placements.Single().Grants.Select(grant => grant.RoleId).Should().Equal(harness.RoleFromStarterRole(HostCatalogue.OperatorStarterRole));
     }
 
     [Fact]
@@ -65,17 +65,17 @@ public class ContainmentTests
         var harness = Harbor(contained: false);
         var ben = await Ben(harness, until: Now.AddDays(7));
         var di = await harness.SeatAt("Di", harness.Harbor.North);
-        var supervisors = harness.RoleFromPack(HostCatalogue.SupervisorPack);
-        var administrators = harness.RoleFromPack(HostCatalogue.AdministratorPack);
+        var supervisors = harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole);
+        var administrators = harness.RoleFromStarterRole(HostCatalogue.AdministratorStarterRole);
 
         // To anyone placed where he manages grants, every role, for as long as he says.
-        await harness.As(ben, use => use.Seats.GrantAsync(di, harness.Harbor.North, administrators, null, null, Cancellation));
+        await harness.As(ben, use => use.Seats.GrantAsync(di, administrators, harness.Harbor.North, null, null, Cancellation));
         harness.Store.Seat(di).Placements.Single().Grants.Single().RoleId.Should().Be(administrators);
 
         // To himself every role too, for no longer than he holds the grants permission there: with it for a week, for a week.
-        await harness.As(ben, use => use.Seats.GrantAsync(ben, harness.Harbor.North, supervisors, Now.AddDays(7), null, Cancellation));
+        await harness.As(ben, use => use.Seats.GrantAsync(ben, supervisors, harness.Harbor.North, Now.AddDays(7), null, Cancellation));
         var forGood = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
-            () => harness.As(ben, use => use.Seats.GrantAsync(ben, harness.Harbor.North, administrators, null, null, Cancellation)));
+            () => harness.As(ben, use => use.Seats.GrantAsync(ben, administrators, harness.Harbor.North, null, null, Cancellation)));
         forGood.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage);
 
         harness.Store.Seat(ben).Placements.Single().Grants.Single(grant => grant.RoleId == supervisors).EndsAt.Should().Be(Now.AddDays(7));
@@ -85,7 +85,7 @@ public class ContainmentTests
         // What it does not touch: the permission is still asked where the role is given, and Ben gives grants at North alone.
         await harness.Place(di, harness.Harbor.South);
         var elsewhere = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
-            () => harness.As(ben, use => use.Seats.GrantAsync(di, harness.Harbor.South, supervisors, null, null, Cancellation)));
+            () => harness.As(ben, use => use.Seats.GrantAsync(di, supervisors, harness.Harbor.South, null, null, Cancellation)));
         elsewhere.Arguments["Permission"].Should().Be(TenancyPermissions.GrantsManage);
     }
 
@@ -96,13 +96,13 @@ public class ContainmentTests
     {
         var harness = Harbor(contained);
         var ben = await Ben(harness, until: Now.AddDays(7));
-        var watchers = harness.RoleFromPack(HostCatalogue.WatcherPack);
+        var watchers = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
 
         var forGood = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
-            () => harness.As(ben, use => use.Seats.GrantAsync(ben, harness.Harbor.North, watchers, null, null, Cancellation)));
+            () => harness.As(ben, use => use.Seats.GrantAsync(ben, watchers, harness.Harbor.North, null, null, Cancellation)));
         forGood.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage);
 
-        await harness.As(ben, use => use.Seats.GrantAsync(ben, harness.Harbor.North, watchers, Now.AddDays(7), null, Cancellation));
+        await harness.As(ben, use => use.Seats.GrantAsync(ben, watchers, harness.Harbor.North, Now.AddDays(7), null, Cancellation));
         harness.Store.Seat(ben).Placements.Single().Grants.Single(grant => grant.RoleId == watchers).EndsAt.Should().Be(Now.AddDays(7));
     }
 
@@ -111,11 +111,11 @@ public class ContainmentTests
     {
         var harness = Harbor(contained: false);
         var ben = await Ben(harness);
-        var seth = await harness.SeatAt("Seth", harness.Harbor.North, HostCatalogue.SupervisorPack, HostCatalogue.OperatorPack);
+        var seth = await harness.SeatAt("Seth", harness.Harbor.North, HostCatalogue.SupervisorStarterRole, HostCatalogue.OperatorStarterRole);
 
-        await harness.As(ben, use => use.Seats.RevokeAsync(seth, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.SupervisorPack), Cancellation));
+        await harness.As(ben, use => use.Seats.RevokeAsync(seth, harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole), harness.Harbor.North, Cancellation));
 
-        harness.Store.Seat(seth).Placements.Single().Grants.Select(grant => grant.RoleId).Should().Equal(harness.RoleFromPack(HostCatalogue.OperatorPack));
+        harness.Store.Seat(seth).Placements.Single().Grants.Select(grant => grant.RoleId).Should().Equal(harness.RoleFromStarterRole(HostCatalogue.OperatorStarterRole));
         harness.Store.SavedRights.Should().NotContain(right => right.SeatId == seth && right.Permission == TenancyPermissions.UnitsManage);
     }
 
@@ -127,8 +127,8 @@ public class ContainmentTests
         var harness = Harbor(contained);
         var desk = await Desk(harness, "Seat desk", TenancyPermissions.SeatsManage);
         var pat = await harness.SeatAt("Pat", harness.Harbor.Root);
-        await harness.BySystemWork(use => use.Seats.GrantAsync(pat, harness.Harbor.Root, desk, null, null, Cancellation));
-        var seth = await harness.SeatAt("Seth", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        await harness.BySystemWork(use => use.Seats.GrantAsync(pat, desk, harness.Harbor.Root, null, null, Cancellation));
+        var seth = await harness.SeatAt("Seth", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
 
         if (contained)
         {
@@ -154,10 +154,10 @@ public class ContainmentTests
     public async Task A_role_manager_for_a_week_changes_a_permission_that_manages_access_in_a_role_only_with_containment_off(bool contained)
     {
         var harness = Harbor(contained);
-        var watchers = harness.RoleFromPack(HostCatalogue.WatcherPack);
-        var supervisors = harness.RoleFromPack(HostCatalogue.SupervisorPack);
+        var watchers = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
+        var supervisors = harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole);
         var rhea = await harness.SeatAt("Rhea", harness.Harbor.Root);
-        await harness.Grant(rhea, harness.Harbor.Root, HostCatalogue.AdministratorPack, until: Now.AddDays(7));
+        await harness.Grant(rhea, harness.Harbor.Root, HostCatalogue.AdministratorStarterRole, until: Now.AddDays(7));
 
         if (contained)
         {
@@ -183,10 +183,10 @@ public class ContainmentTests
     {
         var harness = Harbor(contained);
         var keepers = await Desk(harness, "Tree keeper", TenancyPermissions.UnitsManage);
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         await harness.Place(bert, harness.Harbor.South);
-        await harness.BySystemWork(use => use.Seats.GrantAsync(bert, harness.Harbor.South, keepers, null, null, Cancellation));
-        var pier = await harness.As(bert, use => use.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", Cancellation));
+        await harness.BySystemWork(use => use.Seats.GrantAsync(bert, keepers, harness.Harbor.South, null, null, Cancellation));
+        var pier = (await harness.As(bert, use => use.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", Cancellation))).Id;
 
         // Under North the pier would be Bert's to supervise, where under South he only shapes the tree. With
         // containment off his permissions that manage access count as his own permissions like any other, and a move gives him none.
@@ -204,11 +204,11 @@ public class ContainmentTests
         var harness = Harbor(contained);
         var keepers = await Desk(harness, "Tree keeper", TenancyPermissions.UnitsManage);
         var bert = await harness.SeatAt("Bert", harness.Harbor.North);
-        await harness.BySystemWork(use => use.Seats.GrantAsync(bert, harness.Harbor.North, keepers, null, null, Cancellation));
+        await harness.BySystemWork(use => use.Seats.GrantAsync(bert, keepers, harness.Harbor.North, null, null, Cancellation));
         await harness.Place(bert, harness.Harbor.South);
-        await harness.BySystemWork(use => use.Seats.GrantAsync(bert, harness.Harbor.South, keepers, null, null, Cancellation));
-        await harness.SeatAt("Seth", harness.Harbor.North, HostCatalogue.SupervisorPack);
-        var pier = await harness.As(bert, use => use.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", Cancellation));
+        await harness.BySystemWork(use => use.Seats.GrantAsync(bert, keepers, harness.Harbor.South, null, null, Cancellation));
+        await harness.SeatAt("Seth", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
+        var pier = (await harness.As(bert, use => use.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", Cancellation))).Id;
 
         // Under North the pier would be Seth's to supervise, which Bert, who only shapes the tree, could not give him.
         var moving = () => harness.As(bert, use => use.Organization.MoveUnitAsync(pier, harness.Harbor.North, Cancellation));
@@ -237,8 +237,8 @@ public class ContainmentTests
         var harness = Harbor(contained);
         var office = await Desk(harness, "People office", TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage);
         var hana = await harness.SeatAt("Hana", harness.Harbor.Root);
-        await harness.BySystemWork(use => use.Seats.GrantAsync(hana, harness.Harbor.Root, office, null, null, Cancellation));
-        var supervisors = harness.RoleFromPack(HostCatalogue.SupervisorPack);
+        await harness.BySystemWork(use => use.Seats.GrantAsync(hana, office, harness.Harbor.Root, null, null, Cancellation));
+        var supervisors = harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole);
 
         var issuing = () => harness.As(hana, use => use.Invitations.IssueAsync("wren@example.test", harness.Harbor.South, supervisors, null, null, Cancellation));
         if (contained)
@@ -251,7 +251,7 @@ public class ContainmentTests
         var issued = await issuing();
         var accepted = await harness.Accept(Guid.NewGuid(), issued.Token);
 
-        var grant = harness.Store.Seat(accepted.Seat).Placements.Single().Grants.Single();
+        var grant = harness.Store.Seat(accepted.Seat.Id).Placements.Single().Grants.Single();
         grant.RoleId.Should().Be(supervisors, "accepting asks the issuer again, by the same setting");
     }
 
@@ -260,17 +260,17 @@ public class ContainmentTests
     {
         var harness = Harbor(contained: false);
         var ben = await Ben(harness, at: harness.Harbor.Root);
-        var administrators = harness.RoleFromPack(HostCatalogue.AdministratorPack);
+        var administrators = harness.RoleFromStarterRole(HostCatalogue.AdministratorStarterRole);
 
         // Ben may take Ada's role away, as far as containment goes, and still not the last administrator's.
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin,
-            () => harness.As(ben, use => use.Seats.RevokeAsync(harness.Administrator, harness.Harbor.Root, administrators, Cancellation)));
+            () => harness.As(ben, use => use.Seats.RevokeAsync(harness.Administrator, administrators, harness.Harbor.Root, Cancellation)));
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin,
             () => harness.As(harness.Administrator, use => use.Roles.SetPermissionsAsync(administrators, [HostCatalogue.WidgetRead], Cancellation)));
 
         // Once he gave himself the role, there are two of them, and Ada's goes.
-        await harness.As(ben, use => use.Seats.GrantAsync(ben, harness.Harbor.Root, administrators, null, null, Cancellation));
-        await harness.As(ben, use => use.Seats.RevokeAsync(harness.Administrator, harness.Harbor.Root, administrators, Cancellation));
+        await harness.As(ben, use => use.Seats.GrantAsync(ben, administrators, harness.Harbor.Root, null, null, Cancellation));
+        await harness.As(ben, use => use.Seats.RevokeAsync(harness.Administrator, administrators, harness.Harbor.Root, Cancellation));
 
         harness.Store.Seat(harness.Administrator).Placements.Single().Grants.Should().BeEmpty();
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => harness.As(ben, use => use.Seats.SuspendAsync(ben, Cancellation)));
@@ -280,12 +280,12 @@ public class ContainmentTests
     public async Task A_handler_that_checked_a_quiz_itself_gives_the_calling_seat_a_role_that_manages_access_as_system_work_with_containment_on()
     {
         var harness = Harbor(contained: true);
-        var quinn = await harness.SeatAt("Quinn", harness.Harbor.North, HostCatalogue.WatcherPack);
-        var supervisors = harness.RoleFromPack(HostCatalogue.SupervisorPack);
+        var quinn = await harness.SeatAt("Quinn", harness.Harbor.North, HostCatalogue.WatcherStarterRole);
+        var supervisors = harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole);
 
         // Quinn holds nothing that manages access, and gives herself nothing that does.
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
-            () => harness.As(quinn, use => use.Seats.GrantAsync(quinn, harness.Harbor.North, supervisors, null, null, Cancellation)));
+            () => harness.As(quinn, use => use.Seats.GrantAsync(quinn, supervisors, harness.Harbor.North, null, null, Cancellation)));
 
         await harness.As(quinn, use => PassQuizAsync(use, score: 9));
 
@@ -309,8 +309,8 @@ public class ContainmentTests
     /// </summary>
     private static async Task PassQuizAsync(Harness harness, int score)
     {
-        var caller = TenancyCallers.Current<TenantId, SeatId>();
-        if (caller is not { Kind: TenancyCallerKind.Seat, Tenant: { } tenant, Seat: { } seat })
+        var caller = TenancyUsers.Current<TenantId, SeatId>();
+        if (caller is not { Kind: TenancyUserKind.Seat, Tenant: { } tenant, Seat: { } seat })
         {
             throw new InvalidOperationException("A quiz is passed by a seat.");
         }
@@ -322,7 +322,7 @@ public class ContainmentTests
 
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, seat))
         {
-            await harness.Seats.GrantAsync(seat, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.SupervisorPack), until: null, "passed the supervisors' quiz", Cancellation);
+            await harness.Seats.GrantAsync(seat, harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole), harness.Harbor.North, until: null, "passed the supervisors' quiz", Cancellation);
         }
     }
 }

@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
 using Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles.Events;
@@ -25,8 +27,8 @@ namespace Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles;
 /// give and of the codes it refuses under.
 /// </para>
 /// <para>
-/// The package raises no events, and answers what each change did instead; the methods here raise the module's
-/// own from that, so a change that changes nothing raises nothing.
+/// The package raises no events. The role calls the hooks below after a change that changed something, and they raise
+/// the module's own, so a change that changes nothing raises nothing.
 /// </para>
 /// </remarks>
 [CustomRole<ProjectRoleId, Project>]
@@ -50,45 +52,19 @@ public sealed partial class ProjectRole
         RaiseDomainEvent(new ProjectRoleMade(id, tenantId));
     }
 
-    /// <summary>The tenant the role is of. It never changes; the tenant filter reads it.</summary>
+    /// <summary>The tenant the role is of. It never changes; marked <c>[OfTenant]</c>, so the tenant filter reads it.</summary>
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
-    /// <summary>Gives the role another name, or another description, or both. The same again changes nothing.</summary>
-    /// <param name="name">Its name, as it is to be.</param>
-    /// <param name="description">What it is for, as it is to be; <see langword="null"/> clears it.</param>
-    /// <param name="rules">The rules of the projects' crews.</param>
-    /// <exception cref="Exceptions.RefusalException"><c>projects.role-archived</c>, <c>projects.role-name-invalid</c>.</exception>
-    public void RenameRole(string name, string? description, MembershipRules rules)
-    {
-        if (Rename(name, description, rules))
-        {
-            RaiseDomainEvent(new ProjectRoleRenamed(Id));
-        }
-    }
-
     /// <summary>
-    /// Has the role give these permissions from now on, on every crew it is held on. The same permissions again change nothing.
+    /// The role was renamed, or described again: the hook the role calls after a change that changed something. The
+    /// project role manager, <c>ProjectRoleManager</c>, makes the change.
     /// </summary>
-    /// <param name="permissions">Every permission it is to give.</param>
-    /// <param name="rules">The rules of the projects' crews, which say what a crew role may give.</param>
-    /// <exception cref="Exceptions.RefusalException"><c>projects.role-archived</c>, <c>projects.permission-not-for-members</c>.</exception>
-    public void SetRolePermissions(IReadOnlyCollection<string> permissions, MembershipRules rules)
-    {
-        if (SetPermissions(permissions, rules).Changed)
-        {
-            RaiseDomainEvent(new ProjectRolePermissionsChanged(Id));
-        }
-    }
+    partial void OnRenamed() => RaiseDomainEvent(new ProjectRoleRenamed(Id));
 
-    /// <summary>
-    /// Archives the role: it gives nothing from then on and is given to nobody, and stays on the crews that hold
-    /// it, so what they held still has a name. Any role is archived alike: a project's owner holds none.
-    /// </summary>
-    /// <param name="rules">The rules of the projects' crews.</param>
-    /// <exception cref="Exceptions.RefusalException"><c>projects.role-archived</c>.</exception>
-    public void TakeOutOfUse(MembershipRules rules)
-    {
-        Archive(rules);
-        RaiseDomainEvent(new ProjectRoleArchived(Id));
-    }
+    /// <summary>The role gives other permissions from now on, on every crew it is held on.</summary>
+    partial void OnPermissionsSet(RolePermissionsSet set) => RaiseDomainEvent(new ProjectRolePermissionsChanged(Id));
+
+    /// <summary>The role was archived: it gives nothing from then on, and stays on the crews that hold it.</summary>
+    partial void OnArchived() => RaiseDomainEvent(new ProjectRoleArchived(Id));
 }

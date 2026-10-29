@@ -37,7 +37,7 @@ public static partial class CrateQuestions
 public static partial class PortersReadThePalletsTheyAreOn
 {
     /// <summary>Whether the caller sees <paramref name="pallet"/>.</summary>
-    public static bool Allows(Pallet pallet, Caller caller) => PalletQuestions.Seen().Contains(pallet.Id);
+    public static bool Allows(Pallet pallet, ICurrentUser user) => PalletQuestions.Seen().Contains(pallet.Id);
 }
 
 /// <summary>A porter reads the crates it sees: those it is on, and those in a bay where it holds the permission that sees.</summary>
@@ -45,5 +45,5 @@ public static partial class PortersReadThePalletsTheyAreOn
 public static partial class PortersReadTheCratesTheySee
 {
     /// <summary>Whether the caller sees <paramref name="crate"/>.</summary>
-    public static bool Allows(Crate crate, Caller caller) => CrateQuestions.Seen().Contains(crate.Id);
+    public static bool Allows(Crate crate, ICurrentUser user) => CrateQuestions.Seen().Contains(crate.Id);
 }

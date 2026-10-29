@@ -43,14 +43,18 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
 
         var me = await hana.GetFromJsonAsync<JsonElement>("/me", Cancellation);
 
-        me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which
-            .GetProperty("unit").GetProperty("path").GetString().Should().Be("Harbor Works");
+        me.PathOf(me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which.GetProperty("unitId").GetGuid())
+            .Should().Be("Harbor Works");
         var permission = me.GetProperty("permissions").EnumerateArray().Should().ContainSingle().Which;
         permission.GetProperty("permission").GetString().Should().Be(TenancyPermissions.GrantsManage);
         permission.GetProperty("atTenant").GetBoolean().Should().BeTrue();
         var role = me.GetProperty("roles").EnumerateArray().Should().ContainSingle().Which;
-        role.GetProperty("fromPack").GetString().Should().Be(SampleCatalogue.PeopleOffice);
-        role.GetProperty("managesAccess").GetBoolean().Should().BeTrue("its one permission gives power over other people's access");
+        role.GetProperty("fromStarterRole").GetString().Should().Be(SampleCatalogue.PeopleOffice);
+
+        // Whether the role manages access is in the list of the tenant's roles: the overview names the role.
+        var listed = await hana.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation);
+        listed.EnumerateArray().Single(found => found.GetProperty("id").GetGuid() == role.GetProperty("id").GetGuid())
+            .GetProperty("managesAccess").GetBoolean().Should().BeTrue("its one permission gives power over other people's access");
         (await hana.VisibleProjectsAsync()).Should().BeEmpty("giving roles lets her see nothing");
     }
 
@@ -66,12 +70,12 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value, reason = "Follows the projects on the coast" },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         me.GetProperty("placements").EnumerateArray().Single().GetProperty("grants").EnumerateArray()
-            .Select(grant => grant.GetProperty("role").GetString()).Should().Equal("Observer");
+            .Select(grant => me.RoleNameOf(grant.GetProperty("roleId").GetGuid())).Should().Equal("Observer");
         var hanas = await hana.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         hanas.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetProperty("permission").GetString())
             .Should().Equal([TenancyPermissions.GrantsManage], "giving a role gives the giver nothing");
@@ -89,13 +93,13 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value, reason = "Follows the projects on the coast" },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // The history, read as the application's own work in harbor. The seeding gave every role as system work,
         // so the one grant a seat made is hers.
         List<(TenantId Tenant, string? By, string Payload)> grantsBySeats;
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var rows = await scope.ServiceProvider.GetRequiredService<TenantsContext>().Set<EventLogEntry>()
@@ -138,7 +142,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    new { unitId = Harbor.UnitNamed("North Inland").Value, roleId = Harbor.Roles[SampleCatalogue.Surveyor].Value },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using var after = await vic.GetAsync($"/projects/{depot.Id.Value}", Cancellation);
@@ -157,7 +161,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    $"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Vic).Value}/grants/{northInland}/{Harbor.Roles[SampleCatalogue.Observer].Value}",
                    Cancellation))
         {
-            taken.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            taken.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var me = await vic.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -168,13 +172,13 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
     [InlineData(SampleCatalogue.CrewLead, "projects.crew.manage")]
     [InlineData(SampleCatalogue.AreaManager, "projects.crew.manage, projects.owner.change, tenancy.seats.manage, tenancy.units.manage")]
     [InlineData(SampleCatalogue.AccessAdmin, "projects.crew.manage, projects.owner.change, tenancy.roles.manage, tenancy.seats.manage, tenancy.settings.manage, tenancy.units.manage")]
-    public async Task Hana_cannot_give_a_role_that_manages_access(string pack, string missing)
+    public async Task Hana_cannot_give_a_role_that_manages_access(string starterRole, string missing)
     {
         using var hana = await sample.ClientAsync("hana", Harbor.Slug);
 
         using var response = await hana.PostAsJsonAsync(
             $"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Leo).Value}/grants",
-            new { unitId = NorthCoast.Value, roleId = Harbor.Roles[pack].Value },
+            new { unitId = NorthCoast.Value, roleId = Harbor.Roles[starterRole].Value },
             Cancellation);
 
         // Only the role's permissions that manage access count, and of those she holds tenancy.grants.manage alone.
@@ -206,7 +210,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[SampleCatalogue.Surveyor].Value },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         (await hana.VisibleProjectsAsync()).Select(project => project.Text("number"))
@@ -217,18 +221,18 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
     [InlineData(SampleCatalogue.CrewLead)]
     [InlineData(SampleCatalogue.AreaManager)]
     [InlineData(SampleCatalogue.PeopleOffice)]
-    public async Task Hana_cannot_give_herself_a_role_that_manages_access(string pack)
+    public async Task Hana_cannot_give_herself_a_role_that_manages_access(string starterRole)
     {
         using var hana = await sample.ClientAsync("hana", Harbor.Slug);
 
         using var response = await hana.PostAsJsonAsync(
             $"/tenancy/seats/{HanasSeat}/grants",
-            new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[pack].Value },
+            new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[starterRole].Value },
             Cancellation);
 
         // Refused before her permissions are counted, and before anything else about the grant.
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.SelfAppointment);
-        refused.Argument("Role").Should().Be(Harbor.Roles[pack].Value.ToString());
+        refused.Argument("Role").Should().Be(Harbor.Roles[starterRole].Value.ToString());
     }
 
     [Fact]
@@ -263,7 +267,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
             ],
             "the host marks naming an owner and managing a crew, permissions Projects declares, and Tenancy's own permissions all manage access");
         roles.EnumerateArray()
-            .Select(role => (Pack: role.GetProperty("fromPack").GetString(), ManagesAccess: role.GetProperty("managesAccess").GetBoolean()))
+            .Select(role => (StarterRole: role.GetProperty("fromStarterRole").GetString(), ManagesAccess: role.GetProperty("managesAccess").GetBoolean()))
             .Should().BeEquivalentTo(
             [
                 (SampleCatalogue.AccessAdmin, true), (SampleCatalogue.AreaManager, true), (SampleCatalogue.CrewLead, true), (SampleCatalogue.PeopleOffice, true),

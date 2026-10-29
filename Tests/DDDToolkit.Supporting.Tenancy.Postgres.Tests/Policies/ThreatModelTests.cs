@@ -26,9 +26,9 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
         // Oli, in Harbor, runs the application's code with the filters skipped, and with SQL of its own.
         async Task<(int Roles, int Units, long Raw, int Widgets)> ReadAsync(TenancyServices services)
             => await services.BySeat(Oli.Identity, Harbor, Oli.Seat, async scoped => (
-                await scoped.Tenancy().Set<HostRole>().IgnoreQueryFilters().CountAsync(Cancellation),
-                await scoped.Tenancy().Set<OrganizationUnitRow<TenantId, OrganizationUnitId>>().IgnoreQueryFilters().CountAsync(Cancellation),
-                await scoped.Tenancy().Database.SqlQueryRaw<long>(names.Sql("SELECT count(*) AS \"Value\" FROM tenancy.\"SeatRights\"")).SingleAsync(Cancellation),
+                await scoped.TenancyContext().Set<HostRole>().IgnoreQueryFilters().CountAsync(Cancellation),
+                await scoped.TenancyContext().Set<OrganizationUnitRow<TenantId, OrganizationUnitId>>().IgnoreQueryFilters().CountAsync(Cancellation),
+                await scoped.TenancyContext().Database.SqlQueryRaw<long>(names.Sql("SELECT count(*) AS \"Value\" FROM tenancy.\"SeatRights\"")).SingleAsync(Cancellation),
                 await scoped.Widgets().Widgets.IgnoreQueryFilters().CountAsync(Cancellation)));
 
         var owner = await ReadAsync(unsecured);
@@ -50,19 +50,19 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
         await using var services = new TenancyServices(database);
 
         // Oli manages no seats: renaming every seat renames his own.
-        var renamed = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Tenancy().Set<HostSeat>()
+        var renamed = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.TenancyContext().Set<HostSeat>()
             .IgnoreQueryFilters()
             .ExecuteUpdateAsync(seats => seats.SetProperty(seat => seat.DisplayName, "Renamed"), Cancellation));
         renamed.Should().Be(1);
 
         // Ada, who holds every permission of Harbor, takes away every right Oli holds, in any tenant: none goes. No caller
         // writes a right.
-        var deleted = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
+        var deleted = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.TenancyContext().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
             .IgnoreQueryFilters()
             .Where(right => right.SeatId == Oli.Seat || right.SeatId == OliInOrchard)
             .ExecuteDeleteAsync(Cancellation));
 
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>("SELECT \"DisplayName\" FROM tenancy.\"Seats\" WHERE \"DisplayName\" = 'Renamed'", Cancellation)).Should().ContainSingle();
         deleted.Should().Be(0);
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, Oli.Seat.Value)).Should().Be(3, "the three rights of Oli's Operator role at North Pier stay");
@@ -71,7 +71,7 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
         // Hiro, who gives roles at North, takes away every grant there is: Oli's at North Pier goes, which he may take,
         // and his own, and the rights they gave with them. Every other grant stays, Seth's at North too, whose permissions he
         // does not hold.
-        var taken = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Tenancy().Database
+        var taken = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.TenancyContext().Database
             .ExecuteSqlRawAsync(names.Sql("DELETE FROM tenancy.\"SeatRoleGrants\""), Cancellation));
 
         taken.Should().Be(2);
@@ -89,13 +89,13 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
 
         // Ada stops every seat of Harbor at once, her own included: the policies let a seats manager change them, and
         // the rights of each go with its status, the last administrator's too.
-        var removing = () => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Tenancy().Set<HostSeat>()
+        var removing = () => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.TenancyContext().Set<HostSeat>()
             .ExecuteUpdateAsync(seats => seats.SetProperty(seat => seat.Status, SeatStatus.Suspended), Cancellation));
 
         var failure = await removing.Should().ThrowAsync<Exception>();
         (failure.Which as PostgresException ?? failure.Which.InnerException as PostgresException)!.ConstraintName.Should().Be("tenancy_administrator_remains");
 
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"TenantId\" = 1 AND \"Permission\" = $1", Cancellation, TenancyPermissions.AdministratorPermission))
             .Should().Be(1, "Ada is still Harbor's administrator");
     }
@@ -108,20 +108,20 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
         // Postgres checks SET ROLE against the role that logged in, not the one in use: any statement on the application's
         // connection can go back to the owner, or become system work in any tenant. Parameterized queries are what keep
         // such a statement off the connection.
-        await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
+        await using var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
         (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Roles\"", Cancellation)).Should().Be(5);
 
         await oli.ExecuteAsync("RESET ROLE", Cancellation);
         (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Roles\"", Cancellation)).Should().Be(13, "as the owner, every tenant's");
 
-        await oli.ExecuteAsync("SELECT set_config('role', 'ddd_system_in', true), set_config('tenancy.caller_tenant', '2', true), set_config('request.jwt.claims', '{\"scope\":\"tenancy\"}', true)", Cancellation);
+        await oli.ExecuteAsync("SELECT set_config('role', 'ddd_system_in', true), set_config('tenancy.current_tenant', '2', true), set_config('request.jwt.claims', '{\"scope\":\"tenancy\"}', true)", Cancellation);
         (await oli.ListAsync<string>("SELECT \"DisplayName\" FROM tenancy.\"Seats\" ORDER BY 1", Cancellation)).Should().BeEquivalentTo("Odette", "Oli");
     }
 
     /// <summary>How many rights Harbor has, as the owner counts them.</summary>
     private static async Task<long> HarborRightsAsync(TestDatabase database)
     {
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         return await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"TenantId\" = 1", Cancellation);
     }
 }

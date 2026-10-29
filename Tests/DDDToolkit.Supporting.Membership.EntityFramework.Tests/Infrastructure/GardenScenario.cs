@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 
 /// <summary>Somebody a question about plots is asked as: a user, and the garden its requests are in.</summary>
@@ -7,7 +9,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 public sealed record GardenPerson(string Name, Guid User, GardenId Garden)
 {
     /// <summary>The caller: a signed-in user, whose token says the garden its requests are in, as the host's database reads it.</summary>
-    public Caller Caller => Callers.FromClaims(TestCallers.Claims(User, staff: null, garden: Garden.Value));
+    public CurrentUserSnapshot Caller => CurrentUserSnapshot.FromClaims(TestUsers.Claims(User, staff: null, garden: Garden.Value));
 
     /// <summary>Who the user is as a gardener.</summary>
     public UserId Member => new(User);
@@ -96,7 +98,7 @@ public sealed class GardenScenario
         Plots = [beans, leeks, kale];
 
         // The sheds' roles: the one starter role, and one made since.
-        ShedKeeper = new ShedRole(ShedRoleId.CreateSequential(), StarterRoles.Missing<ShedRoleId>(ShedMembership.Rules, []).Single());
+        ShedKeeper = new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft(ShedMembership.Keeper, null, ShedMembership.Rules.PermissionsOf(new NamedRole(ShedMembership.Keeper)), ShedMembership.Keeper));
         Lender = new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Lender", "Lends the tools out.", [ShedPermissions.Open, ToolPermissions.LendTools]));
         ShedRoles = [ShedKeeper, Lender];
 
@@ -196,7 +198,7 @@ public sealed class GardenScenario
 
     /// <summary>Saves the scenario as the application's own work, in no garden.</summary>
     public async Task SaveAsync(GardenServices services)
-        => await services.AsAsync(Caller.System, async provider =>
+        => await services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<GardenContext>();
             context.PlotRoles.AddRange(Roles);
@@ -260,5 +262,5 @@ public sealed class GardenScenario
 
     /// <summary>A garden's role made from the starter role <paramref name="name"/>, as the rules' drafts say it.</summary>
     private static PlotRole Starter(GardenId garden, string name)
-        => new(PlotRoleId.CreateSequential(), garden, StarterRoles.Missing<PlotRoleId>(PlotMembership.Rules, []).Single(draft => draft.MadeFrom == name));
+        => new(PlotRoleId.CreateSequential(), garden, new CustomRoleDraft(name, null, PlotMembership.Rules.PermissionsOf(new NamedRole(name)), name));
 }

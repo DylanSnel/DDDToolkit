@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The markers are Tenancy's, in the package's own namespace, as an application names them beside its other types. -->
+    <RootNamespace>DDDToolkit.Supporting.Tenancy</RootNamespace>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Tenancy abstractions</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;tenancy;multi-tenant;multitenancy;abstractions</PackageTags>
+    <Description>Tenancy's markers for domain classes, such as [OfTenant] on the property that says which tenant a row belongs to, for a domain project that sees only Tenancy's ids. No Entity Framework in it.</Description>
+  </PropertyGroup>
+
+  <!--
+    A domain project of a module that is not Tenancy's references this package and Tenancy's ids, and nothing else of
+    Tenancy. It declares no classes, ids or value objects, so no generator runs on it. Tenancy's own package references
+    it, so an application that has Tenancy has the markers as well.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

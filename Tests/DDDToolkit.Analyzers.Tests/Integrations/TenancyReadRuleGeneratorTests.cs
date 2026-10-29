@@ -29,12 +29,12 @@ public class TenancyReadRuleGeneratorTests
         """;
 
     [Theory]
-    [InlineData("seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()", "({col:TenantId} = (SELECT {fn:tenancy/caller_tenant}()))")]
-    [InlineData("seat.Id == TenancyRowAccess.CallerSeatId<SeatId>()", "({col:Id} = (SELECT {fn:tenancy/caller_seat}()))")]
+    [InlineData("seat.TenantId == TenancyRowAccess.CurrentTenant<TenantId>()", "({col:TenantId} = (SELECT {fn:tenancy/current_tenant}()))")]
+    [InlineData("seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>()", "({col:Id} = (SELECT {fn:tenancy/current_seat}()))")]
     [InlineData("TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}())))")]
     [InlineData("TenancyRowAccess.HoldsPermission(TenancyPermissions.SeatsManage)", "(SELECT {fn:tenancy/holds_permission}('tenancy.seats.manage'))")]
     [InlineData("TenancyRowAccess.HoldsAtTenant(TenancyPermissions.RolesManage)", "(SELECT {fn:tenancy/holds_at_tenant}('tenancy.roles.manage'))")]
-    [InlineData("seat.Identity == caller.UserId", "({col:Identity} IS NOT DISTINCT FROM {caller:uid})")]
+    [InlineData("seat.Identity == user.Id", "({col:Identity} IS NOT DISTINCT FROM {user:uid})")]
     public void A_building_block_in_a_read_rule_on_the_seat_class_is_asked_once_per_statement(string expression, string sql)
         => RuleSqlOf("Seat", "seat", expression).Should().Be(sql);
 
@@ -45,8 +45,8 @@ public class TenancyReadRuleGeneratorTests
 
     [Fact]
     public void The_building_blocks_combine_as_any_conditions_do()
-        => RuleSqlOf("Seat", "seat", "seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)")
-            .Should().Be("(({col:Id} = (SELECT {fn:tenancy/caller_seat}())) OR ({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}()))))");
+        => RuleSqlOf("Seat", "seat", "seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>() || TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)")
+            .Should().Be("(({col:Id} = (SELECT {fn:tenancy/current_seat}())) OR ({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}()))))");
 
     /// <summary>
     /// The SQL the generator writes for a read rule on <paramref name="aggregate"/>, the application's class, whose
@@ -70,7 +70,7 @@ public class TenancyReadRuleGeneratorTests
                 [RowAccess<{{aggregate}}>(RowOperations.Read, To = [RowAccessRoles.User])]
                 public static partial class TheRule
                 {
-                    public static bool Allows({{aggregate}} {{parameter}}, Caller caller) => {{expression}};
+                    public static bool Allows({{aggregate}} {{parameter}}, ICurrentUser user) => {{expression}};
                 }
                 """,
                 "TheRule.cs")

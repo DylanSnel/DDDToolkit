@@ -16,7 +16,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// (<see cref="CustomRoleAttribute{TRoleId, TResource}"/>), with a name, permissions of the resource's and an archive. A
 /// member holds one by the class's id. The starter roles are what a customer's first rows are made from.</item>
 /// <item><b>External</b>: roles the application keeps in a store of its own, the roles of its organization say,
-/// which it answers for through <see cref="UseCases.IMemberRoles{TResourceId, TRoleId}"/> and, in a database that
+/// which it answers for through <see cref="IMemberRoles{TResourceId, TRoleId}"/> and, in a database that
 /// answers the questions itself, through a function. A member holds one by that store's id.</item>
 /// </list>
 /// <para>
@@ -28,12 +28,13 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// </summary>
 public sealed class Roles
 {
-    private Roles(RolesKind kind, IReadOnlyList<DeclaredRole> declared, DatabaseFunction? function, OtherPermissions? otherPermissions)
+    private Roles(RolesKind kind, IReadOnlyList<DeclaredRole> declared, DatabaseFunction? function, OtherPermissions? otherPermissions, string? managedWith = null)
     {
         Kind = kind;
         Declared = declared;
         Function = function;
         OtherPermissions = otherPermissions;
+        ManagedWith = managedWith;
     }
 
     /// <summary>Which of the three it is.</summary>
@@ -57,6 +58,16 @@ public sealed class Roles
     /// for none: then a role gives the resource's permissions marked <c>InRoles</c> and nothing else.
     /// </summary>
     public OtherPermissions? OtherPermissions { get; }
+
+    /// <summary>
+    /// For <see cref="RolesKind.Custom"/>, the permission that makes, renames, gives permissions to and archives the
+    /// roles, or <see langword="null"/>. The roles are a customer's as a whole, not one resource's, so it is held for the
+    /// whole of what they are kept for: the role manager the generator writes for the role class,
+    /// <c>BoardRoleManager</c>, asks it of what the application registered for that, which the join with an
+    /// organization's package answers for the whole organization. Where nothing answers, and where it is
+    /// <see langword="null"/>, only system work changes the roles.
+    /// </summary>
+    public string? ManagedWith { get; }
 
     /// <summary>
     /// Roles in code, each with the permissions it gives on the resource, held by name: the same for every resource
@@ -85,15 +96,34 @@ public sealed class Roles
     /// Roles a customer makes for itself while the application runs: rows of the application's role class
     /// (<see cref="CustomRoleAttribute{TRoleId, TResource}"/>), each with a name and the permissions it gives, which a
     /// customer renames, gives other permissions and archives, held by the class's id.
+    /// <code>
+    /// Roles.Custom(starters: [new("editor", [BoardPermissions.View, BoardPermissions.Edit])], managedWith: BoardPermissions.ManageRoles)
+    /// </code>
     /// </summary>
     /// <param name="starters">
-    /// The roles a customer starts with: what its first rows are made from (<see cref="UseCases.StarterRoles"/>),
-    /// none when left out. A starter role is no role a member holds; the row made from it is.
+    /// The roles a customer starts with: what its first rows are made from (the role manager's
+    /// <c>CreateStarterRolesAsync</c>), none when left out. A starter role is no role a member holds; the row made from it is.
     /// </param>
     /// <param name="otherPermissions">Which permissions of other modules a role may hold besides the resource's permissions; none when left out.</param>
-    /// <exception cref="ArgumentException">A starter role has no name, the name of another, or a permission twice.</exception>
-    public static Roles Custom(IReadOnlyList<DeclaredRole>? starters = null, OtherPermissions? otherPermissions = null)
-        => new(RolesKind.Custom, Copied(starters ?? [], nameof(starters)), null, otherPermissions);
+    /// <param name="managedWith">
+    /// The permission that changes the roles, held for the whole of what they are kept for (<see cref="ManagedWith"/>).
+    /// Left out, only system work changes them.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// A starter role has no name, the name of another, or a permission twice; or <paramref name="managedWith"/> is blank.
+    /// </exception>
+    public static Roles Custom(IReadOnlyList<DeclaredRole>? starters = null, OtherPermissions? otherPermissions = null, string? managedWith = null)
+    {
+        if (managedWith is not null && (string.IsNullOrWhiteSpace(managedWith) || managedWith != managedWith.Trim()))
+        {
+            throw new ArgumentException(
+                "'" + managedWith + "' is not a permission. Name the permission that changes the roles, Roles.Custom(managedWith: BoardPermissions.ManageRoles), or leave it out "
+                + "for roles that only system work changes.",
+                nameof(managedWith));
+        }
+
+        return new(RolesKind.Custom, Copied(starters ?? [], nameof(starters)), null, otherPermissions, managedWith);
+    }
 
     /// <summary>
     /// Roles the application keeps in a store of its own, such as the roles of its organization, held by that

@@ -1,24 +1,34 @@
 # What the generator writes
 
-Every attribute in DDDToolkit is a request to a Roslyn source generator. The generator reads your
-declaration while the project compiles and adds C# files to the same compilation. There is no runtime
-library looking at your types, no reflection over them and nothing woven into the IL. What runs is the
-code on this page, and you can open it, read it and step through it like your own.
+Every attribute in DDDToolkit is a request to a Roslyn source generator. The generator reads your declaration while the
+project compiles, and it adds C# files to the same compilation. No runtime library inspects your types, nothing uses
+reflection over them, and nothing is woven into the IL. The code that runs is the code on this page. You can open it,
+read it and step through it like your own code.
+
+The diagram shows the three generators. Purple is your code, and green is what each generator writes:
 
 ```mermaid
 flowchart LR
-    You["your partial types, with an attribute"] --> Core["the DDDToolkit generator"]
-    You --> EF["the Entity Framework generator"]
-    You --> HC["the HotChocolate generator"]
-    Core --> CoreOut["base types, identifiers, equality, the always-valid twin, invariant checks"]
-    EF --> EFOut["value converters, ComplexType and Owned, the converter and integration event registrations"]
-    HC --> HCOut["type converters, Relay node id serializers, the GraphQL bindings"]
+    you["<b>Your partial types</b><br/><small>with a toolkit attribute</small>"]
+    core["<b>DDDToolkit</b><br/><small>the core generator</small>"]
+    ef["<b>DDDToolkit.EntityFramework</b><br/><small>its generator</small>"]
+    hc["<b>DDDToolkit.HotChocolate</b><br/><small>its generator</small>"]
+    coreOut["<b>Domain code</b><br/><small>base types, identifiers, equality,<br/>the always-valid twin, invariant checks</small>"]
+    efOut["<b>Mapping</b><br/><small>value converters, ComplexType and Owned,<br/>converter and integration event registrations</small>"]
+    hcOut["<b>GraphQL bindings</b><br/><small>type converters, Relay node id serializers</small>"]
+    you --> core --> coreOut
+    you --> ef --> efOut
+    you --> hc --> hcOut
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class you strong
+    class coreOut,efOut,hcOut good
 ```
 
 <details>
 <summary>Show the code: turning the generators on</summary>
 
-Each package carries its generator, so referencing it is all there is to it:
+Each package carries its generator, so a package reference turns the generator on:
 
 ```bash
 dotnet add package Temp.DDDToolkit --prerelease                   # base types and the core generator
@@ -26,9 +36,9 @@ dotnet add package Temp.DDDToolkit.EntityFramework --prerelease   # its generato
 dotnet add package Temp.DDDToolkit.HotChocolate --prerelease      # its generator: the GraphQL bindings
 ```
 
-The registration methods the generators write are named after the module the project declares. This
-sample declares module Shop with `DDD_Module` in its project file, which a `Directory.Build.props` can set
-for a whole folder of projects instead, and `[assembly: Module]` in a file of the project would say the same:
+The registration methods that the generators write are named after the module the project declares. This sample
+declares the module Shop with `DDD_Module` in its project file. A `Directory.Build.props` can set `DDD_Module` for a
+whole folder of projects instead. `[assembly: Module]` in a file of the project has the same effect:
 
 ```xml
 <PropertyGroup>
@@ -36,16 +46,16 @@ for a whole folder of projects instead, and `[assembly: Module]` in a file of th
 </PropertyGroup>
 ```
 
-The generators' own package, `DDDToolkit.Analyzers`, is what lets them read that property, so it works
-wherever they run. [DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it)
-has the order the two names are read in, and the two ways of referencing the toolkit that are supported.
+The generators' own package, `DDDToolkit.Analyzers`, lets them read that property, so the property works wherever the
+generators run. [The module name in generated code](modules.md#the-module-name-in-generated-code) gives the order in
+which the names are read, and [How the property reaches the generators](modules.md#how-the-property-reaches-the-generators)
+gives the supported ways to reference the toolkit.
 
 </details>
 
-This page walks through that output for one small aggregate. The code comes from
-[`website/sample`](../website/sample), which the docs site compiles to show the same files on its
-homepage, so it is the generators' real output. The only change is that `global::` prefixes have been
-taken out and long files are shortened. Four files go in:
+This page goes through the output for one small aggregate. The code comes from [`website/sample`](../website/sample).
+The docs site compiles that sample to show the same files on its homepage, so this is the generators' real output.
+The only changes are that the `global::` prefixes are removed and long files are shortened. Four files go in:
 
 ```csharp
 [AggregateRoot<Guid>("ORD")]
@@ -85,32 +95,31 @@ public partial record Address(string Street, string City)
 public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 ```
 
-58 lines in, 995 lines out, in 16 files.
+58 lines go in, and 995 lines come out, in 16 files.
 
-## Why generate it
+## Why the code is generated
 
-- **It is there, and it is current.** Add a property to a value object and its equality, its `With()`
-  and its mapping follow at the next build. There is no second file that has to be kept in step, and
-  no reviewer has to check that it was.
-- **It costs what hand-written code costs.** Equality, conversions and invariant checks call your
-  members directly. [Performance](performance.md) measures a struct id against the raw `Guid` it
-  wraps, and they come out the same.
-- **You pay only for what you use.** An entity without rules gets no list of rules and no check to
-  run. An unimplemented `partial void CheckInvariants()` is removed by the compiler, with every call
-  to it.
-- **Misuse is a compile error.** When a declaration cannot be generated, or does something other than
-  it looks like, you get a [diagnostic](diagnostics.md) in the editor instead of a type that quietly
-  behaves like a plain class.
-- **One declaration reaches every integration.** Reference `DDDToolkit.EntityFramework` or
-  `DDDToolkit.HotChocolate` and their generators add converters and bindings for the same types. Your
-  declaration does not change.
+- **The code is always present and current.** Add a property to a value object, and the next build updates its
+  equality, its `With()` and its mapping. No second file has to be kept in step, and no reviewer has to check it.
+- **The code costs what hand-written code costs.** Equality, conversions and invariant checks call your members
+  directly. [Performance](performance.md) measures a struct id against the raw `Guid` it wraps, and the results are
+  the same.
+- **You pay only for what you use.** An entity without rules gets no list of rules and no check to run. The compiler
+  removes an unimplemented `partial void CheckInvariants()` and every call to it.
+- **Misuse is a compile error.** When the generator cannot handle a declaration, or the declaration would not do what
+  it looks like, you get a [diagnostic](diagnostics.md) in the editor. You do not get a type that behaves like a plain
+  class without telling you.
+- **One declaration reaches every integration.** Reference `DDDToolkit.EntityFramework` or `DDDToolkit.HotChocolate`,
+  and their generators add converters and bindings for the same types. Your declaration does not change.
 
 ## `[AggregateRoot]` and `[Entity]`
 
-`Order.g.cs` gives the class its base type, with the identifier type the attribute asked for, and the
-constructor Entity Framework needs to materialize a row:
+`Order.g.cs` gives the class its base type, with the identifier type that the attribute asked for. It also adds the
+constructor that Entity Framework needs to create an object from a row:
 
-```csharp title="Order.g.cs, shortened"
+**Order.g.cs, shortened**
+
+```csharp
 partial class Order : DDDToolkit.BaseTypes.AggregateRoot<Shop.OrderId>
 {
     /// <summary>Parameterless constructor for persistence frameworks and serializers.</summary>
@@ -119,10 +128,12 @@ partial class Order : DDDToolkit.BaseTypes.AggregateRoot<Shop.OrderId>
     }
 ```
 
-Every rule nested in the class is created once and kept in a static array. The checks walk it, then
-the `CheckInvariants()` seam, then every child entity the aggregate holds in a collection:
+The generator creates every rule nested in the class once, and keeps the rules in a static array. The checks run the
+array, then the `CheckInvariants()` seam, then every child entity that the aggregate holds in a collection:
 
-```csharp title="Order.g.cs, shortened"
+**Order.g.cs, shortened**
+
+```csharp
     private static readonly DDDToolkit.Invariants.IInvariant<Shop.Order>[] __invariants =
     [
         new Shop.Order.MustHaveLines(),
@@ -145,12 +156,14 @@ the `CheckInvariants()` seam, then every child entity the aggregate holds in a c
 ```
 
 The list of violations is created on the first failure, so a consistent aggregate allocates nothing.
-[Invariants](invariants.md) explains the two stages, `GetInvariantViolations()` to ask and
-`EnsureInvariants()` to throw, and when the save runs them.
+[Invariants](invariants.md) explains the two stages, `GetInvariantViolations()` to ask and `EnsureInvariants()` to
+throw, and when the save runs them.
 
 The `partial` collection property gets a field behind it:
 
-```csharp title="Order.g.cs, shortened"
+**Order.g.cs, shortened**
+
+```csharp
     private readonly System.Collections.Generic.List<Shop.OrderLine> _lines = new();
 
     private System.Collections.Generic.IReadOnlyList<Shop.OrderLine>? __linesView;
@@ -161,18 +174,20 @@ The `partial` collection property gets a field behind it:
 }
 ```
 
-In practice: code inside `Order` adds a line with `_lines.Add(...)`, and code outside it can read
-`Lines` but cannot change it. Entity Framework loads and saves the field. This is the usual
-hand-written pattern for keeping a collection inside its aggregate, minus the writing.
+Code inside `Order` adds a line with `_lines.Add(...)`. Code outside `Order` can read `Lines` and cannot change the
+list. Entity Framework loads and saves the field. This is the usual hand-written pattern for a collection inside its
+aggregate, written by the generator.
 
 `OrderLine.g.cs` is the same for the child entity, with `Entity<OrderLineId>` as the base class.
 
 ## The identifier
 
-`[AggregateRoot<Guid>("ORD")]` names the id type after the class, so the generator writes `OrderId`.
-No `OrderId.cs` exists anywhere. It is a `readonly record struct` around the `Guid`:
+`[AggregateRoot<Guid>("ORD")]` names the id type after the class, so the generator writes `OrderId`. The project has
+no `OrderId.cs`. `OrderId` is a `readonly record struct` around the `Guid`:
 
-```csharp title="OrderId.g.cs, shortened"
+**OrderId.g.cs, shortened**
+
+```csharp
 [System.Text.Json.Serialization.JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
 public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>, DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>, DDDToolkit.Abstractions.Interfaces.ICreatableEntityId<OrderId>
 {
@@ -197,20 +212,26 @@ public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfac
 }
 ```
 
-`CreateSequential()` makes a version 7 `Guid`, which is ordered by time and friendlier to a database
-index than a random one. `Create()` is the way a new `OrderId` is made, in code and before the save: here it is
-`CreateSequential()`, and it implements `ICreatableEntityId<OrderId>`, so code that is generic over ids, a
-supporting domain's use cases, makes one with `TId.Create()`. Declare a `Create()` of your own in the id's partial
-declaration and the generator writes none; an id over a `long` or a `string` gets one only that way.
-`ISingleValue` names the value and the way back from it, for a project that stores the id without declaring it.
+- `CreateSequential()` makes a version 7 `Guid`. A version 7 `Guid` is ordered by time, which suits a database index
+  better than a random `Guid`.
+- `Create()` makes a new `OrderId`, in code, before the save. Here `Create()` calls `CreateSequential()`. It implements
+  `ICreatableEntityId<OrderId>`, so code that is generic over ids, such as a supporting domain's managers, makes an id
+  with `TId.Create()`.
+- Declare a `Create()` of your own in the id's partial declaration, and the generator writes none. An id over a `long`
+  or a `string` gets a `Create()` only that way.
+- `ISingleValue` names the value type and the way back from a stored value. A project that stores the id without
+  declaring it uses this interface.
+
 [Identifiers](identifiers.md#creating-identifiers) covers the other value types, the record form, the prefix,
 `Create()` and `ISingleValue`.
 
 ## `[ValueObject]`
 
-`Address.g.cs` gives the record its base type and equality over its components, in declaration order:
+`Address.g.cs` gives the record its base type, and equality over its components in declaration order:
 
-```csharp title="Address.g.cs, shortened"
+**Address.g.cs, shortened**
+
+```csharp
 partial record Address : DDDToolkit.BaseTypes.ValueObject, DDDToolkit.Validation.IValidatable<ValidAddress>
 {
     [System.Text.Json.Serialization.JsonInclude]
@@ -226,20 +247,24 @@ partial record Address : DDDToolkit.BaseTypes.ValueObject, DDDToolkit.Validation
     }
 ```
 
-The positional parameters become properties with a `protected init` setter, so nobody outside the
-record can make a changed copy with `with` and skip validation. What it offers instead is `With()`,
-which copies with changes and judges the copy afresh:
+The positional parameters become properties with a `protected init` setter. So code outside the record cannot use
+`with` to make a changed copy that skips validation. The record offers `With()` instead, which copies with changes
+and judges the copy afresh:
 
-```csharp title="Address.g.cs, shortened"
+**Address.g.cs, shortened**
+
+```csharp
     public virtual Address With(DDDToolkit.BaseTypes.Optional<string> street = default, DDDToolkit.BaseTypes.Optional<string> city = default)
         => this with { Street = street.Or(Street), City = city.Or(City) };
 }
 ```
 
-It also writes `ValidAddress`, the always-valid twin. Its only constructor validates, so a method that
-takes a `ValidAddress` never has to check one again:
+The generator also writes `ValidAddress`, the always-valid twin. Its only constructor validates, so a method that
+takes a `ValidAddress` does not have to check it again:
 
-```csharp title="Address.g.cs, shortened"
+**Address.g.cs, shortened**
+
+```csharp
 public partial record ValidAddress : Address, DDDToolkit.Abstractions.Interfaces.IAlwaysValid
 {
     public ValidAddress(Address value) : base(value)
@@ -249,14 +274,16 @@ public partial record ValidAddress : Address, DDDToolkit.Abstractions.Interfaces
     }
 ```
 
-[Value objects](value-objects.md) explains validation, the twin and `With()` in full.
+[Value objects](value-objects.md) explains validation, the twin and `With()`.
 
 ## The event names
 
-Every name the project's events are stored or published under becomes a constant, in a class named after
-the module:
+The generator writes every name under which the project's events are stored or published as a constant, in a class
+named after the module:
 
-```csharp title="EventNames.g.cs, shortened"
+**EventNames.g.cs, shortened**
+
+```csharp
 public static class ShopEventNames
 {
     /// <summary><c>shop.order-placed</c>: <see cref="Shop.OrderPlaced"/> (version 1).</summary>
@@ -264,37 +291,42 @@ public static class ShopEventNames
 }
 ```
 
-`OrderPlaced` pins its name with `[DomainEventName]`. Without it the name would be the module and the class
-name in kebab case; [Stable names](domain-events.md#stable-names) has the rule, and the checks the same
-pass runs on it.
+`OrderPlaced` fixes its name with `[DomainEventName]`. Without that attribute, the name would be the module name and
+the class name in kebab case. [Stable names](domain-events.md#stable-names) has the rule, and the checks that the same
+generator runs on the name.
 
 ## The module
 
-This sample's build declares module Shop from its `DDD_Module`, so the toolkit's generator writes the attribute a
-project would otherwise write itself, for the analyzer, the runtime and every project that references the assembly:
+This sample's build declares the module Shop from its `DDD_Module`. So the core generator writes the attribute that a
+project would otherwise write itself. The analyzer, the runtime and every project that references the assembly read
+this attribute:
 
-```csharp title="Module.g.cs, shortened"
+**Module.g.cs, shortened**
+
+```csharp
 // The module this project's build declared: its DDD_Module. An [assembly: Module] of the project's
 // own would have been kept instead, and nothing written here.
-[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleAttribute("Shop")]
+[assembly: DDDToolkit.Abstractions.Attributes.ModuleAttribute("Shop")]
 ```
 
-It is not written where the project declares `[assembly: Module]` already, so it never declares the module
-twice. [A module named by its folder](modules.md#a-module-named-by-its-folder) has how and why.
+The generator does not write this file when the project already declares `[assembly: Module]`, so the module is never
+declared twice. [A module named by its folder](modules.md#a-module-named-by-its-folder) explains how and why.
 
 ## The access behavior
 
-One thing the core generator writes only where another library is used. In a project that references
-[Mediator](https://github.com/martinothamar/Mediator), an interface marked `[AccessRequests]` gets the
-pipeline behavior that holds its requests to [what they require of their caller](access-requirements.md),
-and the call that registers it:
+The core generator writes one file only in a project that references
+[Mediator](https://github.com/martinothamar/Mediator). For an interface marked `[AccessRequests]`, it writes a pipeline
+behavior and the call that registers it. The behavior runs the access check, which checks each request of the
+interface against [what the request requires of its caller](access-requirements.md):
 
 ```csharp
 [AccessRequests]
 public interface IShopRequest : IRequireAccess;
 ```
 
-```csharp title="ShopAccessBehavior.g.cs, shortened"
+**ShopAccessBehavior.g.cs, shortened**
+
+```csharp
 [assembly: AccessBehavior(typeof(IShopRequest), typeof(ShopAccessBehavior<,>),
     StreamBehavior = typeof(ShopAccessStreamBehavior<,>), Registration = "services.AddShopAccessBehavior()")]
 
@@ -321,10 +353,12 @@ public static class ShopAccessBehaviorRegistration
 }
 ```
 
-A message that is answered with a stream passes a pipeline of its own in Mediator, so the same file holds a
-second class for it, which `AddShopAccessBehavior()` registers too:
+Mediator sends a message that is answered with a stream through a separate pipeline. So the same file holds a second
+class for such messages, and `AddShopAccessBehavior()` registers that class too:
 
-```csharp title="ShopAccessBehavior.g.cs, shortened"
+**ShopAccessBehavior.g.cs, shortened**
+
+```csharp
 public sealed class ShopAccessStreamBehavior<TMessage, TResponse> : IStreamPipelineBehavior<TMessage, TResponse>
     where TMessage : IShopRequest, IStreamMessage
 {
@@ -339,19 +373,21 @@ public sealed class ShopAccessStreamBehavior<TMessage, TResponse> : IStreamPipel
 }
 ```
 
-The toolkit references no dispatcher: the library is noticed by its type, and how its behaviors are implemented
-is read from the version the project references. A project that does not reference it gets none of the classes.
+The toolkit references no dispatcher. The generator recognizes Mediator by its types, and it reads how to implement
+the behaviors from the Mediator version the project references. A project that does not reference Mediator gets none
+of these classes.
 
-The file opens with what it wrote, as an attribute of the assembly: the interface, both behaviors and the call that
-registers them. Registering the interface's checks reads it to bring the start-up check
-`access.behaviors-registered`, which stops a host that handles a request of the interface without the behavior in
-its pipeline ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)).
+The file starts with an assembly attribute that lists what the file contains: the interface, both behaviors, and the
+call that registers them. When the host registers the interface's checks, the registration reads this attribute and
+adds the start-up check `access.behaviors-registered`. That check stops a host that handles a request of the interface
+without the behavior in its pipeline ([When nothing asks the checks](access-requirements.md#handlers-reached-without-the-access-check)).
 
-### What a request's attributes say
+### The requirement of each request
 
-A request that says who may send it with an attribute gets one line, in the same file, in the interface, which is
-declared `partial` for it: the call the attribute stands for, written out. It is written with the library and
-without it, since whatever asks the checks reads it ([What a request declares](access-requirements.md#what-a-request-declares)):
+A request can declare with an attribute who may send it. For such a request, the generator writes one line in the same
+file, inside the interface, which is declared `partial` for this purpose. The line is the call that the attribute
+stands for, written out. The generator writes the line with or without Mediator, because any code that runs the access
+check reads it ([What a request declares](access-requirements.md#what-a-request-declares)):
 
 ```csharp
 [AccessRequests]
@@ -363,12 +399,14 @@ public sealed record CancelOrder([OnResource] OrderId Order, [ExpectedVersion] l
 [RequiresPermission("shop.orders.watchers")]                          // stop watching an order yourself, or take a watcher off with the permission
 public sealed record StopWatching([OnResource] OrderId Order, [OrOwn] Guid Watcher) : IShopRequest;
 
-[SignedIn]                                                     // stacked: both hold, in this order
+[SignedIn]                                                     // stacked: both must hold, checked in this order
 [RequiresPermission("shop.reports.export")]
 public sealed record ExportSales : IShopRequest;
 ```
 
-```csharp title="ShopAccessBehavior.g.cs, shortened"
+**ShopAccessBehavior.g.cs, shortened**
+
+```csharp
 using DDDToolkit_Generated_IRequireAccess = global::DDDToolkit.Access.IRequireAccess;
 
 partial interface IShopRequest
@@ -387,22 +425,29 @@ partial interface IShopRequest
 }
 ```
 
-The line names `IRequireAccess` through an alias the file declares, so a namespace of the module's own called
-`DDDToolkit`, `Contoso.DDDToolkit.Shop` say, takes nothing from it. A request that answers `RequiredAccess` itself
-gets no line: C# takes its own over the interface's. Several
-attributes stacked on a request are `AccessRequirement.All` of their calls, and `[OrOwn]` beside a permission is
-`AccessRequirement.Any` of the caller's own and the permission, the caller's own first; beside `[OnResource]` the caller's own
-way through still sees the resource, `MemberAccess.Sees`, so the order is read, its version compared and its hold kept
-either way ([Requirements that combine](access-requirements.md#requirements-that-combine)). The member marked
-`[OrOwn]` names the subject the request acts on, the watcher who leaves, and the handler acts on that watcher of that
-order alone: the door compares it with the caller, and says nothing of who owns the order.
+- The line names `IRequireAccess` through an alias that the file declares. So a namespace of the module called
+  `DDDToolkit`, such as `Contoso.DDDToolkit.Shop`, does not hide the type.
+- A request that implements `RequiredAccess` itself gets no line. C# uses the request's member instead of the
+  interface's member.
+- Several attributes on one request become `AccessRequirement.All` of their calls.
+- `[OrOwn]` next to a permission becomes `AccessRequirement.Any` of the caller's own and the permission, with the
+  caller's own first.
+- Next to `[OnResource]`, the path through the caller's own still requires that the caller sees the resource, with
+  `MemberAccess.Sees`. So on both paths, the access check reads the order, compares its version and keeps the
+  [hold](membership/checks-and-saves.md#the-expert-hold) ([Requirements that combine](access-requirements.md#requirements-that-combine)).
+
+The member marked `[OrOwn]` names the subject that the request acts on: the watcher who leaves. The handler acts only
+on that watcher of that order. The access check compares the watcher with the caller. It does not check who owns the
+order.
 
 ## `DDDToolkit.EntityFramework`
 
-With the Entity Framework package referenced, its generator adds the mapping. Each id gets a value
-converter that stores it as its plain value:
+With the Entity Framework package referenced, its generator adds the mapping. Each id gets a value converter that
+stores the id as its plain value:
 
-```csharp title="OrderId.Converter.g.cs"
+**OrderId.Converter.g.cs**
+
+```csharp
 public readonly partial record struct OrderId
 {
     public sealed class OrderIdConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<Shop.OrderId, System.Guid>
@@ -414,10 +459,12 @@ public readonly partial record struct OrderId
 }
 ```
 
-One method registers every converter in the project. It is named after the module,
-`<DDD_Module>Shop</DDD_Module>` in the project file, and you call it from `ConfigureConventions`:
+One method registers every converter in the project. The method is named after the module,
+`<DDD_Module>Shop</DDD_Module>` in the project file. Call it from `ConfigureConventions`:
 
-```csharp title="ConverterExtensions.g.cs, shortened"
+**ConverterExtensions.g.cs, shortened**
+
+```csharp
 public static Microsoft.EntityFrameworkCore.ModelConfigurationBuilder AddShopConverters(this Microsoft.EntityFrameworkCore.ModelConfigurationBuilder modelConfigurationBuilder)
 {
     modelConfigurationBuilder.Properties<Shop.OrderId>().HaveConversion<Shop.OrderId.OrderIdConverter>();
@@ -427,34 +474,41 @@ public static Microsoft.EntityFrameworkCore.ModelConfigurationBuilder AddShopCon
 }
 ```
 
-Value objects are marked `[ComplexType]`, so their fields become columns of the table that holds
-them. Child entities are marked `[Owned]`, so they are saved with their aggregate and never alone.
+Value objects are marked `[ComplexType]`, so their fields become columns of the table that holds them. Child entities
+are marked `[Owned]`, so Entity Framework saves them with their aggregate, and never alone.
 
-`AddShopIntegrationEvents()` registers every domain event of the module with the outbox, under its stable
-name, here the one from `[DomainEventName]`:
+`AddShopIntegrationEvents()` registers every domain event of the module with the outbox, under its stable name. Here
+the name comes from `[DomainEventName]`:
 
-```csharp title="IntegrationEventExtensions.g.cs, shortened"
+**IntegrationEventExtensions.g.cs, shortened**
+
+```csharp
 outbox.RegisterEvent<Shop.OrderPlaced>("shop.order-placed", 1);
 ```
 
-The name is what the outbox stores, so renaming the class does not orphan rows already written. See
+The outbox stores the name. So renaming the class does not break the rows that are already written. See
 [Entity Framework](entity-framework.md) and [Integration events](integration-events.md).
 
-A project without the Entity Framework package, such as a module's domain project, gets none of this. The
-core generator still makes every id and single value object implement `ISingleValue<TSelf, TValue>`, and the
-module's project that references Entity Framework writes the rest for it: its `Add{Module}Converters()`
-registers those ids with `SingleValueConverter<T, TValue>`, and its `Add{Module}IntegrationEvents()` names
-the domain project's events, which must be `public`. A registration a package closes over the module's
-classes, such as `modelBuilder.AddTenancy()`, is written into that project as well, and into no project of
-the module above it: an API project that references it calls its own public registration. See
-[A module in layers](modules.md#a-module-in-layers).
+A project without the Entity Framework package, such as a module's domain project, gets none of these files. The core
+generator still makes every id and single value object implement `ISingleValue<TSelf, TValue>`. The module's project
+that references Entity Framework writes the rest for the domain project:
+
+- Its `Add{Module}Converters()` registers the domain project's ids with `SingleValueConverter<T, TValue>`.
+- Its `Add{Module}IntegrationEvents()` names the domain project's events, which must be `public`.
+- A registration that a package closes over the module's classes, such as `modelBuilder.AddTenancy()`, is written into
+  that project too. It is not written into any project of the module above it. An API project that references it
+  calls its public registration.
+
+See [A module in layers](modules.md#a-module-in-layers).
 
 ## `DDDToolkit.HotChocolate`
 
-With the HotChocolate package referenced, each id gets a type converter and a Relay node id
-serializer, and one method binds them all:
+With the HotChocolate package referenced, each id gets a type converter and a Relay node id serializer. One method
+binds them all:
 
-```csharp title="BindingExtensions.g.cs, shortened"
+**BindingExtensions.g.cs, shortened**
+
+```csharp
 public static HotChocolate.Execution.Configuration.IRequestExecutorBuilder AddShopGraphQlRuntimeBindings(this HotChocolate.Execution.Configuration.IRequestExecutorBuilder builder)
 {
     builder.BindRuntimeType<Shop.OrderId, HotChocolate.Types.UuidType>();
@@ -470,13 +524,13 @@ public static HotChocolate.Execution.Configuration.IRequestExecutorBuilder AddSh
 }
 ```
 
-An `OrderId` is a `UUID` in the schema, can be the key inside a Relay node id, and can be the key a paged
-list is ordered by. See [GraphQL](graphql.md).
+An `OrderId` is a `UUID` in the schema. It can be the key inside a Relay node id, and the key that a paged list is
+ordered by. See [GraphQL](graphql.md).
 
-## See it in your own project
+## The generated code in your own project
 
-Go to definition on a generated member opens the generated file, and in Visual Studio the files are
-also listed under **Dependencies → Analyzers**. To have them written to disk:
+Go to definition on a generated member opens the generated file. In Visual Studio, the files are also listed under
+**Dependencies → Analyzers**. To have them written to disk, add this to the project file:
 
 ```xml
 <PropertyGroup>
@@ -485,5 +539,5 @@ also listed under **Dependencies → Analyzers**. To have them written to disk:
 </PropertyGroup>
 ```
 
-Build, then look in `Generated/`, and add that folder to `.gitignore`. If a type you annotated
-produced nothing, the build output has a `DDD` diagnostic that says why; see [Diagnostics](diagnostics.md).
+Build, then look in `Generated/`, and add that folder to `.gitignore`. If a type with a toolkit attribute produced
+nothing, the build output has a `DDD` diagnostic that says why. See [Diagnostics](diagnostics.md).

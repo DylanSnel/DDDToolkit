@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -23,13 +24,13 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
 
         foreach (var (name, user) in desk.People)
         {
-            await using var session = await CallerSession.BeginAsync(desk.Database, TestCallers.User(user));
+            await using var session = await UserSession.BeginAsync(desk.Database, TestUsers.User(user));
 
             var seen = desk.SeenBy(user).Select(id => id.Value).ToList();
             (await session.ListAsync<Guid>("SELECT id FROM desk.documents_i_see() AS id")).Should().BeEquivalentTo(seen, "of what " + name + " sees");
-            (await desk.AsAsync(TestCallers.User(user), async provider =>
+            (await desk.AsAsync(TestUsers.User(user), async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Document>>().ReachSeen();
                 return await provider.GetRequiredService<DeskContext>().Documents.Within(see).Select(document => document.Id.Value).ToListAsync(Cancellation);
             })).Should().BeEquivalentTo(seen, "of what " + name + " sees, asked in the application");
 
@@ -39,9 +40,9 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 var because = "of what " + name + " holds " + permission + " on";
 
                 (await session.ListAsync<Guid>("SELECT id FROM desk.documents_where_i_hold($1) AS id", permission)).Should().BeEquivalentTo(held, because);
-                (await desk.AsAsync(TestCallers.User(user), async provider =>
+                (await desk.AsAsync(TestUsers.User(user), async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(permission);
                     return await provider.GetRequiredService<DeskContext>().Documents.Within(reach).Select(document => document.Id.Value).ToListAsync(Cancellation);
                 })).Should().BeEquivalentTo(held, because + ", asked in the application");
             }
@@ -64,13 +65,13 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
 
         foreach (var person in gardens.People)
         {
-            await using var session = await CallerSession.BeginAsync(gardens.Database, person.Caller);
+            await using var session = await UserSession.BeginAsync(gardens.Database, person.Caller);
 
             var seen = gardens.SeenBy(person).Select(id => id.Value).ToList();
             (await session.ListAsync<Guid>("SELECT id FROM wardens.plots_i_see() AS id")).Should().BeEquivalentTo(seen, "of what " + person + " sees");
             (await gardens.AsAsync(person.Caller, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<PlotId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Plot>>().ReachSeen();
                 return await provider.GetRequiredService<WardensContext>().Plots.Within(see).Select(plot => plot.Id.Value).ToListAsync(Cancellation);
             })).Should().BeEquivalentTo(seen, "of what " + person + " sees, asked in the application");
 
@@ -82,7 +83,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 (await session.ListAsync<Guid>("SELECT id FROM wardens.plots_where_i_hold($1) AS id", permission)).Should().BeEquivalentTo(held, because);
                 (await gardens.AsAsync(person.Caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<PlotId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Plot>>().Reach(permission);
                     return await provider.GetRequiredService<WardensContext>().Plots.Within(reach).Select(plot => plot.Id.Value).ToListAsync(Cancellation);
                 })).Should().BeEquivalentTo(held, because + ", asked in the application");
             }
@@ -91,7 +92,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
         // And what the SQLite suite pins of it: through a role read from its row; from above, by somebody on
         // no plot; both ways at once; nothing through a role put away; and nobody for whom the host does not count.
         Task<MemberHold<PlotId>?> HoldAsync(GardenPerson person, PlotId plot, string permission)
-            => gardens.AsAsync(person.Caller, provider => provider.GetRequiredService<IMemberQuestions<PlotId>>().HoldAsync(plot, permission, Cancellation));
+            => gardens.AsAsync(person.Caller, provider => provider.GetRequiredService<MembershipAccessManager<Plot>>().HoldAsync(plot, permission, Cancellation));
 
         (await HoldAsync(data.Cy, data.Beans, PlotPermissions.Water))!.Via.Should().Be(MemberVia.Members);
         (await HoldAsync(gardens.Ranger, data.Leeks, PlotPermissions.Water))!.Via.Should().Be(MemberVia.Above);
@@ -163,9 +164,9 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
     /// <summary>Where a caller holds a permission over documents: at the owners that made it a deputy for that permission.</summary>
     private sealed class DeputiesOfOwners : IPlacesReached<DocumentId, UserId>
     {
-        public IQueryable<UserId> PlacesReached(DbContext context, Caller caller, string permission)
+        public IQueryable<UserId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission)
         {
-            var user = caller.UserId;
+            var user = caller.Id;
             return context.Set<Deputy>().Where(deputy => deputy.User == user && deputy.Key == permission).Select(deputy => deputy.Of);
         }
     }
@@ -185,7 +186,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                             "text",
                             "SETOF uuid",
                             $"SELECT d.{Column(deputies, nameof(Deputy.Of))} FROM {RowAccessModel.Table(deputies)} d "
-                            + $"WHERE d.{Column(deputies, nameof(Deputy.User))} = {{caller:uid}} AND d.{Column(deputies, nameof(Deputy.Key))} = $1",
+                            + $"WHERE d.{Column(deputies, nameof(Deputy.User))} = {{user:uid}} AND d.{Column(deputies, nameof(Deputy.Key))} = $1",
                             SecurityDefiner: true),
                     ],
                     [],
@@ -291,7 +292,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentPermissions.Edit },
                 new Deputy { Of = desk.Ada, User = desk.Dee.Value, Key = DocumentPermissions.Edit });
 
-            await desk.AsAsync(Caller.System, async provider =>
+            await desk.AsAsync(CurrentUserSnapshot.System, async provider =>
             {
                 var context = provider.GetRequiredService<DeskContext>();
                 context.Documents.AddRange(desk._documents);
@@ -322,11 +323,11 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 .Select(document => document.Id)];
 
         public Task<MemberHold<DocumentId>?> HoldAsync(UserId user, DocumentId document, string permission)
-            => AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(document, permission, Cancellation));
+            => AsAsync(TestUsers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(document, permission, Cancellation));
 
-        public async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+        public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
         {
-            using (Callers.Begin(caller))
+            using (TestAccess.BeginAs(caller))
             {
                 await using var scope = _provider.CreateAsyncScope();
                 return await ask(scope.ServiceProvider);
@@ -363,13 +364,13 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
     /// What a host answers for plots that stand beside something of its own: who the caller is as a gardener,
     /// which is nobody for somebody it let go, and at which gardens the caller holds a permission.
     /// </summary>
-    private sealed class Wardens(UserId letGo) : ICallerMember<PlotId, UserId>, IPlacesReached<PlotId, GardenId>
+    private sealed class Wardens(UserId letGo) : ICurrentMember<PlotId, UserId>, IPlacesReached<PlotId, GardenId>
     {
-        public UserId? Find(Caller caller) => caller.UserId is { } user && user != letGo.Value ? new UserId(user) : null;
+        public UserId? Find(CurrentUserSnapshot caller) => caller.Id is { } user && user != letGo.Value ? new UserId(user) : null;
 
-        public IQueryable<GardenId> PlacesReached(DbContext context, Caller caller, string permission)
+        public IQueryable<GardenId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission)
         {
-            var user = caller.UserId;
+            var user = caller.Id;
             var counted = user is not null && user != letGo.Value;
             return context.Set<GardenPermission>().Where(held => counted && held.UserId == user && held.Permission == permission).Select(held => held.GardenId);
         }
@@ -391,17 +392,17 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
             return new RowAccessContributionResult(
                 [
                     new ContributedFunction(
-                        "caller_gardener",
+                        "current_gardener",
                         "",
                         "uuid",
-                        $"SELECT {{caller:uid}} WHERE NOT EXISTS (SELECT 1 FROM {RowAccessModel.Table(gone)} g WHERE g.{Column(gone, nameof(LetGo.UserId))} = {{caller:uid}})",
+                        $"SELECT {{user:uid}} WHERE NOT EXISTS (SELECT 1 FROM {RowAccessModel.Table(gone)} g WHERE g.{Column(gone, nameof(LetGo.UserId))} = {{user:uid}})",
                         SecurityDefiner: true),
                     new ContributedFunction(
                         "gardens_where_i_hold",
                         "text",
                         "SETOF uuid",
                         $"SELECT k.{Column(permissions, nameof(GardenPermission.GardenId))} FROM {RowAccessModel.Table(permissions)} k "
-                        + $"WHERE k.{Column(permissions, nameof(GardenPermission.UserId))} = (SELECT {{fn:wardens/caller_gardener}}()) AND k.{Column(permissions, nameof(GardenPermission.Permission))} = $1",
+                        + $"WHERE k.{Column(permissions, nameof(GardenPermission.UserId))} = (SELECT {{fn:wardens/current_gardener}}()) AND k.{Column(permissions, nameof(GardenPermission.Permission))} = $1",
                         SecurityDefiner: true),
                 ],
                 [],
@@ -447,7 +448,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
             "plots",
             PlotMembership.Rules.Permissions,
             Roles.Custom(starters: [new(PlotMembership.Tender, [PlotPermissions.See, PlotPermissions.Plant, PlotPermissions.Water]), new(PlotMembership.Waterer, [PlotPermissions.See, PlotPermissions.Water])]),
-            members: MemberSource.Resolved(new DatabaseFunction("wardens", "caller_gardener")),
+            members: MemberSource.Resolved(new DatabaseFunction("wardens", "current_gardener")),
             reachFromAbove: new DatabaseFunction("wardens", "gardens_where_i_hold"),
             codes: PlotMembership.Codes);
 
@@ -495,7 +496,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 [new MembershipRowAccessContribution<PlotGardener>(Rules), new WardensOwnFunctions()]);
             var gardens = new WardenedGardens(database);
 
-            await gardens.AsAsync(Caller.System, async provider =>
+            await gardens.AsAsync(CurrentUserSnapshot.System, async provider =>
             {
                 var context = provider.GetRequiredService<WardensContext>();
                 context.AddRange(gardens.Data.Roles);
@@ -517,9 +518,9 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
         public IReadOnlyList<PlotId> HeldBy(GardenPerson person, string permission)
             => Counts(person) ? [.. Data.PlotsHeldBy(person, permission).Union(Above(person, permission))] : [];
 
-        public async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+        public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
         {
-            using (Callers.Begin(caller))
+            using (TestAccess.BeginAs(caller))
             {
                 await using var scope = _provider.CreateAsyncScope();
                 return await ask(scope.ServiceProvider);

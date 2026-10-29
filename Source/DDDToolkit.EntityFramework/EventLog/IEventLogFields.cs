@@ -24,7 +24,7 @@ namespace DDDToolkit.EntityFramework.EventLog;
 /// <remarks>
 /// <para>
 /// <b>It is a singleton that reads what it fills in each time it is asked</b>, from what follows the flow of
-/// work, such as an ambient caller or the current request, or from the event itself. It keeps nothing between
+/// work, such as a begun user or the current request, or from the event itself. It keeps nothing between
 /// two events and takes no scoped service. The interceptor takes every registered one from the provider its
 /// context's options were built with, once per save, and with a context pool that provider is the
 /// application's root one, where a scoped service cannot be resolved.

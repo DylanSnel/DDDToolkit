@@ -43,7 +43,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         var asked = PolicyMatrix.Cells[cell];
         var database = asked.Caller.At is { } unit ? await HoldingAtAsync(asked.Caller.Person, unit, asked.Caller.Keys) : await SharedAsync();
 
-        await using var caller = await AsCaller.PersonAsync(database, asked.Caller.Person.Identity, asked.Caller.Tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, asked.Caller.Person.Identity, asked.Caller.Tenant, Cancellation);
         foreach (var before in asked.Before)
         {
             (await caller.ExecuteAsync(PolicyMatrix.Fill(before), Cancellation)).Should().BePositive(before);
@@ -90,7 +90,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
                      (Quin, [Quin.Seat.Value], [3L]),
                  })
         {
-            await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant: null, Cancellation);
+            await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant: null, Cancellation);
             (await caller.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"Seats\"", Cancellation)).Should().BeEquivalentTo(seats, "{0} finds their own seats, whatever their status or their tenant's", person.Name);
             (await caller.ListAsync<long>("SELECT \"Id\" FROM tenancy.\"Tenants\"", Cancellation)).Should().BeEquivalentTo(tenants);
             (await caller.ListAsync<long>("SELECT \"Id\" FROM tenancy.\"Organizations\"", Cancellation)).Should().BeEquivalentTo(tenants);
@@ -109,7 +109,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
     {
         var database = await SharedAsync();
 
-        await using (var harbor = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
+        await using (var harbor = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
         {
             (await harbor.ScalarAsync<string>("SELECT current_user", Cancellation)).Should().Be(PostgresRowLevelSecurityOptions.DefaultSystemInRole);
             (await harbor.ScalarAsync<string>("SELECT rolsuper || ' ' || rolbypassrls || ' ' || rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = current_user", Cancellation))
@@ -126,7 +126,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         }
 
         // Outside any tenant it acts in none.
-        await using var nowhere = await AsCaller.SystemInAsync(database, tenant: null, TenancyWork.SystemScope, Cancellation);
+        await using var nowhere = await AsUser.SystemInAsync(database, tenant: null, TenancyWork.SystemScope, Cancellation);
         foreach (var table in TenancyTables)
         {
             (await nowhere.ScalarAsync<long>($"SELECT count(*) FROM tenancy.\"{table}\"", Cancellation)).Should().Be(0, table);
@@ -137,7 +137,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
     public async Task A_system_in_of_another_scope_cannot_write_tenancy_tables()
     {
         var database = await SharedAsync();
-        await using var widgets = await AsCaller.SystemInAsync(database, Harbor, "widgets", Cancellation);
+        await using var widgets = await AsUser.SystemInAsync(database, Harbor, "widgets", Cancellation);
 
         // It reads Tenancy's rows of its tenant, as a module's read model does.
         (await widgets.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Seats\"", Cancellation)).Should().Be(6);
@@ -157,7 +157,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
     public async Task A_grants_manager_at_one_unit_cannot_grant_at_the_root_by_a_query_as_the_caller()
     {
         var database = await SharedAsync();
-        await using var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
+        await using var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
 
         // Ada is placed at the root; Hiro gives roles at North and below. A role that manages no access, in his own name.
         await RefusedAsync(hiro, Give(HarborRoles.Watcher, Ada.Seat, HarborRoot, Hiro.Seat));
@@ -172,7 +172,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         // Orchard's Watcher, given in Harbor: by a grants manager at the unit, and by the administrator.
         foreach (var person in new[] { Hiro, Ada })
         {
-            await using var caller = await AsCaller.PersonAsync(database, person.Identity, Harbor, Cancellation);
+            await using var caller = await AsUser.PersonAsync(database, person.Identity, Harbor, Cancellation);
             await RefusedAsync(caller, Give(OrchardRoles.Watcher, Oli.Seat, NorthPier, person.Seat));
         }
     }
@@ -183,7 +183,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
         // A row that puts South below North would give Seth's permissions at North over South's widgets.
-        await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
+        await using (var seth = await AsUser.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
         {
             (await seth.ExecuteAsync(
                     "INSERT INTO tenancy.\"OrganizationUnitPaths\" (\"AncestorId\", \"DescendantId\", \"TenantId\", \"Distance\") VALUES ($1, $2, 1, 1)",
@@ -197,7 +197,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
             failure.Which.ConstraintName.Should().Be("tenancy_paths_follow_the_tree");
         }
 
-        await using var after = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
+        await using var after = await AsUser.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
         (await after.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission('widget.read')", Cancellation)).Should().BeEquivalentTo([North.Value, NorthPier.Value]);
     }
 
@@ -214,7 +214,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         // made a second root, would make him a manager of all of Harbor. He may take North's subtree out from under the
         // root in the closure, which the tree would then have to agree with at commit; the unit itself he may not
         // leave without a parent.
-        await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
+        await using (var seth = await AsUser.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
         {
             (await seth.ScalarAsync<bool>("SELECT tenancy.holds_at_tenant('tenancy.units.manage')", Cancellation)).Should().BeFalse();
             (await seth.ExecuteAsync(
@@ -231,7 +231,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         }
 
         // The root has no parent and keeps none: Ada, who manages units there, changes it as before.
-        await using var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation);
+        await using var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation);
         (await ada.ExecuteAsync("UPDATE tenancy.\"OrganizationUnits\" SET \"Name\" = 'Harbor Works' WHERE \"Id\" = $1", Cancellation, HarborRoot.Value)).Should().Be(1);
         await RefusedAsync(ada, $"UPDATE tenancy.\"OrganizationUnits\" SET \"ParentId\" = NULL WHERE \"Id\" = '{South.Value}'");
         await ada.CommitAsync(Cancellation);
@@ -247,7 +247,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Seats().PlaceAsync(Eve.Seat, North, primary: false, Cancellation));
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Seats().MakePrimaryAsync(Eve.Seat, North, Cancellation));
 
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ListAsync<string>(
                     "SELECT u.\"Name\" || ' ' || p.\"IsPrimary\" FROM tenancy.\"SeatPlacements\" p JOIN tenancy.\"OrganizationUnits\" u ON u.\"Id\" = p.\"UnitId\" WHERE p.\"SeatId\" = $1 ORDER BY 1",
@@ -257,7 +257,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         }
 
         // Making South primary again takes the seats permission at South, which he does not hold.
-        await using var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
+        await using var seth = await AsUser.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
         (await seth.ExecuteAsync("UPDATE tenancy.\"SeatPlacements\" SET \"IsPrimary\" = false WHERE \"SeatId\" = $1 AND \"UnitId\" = $2", Cancellation, Eve.Seat.Value, North.Value)).Should().Be(1);
         await RefusedAsync(seth, $"UPDATE tenancy.\"SeatPlacements\" SET \"IsPrimary\" = true WHERE \"SeatId\" = '{Eve.Seat.Value}' AND \"UnitId\" = '{South.Value}'");
     }
@@ -268,7 +268,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         var database = await SharedAsync();
 
         // Ada changes widgets at every unit of Harbor. A query that forgot the tenant sees Harbor's widgets and parts.
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ListAsync<string>("SELECT \"Name\" FROM widgets.\"Widgets\" ORDER BY 1", Cancellation)).Should().Equal("Gauge", "Pump", "Valve");
             (await ada.ListAsync<string>("SELECT \"Name\" FROM widgets.\"WidgetPart\"", Cancellation)).Should().Equal("Gasket");
@@ -280,12 +280,12 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         }
 
         // Oli reads by his rule where he holds the permission, in the tenant he acts in.
-        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        await using (var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ListAsync<string>("SELECT \"Name\" FROM widgets.\"Widgets\"", Cancellation)).Should().Equal("Valve");
         }
 
-        await using var inOrchard = await AsCaller.PersonAsync(database, Oli.Identity, Orchard, Cancellation);
+        await using var inOrchard = await AsUser.PersonAsync(database, Oli.Identity, Orchard, Cancellation);
         (await inOrchard.ListAsync<string>("SELECT \"Name\" FROM widgets.\"Widgets\"", Cancellation)).Should().Equal("Crate");
     }
 
@@ -295,7 +295,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await ApplyAsync(database, [.. WidgetRules.All, RowAccessRule.For<Widget>("Widgets for all to read", RowOperations.Read, "true", RowAccessRoles.Anonymous)]);
 
-        await using var anonymous = await AsCaller.AnonymousAsync(database, Cancellation);
+        await using var anonymous = await AsUser.AnonymousAsync(database, Cancellation);
         (await anonymous.ScalarAsync<long>(
                 $"SELECT count(*) FROM pg_catalog.pg_policies WHERE schemaname = 'widgets' AND tablename = '{names.Of("Widgets")}' AND 'anon' = ANY (roles) AND permissive = 'PERMISSIVE'",
                 Cancellation))
@@ -309,7 +309,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await ApplyAsync(database, [.. WidgetRules.All, RowAccessRule.For<Widget>("System work reads every widget", RowOperations.All, "true", RowAccessRoles.SystemIn)]);
 
-        await using var harbor = await AsCaller.SystemInAsync(database, Harbor, "widgets", Cancellation);
+        await using var harbor = await AsUser.SystemInAsync(database, Harbor, "widgets", Cancellation);
         (await harbor.ScalarAsync<long>(
                 $"SELECT count(*) FROM pg_catalog.pg_policies WHERE schemaname = 'widgets' AND tablename = '{names.Of("Widgets")}' AND 'ddd_system_in' = ANY (roles) AND permissive = 'PERMISSIVE' AND qual LIKE '%true%'",
                 Cancellation))
@@ -326,7 +326,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         await ApplyAsync(database, []);
 
         // Ada holds every permission of Harbor; with no rule for signed-in users, the widgets are closed to her.
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ScalarAsync<long>("SELECT count(*) FROM widgets.\"Widgets\"", Cancellation)).Should().Be(0);
             (await ada.ScalarAsync<long>("SELECT count(*) FROM widgets.\"WidgetPart\"", Cancellation)).Should().Be(0);
@@ -335,7 +335,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         }
 
         // The module's own system work still reads its tenant's.
-        await using var widgets = await AsCaller.SystemInAsync(database, Harbor, "widgets", Cancellation);
+        await using var widgets = await AsUser.SystemInAsync(database, Harbor, "widgets", Cancellation);
         (await widgets.ScalarAsync<long>("SELECT count(*) FROM widgets.\"Widgets\"", Cancellation)).Should().Be(3);
     }
 
@@ -343,7 +343,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
     public async Task Anonymous_reads_and_writes_nothing()
     {
         var database = await SharedAsync();
-        await using var anonymous = await AsCaller.AnonymousAsync(database, Cancellation);
+        await using var anonymous = await AsUser.AnonymousAsync(database, Cancellation);
 
         var tables = await anonymous.ListAsync<string>(
             "SELECT schemaname || '.\"' || tablename || '\"' FROM pg_catalog.pg_tables WHERE schemaname IN ('tenancy', 'widgets') ORDER BY 1",
@@ -359,7 +359,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         await RefusedAsync(anonymous, "INSERT INTO tenancy.\"TenancyAccessRevisions\" (\"TenantId\", \"Revision\") VALUES (9, 0)");
 
         // Nor may it ask Tenancy's functions.
-        await RefusedAsync(anonymous, "SELECT tenancy.caller_seat()");
+        await RefusedAsync(anonymous, "SELECT tenancy.current_seat()");
     }
 
     [Fact]
@@ -369,20 +369,20 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         const string Note = "INSERT INTO tenancy.\"TenantNote\" (\"Id\", \"HostTenantId\", \"Text\") VALUES (gen_random_uuid(), {0}, 'Moored at the quay')";
 
         // A note on a tenant is written by whoever may change the tenant: the settings permission for the whole tenant.
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture, Note, 1), Cancellation)).Should().Be(1);
             await RefusedAsync(ada, string.Format(System.Globalization.CultureInfo.InvariantCulture, Note, 2));
             await ada.CommitAsync(Cancellation);
         }
 
-        await using (var odette = await AsCaller.PersonAsync(database, Odette.Identity, Orchard, Cancellation))
+        await using (var odette = await AsUser.PersonAsync(database, Odette.Identity, Orchard, Cancellation))
         {
             (await odette.ExecuteAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture, Note, 2), Cancellation)).Should().Be(1);
             await odette.CommitAsync(Cancellation);
         }
 
-        await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
+        await using (var seth = await AsUser.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
         {
             await RefusedAsync(seth, string.Format(System.Globalization.CultureInfo.InvariantCulture, Note, 1));
             (await seth.ExecuteAsync("UPDATE tenancy.\"TenantNote\" SET \"Text\" = 'Gone'", Cancellation)).Should().Be(0);
@@ -391,24 +391,24 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
 
         // It is read with the tenant, in the tenant the caller acts in: Oli's seat in Orchard shows him Orchard's
         // tenant row, not its notes.
-        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        await using (var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ListAsync<long>("SELECT \"HostTenantId\" FROM tenancy.\"TenantNote\"", Cancellation)).Should().Equal(1L);
         }
 
-        await using (var anonymous = await AsCaller.AnonymousAsync(database, Cancellation))
+        await using (var anonymous = await AsUser.AnonymousAsync(database, Cancellation))
         {
             (await anonymous.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"TenantNote\"", Cancellation)).Should().Be(0);
         }
 
         // System work reads its tenant's in any scope, and writes them in Tenancy's own.
-        await using (var widgets = await AsCaller.SystemInAsync(database, Harbor, "widgets", Cancellation))
+        await using (var widgets = await AsUser.SystemInAsync(database, Harbor, "widgets", Cancellation))
         {
             (await widgets.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"TenantNote\"", Cancellation)).Should().Be(1);
             await RefusedAsync(widgets, string.Format(System.Globalization.CultureInfo.InvariantCulture, Note, 1));
         }
 
-        await using var tenancy = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
+        await using var tenancy = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
         (await tenancy.ExecuteAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture, Note, 1), Cancellation)).Should().Be(1);
         await RefusedAsync(tenancy, string.Format(System.Globalization.CultureInfo.InvariantCulture, Note, 2));
     }
@@ -430,12 +430,12 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
                 async Task<object[]> ReadAsync(TenancyServices over)
                     => await over.BySeat(person.Identity, Harbor, person.Seat, async scoped => new object[]
                     {
-                        (await scoped.Directory().WhoAmIAsync(Cancellation)) with { AsOf = default },
-                        (await scoped.Directory().ListSeatsAsync(Cancellation))
+                        (await scoped.Seats().WhoAmIAsync(Cancellation)) with { AsOf = default },
+                        (await scoped.Seats().ListAsync(Cancellation))
                             .Select(seat => new { seat.Id, seat.Identity, seat.Status, seat.DisplayName, Placements = seat.Placements.Select(placement => new { placement.UnitId, placement.IsPrimary }).ToList() })
                             .ToList(),
-                        await scoped.Directory().ListRolesAsync(Cancellation),
-                        await scoped.Directory().ListUnitsAsync(Cancellation),
+                        await scoped.Roles().ListAsync(Cancellation),
+                        await scoped.Organization().ListUnitsAsync(Cancellation),
                     });
 
                 var read = await ReadAsync(services);
@@ -447,7 +447,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         var pat = await EveryUseCase.RunAsync(services, Cancellation);
 
         // What they did is there, as the owner reads it.
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<string>("SELECT \"DisplayName\" FROM tenancy.\"Seats\" WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value)).Should().Be("Oliver");
         (await owner.ScalarAsync<Guid>("SELECT \"UnitId\" FROM tenancy.\"SeatPlacements\" WHERE \"SeatId\" = $1 AND \"IsPrimary\"", Cancellation, Eve.Seat.Value)).Should().Be(North.Value);
         (await owner.ScalarAsync<string>("SELECT \"Status\" FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, HarborRoles.Watcher.Value)).Should().Be(names.Stored(RoleStatus.Archived));
@@ -470,11 +470,11 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         // Signed in, the tenant named but none chosen yet: the directory is read as the user, by the token's identity.
         foreach (var (person, slug, seat) in new[] { (Oli, "harbor", (SeatId?)Oli.Seat), (Oli, "orchard", OliInOrchard), (Ada, "harbor", Ada.Seat), (Sue, "harbor", null), (Quin, "quay", null), (Ada, "orchard", null) })
         {
-            using (Callers.Begin(Caller.User(person.Identity)))
+            using (TestAccess.BeginAs(person.Identity))
             {
-                var caller = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(person.Identity), slug, Cancellation));
+                var caller = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(person.Identity), slug, Cancellation));
                 caller.Seat.Should().Be(seat, "{0} in {1}: a suspended seat or tenant, or none, is nobody", person.Name, slug);
-                caller.Kind.Should().Be(seat is null ? TenancyCallerKind.Nobody : TenancyCallerKind.Seat);
+                caller.Kind.Should().Be(seat is null ? TenancyUserKind.Nobody : TenancyUserKind.Seat);
             }
         }
     }
@@ -483,7 +483,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
     public async Task A_grant_of_an_archived_role_is_taken_away_and_never_changed_by_a_query_as_the_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Status\" = 'Archived' WHERE \"Id\" = $1", Cancellation, HarborRoles.Operator.Value)).Should().Be(1);
             await ada.CommitAsync(Cancellation);
@@ -491,7 +491,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
 
         // Oli's Operator grant at North Pier names a role that is archived: Hiro, who gives roles there, changes nothing of
         // it, and takes it away, as the use case lets him.
-        await using var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
+        await using var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
         (await hiro.ExecuteAsync("UPDATE tenancy.\"SeatRoleGrants\" SET \"Reason\" = 'Standing in' WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Oli.Seat.Value, HarborRoles.Operator.Value))
             .Should().Be(0);
         (await hiro.ExecuteAsync("DELETE FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Oli.Seat.Value, HarborRoles.Operator.Value))
@@ -531,7 +531,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
     /// Runs <paramref name="sql"/> as <paramref name="caller"/>, expecting a policy to refuse it with 42501, in a savepoint,
     /// so the caller's transaction goes on.
     /// </summary>
-    private static async Task RefusedAsync(AsCaller caller, string sql)
+    private static async Task RefusedAsync(AsUser caller, string sql)
     {
         var refusal = await FluentActions.Awaiting(() => caller.AttemptAsync(sql, Cancellation)).Should().ThrowAsync<PostgresException>(sql);
         refusal.Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege, sql);

@@ -19,6 +19,6 @@ namespace Examples.Tenancy.Inspections.Infrastructure.Access;
 public static partial class SeatsSeeTheInspectionsOfProjectsTheySee
 {
     /// <summary>Whether the calling seat sees the project <paramref name="inspection"/> was recorded on.</summary>
-    public static bool Allows(Inspection inspection, Caller caller)
+    public static bool Allows(Inspection inspection, ICurrentUser user)
         => ProjectsISee.Ids().Contains(inspection.ProjectId);
 }

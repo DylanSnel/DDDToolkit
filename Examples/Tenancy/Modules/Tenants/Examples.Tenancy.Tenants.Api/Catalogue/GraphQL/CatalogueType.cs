@@ -4,7 +4,7 @@ using HotChocolate.Types;
 namespace Examples.Tenancy.Tenants.Api.Catalogue.GraphQL;
 
 /// <summary>
-/// What the application offers a tenant, as the schema shows it: every permission, and the packs roles are
+/// What the application offers a tenant, as the schema shows it: every permission, and the starter roles a tenant's roles are
 /// copied from. Declared over the record the catalogue's query answers.
 /// </summary>
 [ObjectType<CatalogueOverview>]

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -26,14 +27,14 @@ public sealed class MemberStatementTests
         foreach (var (user, permission) in asked)
         {
             filing.Commands.Reset();
-            await filing.DocumentsAsync(TestCallers.User(user), access => access.HoldAsync(data.Minutes, permission, Cancellation));
+            await filing.DocumentsAsync(TestUsers.User(user), access => access.HoldAsync(data.Minutes, permission, Cancellation));
             filing.Commands.Count.Should().Be(1, "seeing the document, holding " + permission + " on it, until when, and its version are one statement");
         }
 
         // The questions that refuse are that statement and nothing more.
         filing.Commands.Reset();
-        await filing.DocumentsAsync(TestCallers.User(data.Ben), access => access.RequireAsync(data.Minutes, DocumentPermissions.Edit, Cancellation));
-        await filing.DocumentsAsync(TestCallers.User(data.Ben), access => access.ViaAsync(data.Minutes, DocumentPermissions.Share, Cancellation));
+        await filing.DocumentsAsync(TestUsers.User(data.Ben), access => access.RequireAsync(data.Minutes, DocumentPermissions.Edit, Cancellation));
+        await filing.DocumentsAsync(TestUsers.User(data.Ben), access => access.ViaAsync(data.Minutes, DocumentPermissions.Share, Cancellation));
         filing.Commands.Count.Should().Be(2);
 
         // And it reads the member rows where they are: no row of a member is fetched to be looked at here.
@@ -49,7 +50,7 @@ public sealed class MemberStatementTests
         DocumentId[] about = [data.Minutes, data.Budget, data.Outline, DocumentId.CreateSequential(), data.Minutes];
 
         filing.Commands.Reset();
-        var ada = await filing.DocumentsAsync(TestCallers.User(data.Ada), access => access.PermissionsOnAsync(about, [.. FilingScenario.DocumentPermissionsAsked, DocumentPermissions.View], Cancellation));
+        var ada = await filing.DocumentsAsync(TestUsers.User(data.Ada), access => access.PermissionsOnAsync(about, [.. FilingScenario.DocumentPermissionsAsked, DocumentPermissions.View], Cancellation));
 
         filing.Commands.Count.Should().Be(1);
         ada.Keys.Should().BeEquivalentTo([data.Minutes, data.Budget], "a document she is no member of, and one that is not there, are not in the answer");
@@ -59,7 +60,7 @@ public sealed class MemberStatementTests
         // Agreed with the rules read over the aggregates, for everybody and every permission.
         foreach (var user in data.Users)
         {
-            var held = await filing.DocumentsAsync(TestCallers.User(user), access => access.PermissionsOnAsync(about, FilingScenario.DocumentPermissionsAsked, Cancellation));
+            var held = await filing.DocumentsAsync(TestUsers.User(user), access => access.PermissionsOnAsync(about, FilingScenario.DocumentPermissionsAsked, Cancellation));
 
             foreach (var document in data.Documents)
             {
@@ -69,10 +70,10 @@ public sealed class MemberStatementTests
         }
 
         // Fay sees the minutes and holds nothing but the permission that sees; Temp sees the cabinet and holds nothing at all.
-        var fay = await filing.DocumentsAsync(TestCallers.User(data.Fay), access => access.PermissionsOnAsync([data.Minutes], [DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation));
+        var fay = await filing.DocumentsAsync(TestUsers.User(data.Fay), access => access.PermissionsOnAsync([data.Minutes], [DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation));
         fay.Should().BeEmpty("a resource the caller holds none of the permissions on is not in the answer");
-        (await filing.FoldersAsync(TestCallers.Staff(data.Temp), access => access.PermissionsOnAsync([data.Cabinet], FilingScenario.FolderPermissionsAsked, Cancellation))).Should().BeEmpty();
-        var clerk = await filing.FoldersAsync(TestCallers.Staff(data.Clerk), access => access.PermissionsOnAsync([data.Cabinet, data.Annex], FilingScenario.FolderPermissionsAsked, Cancellation));
+        (await filing.FoldersAsync(TestUsers.Staff(data.Temp), access => access.PermissionsOnAsync([data.Cabinet], FilingScenario.FolderPermissionsAsked, Cancellation))).Should().BeEmpty();
+        var clerk = await filing.FoldersAsync(TestUsers.Staff(data.Clerk), access => access.PermissionsOnAsync([data.Cabinet, data.Annex], FilingScenario.FolderPermissionsAsked, Cancellation));
         clerk[data.Cabinet].Should().BeEquivalentTo([FolderPermissions.Read, FolderPermissions.File]);
         clerk[data.Annex].Should().BeEquivalentTo(
             [FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver],
@@ -84,7 +85,7 @@ public sealed class MemberStatementTests
     {
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
-        var ada = TestCallers.User(data.Ada);
+        var ada = TestUsers.User(data.Ada);
 
         (await filing.DocumentsAsync(ada, access => access.PermissionsOnAsync([], [DocumentPermissions.View], Cancellation))).Should().BeEmpty();
         (await filing.DocumentsAsync(ada, access => access.PermissionsOnAsync([data.Minutes], [], Cancellation))).Should().BeEmpty();
@@ -92,7 +93,7 @@ public sealed class MemberStatementTests
         filing.Commands.Count.Should().Be(0);
 
         // More resources than one question is asked about: a bug of the use case, refused before anything is read.
-        var many = Enumerable.Range(0, MemberQuestions.MostResources + 1).Select(_ => DocumentId.CreateSequential()).ToList();
+        var many = Enumerable.Range(0, MembershipAccessManager.MostResources + 1).Select(_ => DocumentId.CreateSequential()).ToList();
         await FluentActions.Awaiting(() => filing.DocumentsAsync(ada, access => access.PermissionsOnAsync(many, [DocumentPermissions.View], Cancellation)))
             .Should().ThrowAsync<ArgumentException>().WithMessage("*at most 200 different resources*");
         await FluentActions.Awaiting(() => filing.DocumentsAsync(ada, access => access.PermissionsOnAsync([data.Minutes], [" "], Cancellation))).Should().ThrowAsync<ArgumentException>();
@@ -100,7 +101,7 @@ public sealed class MemberStatementTests
         filing.Commands.Count.Should().Be(0);
 
         // Exactly as many as that are asked about, the same one named twice counted once.
-        var most = many.Take(MemberQuestions.MostResources - 1).Append(data.Minutes).Append(data.Minutes).ToList();
+        var most = many.Take(MembershipAccessManager.MostResources - 1).Append(data.Minutes).Append(data.Minutes).ToList();
         (await filing.DocumentsAsync(ada, access => access.PermissionsOnAsync(most, [DocumentPermissions.View], Cancellation))).Keys.Should().Equal(data.Minutes);
         filing.Commands.Count.Should().Be(1);
     }
@@ -112,9 +113,9 @@ public sealed class MemberStatementTests
         var data = filing.Scenario;
 
         filing.Commands.Reset();
-        var titles = await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        var titles = await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
-            var seen = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentPermissions.View);
+            var seen = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View);
 
             // The module's own query, with its own filter, order and page: the reach is one more condition of it.
             return await provider.GetRequiredService<FilingContext>().Documents
@@ -140,14 +141,14 @@ public sealed class MemberStatementTests
         // What a module tells another module about a document: whether it is there for the caller, whether the
         // caller may change it, and what the document itself says, which only the module knows to ask.
         async Task<DocumentAnswer?> AskAsync(UserId user, DocumentId id)
-            => await filing.Services.AsAsync(TestCallers.User(user), async provider =>
+            => await filing.Services.AsAsync(TestUsers.User(user), async provider =>
             {
-                var access = provider.GetRequiredService<IMemberQuestions<DocumentId>>();
-                var permissions = access.PermissionReach([DocumentPermissions.Edit]);
+                var access = provider.GetRequiredService<MembershipAccessManager<Document>>();
                 var act = access.Reach(DocumentPermissions.Edit);
-                var found = await provider.GetRequiredService<FilingContext>().Documents
+                var db = provider.GetRequiredService<FilingContext>();
+                var found = await db.Documents
                     .Where(document => document.Id == id)
-                    .Within(permissions.See)
+                    .WhereIHold(DocumentPermissions.View, db)
                     .Reached(act)
                     .Select(reached => new { reached.Resource.Archived, reached.AsMember, reached.FromAbove, reached.Until })
                     .FirstOrDefaultAsync(Cancellation);
@@ -181,12 +182,12 @@ public sealed class MemberStatementTests
         async Task<string> SqlOfAsync(Func<IQueryable<MemberFound<Document>>, Task> read)
         {
             filing.Commands.Reset();
-            await filing.Services.AsAsync(TestCallers.User(data.Ben), async provider =>
+            await filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
             {
-                var access = provider.GetRequiredService<IMemberQuestions<DocumentId>>();
+                var access = provider.GetRequiredService<MembershipAccessManager<Document>>();
                 await read(provider.GetRequiredService<FilingContext>().Documents
                     .Where(document => document.Id == data.Minutes)
-                    .Within(access.PermissionReach([]).See)
+                    .Within(access.ReachSeen())
                     .Reached(access.Reach(DocumentPermissions.Edit)));
             });
 
@@ -209,21 +210,65 @@ public sealed class MemberStatementTests
         var data = filing.Scenario;
 
         filing.Commands.Reset();
-        var rows = await filing.Services.AsAsync(TestCallers.User(data.Ben), async provider =>
+        var rows = await filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
         {
-            var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionReach([DocumentPermissions.Edit, DocumentPermissions.Share]);
-            reach.Permissions.Should().Equal(DocumentPermissions.Edit, DocumentPermissions.Share);
-
-            return await provider.GetRequiredService<FilingContext>().Documents.Where(document => !document.Archived).PermissionsOn(reach).ToListAsync(Cancellation);
+            var db = provider.GetRequiredService<FilingContext>();
+            return await db.Documents
+                .Where(document => !document.Archived)
+                .WhereIHold([DocumentPermissions.Edit, DocumentPermissions.Share, DocumentPermissions.Edit], db)
+                .Select(pair => new { pair.Resource.Id, pair.Resource.Title, pair.Permission })
+                .ToListAsync(Cancellation);
         });
 
         filing.Commands.Count.Should().Be(1);
-        rows.Select(row => (row.Resource, row.Permission)).Should().BeEquivalentTo(
+        rows.Select(row => (row.Id, row.Permission)).Should().BeEquivalentTo(
         [
             (data.Minutes, DocumentPermissions.Edit),
             (data.Budget, DocumentPermissions.Edit),
             (data.Budget, DocumentPermissions.Share),
         ]);
+        rows.Where(row => row.Id == data.Minutes).Select(row => row.Title).Should().Equal("Minutes");
+
+        // Read whole, each pair carries its resource as the context reads it, its members with it.
+        var whole = await filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
+            await provider.GetRequiredService<FilingContext>().Documents.WhereIHold([DocumentPermissions.Share]).AsNoTracking().ToListAsync(Cancellation));
+        whole.Should().ContainSingle().Which.Resource.Id.Should().Be(data.Budget);
+        whole[0].Resource.Shares.Should().NotBeEmpty();
+        whole[0].Permission.Should().Be(DocumentPermissions.Share);
+
+        // On the set itself the query finds its context, and the application's own work holds every permission on every document.
+        var all = await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
+            await provider.GetRequiredService<FilingContext>().Documents.WhereIHold([DocumentPermissions.Share]).Select(pair => pair.Resource.Id).ToListAsync(Cancellation));
+        var every = await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider => await provider.GetRequiredService<FilingContext>().Documents.CountAsync(Cancellation));
+        all.Should().HaveCount(every);
+    }
+
+    [Fact]
+    public async Task The_resources_a_permission_is_held_on_are_asked_of_their_own_set()
+    {
+        using var filing = await SqliteFiling.SeededAsync();
+        var data = filing.Scenario;
+
+        filing.Commands.Reset();
+        var titles = await filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
+            await provider.GetRequiredService<FilingContext>().Documents.WhereIHold(DocumentPermissions.Edit).OrderBy(document => document.Title).Select(document => document.Title).ToListAsync(Cancellation));
+
+        titles.Should().Equal("Budget", "Minutes");
+        filing.Commands.Count.Should().Be(1, "one statement, not a list of ids fetched first");
+
+        // The same as the reach the access manager makes, put into the statement by hand.
+        var byHand = await filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
+            await provider.GetRequiredService<FilingContext>().Documents.Within(provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.Edit))
+                .OrderBy(document => document.Title).Select(document => document.Title).ToListAsync(Cancellation));
+        byHand.Should().Equal(titles);
+
+        // A permission is named, and a context the services know nothing of is told so.
+        using var scope = filing.Services.Provider.CreateScope();
+        var documents = scope.ServiceProvider.GetRequiredService<FilingContext>().Documents;
+        FluentActions.Invoking(() => documents.WhereIHold(" ")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => documents.WhereIHold(new[] { DocumentPermissions.View, "" })).Should().Throw<ArgumentException>();
+        await using var stranger = new FilingContext(new DbContextOptionsBuilder<FilingContext>().UseSqlite("Data Source=:memory:").Options);
+        FluentActions.Invoking(() => stranger.Documents.WhereIHold(DocumentPermissions.View)).Should().Throw<InvalidOperationException>().WithMessage("*made without the application's services*");
     }
 
     [Fact]
@@ -232,25 +277,20 @@ public sealed class MemberStatementTests
         using var filing = await SqliteFiling.SeededAsync();
         using var scope = filing.Services.Provider.CreateScope();
         var documents = scope.ServiceProvider.GetRequiredService<FilingContext>().Documents;
-        var foreign = new ForeignReach<DocumentId>(DocumentPermissions.View);
+        var foreign = new ForeignReach<Document>(DocumentPermissions.View);
 
-        FluentActions.Invoking(() => documents.Within(foreign)).Should().Throw<ArgumentException>().WithMessage("This reach was not made by the access questions registered for Document*");
+        FluentActions.Invoking(() => documents.Within(foreign)).Should().Throw<ArgumentException>().WithMessage("This reach was not made by the access manager registered for Document*");
         FluentActions.Invoking(() => documents.Reached(foreign)).Should().Throw<ArgumentException>();
-        FluentActions.Invoking(() => documents.PermissionsOn(new ForeignKeyReach<DocumentId>(foreign))).Should().Throw<ArgumentException>();
 
         // A reach is what it was when it was made: for the caller and the moment it was asked at.
-        using (Callers.Begin(TestCallers.User(filing.Scenario.Ada)))
+        using (TestAccess.BeginAs(TestUsers.User(filing.Scenario.Ada)))
         {
-            var reach = scope.ServiceProvider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentPermissions.View);
+            var reach = scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View);
             (reach.Permission, reach.Now, reach.Everything).Should().Be((DocumentPermissions.View, filing.Clock.Now, false));
 
             // And it is a reach of documents: a query over another kind of resource does not take it, though both are registered.
             var folders = scope.ServiceProvider.GetRequiredService<FilingContext>().Folders;
-            FluentActions.Invoking(() => folders.Within(reach)).Should().Throw<ArgumentException>().WithMessage("This reach was not made by the access questions registered for Folder*");
-            FluentActions.Invoking(() => folders.Reached(reach)).Should().Throw<ArgumentException>();
-            FluentActions.Invoking(() => folders.PermissionsOn(scope.ServiceProvider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionReach([DocumentPermissions.View]))).Should().Throw<ArgumentException>();
-
-            var see = scope.ServiceProvider.GetRequiredService<IMemberQuestions<FolderId>>().PermissionReach([FolderPermissions.Read]).See;
+            var see = scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Folder>>().ReachSeen();
             see.Permission.Should().BeNull("a folder's rules name no permission for seeing, and its members see it all the same");
         }
     }
@@ -261,10 +301,10 @@ public sealed class MemberStatementTests
         using var filing = await SqliteFiling.SeededAsync(ownContexts: true);
         var data = filing.Scenario;
 
-        await filing.Services.AsAsync(TestCallers.User(data.Ben), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ben), async provider =>
         {
             var requests = provider.GetRequiredService<FilingContext>();
-            var access = provider.GetRequiredService<IMemberQuestions<DocumentId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Document>>();
 
             // Asked side by side, as the fields of one request are: each on a context of its own, from the pool.
             var asked = await Task.WhenAll(
@@ -283,9 +323,9 @@ public sealed class MemberStatementTests
 
         // Without a factory the request's context is the one asked.
         using var plain = await SqliteFiling.SeededAsync();
-        await plain.Services.AsAsync(TestCallers.User(plain.Scenario.Ben), async provider =>
+        await plain.Services.AsAsync(TestUsers.User(plain.Scenario.Ben), async provider =>
         {
-            await provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(plain.Scenario.Minutes, DocumentPermissions.Edit, Cancellation);
+            await provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(plain.Scenario.Minutes, DocumentPermissions.Edit, Cancellation);
             plain.Commands.Sent.Should().ContainSingle().Which.Context.Should().BeSameAs(provider.GetRequiredService<FilingContext>());
         });
     }
@@ -294,9 +334,6 @@ public sealed class MemberStatementTests
     private sealed record DocumentAnswer(bool Archived, MemberVia? Via, DateTimeOffset? Until);
 
     /// <summary>A reach somebody else made.</summary>
-    private sealed class ForeignReach<TResourceId>(string permission) : MemberReach<TResourceId>(permission, DateTimeOffset.UnixEpoch, everything: true)
-        where TResourceId : struct, IEntityId, IEquatable<TResourceId>;
-
-    private sealed class ForeignKeyReach<TResourceId>(MemberReach<TResourceId> see) : MemberPermissionReach<TResourceId>(see, [])
-        where TResourceId : struct, IEntityId, IEquatable<TResourceId>;
+    private sealed class ForeignReach<TResource>(string permission) : MemberReach<TResource>(permission, DateTimeOffset.UnixEpoch, everything: true)
+        where TResource : class;
 }

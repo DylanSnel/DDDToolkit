@@ -248,7 +248,7 @@ public sealed partial class PostgresCompositionTests
     /// <summary>
     /// <paramref name="schema"/> without its double quotes where a statement names it: before a function or a table,
     /// in a string Postgres reads as a name too, <c>to_regprocedure('"ddd".f(xid)')</c>, or on its own after
-    /// <c>SCHEMA</c>. A setting's or a permission's name in a string, <c>'tenancy.caller_tenant'</c>, is no schema: no
+    /// <c>SCHEMA</c>. A setting's or a permission's name in a string, <c>'tenancy.current_tenant'</c>, is no schema: no
     /// function's parenthesis or table's quote follows it.
     /// </summary>
     private static Regex Unquoted(string schema)

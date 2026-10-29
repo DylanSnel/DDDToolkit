@@ -11,22 +11,22 @@ namespace DDDToolkit.Supporting.Tenancy.Tests.Support;
 /// <list type="bullet">
 /// <item>It keeps what was saved apart from a unit of work: a command gets its own copies of what it loads,
 /// and a refused command leaves the saved state as it was.</item>
-/// <item>It emulates the tenant filter: every lookup and every read row keeps to the current Tenancy caller's
+/// <item>It emulates the tenant filter: every lookup and every read row keeps to the current Tenancy user's
 /// tenant, evaluated when the query runs; only <see cref="SlugTakenAsync"/> and <see cref="ListTenantsAsync"/>
 /// look across tenants.</item>
 /// <item>It emulates the save: <see cref="TenancySaveCheck"/> on every changed or added aggregate first, then
 /// the invariants, then the closure and the rights recomputed with <see cref="TenancyProjection"/>, the same
 /// functions the Entity Framework writer uses.</item>
 /// <item>It records the order of the calls made to it, so a test sees what a command read first, and who was
-/// calling at each, Tenancy's caller and the toolkit's, so a test sees what a command ran as.</item>
+/// calling at each, Tenancy's user and the toolkit's, so a test sees what a command ran as.</item>
 /// <item>With <see cref="KeepsOtherSeatsRights"/> it shows a seat only its own rights, as a database that keeps the
 /// rights itself does, while it still answers what the use cases ask about every seat's: the administrators, and
 /// the rights a move changes.</item>
 /// </list>
 /// </summary>
 public sealed class InMemoryTenancyStore
-    : HostTenancy.IStore,
-      HostTenancy.IInvitationStore<HostInvitation, InvitationId>,
+    : ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>,
+      IInvitationStore<HostInvitation, InvitationId, TenantId, OrganizationUnitId, RoleId, SeatId>,
       ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>,
       IQueryExecutor
 {
@@ -175,7 +175,7 @@ public sealed class InMemoryTenancyStore
 
     // ---------------------------------------------------------------- IStore
 
-    ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId> HostTenancy.IStore.Reads
+    ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId> ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>.Reads
     {
         get
         {
@@ -184,7 +184,7 @@ public sealed class InMemoryTenancyStore
         }
     }
 
-    IQueryExecutor HostTenancy.IStore.Queries
+    IQueryExecutor ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>.Queries
     {
         get
         {
@@ -226,21 +226,19 @@ public sealed class InMemoryTenancyStore
         return Task.FromResult(_seats.TryGetValue(id, out var seat) && Visible(seat.TenantId) ? LoadedCopy(seat) : null);
     }
 
-    public Task<IReadOnlyList<HostTenancy.TenantListing>> ListTenantsAsync(string? afterSlug, int take, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<TenantManager.TenantListing>> ListTenantsAsync(string? afterSlug, int take, CancellationToken cancellationToken)
     {
-        // Across tenants, as the store's own does: who may ask is the use case's to say.
+        // Across tenants, as the store's own does: who may ask is the manager's to say.
         Record(nameof(ListTenantsAsync));
-        IReadOnlyList<HostTenancy.TenantListing> tenants =
+        IReadOnlyList<TenantManager.TenantListing> tenants =
         [
             .. _tenants.Values
                 .Where(tenant => afterSlug is null || string.CompareOrdinal(tenant.Slug.Value, afterSlug) > 0)
                 .OrderBy(tenant => tenant.Slug.Value, StringComparer.Ordinal)
                 .Take(take)
-                .Select(tenant => new HostTenancy.TenantListing(
-                    tenant.Id,
-                    tenant.Slug.Value,
+                .Select(tenant => new TenantManager.TenantListing(
+                    Copies.Of(tenant),
                     _organizations[tenant.Id].Name,
-                    tenant.Status,
                     _seats.Values.Count(seat => seat.TenantId == tenant.Id && seat.Status == SeatStatus.Active))),
         ];
         return Task.FromResult(tenants);
@@ -364,13 +362,13 @@ public sealed class InMemoryTenancyStore
         return Task.FromResult(open);
     }
 
-    public Task<HostTenancy.InvitationOfToken<InvitationId>?> FindByDigestAsync(byte[] digest, CancellationToken cancellationToken)
+    public Task<InvitationOfToken<InvitationId, TenantId, SeatId>?> FindByDigestAsync(byte[] digest, CancellationToken cancellationToken)
     {
         // Across tenants, as the store's own does: the token is what names the tenant. Ids alone are answered.
         Record(nameof(FindByDigestAsync));
         return Task.FromResult(
             _digests.TryGetValue(Convert.ToHexString(digest), out var id) && _invitations.TryGetValue(id, out var invitation)
-                ? new HostTenancy.InvitationOfToken<InvitationId>(invitation.TenantId, invitation.Id, invitation.IssuedBy)
+                ? new InvitationOfToken<InvitationId, TenantId, SeatId>(invitation.TenantId, invitation.Id, invitation.IssuedBy)
                 : null);
     }
 
@@ -504,7 +502,7 @@ public sealed class InMemoryTenancyStore
     // ---------------------------------------------------------------- the rest
 
     /// <summary>Whether the tenant filter lets the current caller see a row of <paramref name="tenant"/>.</summary>
-    private static bool Visible(TenantId tenant) => TenancyCallers.CurrentTenantOrNull() is TenantId current && current == tenant;
+    private static bool Visible(TenantId tenant) => TenancyUsers.CurrentTenantOrNull() is TenantId current && current == tenant;
 
     private static TenantId TenantOf(object aggregate) => aggregate switch
     {
@@ -532,7 +530,7 @@ public sealed class InMemoryTenancyStore
     private void Record(string call)
     {
         _calls.Add(call);
-        _observed.Add(new StoreCall(call, TenancyCallers.Ambient, Callers.Ambient));
+        _observed.Add(new StoreCall(call, TenancyUsers.Ambient, BegunUser));
     }
 
     private void AddToUnitOfWork(object aggregate)
@@ -601,7 +599,7 @@ public sealed class InMemoryTenancyStore
         private bool Readable(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId> right)
             => !mayKeepRights
                || !store.KeepsOtherSeatsRights
-               || TenancyCallers.Ambient is not HostCaller { Kind: TenancyCallerKind.Seat } seat
+               || TenancyUsers.Ambient is not HostUser { Kind: TenancyUserKind.Seat } seat
                || right.SeatId == seat.Seat;
 
         public IQueryable<OrganizationUnitPath<TenantId, OrganizationUnitId>> UnitPaths
@@ -624,7 +622,7 @@ public sealed class InMemoryTenancyStore
                 {
                     Id = role.Id,
                     TenantId = role.TenantId,
-                    FromPack = role.FromPack,
+                    FromStarterRole = role.FromStarterRole,
                     Status = role.Status,
                     Permissions = role.Permissions,
                 }),
@@ -668,6 +666,6 @@ public sealed class InMemoryTenancyStore
 
 /// <summary>One call made to the store, and who was calling when it was made.</summary>
 /// <param name="Name">The call.</param>
-/// <param name="Tenancy">The Tenancy caller then.</param>
-/// <param name="Core">The toolkit's caller then.</param>
-public sealed record StoreCall(string Name, ITenancyCaller? Tenancy, Caller? Core);
+/// <param name="Tenancy">The Tenancy user then.</param>
+/// <param name="Core">The toolkit's current user then.</param>
+public sealed record StoreCall(string Name, ITenancyUser? Tenancy, CurrentUserSnapshot? Core);

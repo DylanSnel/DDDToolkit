@@ -120,7 +120,7 @@ public sealed class DirectoryNamesTests
 
         await names.EnsureAsync(seats: seats, cancellationToken: Cancellation);
 
-        DirectoryNames.MostIdsPerQuestion.Should().Be(TenancyUseCases.TenancyDirectory.MostIds, "the UI asks for as many at a time as the API takes");
+        DirectoryNames.MostIdsPerQuestion.Should().Be(SeatManager.MostIds, "the UI asks for as many at a time as the API takes");
         stub.Requests.Should().HaveCount(3).And.OnlyContain(request => request.PathAndQuery == "/tenancy/directory/seats");
         stub.Requests.Select(request => IdsOf(request).Count).Should().BeEquivalentTo([200, 200, 50]);
         stub.Requests.SelectMany(IdsOf).Should().BeEquivalentTo(seats, "every id is asked about, each in one part");
@@ -209,7 +209,7 @@ public sealed class DirectoryNamesTests
         {
             "/tenancy/directory/seats" => [.. IdsOf(request).Select(id => new { id, displayName = "seat " + id, status = "active" })],
             "/tenancy/directory/units" => [.. IdsOf(request).Select(id => new { id, parentId = (Guid?)null, name = "unit", kind = "area", status = "active", path = "path of " + id, depth = 1 })],
-            "/tenancy/directory/roles" => [.. IdsOf(request).Select(id => new { id, name = "role " + id, fromPack = (string?)null, status = "active", permissions = Array.Empty<string>(), managesAccess = false })],
+            "/tenancy/directory/roles" => [.. IdsOf(request).Select(id => new { id, name = "role " + id, fromStarterRole = (string?)null, status = "active", permissions = Array.Empty<string>(), managesAccess = false })],
             "/project-roles" => [.. projectRoles.Select(id => new { id, name = "crew role " + id, description = string.Empty, madeFrom = (string?)null, status = "active", permissions = (string[]?)null })],
             _ => throw new InvalidOperationException("The stub has no route " + request.PathAndQuery + "."),
         };

@@ -16,5 +16,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class StateChangesWithTheClosePermission
 {
     /// <summary>Whether the calling seat holds the permission to close <paramref name="project"/>.</summary>
-    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
 }

@@ -200,16 +200,15 @@ else
         }
     }
 
-    // The seat is answered by its id; which tenant it is in is read from the seats the person has. The session then works
-    // there, so the next page shows what the seat gives.
+    // The answer names the tenant and the new seat. The session then works in that tenant, so the next page shows what
+    // the seat gives.
     private async Task<ApiOutcome> AcceptAsync()
     {
         var accepted = await Api.AcceptInvitationAsync(_token, _name);
         if (accepted.Value is { } answer)
         {
             _token = null;
-            var seats = await Api.SeatsOfMineAsync();
-            _tenant = seats.Value?.FirstOrDefault(mine => mine.Seat.Id == answer.SeatId)?.Tenant.Slug;
+            _tenant = answer.Tenant.Slug;
             Session.SeatAdded(_tenant);
         }
 

@@ -57,7 +57,7 @@ public static class ExporterBuild
             using var output = new StringWriter();
             SupabaseMigrationBuild.Run(
                     "Write", Sources, [.. Rules(), .. moreRules ?? []], Functions(), Contributions(application), directory, start: null,
-                    Property("SupabaseRowAccessRoles"), callerFunctions: null, grants: null, force: null, Property("SupabaseLoginRole"), output)
+                    Property("SupabaseRowAccessRoles"), currentUserFunctions: null, grants: null, force: null, Property("SupabaseLoginRole"), output)
                 .Should().Be(0, output.ToString());
 
             return Directory.GetFiles(directory)

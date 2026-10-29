@@ -1,9 +1,9 @@
 # Entity Framework
 
-`DDDToolkit.EntityFramework` is the persistence half of the toolkit. It teaches Entity Framework Core
-about the types the generators produce, so a domain model written the way the other pages describe
-maps to tables without hand-written configuration. It also carries the behaviours that need a save to
-hang off: domain event delivery, the invariant check and optimistic concurrency.
+`DDDToolkit.EntityFramework` is the persistence package of the toolkit. It registers converters and conventions for
+the types the generators write, so a domain model written as the other pages describe maps to tables without
+configuration by hand. It also adds the behaviours that run during a save: domain event delivery, the invariant check
+and optimistic concurrency.
 
 The package does five things:
 
@@ -12,15 +12,14 @@ The package does five things:
 | Generated converters | A `ValueConverter` per identifier and single value object, and one registration call per assembly |
 | Conventions | Read-only collections mapped, `Version` made a concurrency token, `[Internal]` members ignored |
 | Domain event delivery | In-process dispatch during `SaveChanges`, or a transactional outbox |
-| Invariants at the save | Every entity a save adds or changes is asked for its invariants first; see [Invariants](invariants.md#at-the-save) |
-| Optimistic concurrency | `Version` incremented per save, stale writes turned into `ConcurrencyConflictException` |
+| Invariants at the save | Every entity that a save adds or changes is checked for its invariants first ([Invariants](invariants.md#at-the-save)) |
+| Optimistic concurrency | `Version` raised by one per save, and a stale write turned into `ConcurrencyConflictException` |
 
-It does not give you a repository abstraction or a message bus. `DbContext` is already the unit of
-work, and the delegate that hands events to your publisher is one you write. If your publisher is
-[Mediator](https://github.com/martinothamar/Mediator), the companion package `DDDToolkit.Mediator`
-writes that delegate for you; see [In-process dispatch](event-delivery.md#in-process-dispatch). If the
-events have to leave the process, the outbox delivers to a sink you implement; see
-[Integration events](integration-events.md).
+The package has no repository abstraction and no message bus. `DbContext` is already the unit of work. You write the
+delegate that hands events to your publisher. If your publisher is
+[Mediator](https://github.com/martinothamar/Mediator), the companion package `DDDToolkit.Mediator` writes that
+delegate for you ([In-process dispatch](event-delivery.md#in-process-dispatch)). If the events must leave the
+process, the outbox delivers them to a sink you implement ([Integration events](integration-events.md)).
 
 ## Install
 
@@ -28,12 +27,12 @@ events have to leave the process, the outbox delivers to a sink you implement; s
 dotnet add package Temp.DDDToolkit.EntityFramework --prerelease
 ```
 
-The package brings its own source generator, so referencing it is all the configuration there is. It
-targets .NET 10 and Entity Framework Core 10.
+The package brings its own source generator, so the package reference is all the configuration it needs. It targets
+.NET 10 and Entity Framework Core 10.
 
-## Wiring it up
+## Setting up a context
 
-Three calls. One in your service registration, one on the `DbContextOptionsBuilder`, and one or more
+Setting up takes three calls: one in your service registration, one on the `DbContextOptionsBuilder`, and one or more
 in `ConfigureConventions`.
 
 ```csharp
@@ -62,14 +61,14 @@ public class OrderingContext(DbContextOptions<OrderingContext> options) : DbCont
 }
 ```
 
-That stores and loads aggregates. It does not yet save an aggregate that raised a domain event: with
-events pending, `SaveChanges` throws an `InvalidOperationException` that names the aggregate, says that
-no delivery mode is configured and names the two calls that would configure one. Dropping the events
-quietly would be worse, because each of them is a promise that something will happen.
+With this setup the context stores and loads aggregates. It cannot yet save an aggregate that raised a domain event.
+With events pending, `SaveChanges` throws an `InvalidOperationException`. The message names the aggregate, says that
+no delivery mode is configured, and names the two calls that configure one. The toolkit does not drop the events,
+because each event stands for something that must still happen.
 
-The argument to `AddDDDToolkitEntityFramework` says how events are delivered. Handing them to
-[Mediator](https://github.com/martinothamar/Mediator) handlers in the same process takes a second
-package, besides Mediator itself:
+The argument to `AddDDDToolkitEntityFramework` says how events are delivered. To hand them to
+[Mediator](https://github.com/martinothamar/Mediator) handlers in the same process, add a second package, next to
+Mediator itself:
 
 ```bash
 dotnet add package Temp.DDDToolkit.Mediator --prerelease
@@ -82,47 +81,65 @@ builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetim
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 ```
 
-That package is optional, because delivery is a delegate you can write yourself against any library or
-none, and because the outbox is the other way to deliver. [Delivering domain events](event-delivery.md)
-explains both and when to use which.
+That package is optional. Delivery is a delegate that you can write yourself, against any library or none, and the
+outbox is the other way to deliver. [Delivering domain events](event-delivery.md) explains both, and when to use
+which.
 
 ### `UseDDDToolkit`
 
-Wires the context for the toolkit, with one call. It adds the toolkit's own interceptors, the ones that
-deliver domain events, check invariants, raise the version and answer a save the database refused, and then
-whatever the packages the host registered bring to a context: row level security once
-`AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity` is registered, Tenancy's save check once
-`AddTenancy` is. A host that registered none of them gets the toolkit's interceptors and nothing else. Every
-context it wires keeps its migration history in its own default schema, beside its tables; see
-[The migration history](#the-migration-history).
+`UseDDDToolkit` sets up a context for the toolkit with one call. It adds:
 
-Pass the `IServiceProvider` that the options callback gives you. With `AddDbContext` that provider belongs to
-the same scope as the context, so a handler that injects `OrderingContext` receives the very instance that is
-saving. With a context pool the callback runs once and is handed the application's root provider, and the
-handlers get the scope the context was rented in instead; see [Contexts from a pool](#contexts-from-a-pool).
-[The interceptors](#the-interceptors) lists the toolkit's own in the order they run.
+1. the toolkit's own interceptors, which deliver domain events, check invariants, raise the version, and handle a
+   save that the database refused;
+2. the parts that the host's registered packages bring to a context: row level security (RLS) once
+   `AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity` is registered, and Tenancy's save check once
+   `AddTenancy` is registered.
 
-Each registration announces its part with a position, and the one call puts every part after the toolkit's
-own interceptors, the lowest position first. That is the order the toolkit holds a context to. Tenancy's save
-check comes last, at the highest position there is, so it sees what the domain event handlers changed, only
-aggregates that passed their invariants, and every row another part added to the save.
+A host that registered none of those packages gets only the toolkit's interceptors. Every context that
+`UseDDDToolkit` sets up keeps its migration history in its default schema, next to its tables
+([The migration history](#the-migration-history)).
 
-Whether a part belongs on a context is decided from what the options say when the call is made. Row level
-security is left off a context whose provider is configured and is not Postgres's. A context whose provider
-comes later, further down the options callback or in `OnConfiguring`, gets it, and the interceptor passes over
-the context at every use where it turns out not to be on Postgres: so a context on Postgres runs as its caller
-wherever its provider was set. What the options cannot say at all, the model, a part decides when it is used:
-Tenancy's save check sits on every context, checks the rows of one that keeps rows to a tenant, writes the
-rights in Tenancy's own context, and passes over a context that has neither. So no registration names the
-contexts it is for, and a module added later is wired by the same call. A model that cannot do without a part
-says so, and a context of it without the part is refused at its first save
-([A part a model cannot do without](#a-part-a-model-cannot-do-without)).
+Pass the `IServiceProvider` that the options callback gives you. With `AddDbContext`, that provider belongs to the
+same scope as the context, so a handler that injects `OrderingContext` gets the instance that is saving. With a
+context pool, the callback runs once and gets the application's root provider. The handlers then get the scope the
+context was rented in ([Contexts from a pool](#contexts-from-a-pool)). [The interceptors](#the-interceptors) lists the
+toolkit's interceptors in the order they run.
+
+Each registration adds its part with a position. `UseDDDToolkit` puts every part after the toolkit's own
+interceptors, lowest position first. This is the order the toolkit requires of a context. Tenancy's save check comes
+last, at the highest position. So the save check sees what the domain event handlers changed, sees only aggregates
+that passed their invariants, and sees every row that another part added to the save.
+
+`UseDDDToolkit` decides whether a part belongs on a context from what the options say when it is called:
+
+- RLS is left off a context whose provider is set and is not Postgres.
+- A context whose provider is set later, further down the options callback or in `OnConfiguring`, gets row level
+  security. At every use, the interceptor skips the context if it is not on Postgres. So a context on Postgres runs as
+  its caller wherever its provider was set.
+- The options say nothing about the model, so a part decides at use what the model needs. Tenancy's save check is on
+  every context. It checks the rows of a context that keeps rows to a tenant, writes the `SeatRights` rows in Tenancy's own
+  context, and skips a context that has neither.
+
+So no registration names the contexts it is for, and the same call sets up a module that you add later. A model that
+needs a part says so, and a context of that model without the part is refused at its first save
+([Parts a model requires](#parts-a-model-requires)).
+
+The diagram shows the order in which `UseDDDToolkit` adds to a context. Purple: the one call. Green: the parts that
+registrations bring.
 
 ```mermaid
 flowchart TB
-    Call["UseNpgsql(...)<br/>.UseDDDToolkit(services)"] --> Own["the toolkit's<br/>own interceptors"]
-    Own -- "if registered,<br/>at 100" --> Rls["row level security<br/>on a context on Postgres"]
-    Rls -- "if registered,<br/>last" --> Tenancy["Tenancy's save check<br/>does what the model asks"]
+    call["<b>UseNpgsql(...).UseDDDToolkit(services)</b>"]
+    own["<b>The toolkit's interceptors</b><br/><small>always, first</small>"]
+    rls["<b>postgres.row-level-security</b><br/><small>position 100, if registered, on Postgres</small>"]
+    tenancy["<b>tenancy.save-check</b><br/><small>last, if registered</small>"]
+    call --> own
+    own --> rls
+    rls --> tenancy
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class call strong
+    class rls,tenancy good
 ```
 
 <details>
@@ -138,12 +155,12 @@ builder.Services.AddDbContext<OrderingContext>((services, options) => options
     .UseNpgsql(connectionString)
     .UseDDDToolkit(services));
 
-// A context of shared data on Postgres: the same three; the save check finds no row of a tenant, and checks none
+// A context of shared data on Postgres: the same three. The save check finds no tenant rows and checks nothing.
 builder.Services.AddDbContext<CatalogContext>((services, options) => options
     .UseNpgsql(connectionString)
     .UseDDDToolkit(services));
 
-// A context on SQLite in the same host: no row level security, which is Postgres's
+// A context on SQLite in the same host: no row level security, which needs Postgres
 builder.Services.AddDbContext<ReportsContext>((services, options) => options
     .UseSqlite(reportsConnectionString)
     .UseDDDToolkit(services));
@@ -151,36 +168,39 @@ builder.Services.AddDbContext<ReportsContext>((services, options) => options
 
 </details>
 
-The `Use...` calls of the packages stay, and each adds nothing a context already has. A chain written out as it
-was before the one call, `UseDDDToolkit(services).UseSupabaseRowLevelSecurity(services).UseTenancy(services)`,
-gives each interceptor once, as does `UseDDDToolkit` called twice. The first time the options of a context type
-are built with a part, the log says so, once, as information:
+The `Use...` calls of the packages still work, and each adds nothing that a context already has. A chain written as
+before the one call existed, `UseDDDToolkit(services).UseSupabaseRowLevelSecurity(services).UseTenancy(services)`,
+gives each interceptor once. So does calling `UseDDDToolkit` twice. The first time the options of a context type are
+built with a part, the log says so once, at the information level:
 
 ```text
 UseDDDToolkit gave 'OrderingContext' what the host's registrations bring, after the toolkit's own interceptors: postgres.row-level-security, tenancy.save-check. A context that should do without one is configured with UseDDDToolkitCore and the Use... calls of the parts it does want.
 ```
 
-**Coming from 3.1.** Up to 3.1, `UseDDDToolkit` added the toolkit's interceptors alone, and a context ran as its
-caller only with `UseSupabaseRowLevelSecurity` or `UsePostgresRowLevelSecurity` in its own options. Now every
-context on Postgres that `UseDDDToolkit` wires runs as its caller once row level security is registered. A
-context you left without it on purpose moves to `UseDDDToolkitCore`, below, before you upgrade. Until it does,
-its queries run as the role of their caller instead of the role the application logged in as. Where the login
-role owns the tables or is a superuser, as it usually is, that takes rights away: the caller sees and changes
-what the policies let it. Where the login role was a restricted one, it can give more instead: background work
-runs as `SystemRole`, past every policy where that is `service_role`, as a Supabase project with
-`system=service_role` has it, and a request as
-`authenticated` or `anon`, with whatever those roles were granted. The line above names the context the first
-time its options are built, which without start-up checks is the first time something uses it;
-`builder.Services.RunStartupChecks()` builds every registered context before the first request, so every line is
-in the log at start.
+**Upgrading from 3.1.** Up to 3.1, `UseDDDToolkit` added only the toolkit's interceptors. A context ran as its caller
+only with `UseSupabaseRowLevelSecurity` or `UsePostgresRowLevelSecurity` in its own options. Now every context on
+Postgres that `UseDDDToolkit` sets up runs as its caller once RLS is registered. Before you upgrade,
+move a context that you left without RLS on purpose to `UseDDDToolkitCore` (below). Until you do, its
+queries run as the role of their caller, instead of the role the application logged in as:
+
+- Where the login role owns the tables or is a superuser, as it usually is, this takes access away. The caller sees
+  and changes only what the policies allow.
+- Where the login role was a restricted one, this can give more access. Background work runs as `SystemRole`, past
+  every policy where that is `service_role`, as in a Supabase project with `system=service_role`. A request runs as
+  `authenticated` or `anon`, with whatever those roles were granted.
+
+The log line above names the context the first time its options are built. Without start-up checks, that is the
+first time something uses the context. `builder.Services.RunStartupChecks()` builds every registered context before
+the first request, so every line is in the log at start-up.
 
 ### `UseDDDToolkitCore`
 
-The base alone: the toolkit's own interceptors, and nothing a package brings, which is what `UseDDDToolkit`
-added up to 3.1. The migration history is the toolkit's own, not a package's part, so the base keeps it in the
-context's default schema too. It is for a context that should do without a part the host registered, a context on Postgres
-that runs as the role the application logged in as while the others run as their caller, say. Such a context
-takes the parts it does want with their own calls, after it:
+`UseDDDToolkitCore` adds only the base: the toolkit's own interceptors, and no part that a package brings. This is
+what `UseDDDToolkit` added up to 3.1. The migration history belongs to the toolkit, and is no package's part, so the
+base also keeps the history in the context's default schema. Use it for a context that should go without a part the
+host registered. An example is a context on Postgres that runs as the role the application logged in as, while the
+other contexts run as their caller. Such a context adds the parts it does want with their own calls, after
+`UseDDDToolkitCore`:
 
 ```csharp
 // Runs as the login role, and still keeps its rows to a tenant
@@ -190,24 +210,26 @@ builder.Services.AddDbContext<ReportsContext>((services, options) => options
     .UseTenancy(services));
 ```
 
-Writing it is the decision, and the options keep it. The [start-up check](startup-checks.md) of row level
-security, `postgres.row-level-security-wired`, takes a context given the base alone as meant; one without row
-level security that was wired otherwise, with the toolkit's interceptors added by hand say, is still refused.
-A part the context's model cannot do without is still held to: a context that keeps rows to a tenant needs
-Tenancy's save check, whichever call wired it.
+The options record this choice:
 
-Running as the login role means doing what that role may. Where the host keeps to
-[a login that owns nothing](row-level-security.md#a-login-that-owns-nothing), as the start-up check
-`postgres.login-role-owns-nothing` holds it to, the login role holds nothing on the tables, and the database
-refuses such a context's first command. It reads past the policies only where the login role owns the tables,
-in a host that skips that check with a reason. Work across callers usually belongs to a system caller instead,
-`Callers.Begin(Caller.SystemIn("reports"))`, in a context that runs as its caller.
+- The [start-up check](startup-checks.md) of RLS, `postgres.row-level-security-wired`, accepts a
+  context with the base alone as intended. It still refuses a context without RLS that was set up in
+  another way, for example with the toolkit's interceptors added by hand.
+- A part that the context's model requires is still required. A context that keeps rows to a tenant needs Tenancy's
+  save check, whichever call set it up.
 
-### A part of your own
+Running as the login role means doing what that role may do. Where the host uses
+[a login that owns nothing](row-level-security.md#a-login-that-owns-nothing), which the start-up check
+`postgres.login-role-owns-nothing` enforces, the login role holds nothing on the tables. The database then refuses
+such a context's first command. Such a context reads past the policies only where the login role owns the tables, in
+a host that skips that check with a reason. Work across callers usually belongs to system work instead,
+`access.BeginSystem("reports")` on `AccessManager`, in a context that runs as the current user.
 
-A package of yours, or the application's own infrastructure, brings a part the same way the toolkit's packages
-do: registered next to what it is about, with a name and a position, and `UseDDDToolkit` puts it in its place on
-every context it belongs on.
+### Writing a context part
+
+A package of yours, or the application's infrastructure, brings a part the same way the toolkit's packages do. It
+registers the part next to what the part is about, with a name and a position. `UseDDDToolkit` then puts the part in
+its place on every context it belongs on.
 
 ```csharp
 public static IServiceCollection AddBillingAudit(this IServiceCollection services)
@@ -220,35 +242,41 @@ public static IServiceCollection AddBillingAudit(this IServiceCollection service
 }
 ```
 
-`UseBillingAudit` is the method a host calls when it takes the parts one by one, and like the toolkit's it adds
-nothing the options already have. Left as it is, the part goes on every context, and its interceptor decides at
-each use whether the context gives it anything to do, as Tenancy's does. `AppliesTo` passes over a context by
-what its options say, as row level security does by the provider. Where the options cannot tell yet, let the part
-go on and its interceptor pass over at use what it has nothing to do for, as row level security does for a
-provider set later: a part that is left off when nothing can be told yet fails open. Two registrations of one
-name bring the part once. Tenancy's save check comes last, whatever position yours has, so a row your part adds
-or changes in a save is checked like any other.
+`UseBillingAudit` is the method a host calls when it adds the parts one by one. Like the toolkit's methods, it adds
+nothing that the options already have.
+
+- Without `AppliesTo`, the part goes on every context. Its interceptor decides at each use whether the context gives
+  it anything to do, as Tenancy's interceptor does.
+- `AppliesTo` skips a context based on what its options say, as RLS does based on the provider.
+- Where the options cannot tell yet, let the part go on, and let its interceptor skip at use what it has nothing to do
+  for. RLS does this for a provider that is set later. A part that is left off when nothing can be
+  told yet fails open. The context then saves without it.
+- Two registrations with the same name bring the part once.
+- Tenancy's save check comes last, whatever position your part has. So the save check checks a row that your part
+  adds or changes in a save, like any other row.
 
 | Part | Brought by | Position | Goes on |
 |---|---|---|---|
-| `postgres.row-level-security` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | 100 | every context that may be on Postgres; it passes over one that is not |
-| `tenancy.save-check` | `AddTenancy` | last, `int.MaxValue` | every context; it checks those that keep rows to a tenant |
+| `postgres.row-level-security` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | 100 | every context that may be on Postgres. The interceptor skips a context that is not. |
+| `tenancy.save-check` | `AddTenancy` | last, `int.MaxValue` | every context. It checks the contexts that keep rows to a tenant. |
 
-The names and positions are constants on the interceptors, `PostgresRowLevelSecurityInterceptor.PartName` and
-`TenancySaveInterceptor.PartName`, with `PartPosition` next to each. Membership brings none: its member tables
-are your context's own, and on Postgres its lock is the policies the export writes, which hold a context once
-row level security runs it as its caller. Its [expert hold](membership.md#the-expert-hold) is no part either: no
-registration brings it, because a host decides it per context, and writes it after the one call,
+The names and positions are constants on the interceptors: `PostgresRowLevelSecurityInterceptor.PartName` and
+`TenancySaveInterceptor.PartName`, each with `PartPosition` next to it.
+
+Membership brings no part. Its member tables belong to your context. On Postgres, the policies that the export writes
+protect those tables, and the policies apply to a context once RLS runs it as its caller.
+Membership's [expert hold](membership/checks-and-saves.md#the-expert-hold) is not a part either. No registration
+brings it, because a host decides it per context. The host adds it after the one call,
 `.UseDDDToolkit(services).UseMemberHolds(services)`, or after `UseDDDToolkitCore`. It changes no row, so it may come
 after Tenancy's save check.
 
-### A part a model cannot do without
+### Parts a model requires
 
-A part goes on every context the one call wires, and a context needs it because of what its model holds: Tenancy's
-save check, for a context that keeps rows to a tenant. Where nothing registered the part, or the context was given
-the base alone, the one call has nothing to add, and the context would save without it. So the model says what it
-cannot do without. `ScopeToTenant` states the save check, and a mapping of your own states its part with
-`RequireContextPart`:
+`UseDDDToolkit` puts a part on every context it sets up. Some contexts need a part because of what their model
+holds. For example, a context that keeps rows to a tenant needs Tenancy's save check. Where nothing registered the part, or the
+context was given the base alone, the one call has nothing to add, and the context would save without the part. So
+the model states what it requires. Tenancy's mapping of a class kept to a tenant, by `[OfTenant]` or by
+`ScopeToTenant`, states the save check. A mapping of yours states its part with `RequireContextPart`:
 
 ```csharp
 entity.Metadata.Model.RequireContextPart(
@@ -258,29 +286,32 @@ entity.Metadata.Model.RequireContextPart(
     addedWith: "options.UseBillingAudit(serviceProvider)");
 ```
 
-A context whose model requires a part its options do not have is refused at its first save, before anything is
-written, and by the start-up check `entity-framework.toolkit-wired` before the first request. The part is seen on
-a context by the interceptor it adds. Where nothing registered it, the message names the registration:
+A context whose model requires a part that its options do not have is refused before anything is written: at its
+first save, and by the start-up check `entity-framework.toolkit-wired` before the first request. The check recognises
+a part on a context by the interceptor that the part adds. Where nothing registered the part, the message names the
+registration:
 
 ```text
 'ProjectsContext' cannot do without the part tenancy.save-check, which its model requires, and its options have no TenancySaveInterceptor, so its saves would go without it. No registration brought it. Register it with services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework, and options.UseDDDToolkit(serviceProvider) puts it on every context.
 ```
 
-Where one did, the message names `UseDDDToolkit`, and the part's own call after `UseDDDToolkitCore`. The requirement
-is an annotation of the model whose value is text, so the model still goes into a migration's snapshot and a
-compiled model.
+Where a registration brought the part, the message names `UseDDDToolkit`, and the part's own call after
+`UseDDDToolkitCore`. The requirement is a model annotation with a text value, so the model still goes into a
+migration's snapshot and a compiled model. A package's convention states its part with the overload for conventions,
+`modelBuilder.Metadata.RequireContextPart(...)`, as Tenancy's convention of `[OfTenant]` states the save check.
 
 ### `AddDDDToolkitConventions` and `Add{Module}Converters`
 
-`AddDDDToolkitConventions` adds the five toolkit conventions to the model. It is the same for every
-context, so it takes no arguments. What each one does is under
-[What is generated and what is a convention](#what-is-generated-and-what-is-a-convention).
+`AddDDDToolkitConventions` adds the toolkit's six conventions to the model. It is the same for every context, so it
+takes no arguments. [Generated code and conventions](#generated-code-and-conventions) describes each convention.
 
-`Add{Module}Converters` is generated, one per assembly that declares identifiers or single value
-objects. It registers the value converter the generator wrote for each of them, so Entity Framework
-stores an `OrderId` as the `Guid` inside it:
+`Add{Module}Converters` is generated, once per assembly that declares identifiers or single value objects. It
+registers the value converter that the generator wrote for each of them, so Entity Framework stores an `OrderId` as
+the `Guid` inside it. Shortened:
 
-```csharp title="ConverterExtensions.g.cs, shortened"
+**`ConverterExtensions.g.cs`**
+
+```csharp
 namespace Ordering.Domain.Converters;
 
 public static class ConverterExtensions
@@ -296,25 +327,24 @@ public static class ConverterExtensions
 }
 ```
 
-The method lives in a `Converters` namespace under the assembly name, in a static class called
-`ConverterExtensions`. Its name comes from the first of three places that has one:
+The method is in a `Converters` namespace under the assembly name, in a static class called `ConverterExtensions`.
+The method's name comes from the first of these three places that has a name:
 
-1. `[assembly: Module("Ordering")]` in a file of the project. It always wins, and gives
-   `AddOrderingConverters`.
-2. The `DDD_Module` property that [Getting started](getting-started.md#store-it-with-entity-framework)
-   sets in the project file, which a `Directory.Build.props` can set for a whole folder. It declares the
-   module as well, and the build writes the attribute above from it
-   ([A module named by its folder](modules.md#a-module-named-by-its-folder)), except in a test project and in
-   the rare project that sets `DDD_DeclareModule` to false, where it only names the code.
-3. The assembly name with the dots removed.
+1. `[assembly: Module("Ordering")]` in a file of the project. It always wins, and gives `AddOrderingConverters`.
+2. The `DDD_Module` property in the project file, which
+   [Getting started](getting-started.md#store-the-aggregate-with-entity-framework) sets. A `Directory.Build.props` can set it
+   for a whole folder. The property also declares the module. The build writes the attribute above from it
+   ([A module named by its folder](modules.md#a-module-named-by-its-folder)). The exceptions are a test project, and
+   the rare project that sets `DDD_DeclareModule` to false. There the property only names the code.
+3. The assembly name without the dots.
 
-The module is the boundary the analyzer checks, described in [Modules](modules.md).
-[Why the property becomes an attribute](modules.md#why-the-property-becomes-an-attribute) explains why the
-build writes the attribute rather than leave the property to say it.
+The module is the boundary that the analyzer checks ([Modules](modules.md)).
+[Why the property becomes an attribute](modules.md#why-the-property-becomes-an-attribute) explains why the build
+writes the attribute.
 
-Call one per module, and one per assembly that is no module. Two assemblies of one module, such as a
-module and its contracts project, share a name, and each one's method calls the ones of the module's
-other assemblies it references. A solution with a shared kernel and two modules calls three:
+Call one method per module, and one per assembly that is not part of a module. Two assemblies of one module, such as
+a module and its contracts project, share a name. Each assembly's method calls the methods of the module's other
+assemblies that it references. A solution with a shared kernel and two modules calls three methods:
 
 ```csharp
 protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -326,24 +356,23 @@ protected override void ConfigureConventions(ModelConfigurationBuilder configura
 }
 ```
 
-An assembly that declares no identifier and no single value object produces no method, because there
-would be nothing for it to register, unless it is the project of a module whose other projects declare
-identifiers without Entity Framework: then its method registers theirs. See
-[A domain project without Entity Framework](#a-domain-project-without-entity-framework).
+An assembly that declares no identifier and no single value object gets no method, because there would be nothing to
+register. The exception is a module project whose other projects declare identifiers without Entity Framework. Its
+method registers their identifiers
+([A domain project without Entity Framework](#a-domain-project-without-entity-framework)).
 
 ### `AddDDDToolkitEntityFramework`
 
-Registers the delivery configuration and the interceptors `UseDDDToolkit` adds. The argument
-configures delivery; see [Delivering domain events](event-delivery.md). If your aggregates never raise
-events you can call it with no argument at all, but you still need it, because it is what registers the
-interceptors.
+`AddDDDToolkitEntityFramework` registers the delivery configuration and the interceptors that `UseDDDToolkit` adds.
+Its argument configures delivery ([Delivering domain events](event-delivery.md)). If your aggregates never raise
+events, call it without an argument. You still need the call, because it registers the interceptors.
 
-It can be called more than once, which is what lets each module of a modular monolith register its own
-outbox next to its own context. See [An outbox per context](event-delivery.md#an-outbox-per-context).
+You can call it more than once. So each module of a modular monolith can register its own outbox next to its own
+context ([An outbox per context](event-delivery.md#an-outbox-per-context)).
 
 ## Mapping
 
-Everything in this section works with no `OnModelCreating` code at all. The mapping tests in
+Everything in this section works without any code in `OnModelCreating`. The mapping tests in
 `Tests/DDDToolkit.EntityFramework.Tests/MappingTests.cs` cover each case against SQLite.
 
 ### Identifiers
@@ -363,10 +392,12 @@ public partial class Order
 }
 ```
 
-The generator writes a converter into each identifier. It stores the underlying value, so the column is
-a `Guid`, an `int` or a `string`, not a serialized object:
+The generator writes a converter into each identifier. The converter stores the underlying value, so the column is a
+`Guid`, an `int` or a `string`, and never a serialized object:
 
-```csharp title="OrderId.Converter.g.cs"
+**`OrderId.Converter.g.cs`**
+
+```csharp
 readonly partial record struct OrderId
 {
     public sealed class OrderIdConverter : ValueConverter<OrderId, Guid>
@@ -378,7 +409,7 @@ readonly partial record struct OrderId
 }
 ```
 
-and the identifier is usable in a query predicate:
+You can use the identifier in a query predicate:
 
 ```csharp
 var order = context.Orders.Single(o => o.Id == orderId);          // the key
@@ -386,34 +417,37 @@ var theirs = context.Orders.Count(o => o.Customer == customerId); // a plain pro
 var unassigned = context.Orders.Count(o => o.Courier == null);    // a nullable property
 ```
 
-Class identifiers, declared as `partial record` rather than `readonly partial record struct`, map the
-same way and get a converter for their always-valid twin as well.
+Class identifiers, declared as `partial record` instead of `readonly partial record struct`, map the same way. They
+also get a converter for their always-valid twin.
 
-### Ids the database never makes
+### Ids made in code
 
-An id is made in code before the save, `OrderId.Create()`, so a change and every event of it know the id from
-the start; the database stores it, and makes none. Nothing has to be configured for that. Entity Framework
-generates a key's value on add only when the key's own type is a number or a `Guid`, and an id is a type of its
-own, which reaches its column through the converter `Add{Module}Converters` registers: the key of an
-`[EntityId<long>]` is a plain `bigint` on Postgres and an `INTEGER` SQLite numbers nothing for, and a new row
-whose id holds no value yet is saved with that value rather than one the database picks. The tests in
-`Tests/DDDToolkit.EntityFramework.Tests/Conventions/EntityIdKeyTests.cs` hold Postgres and SQLite to it, so a
-provider that ever started making ids would fail them.
+Code makes an id before the save, with `OrderId.Create()`, so a change and each of its events know the id from the
+start. The database stores the id and makes none. This needs no configuration:
 
-An id over a `long` or a `string` that a package makes, as Tenancy makes a tenant's, says how with a `Create()`
-of its own ([Creating identifiers](identifiers.md#creating-identifiers)).
+- Entity Framework generates a key value on add only when the key's type is a number or a `Guid`.
+- An id has its own type, which reaches its column through the converter that `Add{Module}Converters` registers. So
+  the key of an `[EntityId<long>]` is a plain `bigint` on Postgres, and an `INTEGER` that SQLite does not number.
+- A new row whose id still has its default value is saved with that value. The database does not pick another.
+
+The tests in `Tests/DDDToolkit.EntityFramework.Tests/Conventions/EntityIdKeyTests.cs` check this on Postgres and
+SQLite, so they fail if a provider ever starts to make ids.
+
+An id over a `long` or a `string` that a package makes, as Tenancy makes a tenant's id, says how with its own
+`Create()` ([Creating identifiers](identifiers.md#creating-identifiers)).
 
 ### Value objects
 
-A `[ValueObject]` record is annotated `[ComplexType]`, so its properties are stored inline in the
-owning table:
+A `[ValueObject]` record is annotated `[ComplexType]`, so its properties are stored in columns of the owning table:
 
 ```csharp
 [ValueObject]
 public partial record PersonName(string FirstName, string LastName);
 ```
 
-```csharp title="PersonName.EntityFramework.g.cs"
+**`PersonName.EntityFramework.g.cs`**
+
+```csharp
 [ComplexType]
 partial record PersonName
 {
@@ -425,12 +459,11 @@ partial record ValidPersonName
 }
 ```
 
-An order's `Recipient`, a `PersonName`, becomes `Recipient_FirstName` and `Recipient_LastName` columns
-on the `Orders` table, not a table of its own.
+An order's `Recipient`, a `PersonName`, becomes the columns `Recipient_FirstName` and `Recipient_LastName` on the
+`Orders` table. It gets no table of its own.
 
-A `[SingleValueObject<T>]` is a converted scalar, so it becomes one column, and a nullable one stores
-and reads `null`. Its converter is written the same way as an identifier's, with a second one for the
-always-valid twin:
+A `[SingleValueObject<T>]` is a converted scalar, so it becomes one column. A nullable one stores and reads `null`.
+Its converter is written the same way as an identifier's, with a second converter for the always-valid twin:
 
 ```csharp
 [SingleValueObject<string>]
@@ -440,7 +473,9 @@ public partial record EmailAddress
 }
 ```
 
-```csharp title="EmailAddress.Converter.g.cs"
+**`EmailAddress.Converter.g.cs`**
+
+```csharp
 partial record EmailAddress
 {
     public sealed class EmailAddressConverter : ValueConverter<EmailAddress, string>
@@ -466,7 +501,7 @@ See [Value objects](value-objects.md#entity-framework).
 
 ### Child entities and owned collections
 
-`[Entity<TId>]` produces `[Owned]`, so a child entity is loaded and saved with its aggregate:
+`[Entity<TId>]` adds `[Owned]`, so a child entity is loaded and saved with its aggregate:
 
 ```csharp
 [Entity<Guid>("LINE")]
@@ -476,18 +511,22 @@ public partial class OrderLine
 }
 ```
 
-```csharp title="OrderLine.EntityFramework.g.cs"
+**`OrderLine.EntityFramework.g.cs`**
+
+```csharp
 [Owned]
 partial class OrderLine
 {
 }
 ```
 
-A generated `partial IReadOnlyList<OrderLine> Lines { get; }` on the aggregate is discovered as an owned
-collection. The `[BackingField]` annotation on the generated property points Entity Framework at the
-private list, so it reads and writes the field and never tries to write through the read-only view:
+Entity Framework discovers a generated `partial IReadOnlyList<OrderLine> Lines { get; }` on the aggregate as an owned
+collection. The `[BackingField]` annotation on the generated property points Entity Framework at the private list. So
+Entity Framework reads and writes the field, and never tries to write through the read-only view. Shortened:
 
-```csharp title="Order.g.cs, shortened"
+**`Order.g.cs`**
+
+```csharp
 partial class Order : AggregateRoot<OrderId>
 {
     protected Order()
@@ -507,26 +546,24 @@ partial class Order : AggregateRoot<OrderId>
 }
 ```
 
-The protected constructor is the one Entity Framework uses to materialize a row. The core generator
-writes `[BackingField]` only when the project references Entity Framework, so a domain project without
-it gets the same property without the annotation.
+Entity Framework uses the protected constructor to materialize a row. The core generator writes `[BackingField]` only
+when the project references Entity Framework. A domain project without Entity Framework gets the same property
+without the annotation.
 
-Removing an element removes the row. Callers still cannot cast `Lines` back to `List<OrderLine>` and
-mutate it.
+Removing an element removes the row. Callers still cannot cast `Lines` back to `List<OrderLine>` and change it.
 
 ### Composite keys
 
-A property marked `[KeyPart]` joins the primary key ahead of `Id`, and the foreign key of every owned
-child carries it too, so `Order` keyed `(RegionId, Id)` owns `OrderLine` rows keyed
-`(RegionId, OrderId, Id)`. The child needs a property of the same name; without one the model refuses
-to build. [Composite keys](composite-keys.md) has the rules, the order of several parts, and how to
-override it.
+A property marked `[KeyPart]` joins the primary key ahead of `Id`. The foreign key of every owned child also carries
+it. So an `Order` keyed `(RegionId, Id)` owns `OrderLine` rows keyed `(RegionId, OrderId, Id)`. The child needs a
+property with the same name, or the model fails to build. [Composite keys](composite-keys.md) has the rules, the
+order of several parts, and how to override it.
 
 ### Read-only collections of primitives
 
-A generated `IReadOnlyList<T>` where `T` is a primitive, a converted identifier or a single value
-object is mapped as an Entity Framework primitive collection, which on a relational provider is a
-JSON column. The elements are stored as their converted values:
+A generated `IReadOnlyList<T>` is mapped as an Entity Framework primitive collection when `T` is a primitive, a
+converted identifier or a single value object. On a relational provider, a primitive collection is a JSON column. The
+elements are stored as their converted values:
 
 ```csharp
 [EntityId<int>("TAG")]
@@ -535,62 +572,68 @@ public readonly partial record struct TagId;
 public partial IReadOnlyList<TagId> Tags { get; }
 ```
 
-Two tags produce the column value `[1,2]`, not a pair of objects.
+Two tags give the column value `[1,2]`.
 
-This needs the convention. Entity Framework discovers primitive properties only when they have a
-setter, and a generated collection property is get-only, so without `AddDDDToolkitConventions` the
-property would be skipped silently and the data would never reach the database. The convention finds
-it, sets the element type, and copies the converter, max length, unicode, precision and scale from
-the type mapping the generated registration installed.
+This needs the convention. Entity Framework discovers primitive properties only when they have a setter, and a
+generated collection property is get-only. Without `AddDDDToolkitConventions`, Entity Framework would skip the
+property without a warning, and the data would never reach the database. The convention finds the property, sets its
+element type, and copies the converter, max length, unicode, precision and scale from the type mapping that the
+generated registration installed.
 
-The convention only considers public get-only properties. A `protected partial IReadOnlyList<T>` is
-not mapped as a primitive collection.
-
-"A JSON column" is true on SQL Server and SQLite and not on PostgreSQL, which stores the same
-collection as a native array. LINQ queries port across that difference and hand-written SQL does not.
-See [Primitive collections do not port below LINQ](#primitive-collections-do-not-port-below-linq)
-before you write a report against one of these columns.
-
-### What is not mappable
-
-Entity Framework Core 10 accepts only arrays and `IList<T>` implementations as primitive collections.
-A generated `IReadOnlySet<T>` is backed by a `HashSet<T>`, so a set of primitives cannot be a
+The convention only considers public get-only properties. A `protected partial IReadOnlyList<T>` is not mapped as a
 primitive collection.
 
-Rather than leave the property silently unmapped, `ReadOnlyCollectionConvention` throws while the
-model is built. The message names the type and property, says that the backing field is a `HashSet`
-and that only arrays and `IList<T>` qualify, and tells you to declare `IReadOnlyList<T>` instead or
-exclude the property with `[NotMapped]` or `Ignore()`. You see it on first use of the context, not at
-save time.
+The column is JSON on SQL Server and SQLite. PostgreSQL stores the same collection as a native array. LINQ queries
+work across that difference, and hand-written SQL does not. Read
+[Primitive collections in hand-written SQL](#primitive-collections-in-hand-written-sql) before you write a report
+against one of these columns.
+
+### Read-only sets of primitives
+
+Entity Framework Core 10 accepts only arrays and `IList<T>` implementations as primitive collections. A generated
+`IReadOnlySet<T>` is backed by a `HashSet<T>`, so a set of primitives cannot be a primitive collection.
+
+`ReadOnlyCollectionConvention` throws while the model is built, so the property is never left unmapped without an
+error. The message:
+
+- names the type and the property;
+- says that the backing field is a `HashSet`, and that only arrays and `IList<T>` qualify;
+- tells you to declare `IReadOnlyList<T>` instead, or to exclude the property with `[NotMapped]` or `Ignore()`.
+
+You see the error on the first use of the context, before any save.
 
 ```csharp
 public partial IReadOnlySet<string> Keywords { get; }   // throws while building the model
 public partial IReadOnlyList<string> Keywords { get; }  // maps
 ```
 
-An `IReadOnlySet<T>` of entities is fine. That is a navigation, not a primitive collection, so
-relationship discovery handles it and the children round-trip with their aggregate.
+An `IReadOnlySet<T>` of entities works. It is a navigation, so relationship discovery handles it, and the children
+are saved and loaded with their aggregate.
 
 ## Optimistic concurrency
 
-Every aggregate root carries `long Version`. It is 0 on a new instance, becomes 1 when the aggregate
-is inserted, and increases by exactly one per save that touches the aggregate. `AddDDDToolkitConventions`
-maps it as a concurrency token, so the `UPDATE` carries the loaded version in its `WHERE` clause.
+Every aggregate root has a `long Version`. It is 0 on a new instance, becomes 1 when the aggregate is inserted, and
+goes up by one per save that touches the aggregate. `AddDDDToolkitConventions` maps it as a concurrency token, so the
+`UPDATE` carries the loaded version in its `WHERE` clause.
 
-"Touches the aggregate" includes more than the root's own properties. `AggregateVersionInterceptor`
-walks from each changed entry to the aggregate root it belongs to, through ownership or through a
-foreign key whose principal is an aggregate root, and bumps that root. A change to an owned child, an
-element added to or removed from an owned collection, or a change to a primitive collection on a
-child, all version the root. Each root is bumped at most once per save, however many entries changed,
-and a save that changes nothing does not bump anything.
+A save also touches the aggregate when it changes more than the root's own properties. `AggregateVersionInterceptor`
+walks from each changed entry to the aggregate root it belongs to, through ownership or through a foreign key whose
+principal is an aggregate root, and raises that root's version. So each of these raises the root's version:
 
-Deleting an aggregate does not bump its version, but the token is still checked, so deleting an
-aggregate somebody else has changed in the meantime conflicts like any other stale write.
+- a change to an owned child;
+- an element added to or removed from an owned collection;
+- a change to a primitive collection on a child.
 
-The version is what makes the aggregate a unit of consistency: two people editing different lines of
-the same order still conflict, which is the point.
+Each root's version goes up at most once per save, however many entries changed. A save that changes nothing raises
+no version.
 
-When a save writes a stale version, you get a `ConcurrencyConflictException` naming the aggregate:
+Deleting an aggregate does not raise its version, but the token is still checked. So deleting an aggregate that
+someone else changed in the meantime conflicts, like any other stale write.
+
+The version makes the aggregate a unit of consistency. Two people who edit different lines of the same order still
+conflict, by design.
+
+When a save writes a stale version, you get a `ConcurrencyConflictException` that names the aggregate:
 
 ```csharp
 try
@@ -605,21 +648,22 @@ catch (ConcurrencyConflictException conflict)
 }
 ```
 
-There is no safe generic answer for the catch block, which is why the toolkit does not retry for you.
-Reloading and reapplying is right when the change is a command you can repeat, such as adding a line.
-Reporting the conflict is right when the user needs to see what changed underneath them. Blindly
-retrying a computed value is wrong.
+No retry fits every case, so the toolkit does not retry for you:
 
-`conflict.InnerException` is the original `DbUpdateConcurrencyException` if you need the entries.
+- Reload and reapply when the change is a command you can repeat, such as adding a line.
+- Report the conflict when the user needs to see what changed.
+- Do not retry a computed value without reloading the data it was computed from.
+
+`conflict.InnerException` is the original `DbUpdateConcurrencyException`, if you need the entries.
 [Why the exception is rethrown from `SaveChangesFailed`](#why-the-exception-is-rethrown-from-savechangesfailed)
-explains how it reaches your catch block unwrapped.
+explains how the exception reaches your catch block unwrapped.
 
 ### The version the client saw
 
-The token protects the moment between a load and its save. A client that read an order a minute ago and
-now sends a change it decided on then is not covered by that: the server loads the order as it is now,
-and saves over whatever happened in that minute. `ExpectVersion` closes the gap. Hand it the version the
-client read, after the load and before the change:
+The token protects the time between a load and its save. It does not cover a client that read an order a minute ago
+and now sends a change it decided on then. The server loads the order as it is now, and saves over whatever happened
+in that minute. `ExpectVersion` closes this gap. Pass it the version the client read, after the load and before the
+change:
 
 ```csharp
 var order = await context.Orders.SingleAsync(order => order.Id == id, cancellationToken);
@@ -628,107 +672,128 @@ order.Cancel(reason);
 await context.SaveChangesAsync(cancellationToken);
 ```
 
-If the order is loaded at another version, it throws `ConcurrencyConflictException` there and then, before
-anything changes. If the versions agree, the save compares against that version as it always does, so a
-change somebody makes between the load and the save is the same conflict. One exception for both, because
-the client does the same thing for both: read again, and decide again.
+If the order was loaded at another version, `ExpectVersion` throws `ConcurrencyConflictException` at once, before
+anything changes. If the versions match, the save compares against that version as usual. So a change that someone
+makes between the load and the save is the same conflict. Both cases throw the same exception, because the client
+handles both the same way: read again, and decide again.
 
-A request whose client may leave the version out carries a `long?`, and hands it over as it is: with none,
-`null`, there is nothing to compare at the load, and the save compares the version loaded, as it always
-does. So one line serves both, and it is the line a handler writes after its load:
+A request whose client may leave out the version carries a `long?`, and passes it on as it is. With `null`, there is
+nothing to compare at the load, and the save compares the loaded version as usual. So one line handles both cases,
+and a handler writes it after its load:
 
 ```csharp
 var order = await context.Orders.SingleAsync(order => order.Id == command.Order, cancellationToken);
-context.ExpectVersion(order, command.ExpectedVersion);   // none named: the client asked for the order as it is
+context.ExpectVersion(order, command.ExpectedVersion);   // null: the client wants the order as it is now
 ```
 
-It reads nothing from the database and changes nothing in the context. It refuses, with an
-`InvalidOperationException`, an aggregate this context did not load, a new aggregate, which has no stored
-version yet, and a model that does not map `Version` as a concurrency token, where an expectation that
-only held at the load would look like protection and be none.
+`ExpectVersion` reads nothing from the database and changes nothing in the context. It throws an
+`InvalidOperationException` for:
 
-A read answers the version next to the data, in the body or as an `ETag`, and a client that leaves the
-expectation out gets the last write wins it had before. In GraphQL the conflict is a
+- an aggregate that this context did not load;
+- a new aggregate, which has no stored version yet;
+- a model that does not map `Version` as a concurrency token. There an expectation that is checked only at the load
+  would look like protection and give none.
+
+A read returns the version with the data, in the body or as an `ETag`. A client that leaves out the expectation gets
+the same last-write-wins behaviour as before. In GraphQL the conflict is a
 [`ConcurrencyConflictError`](graphql.md#typed-errors-in-mutation-payloads) in the mutation's payload.
 
 ## Migrations
 
-There is nothing special to do. The toolkit adds types and configuration to your own `DbContext`
-model, so everything it maps appears in your ordinary migrations:
+Migrations need no extra steps. The toolkit adds types and configuration to your own `DbContext` model, so everything
+it maps appears in your ordinary migrations:
 
 ```bash
 dotnet ef migrations add AddOutbox
 dotnet ef database update
 ```
 
-The one line to write is in the context's design-time factory, the one `dotnet ef` makes the context with: it
-calls `UseDDDToolkitDesignTime()` after its provider, so `dotnet ef` records the migrations in the history the
-running application reads. The build reports a factory without it
-([DDD00074](diagnostics.md#ddd00074)); [The migration history](#the-migration-history) says why. A context whose
-migrations Supabase applies needs no factory written by hand at all: [The design-time factory](#the-design-time-factory)
-below.
+The one line to write is in the context's design-time factory, the factory that `dotnet ef` makes the context with.
+The factory calls `UseDDDToolkitDesignTime()` after its provider, so `dotnet ef` records the migrations in the history
+that the running application reads. The build reports a factory without that call
+([DDD00074](diagnostics.md#ddd00074)). [The migration history](#the-migration-history) explains why. A context whose
+migrations Supabase applies needs no factory written by hand ([The design-time factory](#the-design-time-factory)).
 
-The outbox table is part of the model as soon as `AddDomainEventOutbox(Database)` is in `OnModelCreating`, so
-the next migration you scaffold contains it, `ddd` schema and all. Opting in is that one call. There
-is no separate package, no separate migration history table and no separate command. The same goes for
-`AddDomainEventInbox(Database)` on the consuming side. See [The table](event-delivery.md#the-table).
+The outbox table is part of the model as soon as `OnModelCreating` calls `AddDomainEventOutbox(Database)`. So the next
+migration you scaffold contains it, including the `ddd` schema. That one call is the whole opt-in. There is no
+separate package, migration history table or command. The same goes for `AddDomainEventInbox(Database)` on the
+consuming side ([The table](event-delivery.md#the-table)).
 
-If you write migrations by hand rather than scaffolding them, `migrationBuilder.CreateDomainEventOutbox()`
-and its inbox and drop counterparts write the same tables. See
-[Integration events](integration-events.md#tables-schema-and-migrations).
+If you write migrations by hand instead of scaffolding them, `migrationBuilder.CreateDomainEventOutbox()` and the
+matching inbox and drop methods write the same tables
+([Integration events](integration-events.md#tables-schema-and-migrations)).
 
-The same applies to everything else on this page. Struct identifier columns, complex type columns,
-primitive collection columns and the `Version` column are all just columns in your model, so a
-`migrations add` after changing an aggregate produces the diff you would expect.
+This applies to everything else on this page too. Struct identifier columns, complex type columns, primitive
+collection columns and the `Version` column are ordinary columns in your model. So `migrations add` after a change to
+an aggregate gives the diff you would expect.
 
-If you map the outbox table before you need it, as the example context does, switching from
-in-process dispatch to the outbox later costs no migration at all.
+If you map the outbox table before you need it, as the example context does, a later switch from in-process dispatch
+to the outbox needs no migration.
 
-On Supabase the CLI applies migrations, not Entity Framework; see [Supabase](#supabase).
+On Supabase the CLI applies the migrations, and Entity Framework does not ([Supabase](#supabase)).
 
 ### The migration history
 
-Entity Framework records the migrations it applied in a table of its own, `__EFMigrationsHistory`. Left to
-itself it keeps that table in the provider's default schema, `public` on Postgres and `dbo` on SQL Server,
-whatever schema the model's tables are in. Two modules that share a database would share one history, and each
-would read the other's migrations as its own. So the toolkit keeps the history in the context's default schema,
-beside its tables: a model with `HasDefaultSchema("ordering")` keeps it in `ordering."__EFMigrationsHistory"`,
-and nothing in the options says so.
+Entity Framework records the migrations it applied in its own table, `__EFMigrationsHistory`. By default it keeps
+that table in the provider's default schema: `public` on Postgres and `dbo` on SQL Server, whatever schema the
+model's tables are in. Two modules that share a database would then share one history, and each would read the
+other's migrations as its own. So the toolkit keeps the history in the context's default schema, next to its tables.
+A model with `HasDefaultSchema("ordering")` keeps it in `ordering."__EFMigrationsHistory"`, and the options need to
+say nothing.
+
+The diagram shows where a context's history table ends up. Purple: the two ways a context is made. Green: the
+module's own history table. Grey: the provider's default.
 
 ```mermaid
 flowchart LR
-    Host["the host<br/>UseNpgsql(...).UseDDDToolkit(services)"] --> Named{"the options name<br/>a history table?"}
-    Factory["the design-time factory<br/>UseNpgsql(...).UseDDDToolkitDesignTime()"] --> Named
-    Named -- "yes" --> Theirs["that table"]
-    Named -- "no, the model has<br/>a default schema" --> Schema["ordering.__EFMigrationsHistory"]
-    Named -- "no, and it has none" --> Providers["the provider's default<br/>public, dbo"]
+    host["<b>The host</b><br/><small>UseNpgsql(...).UseDDDToolkit(services)</small>"]
+    factory["<b>The design-time factory</b><br/><small>UseNpgsql(...).UseDDDToolkitDesignTime()</small>"]
+    named{"Do the options name<br/>a history table?"}
+    theirs["<b>That table</b>"]
+    schema["<b>ordering.__EFMigrationsHistory</b><br/><small>the model's default schema</small>"]
+    providers["<b>The provider's default</b><br/><small>public, dbo</small>"]
+    host --> named
+    factory --> named
+    named -- yes --> theirs
+    named -- "no, and the model has a default schema" --> schema
+    named -- "no, and the model has none" --> providers
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    class host,factory strong
+    class schema good
+    class providers muted
 ```
 
-`UseDDDToolkit` does it, and so does `UseDDDToolkitCore`, because the history is the toolkit's own and no
-package's part. The provider may be configured before the call or after it, or in `OnConfiguring`, and every
-relational provider gets the same; SQLite, which has no schemas, leaves the schema's name out of the history as
-it does out of the tables.
+`UseDDDToolkit` does this, and so does `UseDDDToolkitCore`, because the history belongs to the toolkit and is no
+package's part. The provider may be configured before the call, after it, or in `OnConfiguring`. Every relational
+provider gets the same. SQLite has no schemas, so it leaves the schema name out of the history, as it does for the
+tables.
 
-The other way in is the design-time factory. `dotnet ef` and the [Supabase export](supabase.md) make the
-context through it, before any host exists, so it has no services to hand `UseDDDToolkit`. It writes
-`UseDDDToolkitDesignTime()` instead, which adds what `UseDDDToolkit` adds that needs no service: today that is
-the migration history and nothing else. Without it the factory's context keeps Entity Framework's default, and
-`dotnet ef database update`, a migrations script, a migration bundle and the exported files record every
-migration in a table the running application does not read: its `Migrate()` then tries to apply the first
-migration again and fails on a table that is there. So the build reports a factory, in a project that references
-`DDDToolkit.EntityFramework`, that leaves the call out ([DDD00074](diagnostics.md#ddd00074)), and a code fix adds
-it. On Supabase the [start-up check](supabase.md#checking-at-start-up) also says so when it finds the migrations
-missing for that reason.
+The other way a context is made is the design-time factory. `dotnet ef` and the [Supabase export](supabase.md) make
+the context through it, before any host exists, so the factory has no services to pass to `UseDDDToolkit`. It calls
+`UseDDDToolkitDesignTime()` instead. That call adds what `UseDDDToolkit` adds that needs no services. Today that is
+only the migration history.
 
-Options that name a history table with `MigrationsHistoryTable` keep it where they name it, so that is how an
-application puts it elsewhere. A model without a default schema keeps the provider's default. A history
-repository of the host's own, put in with `ReplaceService<IHistoryRepository, ...>()` in either of its forms, is
-kept, and decides where its history is. One exception needs the table named: options that hand Entity Framework
-an internal service provider of their own, with `UseInternalServiceProvider`. Entity Framework hands no options
-extension the services of a provider it did not build, so the toolkit cannot place the history there, while the
-design-time factory, which has no such provider, would place it in the schema. Such options are refused as the
-context is made, unless they name the table, `MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema)`,
-in the host's options and the factory's alike.
+Without that call, the factory's context keeps Entity Framework's default. Then `dotnet ef database update`, a
+migrations script, a migration bundle and the exported files record every migration in a table the running
+application does not read. The application's `Migrate()` then tries to apply the first migration again, and fails on
+a table that already exists. So the build reports a factory that leaves the call out, in a project that references
+`DDDToolkit.EntityFramework` ([DDD00074](diagnostics.md#ddd00074)), and a code fix adds the call. On Supabase, the
+[start-up check](supabase.md#checking-at-start-up) also names this cause when it finds the migrations missing.
+
+Other cases:
+
+- Options that name a history table with `MigrationsHistoryTable` keep it where they name it. Use this to put the
+  history in another place.
+- A model without a default schema keeps the provider's default.
+- A history repository of the host's own, added with `ReplaceService<IHistoryRepository, ...>()` in either of its
+  forms, is kept, and decides where its history is.
+- Options with their own internal service provider, set with `UseInternalServiceProvider`, must name the table.
+  Entity Framework gives no options extension the services of a provider it did not build, so the toolkit cannot place
+  the history there. The design-time factory has no such provider, so it would place the history in the schema. So
+  such options are refused when the context is made, unless they name the table,
+  `MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema)`, in the host's options and the factory's alike.
 
 <details>
 <summary>Show the code: a module's context, its design-time factory and its host</summary>
@@ -743,8 +808,8 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
     }
 }
 
-// dotnet ef makes the context with this, without the application's services; for a context marked
-// [SupabaseMigrations] the build writes the same factory itself (see The design-time factory, below)
+// dotnet ef makes the context with this factory, without the application's services. For a context marked
+// [SupabaseMigrations], the build writes the same factory (see The design-time factory, below).
 public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
 {
     public OrderingContext CreateDbContext(string[] args)
@@ -759,25 +824,25 @@ builder.Services.AddDbContext<OrderingContext>((services, options) => options
 
 </details>
 
-**Coming from 3.1.** Up to 3.1 a context whose model has a default schema, and whose options named no history
-table, kept its history in the provider's default schema. It is now looked for in the context's own schema,
-where there is none yet: `Migrate()` would try to apply every migration again and fail on the first table that
-is there, and the Supabase start-up check would report every migration missing. Before upgrading, do one of two
-things.
+**Upgrading from 3.1.** Up to 3.1, a context whose model has a default schema, and whose options named no history
+table, kept its history in the provider's default schema. The toolkit now looks for the history in the context's
+schema, where there is none yet. `Migrate()` would then try to apply every migration again and fail on the first
+table that exists, and the Supabase start-up check would report every migration as missing. Before you upgrade, do
+one of two things.
 
-Keep the table where it is by naming it, in the application's options and the design-time factory's alike. This
-is the way for a context whose migrations are exported to Supabase: every file exported so far records its
-migration in that table, and a factory that placed the history elsewhere would make the export report each of
-those files as changed. Such a context keeps a factory of its own, which names the table: the one the build writes
-for a `[SupabaseMigrations]` context names none.
+**Keep the table where it is** by naming it, in the application's options and in the design-time factory alike. Do
+this for a context whose migrations are exported to Supabase. Every file exported so far records its migration in
+that table, and a factory that placed the history in another table would make the export report each of those files
+as changed. Such a context keeps a factory of its own that names the table, because the factory the build writes for
+a `[SupabaseMigrations]` context names none.
 
 ```csharp
 options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName));
 ```
 
-Or, for a context whose migrations Entity Framework applies, and where the table holds that one context's
-migrations and no other's, move it into the schema once, before the application starts on the new release, and
-add `UseDDDToolkitDesignTime()` to the factory:
+**Move the table into the schema** for a context whose migrations Entity Framework applies, and whose table holds
+only that context's migrations. Move it once, before the application starts on the new release, and add
+`UseDDDToolkitDesignTime()` to the factory:
 
 ```sql
 -- Postgres
@@ -788,60 +853,71 @@ ALTER SCHEMA ordering TRANSFER dbo.__EFMigrationsHistory;
 
 ### Several services on one database
 
-Several services may share one Postgres database, each with modules of its own, and migrate it as they start.
-Entity Framework takes a lock while it migrates. On SQL Server and SQLite that lock is the whole database's. On
-Postgres, Npgsql's is the context's migration history table, and the toolkit keeps a history per module, so it kept
-two services from migrating one module at once and let two modules migrate side by side. Where their migrations make
-the same thing, a schema both use such as `ddd`, each makes it in a transaction of its own: the second asks whether
-it exists while the first has made it and not yet committed, makes it as well, and fails as soon as the first commits.
+Several services can share one Postgres database, each with its own modules, and migrate it when they start. Entity
+Framework takes a lock while it migrates. On SQL Server and SQLite that lock covers the whole database. On Postgres,
+Npgsql locks the context's migration history table, and the toolkit keeps one history per module. So Npgsql's lock
+stops two services from migrating one module at the same time, and lets two modules migrate side by side.
+
+Two modules' migrations can create the same object, such as a schema that both use (`ddd`). Each service then
+creates it in its own transaction. The second service asks whether the schema exists while the first has created it
+and not yet committed. The second then creates it too, and fails as soon as the first commits:
 
 ```text
 23505: duplicate key value violates unique constraint "pg_namespace_nspname_index"
 ```
 
-`IF NOT EXISTS` does not help between two transactions, and the window is short, so it happened now and then, when
-two services happened to start together.
+`IF NOT EXISTS` does not help between two transactions. The window is short, so this happened now and then, when two
+services started at the same time.
 
-So on Postgres every context the toolkit wires takes one more lock when it migrates: the database's, an advisory lock
-taken in the migration's transaction before Npgsql's own. The migrations of every module, in every service on that
-database, run one after the other.
+So on Postgres, every context the toolkit sets up takes one more lock when it migrates: the migration lock
+(`DatabaseMigrationLock`), which covers the whole database. It is an advisory lock, taken in the migration's
+transaction before Npgsql's own lock. The migrations of every module, in every service on that database, then run one
+after the other.
+
+The diagram shows two services that start together. The purple band is the time the storefront holds the migration
+lock, while fulfilment waits.
 
 ```mermaid
 sequenceDiagram
     participant S as storefront
     participant DB as Postgres
     participant F as fulfilment
-    S->>DB: BEGIN, the database's lock
-    F->>DB: BEGIN, the database's lock
-    Note over DB,F: waits
-    S->>DB: Ordering: CREATE SCHEMA ddd, COMMIT
+    rect rgba(91, 46, 201, 0.14)
+        S->>DB: BEGIN, take the migration lock
+        F->>DB: BEGIN, take the migration lock
+        Note over DB,F: fulfilment waits
+        S->>DB: Ordering: CREATE SCHEMA ddd, COMMIT
+    end
     DB-->>F: the lock
-    F->>DB: Shipping: ddd is there, COMMIT
+    F->>DB: Shipping: ddd exists, COMMIT
 ```
 
-- **Every way in.** `UseDDDToolkit`, `UseDDDToolkitCore` and a design-time factory's `UseDDDToolkitDesignTime()` bring
-  it, so it holds for `Migrate()`, `MigrateAsync()`, `dotnet ef database update` and a migration bundle. Entity
-  Framework asks for it before it reads what is applied, so a service with nothing to apply waits for one that is
-  migrating, and then finds it all applied.
-- **Nothing left behind.** It lasts until the migration's transaction commits or rolls back, so a service that fails
-  or is stopped halfway never keeps it, a pooled connection never carries it back to the pool, and it works through a
-  pooler that hands out a connection per transaction.
-- **One database.** Advisory locks belong to a database, so services on two databases of one server never wait for
-  each other.
-- **How long it waits.** As long as the context's command timeout, as for Entity Framework's own lock, and then the
-  migration fails with a timeout on `pg_advisory_xact_lock`. A service that may wait behind a long migration of
-  another's gives its own a timeout as long: `Database.SetCommandTimeout(...)` before it migrates.
+- **Every way to migrate.** `UseDDDToolkit`, `UseDDDToolkitCore` and a design-time factory's
+  `UseDDDToolkitDesignTime()` add the lock. So it applies to `Migrate()`, `MigrateAsync()`,
+  `dotnet ef database update` and a migration bundle. Entity Framework takes the lock before it reads what is applied.
+  So a service with nothing to apply waits for a service that is migrating, and then finds everything applied.
+- **Nothing left behind.** The lock lasts until the migration's transaction commits or rolls back. So a service that
+  fails or stops halfway never keeps it, and a pooled connection never carries it back to the pool. It also works
+  through a pooler that hands out a connection per transaction.
+- **One database.** Advisory locks belong to a database. Services on two databases of one server never wait for each
+  other.
+- **How long it waits.** As long as the context's command timeout, as for Entity Framework's own lock. Then the
+  migration fails with a timeout on `pg_advisory_xact_lock`. A service that may wait behind another service's long
+  migration gives its own migration a timeout that is as long: `Database.SetCommandTimeout(...)` before it migrates.
 - **The toolkit's scripts.** `PostgresRowAccess.SetupScript()` and the row access scripts, with what Tenancy and
-  Membership add to them, make `ddd`, its functions and roles. They run in a migration of your own
-  (`migrationBuilder.Sql(...)`), so under the lock; on Supabase they are files the CLI applies one at a time. A script
-  you run yourself, outside the migrations, waits for them when its transaction runs
+  Membership add to them, create `ddd`, its functions and its roles. They run in a migration of yours
+  (`migrationBuilder.Sql(...)`), so they run under the lock. On Supabase they are files that the CLI applies one at a
+  time. A script you run yourself, outside the migrations, waits for the lock when its transaction runs
   `DatabaseMigrationLock.PostgresStatement` first.
 
-A context whose migrations make nothing another context's do, and that should not wait behind one that takes long,
-leaves the lock out with `WithoutDatabaseMigrationLock()`, in the host's options and its design-time factory's. A
-migrations script, `dotnet ef migrations script`, takes no lock, as Entity Framework's own takes none. A history
-repository of your own, put in with `ReplaceService`, decides its own lock, as it decides where its history is; so do
-options with an internal service provider of their own, which the toolkit cannot reach.
+A context that should not wait behind another context's long migration can leave the lock out, if its migrations
+create nothing that another context's migrations also create. It calls `WithoutDatabaseMigrationLock()` after the
+toolkit's call, in the host's options and in its design-time factory.
+
+- A migrations script (`dotnet ef migrations script`) takes no lock, as Entity Framework's own script takes none.
+- A history repository of yours, added with `ReplaceService`, decides its own lock, as it decides where its history
+  is.
+- So do options with their own internal service provider, which the toolkit cannot reach.
 
 <details>
 <summary>Show the code: leaving the lock out, and seeing who waits</summary>
@@ -866,30 +942,46 @@ WHERE locktype = 'advisory' AND classid = 1145324628 AND objid = 1296648018 AND 
 
 ### The design-time factory
 
-`dotnet ef` makes a context without the application, through an `IDesignTimeDbContextFactory<TContext>`: it looks
-for one in the startup project first, and then in the context's own assembly.
+`dotnet ef` makes a context without the application, through an `IDesignTimeDbContextFactory<TContext>`. It looks for
+one in the startup project first, and then in the context's assembly.
+
+The diagram shows which factory `dotnet ef` uses. Purple: `dotnet ef`. Green: the factory it uses.
 
 ```mermaid
 flowchart LR
-    Ef["dotnet ef"] --> Startup{"a factory in the<br/>startup project?"}
-    Startup -- "yes" --> That["that one"]
-    Startup -- "no" --> Own{"one of yours beside<br/>the context?"}
-    Own -- "yes" --> Yours["yours"]
-    Own -- "no, and the context is<br/>[SupabaseMigrations]" --> Build["the one the build<br/>wrote beside it"]
+    ef["<b>dotnet ef</b>"]
+    startup{"A factory in the<br/>startup project?"}
+    that["<b>That factory</b>"]
+    own{"A factory of yours<br/>beside the context?"}
+    yours["<b>Your factory</b>"]
+    build["<b>The factory the build wrote</b><br/><small>for a [SupabaseMigrations] context</small>"]
+    ef --> startup
+    startup -- yes --> that
+    startup -- no --> own
+    own -- yes --> yours
+    own -- "no, and the context is marked" --> build
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class ef strong
+    class that,yours,build good
 ```
 
-For a context on any database, write one, with `UseDDDToolkitDesignTime()` after its provider, as above. For a
-context whose migrations Supabase applies, write none. The [Supabase export](supabase.md#exporting-as-part-of-the-build)
-always builds the context on Npgsql, pointing nowhere, so its factory is always the same, and the marker the export
-needs, `[SupabaseMigrations]` on the context, is all the build needs to write it: `OrderingContextDesignTimeFactory`,
-beside the context, in a file of that name. `dotnet ef` finds it as it finds one written by hand, with the module or
-the host as the startup project, and a startup project with a factory of its own, SQL Server migrations of their own
-say, keeps that one. A factory of the context's project's own wins over the build's: the build writes none. Write
-one where the context needs more at design time than Npgsql and the toolkit's call, provider options such as
-`MapEnum` or a history table of its own, since the build's has neither. The export and the start-up check make the
-context as `dotnet ef` does with the host as its startup project, so a factory of the host's own for a module's
-context is the one they use there too. DDD00074 holds a factory written by hand to `UseDDDToolkitDesignTime()`; the
-one the build writes calls it wherever the project references `DDDToolkit.EntityFramework`.
+For a context on any database, write a factory that calls `UseDDDToolkitDesignTime()` after its provider, as above.
+For a context whose migrations Supabase applies, write none:
+
+- The [Supabase export](supabase.md#exporting-as-part-of-the-build) always builds the context on Npgsql, with a
+  connection string that points nowhere, so its factory is always the same.
+- The marker that the export needs, `[SupabaseMigrations]` on the context, is all the build needs to write the
+  factory: `OrderingContextDesignTimeFactory`, beside the context, in a file with that name.
+- `dotnet ef` finds that factory as it finds one written by hand, with the module or the host as the startup project.
+  A startup project with its own factory, for example for its own SQL Server migrations, keeps that factory.
+- A factory in the context's project wins over the build's, and the build then writes none. Write one where the
+  context needs more at design time than Npgsql and the toolkit's call, such as provider options like `MapEnum`, or
+  its own history table. The build's factory has neither.
+- The export and the start-up check make the context the way `dotnet ef` does with the host as its startup project.
+  So a factory in the host for a module's context is the one they use there too.
+- DDD00074 requires `UseDDDToolkitDesignTime()` in a factory written by hand. The factory that the build writes calls
+  it wherever the project references `DDDToolkit.EntityFramework`.
 
 <details>
 <summary>Show the code: a context marked for Supabase, and the factory the build writes beside it</summary>
@@ -903,7 +995,11 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 }
 ```
 
-```csharp title="OrderingContextDesignTimeFactory.g.cs, shortened"
+The factory, shortened:
+
+**`OrderingContextDesignTimeFactory.g.cs`**
+
+```csharp
 public sealed class OrderingContextDesignTimeFactory : IDesignTimeDbContextFactory<OrderingContext>
 {
     public OrderingContext CreateDbContext(string[] args)
@@ -913,79 +1009,90 @@ public sealed class OrderingContextDesignTimeFactory : IDesignTimeDbContextFacto
 
 </details>
 
-## What is generated and what is a convention
+## Generated code and conventions
 
-The split is not arbitrary. A value converter is specific to one type, so it has to be written per
-type and registered per assembly, which is work for a generator. A convention is a rule about the
-shape of a model, identical in every context, so it lives in the runtime package.
+A value converter belongs to one type, so it must be written per type and registered per assembly. A generator does
+that work. A convention is a rule about the shape of a model, the same in every context, so it is in the runtime
+package.
 
-The generator emits, for each type:
+The generator writes, for each type:
 
 | You wrote | Generated |
 |---|---|
-| `[EntityId<T>]` | A nested `ValueConverter`, for example `OrderId.OrderIdConverter`, storing `Value` |
+| `[EntityId<T>]` | A nested `ValueConverter`, for example `OrderId.OrderIdConverter`, that stores `Value` |
 | `[SingleValueObject<T>]` | The same, plus a converter for the always-valid twin |
 | `[ValueObject]` | `[ComplexType]` on the record and on its twin |
 | `[Entity<TId>]` | `[Owned]` on the class |
 
-and once per assembly, the registration method, which registers every converter twice:
+It also writes, once per assembly, the registration method, which registers every converter twice. Shortened:
 
-```csharp title="ConverterExtensions.g.cs, shortened"
+**`ConverterExtensions.g.cs`**
+
+```csharp
 modelConfigurationBuilder.Properties<OrderId>().HaveConversion<OrderId.OrderIdConverter>();
 modelConfigurationBuilder.DefaultTypeMapping<OrderId>().HasConversion<OrderId.OrderIdConverter>();
 ```
 
-Both lines are needed and neither covers the other's ground. `Properties<T>()` configures properties
-of that type, which is most of what a model contains. `DefaultTypeMapping<T>()` configures the type
-where no property is involved: query parameters, constants, and the element type of a primitive
-collection. The read-only collection convention reads that default type mapping to find the converter
-for the elements of a generated `IReadOnlyList<T>`, because Entity Framework does not carry property
-configuration down to collection elements.
+Both lines are needed:
 
-`ColumnLength` on an identifier or single value object becomes `HaveMaxLength` on the property
-registration and `HasMaxLength` on the type mapping. See [Identifiers](identifiers.md#column-length).
+- `Properties<T>()` configures the properties of that type, which is most of a model.
+- `DefaultTypeMapping<T>()` configures the type where no property is involved: query parameters, constants, and the
+  element type of a primitive collection. The read-only collection convention reads this default type mapping to find
+  the converter for the elements of a generated `IReadOnlyList<T>`, because Entity Framework does not pass property
+  configuration down to collection elements.
 
-The conventions, added by `AddDDDToolkitConventions`, are:
+`ColumnLength` on an identifier or a single value object becomes `HaveMaxLength` on the property registration and
+`HasMaxLength` on the type mapping ([Identifiers](identifiers.md#column-length)).
+
+`AddDDDToolkitConventions` adds these conventions:
 
 | Convention | What it does |
 |---|---|
-| `InternalMemberConvention` | Ignores every member carrying `[Internal]`, on entity types and complex types alike |
-| `ReadOnlyCollectionConvention` | Maps generated get-only collections of primitives and converted types as primitive collections, applying the element converter |
+| `InternalMemberConvention` | Ignores every member marked `[Internal]`, on entity types and complex types alike |
+| `ReadOnlyCollectionConvention` | Maps generated get-only collections of primitives and converted types as primitive collections, and applies the element converter |
+| `MarkerConvention` | Runs the convention of a package that a marker names with `[ModelConvention]`, in every model that maps a class with the marker, on the class or on a property. Tenancy's `[OfTenant]` and Membership's `[Member<...>]` and `[CustomRole<...>]` are mapped this way. A model with a marked class whose convention the application does not have is refused, naming the assembly to reference ([A marker mapped by a convention](writing-a-supporting-domain.md#a-marker-mapped-by-a-convention)). |
 | `AggregateRootVersionConvention` | Makes `Version` on every aggregate root a concurrency token |
-| `KeyPartConvention` | Puts `[KeyPart]` properties into the primary key ahead of `Id`, and into the foreign key of every owned type below; see [Composite keys](composite-keys.md) |
-| `IndexRefusalConvention` | Checks every index that says what it refuses with, `RefusesAs`, when the model is built: the index is unique, and every property its message names in braces is one the entity maps |
+| `KeyPartConvention` | Puts `[KeyPart]` properties into the primary key ahead of `Id`, and into the foreign key of every owned type below ([Composite keys](composite-keys.md)) |
+| `IndexRefusalConvention` | Checks, when the model is built, every index that names its refusal with `RefusesAs`. The index must be unique, and every property that its message names in braces must be one the entity maps. |
 
-`InternalMemberConvention` is why `DomainEvents` never reaches your tables. The `AggregateRoot<TId>`
-base class marks it `[Internal]`, so the convention ignores it exactly as `[NotMapped]` would.
+`InternalMemberConvention` is why `DomainEvents` never reaches your tables. The `AggregateRoot<TId>` base class marks
+it `[Internal]`, so the convention ignores it, as `[NotMapped]` would.
 
-Explicit configuration in `OnModelCreating` still wins over any of this. The conventions fill in what
-you did not say.
+Explicit configuration in `OnModelCreating` still wins over all of this. The conventions fill in what you did not
+configure. `MarkerConvention` runs when the model is finished, so a package's convention sees what the context mapped
+by hand and leaves it. It runs before the version and the key parts, so what a package maps is keyed like the rest,
+and before `IndexRefusalConvention`, so an index a package adds is checked.
 
 ### A domain project without Entity Framework
 
-A module split into projects by layer (see [A module in layers](modules.md#a-module-in-layers)) keeps Entity
-Framework out of its domain and contracts projects. The generator writes Entity Framework's parts only into a
-project that references it, so those projects get no nested converters, no `[Owned]`, no `[ComplexType]`, and
-no `[BackingField]` on the field behind a generated collection. What the infrastructure project, which holds
-the context, gets instead:
+A module that is split into projects by layer ([A module in layers](modules.md#a-module-in-layers)) keeps Entity
+Framework out of its domain and contracts projects. The generator writes Entity Framework's parts only into a project
+that references Entity Framework. So those projects get no nested converters, no `[Owned]`, no `[ComplexType]`, and
+no `[BackingField]` on the field behind a generated collection. The infrastructure project, which holds the context,
+does that mapping instead.
+
+The diagram shows which code in the infrastructure project maps each part of the domain. Purple: the infrastructure
+code.
 
 ```mermaid
 flowchart LR
-    subgraph domain ["Ordering.Domain, no Entity Framework"]
+    subgraph domain ["Ordering.Domain, without Entity Framework"]
         direction TB
-        D1["OrderId, EmailAddress<br/>implement ISingleValue"]
-        D2["Order with its OrderLine entities<br/>no Owned, no BackingField"]
-        D3["OrderPlaced, a public domain event"]
+        d1["<b>OrderId, EmailAddress</b><br/><small>implement ISingleValue</small>"]
+        d2["<b>Order, with its OrderLine entities</b><br/><small>no [Owned], no [BackingField]</small>"]
+        d3["<b>OrderPlaced</b><br/><small>a public domain event</small>"]
     end
-    subgraph infrastructure ["Ordering.Infrastructure, Entity Framework"]
+    subgraph infrastructure ["Ordering.Infrastructure, with Entity Framework"]
         direction TB
-        I1["AddOrderingConverters()<br/>SingleValueConverter for each id"]
-        I2["OrderingContext.OnModelCreating<br/>OwnsMany for the lines, by hand"]
-        I3["AddOrderingIntegrationEvents()<br/>names OrderPlaced"]
+        i1["<b>AddOrderingConverters()</b><br/><small>a SingleValueConverter for each id</small>"]
+        i2["<b>OrderingContext.OnModelCreating</b><br/><small>OwnsMany for the lines, by hand</small>"]
+        i3["<b>AddOrderingIntegrationEvents()</b><br/><small>names OrderPlaced</small>"]
     end
-    D1 --> I1
-    D2 --> I2
-    D3 --> I3
+    d1 --> i1
+    d2 --> i2
+    d3 --> i3
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class i1,i2,i3 strong
 ```
 
 <details>
@@ -1000,7 +1107,7 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
     protected override void OnModelCreating(ModelBuilder modelBuilder)
         => modelBuilder.Entity<Order>(order =>
         {
-            // The domain project marks nothing for Entity Framework, so the context says what an order line is
+            // The domain project marks nothing for Entity Framework, so the context maps the order lines
             order.OwnsMany(row => row.Lines, line => line.ToTable("OrderLines"));
         });
 
@@ -1020,62 +1127,64 @@ services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingConte
 
 </details>
 
-- **Identifiers and single value objects** are registered by the infrastructure project's generated
-  `Add{Module}Converters()`, with `SingleValueConverter<T, TValue>`, so the context calls that one method,
-  whichever of the module's projects declares the ids. See
-  [Identifiers](identifiers.md#stored-by-a-project-that-does-not-declare-it).
-- **Child entities and value objects** are not marked for Entity Framework, so the context maps them in
-  `OnModelCreating`: `OwnsMany` or `OwnsOne` for a child entity, `ComplexProperty` for a value object. Without
-  it a child entity with an id of its own is mapped as an entity type of its own, and the model changes.
-- **A generated read-only collection of ids or primitives** needs its backing field named. The read-only
-  collection convention finds the `List<T>` behind the property through `[BackingField]`, and without it
+- **Identifiers and single value objects.** The infrastructure project's generated `Add{Module}Converters()`
+  registers them, with `SingleValueConverter<T, TValue>`. So the context calls that one method, whichever of the
+  module's projects declares the ids ([Identifiers](identifiers.md#an-identifier-stored-by-another-project)).
+- **Child entities and value objects.** They carry no Entity Framework attributes, so the context maps them in
+  `OnModelCreating`: `OwnsMany` or `OwnsOne` for a child entity, `ComplexProperty` for a value object. Without that
+  mapping, a child entity with its own id is mapped as a separate entity type, and the model changes.
+- **A generated read-only collection of ids or primitives.** Its backing field must be named. The read-only collection
+  convention finds the `List<T>` behind the property through `[BackingField]`. Without the attribute the convention
   leaves the collection unmapped, so the context maps it with `HasField`. A collection of child entities is a
   navigation, and Entity Framework finds its field by name.
-- **Domain events** are registered by the infrastructure project's `Add{Module}IntegrationEvents()`, and must
-  be `public` ([DDD00033](diagnostics.md#ddd00033)).
+- **Domain events.** The infrastructure project's `Add{Module}IntegrationEvents()` registers them, and they must be
+  `public` ([DDD00033](diagnostics.md#ddd00033)).
 
-Whether a model still maps as it did is what `HasPendingModelChanges()` answers: a test that asks it of each
-context catches a child entity or a collection the split left unmapped.
+`HasPendingModelChanges()` tells whether a model still maps as it did. A test that calls it for each context catches
+a child entity or a collection that the split left unmapped.
 
 ## The interceptors
 
-`UseDDDToolkit` and `UseDDDToolkitCore` add the toolkit's own four interceptors, in the order they run,
-before any part a package brings. The first of them also refuses a save of a context that lacks a part its model
-requires ([A part a model cannot do without](#a-part-a-model-cannot-do-without)):
+`UseDDDToolkit` and `UseDDDToolkitCore` add the toolkit's four interceptors, in the order they run, before any part
+that a package brings. The first interceptor also refuses a save of a context that lacks a part its model requires
+([Parts a model requires](#parts-a-model-requires)):
 
-| | Interceptor | Why there |
+| | Interceptor | Why in this position |
 |---|---|---|
-| 1 | `PublishDomainEventsInterceptor` | Delivers domain events first, so whatever the handlers change is part of the same save |
-| 2 | `InvariantInterceptor` | Sees whatever those handlers changed |
-| 3 | `AggregateVersionInterceptor` | Comes after both, so a save the invariants reject leaves no version bumped |
-| 4 | `DatabaseRefusalInterceptor` | Only answers a save the database refused: the refusal a unique index declares with `RefusesAs`, or `access.refused` for a row a policy or a guard denied, logged as [a race or a disagreement](row-level-security.md#when-the-policies-refuse-what-c-allowed) |
+| 1 | `PublishDomainEventsInterceptor` | It delivers domain events first, so what the handlers change is part of the same save. |
+| 2 | `InvariantInterceptor` | It runs after the handlers, so it sees what they changed. |
+| 3 | `AggregateVersionInterceptor` | It runs after both, so a save that the invariants refuse raises no version. |
+| 4 | `DatabaseRefusalInterceptor` | It only handles a save that the database refused: the refusal that a unique index declares with `RefusesAs`, or `access.refused` for a row that a policy or a guard refused. It logs that as [a race or a disagreement](row-level-security.md#when-the-policies-refuse-what-c-allowed). |
 
-`AddDDDToolkitEntityFramework` registers them. The options object is a singleton, and so are
-`InvariantInterceptor`, `AggregateVersionInterceptor` and `DatabaseRefusalInterceptor`, because they
-hold no state. `UseDDDToolkit` builds a `PublishDomainEventsInterceptor` for the options it is called
-on, from the provider it is handed, and that interceptor hands the handlers the scope the saving
-`DbContext` belongs to: the scope that owns it under `AddDbContext`, the scope that rented it under
-[a pool](#contexts-from-a-pool). It is also registered as a scoped service, for a host that adds the
-interceptors by hand.
+`AddDDDToolkitEntityFramework` registers them. The options object is a singleton, and so are `InvariantInterceptor`,
+`AggregateVersionInterceptor` and `DatabaseRefusalInterceptor`, because they hold no state. `UseDDDToolkit` builds a
+`PublishDomainEventsInterceptor` for the options it is called on, from the provider it gets. That interceptor gives
+the handlers the scope that the saving `DbContext` belongs to: the scope that owns it under `AddDbContext`, or the
+scope that rented it under [a pool](#contexts-from-a-pool). It is also registered as a scoped service, for a host that
+adds the interceptors by hand.
 
 ### Checking the wiring
 
-A context built without `UseDDDToolkit`, or `UseDDDToolkitCore`, saves, and simply checks no invariant,
-bumps no version and stores no event. Nothing fails, so nobody notices. `EntityFrameworkChecks` says so at start-up, before the
-first request. `AddDDDToolkitEntityFramework` registers it as the [start-up check](startup-checks.md)
-`entity-framework.toolkit-wired`, and one call runs it with every other check the host's registrations brought:
+A context built without `UseDDDToolkit` or `UseDDDToolkitCore` still saves. It checks no invariant, raises no version
+and stores no event, and nothing fails, so nobody notices. `EntityFrameworkChecks` reports this at start-up, before
+the first request. `AddDDDToolkitEntityFramework` registers it as the [start-up check](startup-checks.md)
+`entity-framework.toolkit-wired`, and one call runs it with every other check that the host's registrations brought:
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 builder.Services.RunStartupChecks();
 ```
 
-It looks at every context the host registers that maps one of the toolkit's classes: an entity or an aggregate,
-or the table of the outbox, the inbox or the event log. A context a library brings for its own tables needs none
-of the interceptors, and is passed over. Every context, either kind, is also held to the parts its model requires
-([A part a model cannot do without](#a-part-a-model-cannot-do-without)). Beside it the registration brings
-`entity-framework.owners-mapped`, which finds the context of every aggregate the host's requests ask the owner of
-([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). By hand, the first is:
+- The check looks at every context the host registers that maps one of the toolkit's classes: an entity, an
+  aggregate, or the table of the outbox, the inbox or the event log.
+- A context that a library brings for its own tables needs none of the interceptors, and the check skips it.
+- Every context, of either kind, is also checked for the parts its model requires
+  ([Parts a model requires](#parts-a-model-requires)).
+- The same registration also brings `entity-framework.owners-mapped`. That check finds the context of every aggregate
+  whose owner the host's requests ask about
+  ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)).
+
+By hand, the first check is:
 
 ```csharp
 var app = builder.Build();
@@ -1089,35 +1198,35 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 ```
 
-`EnsureToolkitWired` opens nothing. It throws unless the context's options hold the three interceptors
-that decide what is saved, in the order above: a host that adds them by hand passes as long as events
-come before invariants and invariants before versions. It also throws when the model and the outbox
-disagree: the model maps an [event log](#an-event-log) that no `KeepEventLog()` keeps, or the context has
-an outbox of its own whose table, or whose event log, the model does not map. `RegisteredContexts` lists
-every context type the container knows, by name, so a module added later is checked without anyone
-remembering to list it.
+`EnsureToolkitWired` opens nothing. It throws unless the context's options hold the three interceptors that decide
+what is saved, in the order above. A host that adds them by hand passes, as long as events come before invariants and
+invariants come before versions. It also throws when the model and the outbox disagree:
+
+- the model maps an [event log](#an-event-log) that no `KeepEventLog()` keeps;
+- the context has its own outbox, and the model does not map that outbox's table or its event log.
+
+`RegisteredContexts` lists every context type that the container knows, by name. So a module added later is checked
+without anyone adding it to a list.
 
 ## Why the exception is rethrown from `SaveChangesFailed`
 
-The interceptor translates the conflict in `ThrowingConcurrencyException`, but the update pipeline
-wraps whatever that throws in a `DbUpdateException`, so callers would have to dig through inner
-exceptions to find it. The interceptor therefore also handles `SaveChangesFailed`, unwraps the
-`ConcurrencyConflictException` and rethrows it, which is what lets you write
-`catch (ConcurrencyConflictException)` directly. It does the same for a provider that raised the
-conflict without passing through `ThrowingConcurrencyException`.
+The interceptor translates the conflict in `ThrowingConcurrencyException`. But the update pipeline wraps whatever that
+method throws in a `DbUpdateException`, so callers would have to search the inner exceptions. So the interceptor also
+handles `SaveChangesFailed`. It unwraps the `ConcurrencyConflictException` and rethrows it, which lets you write
+`catch (ConcurrencyConflictException)` directly. It does the same for a provider that raised the conflict without
+going through `ThrowingConcurrencyException`.
 
-Both the synchronous and the asynchronous save path behave the same.
-`Tests/DDDToolkit.EntityFramework.Tests/ConcurrencyTests.cs` covers the version arithmetic, child-only
-changes, deletes and both paths.
+The synchronous and the asynchronous save behave the same.
+`Tests/DDDToolkit.EntityFramework.Tests/ConcurrencyTests.cs` covers the version arithmetic, changes to children only,
+deletes, and both save paths.
 
 ## Contexts from a pool
 
-Entity Framework can keep context instances in a pool and hand them out again, instead of making one
-for every scope. `AddPooledDbContextFactory<TContext>` registers a factory to rent from, and
-`AddDbContextPool<TContext>` a context per scope. A pool earns its place when one request reads side
-by side, because no two queries may share a context: each read rents a context for its own query, the
-way a GraphQL server needs it for the fields of one query, while the commands of the request keep one
-context as their unit of work.
+Entity Framework can keep context instances in a pool and hand them out again, instead of making a new one for every
+scope. `AddPooledDbContextFactory<TContext>` registers a factory to rent from, and `AddDbContextPool<TContext>`
+registers a context per scope. A pool is useful when one request runs reads in parallel. No two queries may share a
+context, so each read rents a context for its own query, as a GraphQL server needs for the fields of one query. The
+commands of the request keep one context as their unit of work.
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
@@ -1128,28 +1237,34 @@ builder.Services.AddPooledDbContextFactory<OrderingContext>((services, options) 
 builder.Services.AddScopedFromPool<OrderingContext>();
 ```
 
-`UseDDDToolkit` is the call it always was. `AddScopedFromPool<TContext>()` makes the context a scope
-asks for one that is taken from the pool, bound to that scope, and given back when the scope ends. It
-goes after either pool registration. Entity Framework 10 registers the context as a scoped service for
-both of them already (checked on 10.0.0 and 10.0.12), so there the call adds the binding and nothing
-else; over a factory you registered yourself it registers the scoped context too. A context registered
-with `AddDbContext` or `AddDbContextFactory` is not pooled, and is refused with an
-`InvalidOperationException`: the first by the call itself, the second when a scope first asks for the
-context, because only the context it is then given says that it comes from no pool.
+`UseDDDToolkit` is the same call as without a pool. `AddScopedFromPool<TContext>()` makes the context that a scope
+asks for come from the pool, bound to that scope. The context goes back to the pool when the scope ends. Call it after
+either pool registration.
 
-**One rule comes with a pool: nothing in the options callback reads a caller, a request or a scope.**
-A pool builds its options once, with the application's root services, and every context it hands out
-shares them. The toolkit's own `Use...` methods resolve singletons only, and what differs per use is
-read when it is used: who is calling, which [row level security](row-level-security.md) asks on every
-open and before every command, and which scope the handlers of a save belong to. An interceptor of
-your own in that callback has to do the same, so register it as a singleton that asks per use, and
+- Entity Framework 10 already registers the context as a scoped service for both pool registrations (checked on
+  10.0.0 and 10.0.12). There the call only adds the binding.
+- Over a factory that you registered yourself, the call also registers the scoped context.
+- A context registered with `AddDbContext` or `AddDbContextFactory` is not pooled, and is refused with an
+  `InvalidOperationException`. The call itself refuses `AddDbContext`. A context from `AddDbContextFactory` is refused
+  when a scope first asks for it, because only the context that the scope then gets shows that it comes from no pool.
+
+**A pool has one rule. Nothing in the options callback reads a caller, a request or a scope.** A pool builds its
+options once, with the application's root services, and every context it hands out shares those options. The
+toolkit's own `Use...` methods resolve singletons only. What differs per use is read at the moment of use:
+
+- who is calling, which [RLS](row-level-security.md) reads on every open and before every command;
+- which scope the handlers of a save belong to.
+
+An interceptor of yours in that callback must work the same way. Register it as a singleton that reads per use, and
 capture nothing while the options are built.
 
-### Handlers and the scope of a rental
+### Event handlers in a pooled context
 
-In-process handlers run with a scope's services, so a handler that injects the context is given the
-one that is saving. A pool's options know no scope, so the toolkit remembers which scope each rental
-was bound to:
+In-process handlers run with a scope's services, so a handler that injects the context gets the one that is saving.
+A pool's options know no scope, so the toolkit records which scope each rental was bound to.
+
+The diagram follows one rental. The purple band is the save. The handlers run with the scope's services, on the same
+context.
 
 ```mermaid
 sequenceDiagram
@@ -1158,12 +1273,14 @@ sequenceDiagram
     participant Context as Context
     participant Handlers as Handlers
 
-    Scope->>Pool: first asks for the context
+    Scope->>Pool: first request for the context
     Pool-->>Scope: a context, bound to this scope
-    Scope->>Context: SaveChanges
-    Context->>Handlers: domain events, with<br/>the scope's services
-    Handlers-->>Context: changes on the<br/>same context
-    Context-->>Scope: saved
+    rect rgba(91, 46, 201, 0.14)
+        Scope->>Context: SaveChanges
+        Context->>Handlers: domain events, with<br/>the scope's services
+        Handlers-->>Context: changes on the<br/>same context
+        Context-->>Scope: saved
+    end
     Scope->>Pool: the scope ends: the context<br/>goes back, tracking nothing
     Note over Pool,Context: the next renter gets<br/>its own scope and its own caller
 ```
@@ -1171,8 +1288,8 @@ sequenceDiagram
 <details>
 <summary>Show the code: a command and a read on one pool</summary>
 
-The command takes the scope's context, which `AddScopedFromPool` took from the pool and bound to the
-scope, so the handlers of its events run with that scope:
+The command uses the scope's context, which `AddScopedFromPool` took from the pool and bound to the scope. So the
+handlers of its events run with that scope:
 
 ```csharp
 public sealed class CancelOrderHandler(OrderingContext context)
@@ -1186,8 +1303,7 @@ public sealed class CancelOrderHandler(OrderingContext context)
 }
 ```
 
-A read rents a context for its one query and gives it back, so two reads of one request never share
-one:
+A read rents a context for its one query and gives it back, so two reads of one request never share a context:
 
 ```csharp
 public sealed class OrderReads(IDbContextFactory<OrderingContext> contexts)
@@ -1202,60 +1318,60 @@ public sealed class OrderReads(IDbContextFactory<OrderingContext> contexts)
 
 </details>
 
-- **The context a scope asks for** is bound to that scope by `AddScopedFromPool`. Nothing else is
-  needed.
-- **A context you rent from the factory** has no scope. Reading through it needs none, and neither
-  does saving with [an outbox](event-delivery.md#the-outbox), which writes its rows on the saving
-  context and resolves nothing. Dispatching in process does: name the scope with
-  `context.BindToScope(scope.ServiceProvider)`, which holds until the context is disposed.
+- **The context a scope asks for** is bound to that scope by `AddScopedFromPool`. Nothing else is needed.
+- **A context you rent from the factory** has no scope. Reading through it needs none. Saving with
+  [an outbox](event-delivery.md#the-outbox) needs none either, because the outbox writes its rows on the saving
+  context and resolves nothing. Dispatching in process does need a scope. Name it with
+  `context.BindToScope(scope.ServiceProvider)`. The binding lasts until the context is disposed.
+- **A package reads the scope back** with `context.ScopeOf()`. It returns the services of the scope the context is
+  bound to for the rental it is in, or `null` when it is bound to none, when the binding is an earlier rental's, or
+  when the scope is gone. A package that asks the application's scoped services about a statement of the context asks
+  them there first, and the provider the context's options were built with after. Membership's queries on a
+  resource's set, such as `db.Boards.WhereIHold(permission)`, find the rules this way.
 - **A pooled context with events to dispatch in process and no scope is refused**, with an
-  `InvalidOperationException` that names both ways out. It is refused before any event leaves its
-  aggregate, so nothing is dispatched, nothing is saved, and the same save goes through once the
-  context is bound. The toolkit does not make a scope of its own for the handlers: a handler that
-  asked such a scope for the context would be given another instance than the one that is saving, and
-  what it changed would be lost without a word.
+  `InvalidOperationException` that names both fixes. It is refused before any event leaves its aggregate. So nothing is
+  dispatched and nothing is saved, and the same save succeeds once the context is bound. The toolkit does not make a
+  scope of its own for the handlers. A handler that asked such a scope for the context would get another instance than
+  the one that is saving, and its changes would be lost without an error.
 
-Options that are built once without a pool, `AddDbContextFactory` or `AddDbContext` with
-`optionsLifetime: ServiceLifetime.Singleton`, hand the callback the root provider as well. Where the
-container validates scopes, the first in-process dispatch from such a context is refused in the same
-way, and `BindToScope` is the way out there too.
+Options that are built once without a pool also give the callback the root provider. That is the case with
+`AddDbContextFactory`, and with `AddDbContext` and `optionsLifetime: ServiceLifetime.Singleton`. Where the container
+validates scopes, the first in-process dispatch from such a context is refused in the same way, and `BindToScope`
+fixes it there too.
 
-### What the next renter gets
+### What a pooled context resets
 
-One instance serves one renter after another, and nothing of one reaches the next:
+One instance serves one renter after another, and nothing of one renter reaches the next:
 
 | What | Who ends it | When |
 |---|---|---|
 | Tracked entities, and the domain events pending on them | Entity Framework | when the context goes back |
-| Change tracker settings, the command timeout, `SavingChanges` handlers | Entity Framework puts back what the context started with | when the context goes back |
+| Change tracker settings, the command timeout, `SavingChanges` handlers | Entity Framework restores the values the context started with | when the context goes back |
 | An open transaction | Entity Framework rolls it back | when the context goes back |
 | A connection left open | Entity Framework closes it, and the context keeps the connection object | when the context goes back |
-| The role, the claims and the settings of row level security on the server connection | Npgsql resets the connection, and the interceptor sets them again on every open | before the connection is used again |
-| The scope a rental was bound to | the toolkit: a binding is for one rental | the next rental starts with none |
-| Who is calling | nobody has to: it is never kept on a context | read on every use |
+| The role, the claims and the settings of RLS on the server connection | Npgsql resets the connection, and the interceptor sets them again on every open | before the connection is used again |
+| The scope a rental was bound to | The toolkit. A binding lasts one rental | the next rental starts with none |
+| Who is calling | Nobody. It is never stored on a context | read on every use |
 
-What nobody resets is a field your context class declares for itself, so declare none.
+Nobody resets a field that your context class declares itself, so declare no such field.
 
-A context pool bounds how many context instances are kept, not how many connections are open. A
-context holds a connection only while one of its commands runs, while it has a transaction, or after
-you opened one by hand; a context in the pool holds none. The bound on connections is the data
-source's `Maximum Pool Size`: a read that finds every connection taken waits up to `Timeout` seconds
-and then fails with Npgsql's exception, and the next one succeeds as soon as a connection is free.
-Code that already holds a connection and waits for a second one can end up waiting for itself, so do
-not nest them.
+A context pool limits how many context instances are kept. It does not limit how many connections are open. A context
+holds a connection only while one of its commands runs, while it has a transaction, or after you opened one by hand.
+A context in the pool holds none. The limit on connections is the data source's `Maximum Pool Size`. A read that
+finds every connection taken waits up to `Timeout` seconds and then fails with Npgsql's exception. The next read
+succeeds as soon as a connection is free. Code that already holds a connection and waits for a second one can end up
+waiting for itself, so do not nest them.
 
-`PooledContextSaveTests.cs`, `PooledContextRowLevelSecurityTests.cs` and `PooledContextBudgetTests.cs`
-in `Tests/DDDToolkit.EntityFramework.Tests` hold each of these lines, on SQLite and against a real
-Postgres.
+`PooledContextSaveTests.cs`, `PooledContextRowLevelSecurityTests.cs` and `PooledContextBudgetTests.cs` in
+`Tests/DDDToolkit.EntityFramework.Tests` test each of these rows, on SQLite and against a real Postgres.
 
 ## Providers
 
-Everything on this page is tested on SQLite, PostgreSQL and SQL Server. SQLite is where the fast suite
-runs; the other two run in containers, in their own CI workflow, against the same aggregates and the
-same context. Most of the mapping is identical on all three. This section is the part that is not, so
-that none of it is a surprise in production.
+Everything on this page is tested on SQLite, PostgreSQL and SQL Server. The fast test suite runs on SQLite. The other
+two run in containers, in their own CI workflow, against the same aggregates and the same context. Most of the
+mapping is the same on all three. This section lists what differs, so none of it surprises you in production.
 
-### What differs, and what to do about it
+### Differences between providers
 
 | | SQLite | PostgreSQL | SQL Server |
 |---|---|---|---|
@@ -1264,20 +1380,22 @@ that none of it is a surprise in production.
 | Primitive collection | JSON `TEXT` | `integer[]` | JSON `nvarchar` |
 | Schemas | ignored | yes | yes |
 
-Timestamps are covered under [Timestamps](event-delivery.md#timestamps). Schemas are ignored by SQLite,
-which drops the schema when it writes an identifier, so `ddd.OutboxMessages` is plain `OutboxMessages`
-there and nothing else changes. The primitive collection is the one that needs a paragraph.
+[Timestamps](event-delivery.md#timestamps) covers the outbox timestamps. SQLite ignores schemas. It drops the schema
+when it writes an identifier. So `ddd.OutboxMessages` is `OutboxMessages` there, and nothing else changes. The
+primitive collection needs more explanation
+([Primitive collections in hand-written SQL](#primitive-collections-in-hand-written-sql)).
 
-### Your own timestamps on SQLite
+### DateTimeOffset properties on SQLite
 
-The outbox converts its timestamps for SQLite by itself; your own `DateTimeOffset` properties are left as
-they are, which is fine until a query compares or orders one. SQLite keeps a `DateTimeOffset` as text and
-throws on `Where(voyage => voyage.StartsAt <= now)`. Call `StoreDateTimeOffsetsAsUtc()` in
-`ConfigureConventions` and every `DateTimeOffset` and `DateTimeOffset?` property of the model, owned and
-keyless types included, is stored as its UTC instant in a `DateTime` column, on every provider, with the
-same converters the outbox uses. The value reads back as the same instant with an offset of zero; the
-offset it was written with is not kept. On PostgreSQL that is still `timestamp with time zone`, and on SQL
-Server it is `datetime2` instead of `datetimeoffset`, so decide before the first migration.
+The outbox converts its own timestamps for SQLite. Your `DateTimeOffset` properties stay as they are, which works
+until a query compares or orders by one. SQLite stores a `DateTimeOffset` as text, and throws on
+`Where(voyage => voyage.StartsAt <= now)`.
+
+Call `StoreDateTimeOffsetsAsUtc()` in `ConfigureConventions`. Every `DateTimeOffset` and `DateTimeOffset?` property
+of the model, owned and keyless types included, is then stored as its UTC instant in a `DateTime` column, on every
+provider, with the same converters that the outbox uses. The value reads back as the same instant with an offset of
+zero. The offset it was written with is not kept. On PostgreSQL the column is still `timestamp with time zone`. On
+SQL Server it is `datetime2` instead of `datetimeoffset`, so decide before the first migration.
 
 ```csharp
 protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -1287,29 +1405,26 @@ protected override void ConfigureConventions(ModelConfigurationBuilder configura
 }
 ```
 
-### Primitive collections do not port below LINQ
+### Primitive collections in hand-written SQL
 
-A generated `IReadOnlyList<TagId>` is mapped as an Entity Framework primitive collection. What that
-becomes in the database is the provider's decision, not the toolkit's, and the providers decide
-differently:
+A generated `IReadOnlyList<TagId>` is mapped as an Entity Framework primitive collection. The provider decides what
+that becomes in the database, and the providers decide differently:
 
-- **PostgreSQL** stores it as a real `integer[]`. Npgsql maps .NET collections of a primitive onto
-  PostgreSQL's own array types, which is the better mapping and the reason it does it.
-- **SQL Server and SQLite** store it as a JSON document in a string column, `[1,2]`.
+- **PostgreSQL** stores it as a real `integer[]`. Npgsql maps .NET collections of a primitive to PostgreSQL's own
+  array types, which is the better mapping.
+- **SQL Server and SQLite** store it as a JSON document in a string column: `[1,2]`.
 
-**This is inherent to Entity Framework Core, not something the toolkit chose or can sensibly undo.**
-The mapping is supplied by each provider's type mapping source. The toolkit's convention only finds
-the get-only property, sets its element type and copies the element converter across; the store type
-is chosen after that, by the provider, exactly as it would be for a hand-written
-`modelBuilder.PrimitiveCollection(...)`. Forcing every provider onto the same store type would mean
-overriding Npgsql's native array mapping with a worse one for the sake of a portability nobody asked
-for, and would break every PostgreSQL index and query already written against the array.
+**This comes from Entity Framework Core, and the toolkit does not change it.** Each provider's type mapping source
+supplies the mapping. The toolkit's convention only finds the get-only property, sets its element type and copies the
+element converter. The provider chooses the store type after that, as it would for a hand-written
+`modelBuilder.PrimitiveCollection(...)`. Forcing every provider onto the same store type would replace Npgsql's native
+array mapping with a worse one, for a portability that nobody asked for. It would also break every PostgreSQL index
+and query already written against the array.
 
-So the practical rule is:
+So the rule is:
 
-**LINQ ports.** `Contains`, `Count` and the rest translate on both providers, to `= ANY(...)` on
-PostgreSQL and to `OPENJSON` on SQL Server. If your query goes through `IQueryable`, you can move
-providers and it keeps working.
+**LINQ ports.** `Contains`, `Count` and the other operators translate on both providers: to `= ANY(...)` on
+PostgreSQL and to `OPENJSON` on SQL Server. A query through `IQueryable` keeps working when you change providers.
 
 ```csharp
 // Translates on both.
@@ -1319,8 +1434,8 @@ var tagged = await context.Shelves
     .ToListAsync();
 ```
 
-**SQL does not port.** Anything that reaches inside the column in hand-written SQL is provider
-specific, and there is no spelling that runs on both:
+**SQL does not port.** Hand-written SQL that reads inside the column is specific to the provider, and no SQL text runs
+on both:
 
 ```sql
 -- PostgreSQL
@@ -1330,29 +1445,28 @@ SELECT COUNT(*) FROM "Book" WHERE 7 = ANY("Tags");
 SELECT COUNT(*) FROM "Book" WHERE EXISTS (SELECT 1 FROM OPENJSON("Tags") WHERE CAST([value] AS int) = 7);
 ```
 
-That matters for reports, ad hoc queries, data migrations and anything a DBA writes. Indexing differs
-too: a PostgreSQL array takes a GIN index, a JSON string column does not.
+This matters for reports, ad hoc queries, data migrations and anything a DBA writes. Indexing also differs. A
+PostgreSQL array takes a GIN index, and a JSON string column does not.
 
-If you need a query like that to port, the answer is not to fight the mapping. Model the collection as
-a child entity with its own table, which is one row per tag and identical on every provider. You lose
-the single-column read and gain a join. That is a design decision, so make it because you need the
-portability, not by accident.
+If a query like that must port, model the collection as a child entity with its own table: one row per tag, the same
+on every provider. You lose the single-column read and gain a join. Make that design decision only when you need the
+portability.
 
-Both halves are asserted against real servers in
-`Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`.
+`Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs` tests both cases against real
+servers.
 
 ## Domain event delivery
 
-A raised domain event is a promise that something will happen, and this package keeps it when the
-context saves: by running your handlers inside `SaveChanges`, or by writing the events to an outbox
-table in the same transaction and delivering them afterwards. [Delivering domain events](event-delivery.md)
-explains both modes, how to choose between them, and the outbox's table, processor and retries.
+A raised domain event stands for something that must happen. This package delivers it when the context saves. It
+either runs your handlers inside `SaveChanges`, or writes the events to an outbox table in the same transaction and
+delivers them afterwards. [Delivering domain events](event-delivery.md) explains both modes, how to choose, and the
+outbox's table, processor and retries.
 
 ## An event log
 
-An outbox row is work: it is marked, retried, and deleted once it is delivered. Some events are also a
-record, of what happened and who did it, that has to stay as it was written. A context with an outbox
-keeps those in an event log, a table of its own that nothing updates:
+An outbox row is work. It is marked, retried, and deleted once it is delivered. Some events are also a record of what
+happened and who did it, and that record must stay as it was written. A context with an outbox keeps those events in
+an event log, a separate table that nothing updates:
 
 ```csharp
 // in the module's registration
@@ -1368,34 +1482,37 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
-The save that persists the aggregate adds one `EventLogEntry` per kept event next to the event's outbox
-row, so the aggregate, the outbox row and the log row are written by one transaction: all three, or none
-of them. `KeepEventLog()` without a choice keeps every event the context saves; `Keep<TEvent>()` keeps a
-type and everything derived from it, and `Only(domainEvent => ...)` whatever it chooses. The choices add
-up.
+The save that persists the aggregate adds one `EventLogEntry` per kept event, next to the event's outbox row. So one
+transaction writes the aggregate, the outbox row and the log row: all three, or none.
 
-A row has the event's id, which is its outbox row's id as well, its stable name, version and payload,
-when it occurred and when it was recorded, the aggregate that raised it, and who acted:
+- `KeepEventLog()` without a choice keeps every event the context saves.
+- `Keep<TEvent>()` keeps a type and every type derived from it.
+- `Only(domainEvent => ...)` keeps the events that the predicate chooses.
 
-| The caller | `ActedByKind` | `ActedById` |
+The choices add up.
+
+A row holds the event's id (which is also its outbox row's id), its stable name, version and payload, when it
+occurred and when it was recorded, the aggregate that raised it, and who acted:
+
+| The current user | `ActedByKind` | `ActedById` |
 |---|---|---|
-| A signed-in user | `user` | the user's id, or the token's `sub` where that is no `uuid` |
-| The application's own work | `system` | `null` |
-| The application's own work inside a scope, `Caller.SystemIn("ordering")` | `system` | the scope |
+| A signed-in user | `user` | the user's id, or the token's `sub` where that is not a `uuid` |
+| System work past the row access rules, `access.BeginSystemBypassingRowAccess()` | `system` | `null` |
+| System work inside a scope, `access.BeginSystem("ordering")` | `system` | the scope |
 | A request without a user | `anonymous` | `null` |
 
-That pair is an `ActedBy`, and `IActedByAccessor` answers it. The one the toolkit registers reads the
-[caller](row-level-security.md#running-queries-as-the-caller) once for each save that keeps an event. Register a
-singleton of your own before `AddDDDToolkitEntityFramework` to say it differently, with a kind of your own
-for one: `new ActedBy("device", serialNumber)`.
+That pair is an `ActedBy`, and `IActedByAccessor` returns it. The accessor that the toolkit registers reads the
+[current user](row-level-security.md#running-queries-as-the-caller) once for each save that keeps an event. To fill it in
+another way, register your own singleton before `AddDDDToolkitEntityFramework`, for example with a kind of your own:
+`new ActedBy("device", serialNumber)`.
 
-Who acted is what the application wrote, and the database does not check it: with the
-[written privileges](row-level-security.md#privileges-from-the-policies), every role that saves may add a
-row, under any actor. A log that has to hold the actor to the caller needs policies that do, written by a
+The application writes who acted, and the database does not check it. With the
+[written privileges](row-level-security.md#privileges-from-the-policies), every role that saves may add a row, with
+any actor. A log that must tie the actor to the caller needs policies that check it, written by a
 [contribution](row-level-security.md#policies-a-package-ships) that claims the table.
 
-A module adds columns of its own with the `configure` argument, as shadow properties, and fills them with
-an `IEventLogFields`:
+A module adds its own columns with the `configure` argument, as shadow properties, and fills them with an
+`IEventLogFields`:
 
 ```csharp
 modelBuilder.AddEventLog(Database, configure: log => log.Property<string?>("Branch").HasMaxLength(64));
@@ -1415,31 +1532,35 @@ services.AddSingleton<IEventLogFields, BranchOfTheEvent>();
 ```
 
 > [!IMPORTANT]
-> `IActedByAccessor` and every `IEventLogFields` are singletons that read what they answer each time they
-> are asked, from what follows the flow of work: the ambient caller, the current request, the event
-> itself. They keep nothing between two events and take no scoped service. The interceptor asks its own
-> provider for them once per save, and for a context from [a pool](#contexts-from-a-pool) that provider is
-> the application's root one, where a scoped one is refused with a message that says so.
+> `IActedByAccessor` and every `IEventLogFields` are singletons. Each time they are asked, they read their answer from
+> the current flow of work: the begun user, the current request, the event itself. They keep nothing between two
+> events and use no scoped service. The interceptor gets them from its own provider once per save. For a context from
+> [a pool](#contexts-from-a-pool), that provider is the application's root provider, which refuses a scoped service
+> with a message that says so.
 
 **The guard.** On Postgres, `DDDToolkit.EntityFramework.Postgres` writes the table's guard into every
-[script of policies](row-level-security.md#writing-the-policies) of the context, and into its Supabase
-access file, whether or not the context has a rule: triggers that refuse every update of a row, a
-truncate, and every delete of a row younger than `keepFor`, by the database's own clock. They fire for
-every role, the table's owner and a superuser included, where a privilege or a policy would stop neither.
-A refused statement is SQLSTATE `55000` with the message `A kept row does not change.`,
-`PostgresRowAccess.KeptRowsSqlState` and `KeptRowsRefusal`. A log mapped without `keepFor` keeps every row
-for as long as the table exists. The guard needs Postgres 14 or later.
+[script of policies](row-level-security.md#writing-the-policies) of the context, and into its Supabase access file,
+whether or not the context has a rule. The guard is a set of triggers that refuse:
 
-The guard holds statements, not definitions: whoever owns the table can still drop its triggers, or the
-table. So the owner is the role that runs the migrations, and the application logs in as
+- every update of a row;
+- a truncate;
+- every delete of a row younger than `keepFor`, by the database's clock.
+
+The triggers fire for every role, including the table's owner and a superuser. A privilege or a policy would stop
+neither of those. A refused statement fails with SQLSTATE `55000` and the message `A kept row does not change.`
+(`PostgresRowAccess.KeptRowsSqlState` and `KeptRowsRefusal`). A log mapped without `keepFor` keeps every row for as
+long as the table exists. The guard needs Postgres 14 or later.
+
+The guard stops statements on the rows. The table's owner can still drop the triggers, or the table. So the owner is
+the role that runs the migrations, and the application logs in as
 [a role that owns nothing](row-level-security.md#a-login-that-owns-nothing).
 
 > [!WARNING]
-> On SQLite and SQL Server nothing guards the table. The toolkit itself never updates a row and deletes
-> one only through retention, but a statement of your own is not refused there.
+> On SQLite and SQL Server nothing guards the table. The toolkit itself never updates a row, and deletes one only
+> through retention. A statement of your own is not refused there.
 
-**Letting old rows go.** [Retention](integration-events.md#keeping-the-tables-small) has a
-window for the log, separate from the outbox's, and leaves the log alone without one:
+**Deleting old rows.** [Retention](integration-events.md#keeping-the-tables-small) has a window for the log, separate
+from the outbox's window. Without that window, retention leaves the log alone:
 
 ```csharp
 services.AddDomainEventRetention<OrderingContext>(retention =>
@@ -1449,41 +1570,40 @@ services.AddDomainEventRetention<OrderingContext>(retention =>
 });
 ```
 
-The table has the last word, so `KeepEventLogFor` is at least the `keepFor` the log was mapped with. A run
-that finds it shorter, or finds a log kept for good, fails before it deletes anything and names both. The
-guard reads the database's clock and retention the application's, so retention waits a minute longer than
-`keepFor` whatever the window says; keep the two clocks within that minute of each other.
+The table decides, so `KeepEventLogFor` must be at least the `keepFor` the log was mapped with. A retention run that
+finds it shorter, or finds a log that is kept forever, fails before it deletes anything and names both values. The
+guard reads the database's clock, and retention reads the application's clock. So retention waits one minute longer
+than `keepFor`, whatever the window says. Keep the two clocks within one minute of each other.
 
 ## Supabase
 
-The Supabase CLI applies migrations from SQL files in `supabase/migrations`, not from Entity Framework.
-`DDDToolkit.EntityFramework.Supabase` writes one such file per Entity Framework migration as part of the
-build, and can check at start-up that Supabase applied them. See [Supabase](supabase.md).
+The Supabase CLI applies migrations from SQL files in `supabase/migrations`, and does not run Entity Framework
+migrations. `DDDToolkit.EntityFramework.Supabase` writes one such file per Entity Framework migration as part of the
+build, and can check at start-up that Supabase applied them ([Supabase](supabase.md)).
 
 ## Where to look next
 
 - [Getting started](getting-started.md) for the module name and your first aggregate.
 - [Delivering domain events](event-delivery.md) for in-process dispatch, Mediator and the outbox.
-- [Identifiers](identifiers.md) for what a struct identifier actually is, and `ColumnLength`.
+- [Identifiers](identifiers.md) for what a struct identifier is, and `ColumnLength`.
 - [Value objects](value-objects.md) for `[ValueObject]` and `[SingleValueObject<T>]`.
 - [Entities and aggregates](entities-and-aggregates.md) for read-only collections and `[BackingField]`.
-- [Invariants](invariants.md) for the check every save runs.
+- [Invariants](invariants.md) for the check that every save runs.
 - [Domain events](domain-events.md) for raising, draining and stable names.
 - [Integration events](integration-events.md) for sinks, published contracts and the inbox.
 - [Supabase](supabase.md) for exporting migrations to the Supabase CLI.
-- [Diagnostics](diagnostics.md) for the build errors the generators report.
+- [Diagnostics](diagnostics.md) for the build errors that the generators report.
 
-The runnable version of everything here is the shop in
-[`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase). The host's
-[`Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs) shows the
-registration,
-[`OrderingContext.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Infrastructure/Persistence/OrderingContext.cs)
-shows the conventions and the generated converters,
-[`OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs) shows
-the outbox, and
-[`OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs)
-shows the conflict catch block. The example's `supabase/` folder and each module's `Migrations` folder
-show the Supabase export.
+The shop in [`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase) runs everything on this page:
+
+- The host's [`Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs) shows the
+  registration.
+- [`OrderingContext.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Infrastructure/Persistence/OrderingContext.cs)
+  shows the conventions and the generated converters.
+- [`OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs) shows the outbox.
+- [`OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs) shows the
+  catch block for a conflict.
+- The example's `supabase/` folder and each module's `Migrations` folder show the Supabase export.
 
 ## For contributors: running the provider tests
 
@@ -1492,16 +1612,16 @@ dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests --filter "Provider=
 dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests --filter "Provider=SqlServer"
 ```
 
-They need Docker. Without it they skip themselves, naming what could not be started, because a machine
-without Docker is a normal machine and should not go red.
+The tests need Docker. Without Docker they skip themselves and name what could not start, because a machine without
+Docker is a normal machine and should not fail the run.
 
-That skip is a problem in CI, where a green run would then say PostgreSQL and SQL Server pass without
-either having started. Setting `DDDTOOLKIT_REQUIRE_CONTAINERS=1` turns every such skip into a failure
-that says what was missing. Both workflows set it, and the provider workflow also counts the tests that
-ran, so a filter that matched nothing cannot pass either.
+In CI that skip is a problem. A green run would then report that PostgreSQL and SQL Server pass, without either
+having started. `DDDTOOLKIT_REQUIRE_CONTAINERS=1` turns every such skip into a failure that names what was missing.
+Both workflows set it. The provider workflow also counts the tests that ran, so a filter that matched nothing cannot
+pass either.
 
-The images are pinned exactly, in
-`Tests/DDDToolkit.EntityFramework.Providers.Tests/Infrastructure/ContainerImages.cs`, with the reason
-for each next to it. No floating tag, so a red build is always something we changed. PostgreSQL matches
-the major of the pgmq image the Postgres package is tested against; SQL Server is the older release
-still in mainstream support, which is the weaker of the two and therefore the one worth testing.
+The images are pinned to exact versions in
+`Tests/DDDToolkit.EntityFramework.Providers.Tests/Infrastructure/ContainerImages.cs`, with the reason for each next to
+it. No tag floats, so a red build always comes from a change of ours. PostgreSQL matches the major version of the
+pgmq image that the Postgres package is tested against. SQL Server is the older release still in mainstream support.
+That release is the weaker of the two, and so the one worth testing.

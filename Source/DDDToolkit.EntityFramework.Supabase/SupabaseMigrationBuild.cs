@@ -16,9 +16,9 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// </para>
 /// <para>
 /// Because the export runs before <c>Main</c>, the host's configuration reaches it only through the
-/// environment the build sets: the roles and the caller functions the policies are written with come from
-/// <see cref="RolesVariable"/> and <see cref="CallerFunctionsVariable"/>, which the build fills from the
-/// project's <c>SupabaseRowAccessRoles</c> and <c>SupabaseCallerFunctions</c> properties. The roles of the
+/// environment the build sets: the roles and the current user functions the policies are written with come from
+/// <see cref="RolesVariable"/> and <see cref="CurrentUserFunctionsVariable"/>, which the build fills from the
+/// project's <c>SupabaseRowAccessRoles</c> and <c>SupabaseCurrentUserFunctions</c> properties. The roles of the
 /// token roles the host mapped come the same way, as <c>token:&lt;role&gt;</c> pairs of the first, and so does
 /// the role its own bookkeeping runs as, <c>system=&lt;role&gt;</c>. Whether the access files write the tables'
 /// privileges and force row level security comes from <see cref="GrantsVariable"/> and
@@ -51,11 +51,11 @@ public static partial class SupabaseMigrationBuild
     public const string RolesVariable = "DDDTOOLKIT_SUPABASE_ROLES";
 
     /// <summary>
-    /// How a policy asks about the caller, from the <c>SupabaseCallerFunctions</c> property:
+    /// How a policy asks about the caller, from the <c>SupabaseCurrentUserFunctions</c> property:
     /// <c>uid=auth.uid()|role=auth.role()|claims=auth.jwt()</c>, each pair optional and each value a function
-    /// called without arguments. Unset means <see cref="SupabaseRowLevelSecurity.CallerFunctions"/>.
+    /// called without arguments. Unset means <see cref="SupabaseRowLevelSecurity.CurrentUserFunctions"/>.
     /// </summary>
-    public const string CallerFunctionsVariable = "DDDTOOLKIT_SUPABASE_CALLER_FUNCTIONS";
+    public const string CurrentUserFunctionsVariable = "DDDTOOLKIT_SUPABASE_CURRENT_USER_FUNCTIONS";
 
     /// <summary>
     /// Whether the access files write the tables' privileges from the policies, from the
@@ -79,10 +79,10 @@ public static partial class SupabaseMigrationBuild
     public const string LoginRoleVariable = "DDDTOOLKIT_SUPABASE_LOGIN_ROLE";
 
     /// <summary>The project property <see cref="RolesVariable"/> comes from, as an error names it.</summary>
-    private const string RolesProperty = SupabaseCallerRoles.Property;
+    private const string RolesProperty = SupabaseUserRoles.Property;
 
-    /// <summary>The project property <see cref="CallerFunctionsVariable"/> comes from, as an error names it.</summary>
-    private const string CallerFunctionsProperty = "SupabaseCallerFunctions";
+    /// <summary>The project property <see cref="CurrentUserFunctionsVariable"/> comes from, as an error names it.</summary>
+    private const string CurrentUserFunctionsProperty = "SupabaseCurrentUserFunctions";
 
     /// <summary>The project property <see cref="GrantsVariable"/> comes from, as an error names it.</summary>
     private const string GrantsProperty = "SupabaseRowAccessGrants";
@@ -165,7 +165,7 @@ public static partial class SupabaseMigrationBuild
             Environment.GetEnvironmentVariable(DirectoryVariable),
             Environment.GetEnvironmentVariable(StartVariable),
             Environment.GetEnvironmentVariable(RolesVariable),
-            Environment.GetEnvironmentVariable(CallerFunctionsVariable),
+            Environment.GetEnvironmentVariable(CurrentUserFunctionsVariable),
             Environment.GetEnvironmentVariable(GrantsVariable),
             Environment.GetEnvironmentVariable(ForceVariable),
             Environment.GetEnvironmentVariable(LoginRoleVariable),
@@ -222,10 +222,10 @@ public static partial class SupabaseMigrationBuild
         string? directory,
         string? start,
         TextWriter output)
-        => Run(mode, sources, rules, functions, directory, start, roles: null, callerFunctions: null, output);
+        => Run(mode, sources, rules, functions, directory, start, roles: null, currentUserFunctions: null, output);
 
     /// <summary>
-    /// Runs the export with the roles and the caller functions the build passed, and describes it on
+    /// Runs the export with the roles and the current user functions the build passed, and describes it on
     /// <paramref name="output"/>, problems in the <c>error : message</c> form MSBuild shows as build errors.
     /// </summary>
     /// <param name="mode"><c>Write</c> or <c>Check</c>.</param>
@@ -235,7 +235,7 @@ public static partial class SupabaseMigrationBuild
     /// <param name="directory">The migrations directory, or null or empty to find it.</param>
     /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
     /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
-    /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="currentUserFunctions">The <see cref="CurrentUserFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
     /// <param name="output">Where to report.</param>
     /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
     public static int Run(
@@ -246,12 +246,12 @@ public static partial class SupabaseMigrationBuild
         string? directory,
         string? start,
         string? roles,
-        string? callerFunctions,
+        string? currentUserFunctions,
         TextWriter output)
-        => Run(mode, sources, rules, functions, [], directory, start, roles, callerFunctions, output);
+        => Run(mode, sources, rules, functions, [], directory, start, roles, currentUserFunctions, output);
 
     /// <summary>
-    /// Runs the export with the row access contributions the host uses and the roles and the caller functions
+    /// Runs the export with the row access contributions the host uses and the roles and the current user functions
     /// the build passed, and describes it on <paramref name="output"/>, problems in the <c>error : message</c>
     /// form MSBuild shows as build errors.
     /// </summary>
@@ -263,7 +263,7 @@ public static partial class SupabaseMigrationBuild
     /// <param name="directory">The migrations directory, or null or empty to find it.</param>
     /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
     /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
-    /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="currentUserFunctions">The <see cref="CurrentUserFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
     /// <param name="output">Where to report.</param>
     /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
     public static int Run(
@@ -275,13 +275,13 @@ public static partial class SupabaseMigrationBuild
         string? directory,
         string? start,
         string? roles,
-        string? callerFunctions,
+        string? currentUserFunctions,
         TextWriter output)
-        => Run(mode, sources, rules, functions, contributions, directory, start, roles, callerFunctions, grants: null, force: null, output);
+        => Run(mode, sources, rules, functions, contributions, directory, start, roles, currentUserFunctions, grants: null, force: null, output);
 
     /// <summary>
     /// Runs the export with everything the build passed: the row access contributions the host uses, the roles
-    /// and the caller functions, and whether the access files write the tables' privileges and force row level
+    /// and the current user functions, and whether the access files write the tables' privileges and force row level
     /// security. It describes the run on <paramref name="output"/>, problems in the <c>error : message</c> form
     /// MSBuild shows as build errors.
     /// </summary>
@@ -293,7 +293,7 @@ public static partial class SupabaseMigrationBuild
     /// <param name="directory">The migrations directory, or null or empty to find it.</param>
     /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
     /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
-    /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="currentUserFunctions">The <see cref="CurrentUserFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
     /// <param name="grants">The <see cref="GrantsVariable"/>'s value: <c>Write</c>, null or empty to write the privileges, or <c>None</c> to write none.</param>
     /// <param name="force">The <see cref="ForceVariable"/>'s value: <c>true</c>, null or empty to force row level security, or <c>false</c> not to.</param>
     /// <param name="output">Where to report.</param>
@@ -307,15 +307,15 @@ public static partial class SupabaseMigrationBuild
         string? directory,
         string? start,
         string? roles,
-        string? callerFunctions,
+        string? currentUserFunctions,
         string? grants,
         string? force,
         TextWriter output)
-        => Run(mode, sources, rules, functions, contributions, directory, start, roles, callerFunctions, grants, force, loginRole: null, output);
+        => Run(mode, sources, rules, functions, contributions, directory, start, roles, currentUserFunctions, grants, force, loginRole: null, output);
 
     /// <summary>
     /// Runs the export with everything the build passed: the row access contributions the host uses, the roles
-    /// and the caller functions, whether the access files write the tables' privileges and force row level
+    /// and the current user functions, whether the access files write the tables' privileges and force row level
     /// security, and the role the application logs in as, whose migration it writes after every other file. It
     /// describes the run on <paramref name="output"/>, problems in the <c>error : message</c> form MSBuild shows
     /// as build errors.
@@ -328,7 +328,7 @@ public static partial class SupabaseMigrationBuild
     /// <param name="directory">The migrations directory, or null or empty to find it.</param>
     /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
     /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
-    /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="currentUserFunctions">The <see cref="CurrentUserFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
     /// <param name="grants">The <see cref="GrantsVariable"/>'s value: <c>Write</c>, null or empty to write the privileges, or <c>None</c> to write none.</param>
     /// <param name="force">The <see cref="ForceVariable"/>'s value: <c>true</c>, null or empty to force row level security, or <c>false</c> not to.</param>
     /// <param name="loginRole">The <see cref="LoginRoleVariable"/>'s value: the role the application logs in as, or null or empty to write no migration for it.</param>
@@ -343,7 +343,7 @@ public static partial class SupabaseMigrationBuild
         string? directory,
         string? start,
         string? roles,
-        string? callerFunctions,
+        string? currentUserFunctions,
         string? grants,
         string? force,
         string? loginRole,
@@ -363,14 +363,14 @@ public static partial class SupabaseMigrationBuild
         }
 
         var options = new SupabaseMigrationOptions();
-        if (!TryConfigure(options, roles, callerFunctions, grants, force, out var callerRoles, out var problem)
+        if (!TryConfigure(options, roles, currentUserFunctions, grants, force, out var userRoles, out var problem)
             || !TryConfigureLoginRole(options, loginRole, out problem))
         {
             output.WriteLine($"error : {problem}");
             return 2;
         }
 
-        if (BookkeepingRoleNobodyMakes(options, callerRoles) is { } unmade)
+        if (BookkeepingRoleNobodyMakes(options, userRoles) is { } unmade)
         {
             output.WriteLine($"warning : {unmade}");
         }
@@ -440,15 +440,15 @@ public static partial class SupabaseMigrationBuild
     }
 
     /// <summary>
-    /// Sets <paramref name="options"/>' roles and caller functions, and whether the access files write
+    /// Sets <paramref name="options"/>' roles and current user functions, and whether the access files write
     /// privileges and force row level security, from the build's properties, or says what is wrong with them. The
     /// roles are read as <c>AddSupabaseRowLevelSecurity</c> reads what the build recorded of them, so the export and
     /// the application take the same defaults.
     /// </summary>
-    private static bool TryConfigure(SupabaseMigrationOptions options, string? roles, string? callerFunctions, string? grants, string? force, out SupabaseCallerRoles callerRoles, out string problem)
+    private static bool TryConfigure(SupabaseMigrationOptions options, string? roles, string? currentUserFunctions, string? grants, string? force, out SupabaseUserRoles userRoles, out string problem)
     {
-        if (!SupabaseCallerRoles.TryParse(roles, out callerRoles, out problem)
-            || !TryReadPairs(CallerFunctionsProperty, callerFunctions, ["uid", "role", "claims"], "uid=auth.uid()|role=auth.role()|claims=auth.jwt()", prefix: null, out var caller, out _, out problem))
+        if (!SupabaseUserRoles.TryParse(roles, out userRoles, out problem)
+            || !TryReadPairs(CurrentUserFunctionsProperty, currentUserFunctions, ["uid", "role", "claims"], "uid=auth.uid()|role=auth.role()|claims=auth.jwt()", prefix: null, out var functions, out _, out problem))
         {
             return false;
         }
@@ -485,21 +485,21 @@ public static partial class SupabaseMigrationBuild
                 return false;
         }
 
-        options.Roles = callerRoles.Names;
+        options.Roles = userRoles.Names;
 
-        foreach (var (key, function) in caller)
+        foreach (var (key, function) in functions)
         {
             if (!CallWithoutArguments().IsMatch(function))
             {
-                problem = $"{CallerFunctionsProperty} has '{key}={function}', which is not a function called without arguments. Each value is one, with its schema or without, such as auth.uid(), and the policies call it as it is written.";
+                problem = $"{CurrentUserFunctionsProperty} has '{key}={function}', which is not a function called without arguments. Each value is one, with its schema or without, such as auth.uid(), and the policies call it as it is written.";
                 return false;
             }
         }
 
-        options.CallerFunctions = new PostgresCallerFunctions(
-            caller.GetValueOrDefault("uid") ?? options.CallerFunctions.UserId,
-            caller.GetValueOrDefault("role") ?? options.CallerFunctions.Role,
-            caller.GetValueOrDefault("claims") ?? options.CallerFunctions.Claims);
+        options.CurrentUserFunctions = new PostgresCurrentUserFunctions(
+            functions.GetValueOrDefault("uid") ?? options.CurrentUserFunctions.UserId,
+            functions.GetValueOrDefault("role") ?? options.CurrentUserFunctions.Role,
+            functions.GetValueOrDefault("claims") ?? options.CurrentUserFunctions.Claims);
 
         return true;
     }
@@ -530,15 +530,15 @@ public static partial class SupabaseMigrationBuild
 
     /// <summary>
     /// What the build says where the access files write no privileges and <c>SupabaseRowAccessRoles</c> leaves the
-    /// system caller its default, the bookkeeping role <c>ddd_system</c>: no access file then makes that role or gives
-    /// it the toolkit's tables, unless a rule is for it, so the application's system caller would switch to a role the
+    /// system work its default, the bookkeeping role <c>ddd_system</c>: no access file then makes that role or gives
+    /// it the toolkit's tables, unless a rule is for it, so the application's system work would switch to a role the
     /// files never made. <see langword="null"/> where there is nothing to say.
     /// </summary>
-    private static string? BookkeepingRoleNobodyMakes(SupabaseMigrationOptions options, SupabaseCallerRoles roles)
+    private static string? BookkeepingRoleNobodyMakes(SupabaseMigrationOptions options, SupabaseUserRoles roles)
         => options.WriteGrants || roles.SystemSaid || roles.Names.System is not { } system
             ? null
-            : $"{GrantsProperty} is None, so no access file makes the bookkeeping role {system} or gives it the outbox, the inbox and the migration history, and the system caller switches to it unless {RolesProperty} says otherwise. " +
-              $"Add system={SupabaseCallerRoles.LoginRole} to {RolesProperty} where the system caller runs as the role the application logs in as, or system=<role> for a role a migration of your own makes and grants.";
+            : $"{GrantsProperty} is None, so no access file makes the bookkeeping role {system} or gives it the outbox, the inbox and the migration history, and system work switches to it unless {RolesProperty} says otherwise. " +
+              $"Add system={SupabaseUserRoles.LoginRole} to {RolesProperty} where system work runs as the role the application logs in as, or system=<role> for a role a migration of your own makes and grants.";
 
     /// <summary>
     /// Sets <paramref name="options"/>' login role from the build's property, once the roles callers run as are
@@ -560,7 +560,7 @@ public static partial class SupabaseMigrationBuild
             return false;
         }
 
-        if (SupabaseMigrations.CallerRoleNamed(login, options.Roles) is { } key)
+        if (SupabaseMigrations.RunAsRoleNamed(login, options.Roles) is { } key)
         {
             problem = $"{LoginRoleProperty} is '{login}', the role of {key} in {RolesProperty}: a role callers run as. " +
                       "The role the application logs in as only switches to those, and is a role of its own; name another, such as sample_api.";
@@ -584,7 +584,7 @@ public static partial class SupabaseMigrationBuild
 
     /// <summary>
     /// A function called without arguments, with its schema or without: <c>auth.uid()</c>. A policy writes a
-    /// caller function into its condition as it is, so anything else could change what the condition says.
+    /// current user function into its condition as it is, so anything else could change what the condition says.
     /// </summary>
     [GeneratedRegex(@"^(?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*\(\)$", RegexOptions.CultureInvariant)]
     private static partial Regex CallWithoutArguments();

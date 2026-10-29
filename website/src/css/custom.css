@@ -41,7 +41,9 @@
   --ddd-muted: #5b5b72;
   --ddd-code-inline-bg: #f1eefc;
   --ddd-code-inline-fg: #4c22b3;
-  --docusaurus-highlighted-code-line-bg: rgba(109, 46, 211, 0.08);
+  --docusaurus-highlighted-code-line-bg: rgba(109, 46, 211, 0.14);
+  --ddd-good: #1f8a5b;
+  --ddd-bad: #c93c3c;
 }
 
 html[data-theme='dark'] {
@@ -64,7 +66,9 @@ html[data-theme='dark'] {
   --ddd-muted: #9a9ab5;
   --ddd-code-inline-bg: #1c1a33;
   --ddd-code-inline-fg: #c9b6ff;
-  --docusaurus-highlighted-code-line-bg: rgba(169, 139, 255, 0.12);
+  --docusaurus-highlighted-code-line-bg: rgba(169, 139, 255, 0.22);
+  --ddd-good: #4fd1a1;
+  --ddd-bad: #ff8080;
 }
 
 body {
@@ -98,6 +102,31 @@ body {
 
 .theme-doc-markdown {
   max-width: 50rem;
+}
+
+/* The table of contents stands at the right edge of the window, at every width: the page's container fills the
+   space beside the sidebar instead of centring at 1320px, the contents column has a fixed width, and the text
+   keeps its reading width (above) at the left. */
+@media (min-width: 997px) {
+  [class*='docMainContainer'] > .container {
+    max-width: none;
+  }
+
+  [class*='docMainContainer'] > .container > .row {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  [class*='docMainContainer'] > .container > .row > .col--3 {
+    flex: 0 0 17rem;
+    max-width: 17rem;
+  }
+
+  [class*='docItemCol'] {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none !important;
+  }
 }
 
 .theme-doc-markdown h1 {
@@ -186,17 +215,31 @@ html[data-theme='dark'] .theme-code-block {
   text-transform: uppercase;
 }
 
-/* tables */
+/* A line a step adds or changes, highlighted with {n-m} after the language: a stronger tint than Infima's, and a
+   bar at the left, so it stands out on the dark code background as well. */
+.theme-code-block-highlighted-line {
+  box-shadow: inset 3px 0 0 var(--ifm-color-primary);
+}
+
+/* tables: each sits in a box that scrolls sideways (src/rehype/scrollingTables.js), so a table wider than the
+   column scrolls inside its border instead of running over the table of contents. */
+.markdown .table-scroll {
+  overflow-x: auto;
+  margin-bottom: var(--ifm-spacing-vertical);
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.75rem;
+}
+
 .markdown table {
   display: table;
   width: 100%;
+  margin: 0;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid var(--ddd-border);
-  border-radius: 0.75rem;
-  overflow: hidden;
+  border: none;
   font-size: 0.93rem;
 }
+
 
 .markdown table thead tr {
   background: color-mix(in srgb, var(--ifm-color-primary) 8%, var(--ddd-card));
@@ -205,6 +248,12 @@ html[data-theme='dark'] .theme-code-block {
 .markdown table th {
   text-align: left;
   font-weight: 600;
+}
+
+/* The last column is most often the one with sentences: it keeps room to read, and a table that then no longer
+   fits scrolls inside its box. */
+.markdown table td:last-child {
+  min-width: 16rem;
 }
 
 .markdown table th,
@@ -220,15 +269,6 @@ html[data-theme='dark'] .theme-code-block {
 
 .markdown table tr:nth-child(2n) {
   background: transparent;
-}
-
-/* On a phone a table wider than the column scrolls inside its own border, rather than widening the page:
-   drawn as a table, a wide one made the whole page scroll sideways. */
-@media (max-width: 996px) {
-  .markdown table {
-    display: block;
-    overflow-x: auto;
-  }
 }
 
 /* blockquotes as quiet asides */
@@ -378,6 +418,56 @@ html[data-theme='dark'] .theme-code-block {
 .docusaurus-mermaid-container .edgeLabel {
   fill: var(--ddd-muted) !important;
   color: var(--ddd-muted) !important;
+}
+
+/* Mermaid gives some labels, such as a class diagram's "1" and "many", a box lower than their line height; the
+   text then loses its bottom. Letting it overflow the box shows it whole. */
+.docusaurus-mermaid-container foreignObject {
+  overflow: visible;
+}
+
+/* Four states a diagram marks its nodes with, as `class north strong`: what the diagram is about (strong),
+   what it lets through or reaches (good), what it leaves out (muted), what it refuses (bad). The diagram also
+   declares them with classDef, so GitHub colours them; these replace those colours with the site's, in both modes. */
+.docusaurus-mermaid-container .node.strong rect,
+.docusaurus-mermaid-container .node.strong polygon,
+.docusaurus-mermaid-container .node.strong path {
+  fill: color-mix(in srgb, var(--ifm-color-primary) 30%, var(--ddd-card)) !important;
+  stroke: var(--ifm-color-primary) !important;
+  stroke-width: 2px !important;
+}
+
+.docusaurus-mermaid-container .node.good rect,
+.docusaurus-mermaid-container .node.good polygon,
+.docusaurus-mermaid-container .node.good path {
+  fill: color-mix(in srgb, var(--ddd-good) 16%, var(--ddd-card)) !important;
+  stroke: color-mix(in srgb, var(--ddd-good) 70%, var(--ddd-card)) !important;
+}
+
+.docusaurus-mermaid-container .node.muted rect,
+.docusaurus-mermaid-container .node.muted polygon,
+.docusaurus-mermaid-container .node.muted path {
+  fill: var(--ddd-card) !important;
+  stroke: var(--ddd-border) !important;
+  stroke-dasharray: 4 3;
+}
+
+.docusaurus-mermaid-container .node.muted .nodeLabel,
+.docusaurus-mermaid-container .node.muted .label {
+  color: var(--ddd-muted) !important;
+  fill: var(--ddd-muted) !important;
+}
+
+.docusaurus-mermaid-container .node.bad rect,
+.docusaurus-mermaid-container .node.bad polygon,
+.docusaurus-mermaid-container .node.bad path {
+  fill: color-mix(in srgb, var(--ddd-bad) 14%, var(--ddd-card)) !important;
+  stroke: color-mix(in srgb, var(--ddd-bad) 65%, var(--ddd-card)) !important;
+}
+
+/* A second line in a node, <small>, says what the first names: North, then "granted here". */
+.docusaurus-mermaid-container .nodeLabel small {
+  color: var(--ddd-muted);
 }
 
 /* A link the diagram colours itself (linkStyle, as for what the analyzer refuses) keeps its colour. */

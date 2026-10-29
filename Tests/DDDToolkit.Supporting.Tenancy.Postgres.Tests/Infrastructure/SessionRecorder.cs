@@ -65,27 +65,55 @@ public sealed class SessionRecorder : DbCommandInterceptor
 }
 
 /// <summary>
-/// Says who is calling as the flow of work began it, as a host that requires explicit callers does, and remembers
-/// every answer it gave with the part of a test it gave it in: who every connection of that part ran as.
+/// Says who is calling as the flow of work began it, as a host that requires an explicit current user does, and
+/// remembers every snapshot it gave with the part of a test it gave it in: who every connection of that part ran as.
 /// </summary>
-public sealed class ObservedCallers : ICallerAccessor
+public sealed class ObservedUsers : ICurrentUser
 {
-    private readonly ConcurrentQueue<(string During, Caller Caller)> _answered = new();
+    private readonly ICurrentUser _inner = new CurrentUser(new CurrentUserOptions { RequireExplicitCurrentUser = true });
+    private readonly ConcurrentQueue<(string During, CurrentUserSnapshot Caller)> _answered = new();
 
     /// <summary>The part of the test that is running, by a name the test gives it.</summary>
     public string During { get; set; } = string.Empty;
 
-    /// <summary>Every caller answered so far, with the part it was answered in.</summary>
-    public IReadOnlyList<(string During, Caller Caller)> Answered => [.. _answered];
+    /// <summary>Every user answered so far, with the part it was answered in.</summary>
+    public IReadOnlyList<(string During, CurrentUserSnapshot Caller)> Answered => [.. _answered];
 
     /// <inheritdoc />
-    public Caller Current
+    public CurrentUserSnapshot Snapshot
     {
         get
         {
-            var caller = Callers.Ambient ?? throw new NoCallerException();
-            _answered.Enqueue((During, caller));
-            return caller;
+            var user = _inner.Snapshot;
+            _answered.Enqueue((During, user));
+            return user;
         }
     }
+
+    /// <inheritdoc />
+    public bool IsBegun => _inner.IsBegun;
+
+    /// <inheritdoc />
+    public CurrentUserKind Kind => _inner.Kind;
+
+    /// <inheritdoc />
+    public Guid? Id => _inner.Id;
+
+    /// <inheritdoc />
+    public bool IsAuthenticated => _inner.IsAuthenticated;
+
+    /// <inheritdoc />
+    public bool IsSystem => _inner.IsSystem;
+
+    /// <inheritdoc />
+    public string? SystemScope => _inner.SystemScope;
+
+    /// <inheritdoc />
+    public string? Role => _inner.Role;
+
+    /// <inheritdoc />
+    public string? FindClaim(string path) => _inner.FindClaim(path);
+
+    /// <inheritdoc />
+    public CurrentUserSnapshot RequireSystemWork() => _inner.RequireSystemWork();
 }

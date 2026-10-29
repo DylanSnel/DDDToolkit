@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// parameters. They run as their caller, so what a caller may read of Tenancy's tables decides their rows: a
 /// seat its own rights and the rest of its tenant, system work in a tenant all of that tenant. A status is
 /// answered as the name of its enum member. They answer access facts only, exactly the columns listed here:
-/// none answers what a seat, a unit or a role is called, which the directory answers by id.
+/// none answers what a seat, a unit or a role is called, which Tenancy's managers answer by id.
 /// </para>
 /// <para>
 /// The next three answer a seat what it may learn of other seats' rights, the one after them what the units it asks
@@ -28,7 +28,7 @@ public static class TenancyFunctionNames
     /// <c>"TenantId"</c>, <c>"SeatId"</c>, <c>"UnitId"</c>, <c>"RoleId"</c>, <c>"Permission"</c>, <c>"StartsAt"</c> and
     /// <c>"EndsAt"</c>.
     /// </summary>
-    public const string CallerPermissions = "caller_permissions";
+    public const string CurrentPermissions = "current_permissions";
 
     /// <summary>
     /// The closure of the organization's tree, as rows of <see cref="Access.OrganizationUnitPath{TTenantId, TUnitId}"/>:
@@ -44,10 +44,10 @@ public static class TenancyFunctionNames
 
     /// <summary>
     /// The roles, as rows of <see cref="Access.RoleRow{TTenantId, TRoleId}"/>: <c>"Id"</c>, <c>"TenantId"</c>,
-    /// <c>"FromPack"</c>, <c>"Status"</c> and <c>"Permissions"</c>, an array of text however the roles' table stores
+    /// <c>"FromStarterRole"</c>, <c>"Status"</c> and <c>"Permissions"</c>, an array of text however the roles' table stores
     /// them; never the name.
     /// </summary>
-    public const string TenantRoles = "tenant_roles_with_permissions";
+    public const string TenantRoles = "tenant_roles_with_starter_roles";
 
     /// <summary>
     /// Where seats are placed, as rows of <see cref="Access.PlacementRow{TSeatId, TUnitId}"/>: <c>"SeatId"</c>,
@@ -71,11 +71,11 @@ public static class TenancyFunctionNames
 
     /// <summary>
     /// The rights a move of a unit changes, as rows of <c>"UnitId"</c>, <c>"Permission"</c>, <c>"EndsAt"</c>,
-    /// <c>"Parent"</c> and <c>"OfCaller"</c>: its parameters are the unit's parent and the parent it would get.
+    /// <c>"Parent"</c> and <c>"OfCurrentSeat"</c>: its parameters are the unit's parent and the parent it would get.
     /// Answered to a seat that manages units at both: its own rights, and another seat's only where it reaches one
     /// parent and not the other, which is where the move changes it.
     /// </summary>
-    public const string PermissionsAMoveChanges = "permissions_a_move_changes";
+    public const string PermissionsAUnitMoveChanges = "permissions_a_unit_move_changes";
 
     /// <summary>
     /// The seats that hold a permission at a unit, as rows of <c>"SeatId"</c>: its parameters are the permission and the unit.

@@ -180,9 +180,12 @@ internal static class OwnerDeclarations
 
     /// <summary>
     /// DDD00097 for a property marked <c>[At]</c> where it is declared: an instance property of an aggregate root, the
-    /// one it marks, that is never empty. <see langword="null"/> where it is all of these.
+    /// one it marks, that is never empty. <see langword="null"/> where it is all of these. The marker is the package's
+    /// that declares it, named by <paramref name="marker"/>, so the toolkit's own generators name no package.
     /// </summary>
-    public static DiagnosticInfo? CheckPlace(GeneratorAttributeSyntaxContext context)
+    /// <param name="context">The marked property.</param>
+    /// <param name="marker">The marker's metadata name.</param>
+    public static DiagnosticInfo? CheckPlace(GeneratorAttributeSyntaxContext context, string marker)
     {
         if (context.TargetSymbol is not IPropertySymbol { ContainingType: { } type } property)
         {
@@ -203,7 +206,7 @@ internal static class OwnerDeclarations
                 "is marked [At], and '" + type.Name + "' is no aggregate root: what is reached from above is an aggregate, by the place its root hangs at, so mark the property on an [AggregateRoot<TId>]");
         }
 
-        var marked = MarkedIn(type, KnownTypes.AtAttribute);
+        var marked = MarkedIn(type, marker);
         if (marked.Count > 1 && !SymbolEqualityComparer.Default.Equals(First(marked), property))
         {
             return DiagnosticInfo.Create(DiagnosticDescriptors.PlaceMisdeclared, location, at,

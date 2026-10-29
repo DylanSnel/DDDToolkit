@@ -16,11 +16,11 @@
         }
         @foreach (var mine in _seats)
         {
-            <option value="@mine.Tenant.Slug" class="@(mine.Seat.IsActive ? null : "seat-inactive")">
-                @mine.Tenant.Slug · @mine.Tenant.Name@(mine.Seat.IsActive ? string.Empty : T["tenant-picker.seat-status", mine.Seat.Status.ToLowerInvariant()])
+            <option value="@mine.Slug" class="@(mine.Seat.IsActive ? null : "seat-inactive")">
+                @mine.Slug · @mine.OrganizationName@(mine.Seat.IsActive ? string.Empty : T["tenant-picker.seat-status", mine.Seat.Status.ToLowerInvariant()])
             </option>
         }
-        @if (Session.Tenant is { } picked && _seats.All(mine => mine.Tenant.Slug != picked))
+        @if (Session.Tenant is { } picked && _seats.All(mine => mine.Slug != picked))
         {
             @* Until the seats have come, the tenant is shown as it is: "no seat here" would be a guess. *@
             <option value="@picked">@picked@(SeatsLoaded ? T["tenant-picker.no-seat"] : string.Empty)</option>
@@ -38,7 +38,7 @@
     private bool SeatsLoaded => _seatsOf is not null && _seatsOf == Session.AccessToken;
 
     private bool SelectedIsActive
-        => Session.Tenant is not { } slug || _seats.FirstOrDefault(mine => mine.Tenant.Slug == slug) is not { } seat || seat.Seat.IsActive;
+        => Session.Tenant is not { } slug || _seats.FirstOrDefault(mine => mine.Slug == slug) is not { } seat || seat.Seat.IsActive;
 
     protected override async Task OnInitializedAsync()
     {
@@ -58,7 +58,7 @@
         var token = Session.AccessToken;
         (_loadedFor, _loadedAfter) = (token, Session.SeatsAdded);
         var answer = await Api.SeatsOfMineAsync();
-        _seats = answer.Value?.OrderBy(mine => mine.Tenant.Slug, StringComparer.Ordinal).ToList() ?? [];
+        _seats = answer.Value?.OrderBy(mine => mine.Slug, StringComparer.Ordinal).ToList() ?? [];
         _seatsOf = token;
     }
 

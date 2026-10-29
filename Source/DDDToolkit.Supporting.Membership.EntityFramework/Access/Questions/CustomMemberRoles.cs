@@ -1,19 +1,19 @@
 using DDDToolkit.Abstractions.Interfaces;
-using DDDToolkit.Supporting.Membership.UseCases;
+using DDDToolkit.Supporting.Membership.Access;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
-/// The roles there are for the members of a resource whose roles a customer makes, as the admission asks about them:
+/// The roles there are for the members of a resource whose roles a customer makes, as the member manager asks about them:
 /// answered from the rows of the application's role class, on the request's own context, so the application's
 /// rule about whose roles a request reads applies to what is answered. An application that registered a
 /// factory for the context and no context for a request is read on a context of the factory's, as its access
 /// questions are.
 /// </summary>
 /// <param name="registration">The resource, with its rules.</param>
-/// <param name="services">The services of the scope the admission is asked in.</param>
+/// <param name="services">The services of the scope the member manager asks in.</param>
 internal sealed class CustomMemberRoles<TContext, TResource, TResourceId, TRoleId>(MembershipRegistration registration, IServiceProvider services)
     : IMemberRoles<TResourceId, TRoleId>
     where TContext : DbContext

@@ -23,9 +23,9 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     /// <summary>
-    /// What the application adds to the catalogue: role packs, permissions of its own and marks on permissions that manage
+    /// What the application adds to the catalogue: starter roles, permissions of its own and marks on permissions that manage
     /// access. Left unset, it adds none: the permissions are Tenancy's and what the modules contribute, and every tenant
-    /// starts with the default administrators' role (<see cref="TenancyPacks.DefaultAdministrators"/>).
+    /// starts with the default administrators' role (<see cref="TenancyStarterRoles.DefaultAdministrators"/>).
     /// </summary>
     public ApplicationCatalogue? Catalogue { get; set; }
 
@@ -37,31 +37,30 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
 
     /// <summary>
     /// The token roles whose users are operators of the application: staff who look across tenants, by the role
-    /// their token carries (<c>Caller.Role</c>, as the host's token role map spells it). Empty by default: an
+    /// their token carries (<c>ICurrentUser.Role</c>, as the host's token role map spells it). Empty by default: an
     /// application without operators has none.
     /// <code>
     /// options.OperatorTokenRoles.Add("operator");
     /// </code>
     /// <para>
     /// An operator holds no seat. Its token role is never one of <see cref="TenantSelectionOptions.SeatedTokenRoles"/>,
-    /// so tenant selection answers nobody for it whatever tenant the request names, and registration refuses a
-    /// role that is on both lists. An operator reads: the tenants, through <c>TenantDirectory</c>, and on Postgres
-    /// whatever the policies of its own database role let it read. It changes nothing itself: what it asks for is
-    /// carried out by system work that names it (<see cref="TenancyWork.BeginOperator"/> and
-    /// <see cref="TenancyWork.BeginOperatorIn"/>).
+    /// so tenant selection answers nobody for it whatever tenant the request names, keeping that tenant, and registration
+    /// refuses a role that is on both lists. An operator reads: the tenants, through <c>TenantManager</c>, and on Postgres
+    /// whatever the policies of its own database role let it read. It changes nothing as itself. A command marked
+    /// <see cref="OperatorAttribute"/> runs as operator work, which is system work that names it.
     /// </para>
     /// </summary>
     public ISet<string> OperatorTokenRoles { get; } = new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>
-    /// Whether <paramref name="caller"/> is one of the application's operators: a signed-in user whose token
-    /// carries one of <see cref="OperatorTokenRoles"/>. The one place that says so: the tenants' directory and
-    /// the check of <see cref="TenancyRequirement.Operator"/> both ask here, so they mean the same caller
-    /// by it. System work is never one, whoever it is recorded as, and neither is anyone without an identity.
+    /// Whether <paramref name="user"/> is one of the application's operators: a signed-in user whose token
+    /// carries one of <see cref="OperatorTokenRoles"/>. The one place that says so: <c>TenantManager.ListAsync</c> and
+    /// the check of <see cref="OperatorAttribute"/> both ask here, so they mean the same caller by it. System work is
+    /// never one, whoever it is recorded as, and neither is anyone without an identity.
     /// </summary>
-    /// <param name="caller">Who is calling, as the toolkit says: the caller of the request, not the Tenancy caller.</param>
-    public bool IsOperator(Caller? caller)
-        => caller is { Kind: CallerKind.User, UserId: not null, Role: { } tokenRole } && OperatorTokenRoles.Contains(tokenRole);
+    /// <param name="user">Who is calling, as the toolkit's current user answers: the user of the request, not the Tenancy user.</param>
+    public bool IsOperator(CurrentUserSnapshot? user)
+        => user is { Kind: CurrentUserKind.User, Id: not null, Role: { } tokenRole } && OperatorTokenRoles.Contains(tokenRole);
 
     /// <summary>The operator token roles that are seated as well, which no role may be: in ordinal order.</summary>
     internal IReadOnlyList<string> SeatedOperators()

@@ -116,7 +116,7 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   request or scope. A context rented from the factory dispatches in process only after
   `context.BindToScope(scope.ServiceProvider)`; the outbox needs no scope.
 - A primary key made of more than the id: `[KeyPart]`, see `composite-keys.md`. Migrations as Supabase
-  SQL files: `DDDToolkit.EntityFramework.Supabase`, see `supabase.md`. Queries run as the caller, and
+  SQL files: `DDDToolkit.EntityFramework.Supabase`, see `supabase.md`. Queries run as the current user, and
   `[RowAccess]` rules as Postgres policies: `DDDToolkit.EntityFramework.Postgres`, see `row-level-security.md`.
 - A property that never changes once its row is saved: `builder.Property(order => order.CustomerId).IsFixedAfterInsert()`.
   Entity Framework throws when a save would change it, and a policy script written with

@@ -24,5 +24,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class SeatsSeeTheProjectsTheyReach
 {
     /// <summary>Whether the calling seat reaches <paramref name="project"/>, through the organization or through its crew.</summary>
-    public static bool Allows(Project project, Caller caller) => ProjectsISee.Ids().Contains(project.Id);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectsISee.Ids().Contains(project.Id);
 }

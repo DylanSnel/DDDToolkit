@@ -21,9 +21,9 @@ public sealed class DatabaseRefusalProbeTests(PalletDepotDatabase database) : IA
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static Caller Alice => PalletDepotDatabase.Alice;
+    private static CurrentUserSnapshot Alice => PalletDepotDatabase.Alice;
 
-    private static Caller Bob => PalletDepotDatabase.Bob;
+    private static CurrentUserSnapshot Bob => PalletDepotDatabase.Bob;
 
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 

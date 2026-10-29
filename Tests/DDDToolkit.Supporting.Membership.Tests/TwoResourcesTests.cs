@@ -67,9 +67,14 @@ public sealed class TwoResourcesTests
         Refused.With(FolderRefusals.Membership, MembershipRefusals.MemberNotFound, () => folder.GiveRole(stranger, FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: Keeper)).Arguments.Keys.Should().Equal("Staff");
         Refused.With(FolderRefusals.Membership, MembershipRefusals.MemberNotFound, () => folder.TakeRole(stranger, FolderMembership.Clerk)).Arguments.Keys.Should().Equal("Staff");
 
-        // The admission of folders, which refuses under the same codes, says it the same way.
-        var admission = new MemberAdmission<FolderId, StaffCode, NamedRole>(FolderMembership.Rules, new NamedRoles<FolderId>(FolderMembership.Rules), new NobodyIsActive());
-        var inactive = await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.MemberNotActive, () => admission.RequireMemberAsync(stranger, TestContext.Current.CancellationToken).AsTask());
+        // The member manager of folders, which refuses under the same codes, says it the same way.
+        var staff = new FolderMemberManager(
+            new StubAccess<Folder, FolderId>(FolderMembership.Rules).Sees(folder.Id, version: 0, (FolderPermissions.Staff, MemberVia.Members)),
+            new StubMemberStore<Folder, FolderId, StaffCode>().With(folder),
+            TestUser,
+            TimeProvider.System,
+            directory: new NobodyIsActive());
+        var inactive = await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.MemberNotActive, () => staff.AddAsync(folder.Id, stranger, null, null, TestContext.Current.CancellationToken));
         inactive.Arguments.Should().Contain("Staff", stranger).And.NotContainKey("Member");
 
         // And so does the rule about the whole list, when it is broken behind the member list.
@@ -185,7 +190,7 @@ public sealed class TwoResourcesTests
         folders.RolesWith(DocumentPermissions.View).Should().BeEmpty();
 
         (documents.Members.Kind, folders.Members.Kind).Should().Be((MemberSourceKind.Inferred, MemberSourceKind.Claim));
-        (documents.OwnerLockPermission, folders.OwnerLockPermission).Should().Be((DocumentPermissions.Share, FolderPermissions.HandOver));
+        (documents.NamesOwnerPermission, folders.NamesOwnerPermission).Should().Be((DocumentPermissions.Share, FolderPermissions.HandOver));
         documents.Functions.Should().NotBe(folders.Functions);
     }
 }

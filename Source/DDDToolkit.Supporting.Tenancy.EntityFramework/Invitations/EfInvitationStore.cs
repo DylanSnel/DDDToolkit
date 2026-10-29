@@ -1,18 +1,18 @@
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Access;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using Microsoft.EntityFrameworkCore;
 
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
-/// Where the invitation use cases load and keep invitations, over Tenancy's context: the same context, and so the
+/// Where the invitation manager loads and keeps invitations, over Tenancy's context: the same context, and so the
 /// same unit of work, as Tenancy's own store, whose save writes what is added or changed here. Every load goes
 /// through the context's sets, so the tenant filter keeps it to the current caller's tenant.
 /// <para>
 /// A token's digest goes into a table of its own, in a row added with its invitation, and is never loaded again.
 /// The one question asked of it, which invitation a digest is for, is one of the few reads Tenancy makes across
-/// tenants (<see cref="TenancySystemReads"/>): on a context of its own, as a caller begun around it alone. Where
+/// tenants (<see cref="TenancySystemReads"/>): on a context of its own, as a user begun around it alone. Where
 /// the database keeps the rights (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>, as on Postgres with row
 /// level security), that caller is Tenancy's scoped system work in no tenant, and the question is asked of the
 /// database's function <see cref="TenancyFunctionNames.InvitationOfDigest"/>, since no caller's role reads the
@@ -20,7 +20,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// </para>
 /// </summary>
 internal sealed class EfInvitationStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId, TContext>(TContext context)
-    : TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.IInvitationStore<TInvitation, TInvitationId>
+    : IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
     where TUnit : OrganizationUnitEntity<TUnitId>
@@ -48,7 +48,7 @@ internal sealed class EfInvitationStore<TTenant, TTenantId, TOrganization, TUnit
             .ConfigureAwait(false);
 
     /// <inheritdoc />
-    public Task<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.InvitationOfToken<TInvitationId>?> FindByDigestAsync(
+    public Task<InvitationOfToken<TInvitationId, TTenantId, TSeatId>?> FindByDigestAsync(
         byte[] digest,
         CancellationToken cancellationToken)
     {
@@ -108,7 +108,7 @@ internal sealed class EfInvitationStore<TTenant, TTenantId, TOrganization, TUnit
         });
     }
 
-    private static TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.InvitationOfToken<TInvitationId> Found(
+    private static InvitationOfToken<TInvitationId, TTenantId, TSeatId> Found(
         TTenantId tenant,
         TInvitationId invitation,
         TSeatId? issuedBy)

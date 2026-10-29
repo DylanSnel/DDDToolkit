@@ -6,7 +6,7 @@ using System.Xml.Linq;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.HotChocolate.Authorization;
 using DDDToolkit.Supporting.Tenancy.Access;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using Examples.Tenancy.Shared.Infrastructure.Paging;
 using FluentAssertions;
 using GreenDonut;
@@ -313,9 +313,9 @@ public sealed class LayerReferenceTests
 
         HostRegistrations.Services.Should().Contain(typeof(ProjectAccess), "the host registers a module's services, so one taken by its own code would be found")
             .And.Contain(typeof(IProjectGate), "its contracts' too")
-            .And.Contain(typeof(TenancyUseCases<,,,,,,,,>.SeatCommands), "and the package's use cases");
+            .And.Contain(typeof(SeatManager), "and the package's managers");
         uses.Select(use => use.Type).Should().Contain(typeof(ISender), "the host does send, and the scan sees it");
-        seeding.Select(use => use.Type).Should().Contain(typeof(TenancyUseCases<,,,,,,,,>.SeatCommands), "the seeding names the package's use cases, so the scan would see one named elsewhere");
+        seeding.Select(use => use.Type).Should().Contain(typeof(SeatManager), "the seeding names the package's managers, so the scan would see one named elsewhere");
 
         uses.Where(use => SampleLayout.IsPort(use.Type) || IsServiceOfAModule(use.Type))
             .Select(use => use.ToString())
@@ -566,10 +566,10 @@ public sealed class LayerReferenceTests
             var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
             return definition == typeof(ISeatDirectory<,>)
                 || definition == typeof(TenantSelection<,>)
-                || definition == typeof(SeatOfCaller<,>)
+                || definition == typeof(SeatOfUser<,>)
                 || definition == typeof(SeatInTenant<>)
-                || definition == typeof(TenancyUseCases<,,,,,,,,>)
-                || definition.DeclaringType == typeof(TenancyUseCases<,,,,,,,,>);
+                || IsAManager(definition)
+                || (definition.DeclaringType is { } outer && IsAManager(outer));
         }
 
         var naming = SampleLayout.Projects
@@ -583,7 +583,7 @@ public sealed class LayerReferenceTests
         var tenancy = naming.Where(found => found.Module == "Tenants").SelectMany(found => found.Uses).Select(use => use.Type).ToList();
         tenancy.Should().Contain(typeof(TenantSelection<,>))
             .And.Contain(typeof(SeatInTenant<>))
-            .And.Contain(typeof(TenancyUseCases<,,,,,,,,>.TenancyDirectory));
+            .And.Contain(typeof(SeatManager));
     }
 
     [Fact]
@@ -643,7 +643,7 @@ public sealed class LayerReferenceTests
         TypeScan.PartsOf(typeof(ITenancyReads)).Should().Contain(part => SampleLayout.IsPort(part));
         TypeScan.PartsOf(typeof(IInspectionStore[])).Should().Contain(part => SampleLayout.IsPort(part));
         TypeScan.PartsOf(typeof(IReadOnlyList<Lazy<IProjectStore>>)).Should().Contain(part => SampleLayout.IsPort(part), "a port inside a type argument of a type argument is still a port");
-        TypeScan.PartsOf(typeof(Func<TenancyUseCases.IStore, Task>)).Should().Contain(part => SampleLayout.IsPort(part), "the Tenancy package's store is the port of Tenancy's use cases");
+        TypeScan.PartsOf(typeof(Func<TenancyStore, Task>)).Should().Contain(part => SampleLayout.IsPort(part), "the Tenancy package's store is the port of Tenancy's use cases");
         TypeScan.PartsOf(typeof(Func<IProjectReading, Task>)).Should().Contain(part => SampleLayout.IsPort(part), "what a read port opens is a port too: it reads");
         TypeScan.PartsOf(typeof(Task<IInspectionReads>)).Should().Contain(part => SampleLayout.IsPort(part), "a read port that hands out no reading is a port all the same");
         TypeScan.PartsOf(typeof(Func<TenantSeats, Task>)).Should().NotContain(part => SampleLayout.IsPort(part));
@@ -674,7 +674,7 @@ public sealed class LayerReferenceTests
         uses.Should().Contain(use => use.Type == typeof(ITenancyReading) && use.Seen == Seen.Declaration, "an interface");
         uses.Should().Contain(use => use.Type == typeof(ITenancyReads) && use.Seen == Seen.Declaration, "a generic constraint");
         uses.Should().Contain(use => use.Type == typeof(TenantsContext) && use.Seen == Seen.Declaration, "a typeof in an attribute");
-        uses.Should().Contain(use => use.Type == typeof(TenancyUseCases.IStore) && use.Seen == Seen.Signature, "what a method returns");
+        uses.Should().Contain(use => use.Type == typeof(TenancyStore) && use.Seen == Seen.Signature, "what a method returns");
     }
 
     [Fact]
@@ -725,7 +725,7 @@ public sealed class LayerReferenceTests
 
         public abstract ValueTask DisposeAsync();
 
-        public abstract TenancyUseCases.IStore Store();
+        public abstract TenancyStore Store();
     }
 
     [AttributeUsage(AttributeTargets.Class)]
@@ -758,11 +758,33 @@ public sealed class LayerReferenceTests
     /// host may name those.
     /// </summary>
     private static bool IsServiceOfAModule(Type type)
-        => HostRegistrations.Services.Contains(type) && SampleLayout.Holds(type.Assembly.GetName().Name!);
+        => HostRegistrations.Services.Contains(type) && SampleLayout.Holds(type.Assembly.GetName().Name!) && !IsTheAccessManager(type) && !IsAManager(type);
 
-    /// <summary>Whether <paramref name="type"/> is a use-case class of the Tenancy package that the host registers.</summary>
+    /// <summary>
+    /// Whether <paramref name="type"/> is the access manager: the package's class, which the generator closed over the
+    /// Tenants module's ids in its domain project. It answers who acts and begins the work that is not a caller's own,
+    /// as the host's seeding does; it is the package's, and no way round a module's check.
+    /// </summary>
+    private static bool IsTheAccessManager(Type type)
+        => type.BaseType is { IsGenericType: true } parent && parent.GetGenericTypeDefinition() == typeof(DDDToolkit.Supporting.Tenancy.Access.TenancyAccessManager<,,,>);
+
+    /// <summary>Whether <paramref name="type"/> is a manager of the Tenancy package that the host registers.</summary>
     private static bool IsUseCaseOfThePackage(Type type)
-        => type.DeclaringType == typeof(TenancyUseCases<,,,,,,,,>) && HostRegistrations.Services.Contains(type);
+        => IsAManager(type) && HostRegistrations.Services.Contains(type);
+
+    /// <summary>
+    /// Whether <paramref name="type"/> is one of the Tenancy package's managers: the package's own class, or the one the
+    /// generator closed over the Tenants module's classes in its domain project. They check their caller themselves.
+    /// </summary>
+    private static bool IsAManager(Type type)
+    {
+        var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
+        var package = definition.IsGenericTypeDefinition ? definition : definition.BaseType is { IsGenericType: true } parent ? parent.GetGenericTypeDefinition() : null;
+        return package is not null
+               && package.Assembly == typeof(SeatManager<,,,,,,,,>).Assembly
+               && package.Namespace == typeof(SeatManager<,,,,,,,,>).Namespace
+               && package.Name.Contains("Manager", StringComparison.Ordinal);
+    }
 
     private static bool IsOfEntityFramework(Type type) => SampleLayout.IsEntityFramework(type.Assembly.GetName().Name!);
 

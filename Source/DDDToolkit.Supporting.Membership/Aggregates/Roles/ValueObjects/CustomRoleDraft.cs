@@ -13,6 +13,6 @@ namespace DDDToolkit.Supporting.Membership;
 /// <param name="MadeFrom">
 /// The name of the starter role it is made from, one of the roles the resource's rules declare, or
 /// <see langword="null"/> for a role a customer makes. The drafts of the starter roles carry it
-/// (<see cref="UseCases.StarterRoles"/>); a draft made from what a customer entered leaves it out.
+/// (the role manager's <c>CreateStarterRolesAsync</c>); a draft made from what a customer entered leaves it out.
 /// </param>
 public sealed record CustomRoleDraft(string Name, string? Description, IReadOnlyCollection<string> Permissions, string? MadeFrom = null);

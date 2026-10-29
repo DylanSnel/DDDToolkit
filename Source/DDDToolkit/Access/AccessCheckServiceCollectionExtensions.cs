@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -17,17 +18,16 @@ public static class AccessCheckServiceCollectionExtensions
     /// It is for whoever asks the set in front of the handlers: the pipeline behavior the generator writes for
     /// an interface marked <c>[AccessRequests]</c> registers the set with itself.
     /// <para>
-    /// The set asks the core's <see cref="CallerAccessCheck"/> first, so the requirements that are about who is
+    /// The set asks the core's <see cref="CurrentUserAccessCheck"/> first, so the requirements that are about who is
     /// calling and nothing else work in every module, with no check added:
     /// <see cref="AccessRequirement.AllowAnonymous"/>, <see cref="AccessRequirement.SignedIn"/>, and
     /// <see cref="AccessRequirement.Own{TValue}"/> for a type something says the caller's own of
-    /// (<see cref="AddCallersOwn{TValue, TCallersOwn}"/>), and <see cref="AccessRequirement.OwnerOf{TId}"/> for an aggregate
+    /// (<see cref="AddOwnedByCurrentUser{TValue, THandle}"/>), and <see cref="AccessRequirement.OwnerOf{TId}"/> for an aggregate
     /// whose owner something reads (<see cref="IAggregateOwners{TId}"/>, which the Entity Framework package registers for
     /// every id). The set itself decides what combines their cases, and every
     /// other, <see cref="AccessRequirement.All"/> and <see cref="AccessRequirement.Any"/>. Who is calling
-    /// is what the host's <see cref="ICallerAccessor"/> answers, and without one what <see cref="Callers.Begin"/>
-    /// made current (<see cref="AmbientCallerAccessor"/>). Anything else a request declares is stopped unless a
-    /// check the module added decides it.
+    /// is what <see cref="ICurrentUser"/> answers, which this registers as <see cref="CurrentUser"/> unless one is
+    /// registered already. Anything else a request declares is stopped unless a check the module added decides it.
     /// </para>
     /// <para>
     /// Everything is registered per scope: the set, and <see cref="Checked{T}"/> for what a check keeps for a
@@ -49,12 +49,14 @@ public static class AccessCheckServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         // Made from the registrations kept for this interface alone, behind the core's check of who is calling. The
-        // set's own constructor takes every check there is, so the container is never left to call it. No accessor
-        // is registered here: one the host adds later, with TryAdd too, is the one asked.
+        // set's own constructor takes every check there is, so the container is never left to call it. The current
+        // user is the toolkit's unless one was registered before. A host says who its requests run as with an
+        // ICurrentUserSource, which the current user asks.
+        services.AddCurrentUser();
         services.TryAddScoped(static provider => new AccessChecks<TRequests>(
             provider.GetServices<RegisteredAccessCheck<TRequests>>()
                 .Select(static registered => registered.Check)
-                .Prepend(new CallerAccessCheck(provider.GetService<ICallerAccessor>() ?? new AmbientCallerAccessor(provider.GetService<CallerOptions>()), provider))));
+                .Prepend(new CurrentUserAccessCheck(provider.GetRequiredService<ICurrentUser>(), provider))));
         services.TryAddScoped(typeof(Checked<>));
 
         // The checks hold nobody to anything until something asks them. Where that is a behavior the toolkit
@@ -99,7 +101,7 @@ public static class AccessCheckServiceCollectionExtensions
     /// (<see cref="AccessRequirement.Own{TValue}"/>, <see cref="OrOwnAttribute"/>, <see cref="OwnAttribute"/>): the
     /// handle an application writes for a kind of its own, its own user id say.
     /// <code>
-    /// services.AddCallersOwn&lt;UserId, CallersUser&gt;();
+    /// services.AddOwnedByCurrentUser&lt;UserId, CurrentUserId&gt;();
     /// </code>
     /// </summary>
     /// <remarks>
@@ -110,15 +112,15 @@ public static class AccessCheckServiceCollectionExtensions
     /// per scope, so a handle may take what the scope knows of its caller.
     /// </remarks>
     /// <typeparam name="TValue">What a request names as the caller's own.</typeparam>
-    /// <typeparam name="TCallersOwn">The handle, made by the container once per scope.</typeparam>
+    /// <typeparam name="THandle">The handle, made by the container once per scope.</typeparam>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
-    public static IServiceCollection AddCallersOwn<TValue, TCallersOwn>(this IServiceCollection services)
+    public static IServiceCollection AddOwnedByCurrentUser<TValue, THandle>(this IServiceCollection services)
         where TValue : struct, IEquatable<TValue>
-        where TCallersOwn : class, ICallersOwn<TValue>
+        where THandle : class, IOwnedByCurrentUser<TValue>
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        return services.Replace(ServiceDescriptor.Scoped<ICallersOwn<TValue>, TCallersOwn>());
+        return services.Replace(ServiceDescriptor.Scoped<IOwnedByCurrentUser<TValue>, THandle>());
     }
 }
 

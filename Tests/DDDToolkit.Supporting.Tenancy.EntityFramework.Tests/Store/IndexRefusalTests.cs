@@ -38,10 +38,10 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         await using (var scope = _services.Scope())
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            _services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => _services.ProvisionAsync("orchard"));
+            _services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => _services.ProvisionAsync("orchard"));
 
             var refusal = await Refused.WithCodeAsync(TenancyRefusals.SlugTaken, () => scope.ServiceProvider.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid()),
+                new TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid()),
                 Cancellation));
             Same(refusal, TenancyRefusals.Refuse(TenancyRefusals.SlugTaken, ("Slug", "orchard")));
             refusal.InnerException.Should().BeOfType<DbUpdateException>("the refusal keeps the failure it stands for, so a log of it names the index");
@@ -53,10 +53,10 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         var bert = Guid.NewGuid();
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            _services.Hook.BeforeSave(services.Tenancy(), () => _services.AddSeatAsync(harbor.Tenant, bert, "Bert"));
+            _services.Hook.BeforeSave(services.TenancyContext(), () => _services.AddSeatAsync(harbor.Tenant, bert, "Bert"));
 
             Same(
-                await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => services.Seats().AddSeatAsync(bert, Cancellation)),
+                await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => services.Seats().AddAsync(bert, Cancellation)),
                 TenancyRefusals.Refuse(TenancyRefusals.IdentityHasSeat));
         });
 
@@ -64,7 +64,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         // name as the role has it.
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            _services.Hook.BeforeSave(services.Tenancy(), () => _services.BySystemIn(harbor.Tenant, racing =>
+            _services.Hook.BeforeSave(services.TenancyContext(), () => _services.BySystemIn(harbor.Tenant, racing =>
                 racing.Roles().CreateAsync("Élan", "Keeps going", [HostCatalogue.WidgetRead], Cancellation)));
 
             Same(
@@ -75,7 +75,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         // The other two rules the aggregates keep themselves, so only a write that goes past them meets the index:
         // a context without the toolkit's checks, saving a second root and a second primary placement.
         await using (var past = PastTheAggregates())
-        using (TenancyCallers.Begin(HostCaller.SystemIn(harbor.Tenant)))
+        using (TenancyUsers.Begin(HostUser.SystemIn(harbor.Tenant)))
         {
             var organization = await past.Set<HostOrganization>().SingleAsync(row => row.Id == harbor.Tenant, Cancellation);
             past.Entry(organization.Units.Single(unit => unit.Id == north)).Property(unit => unit.ParentId).CurrentValue = null;
@@ -86,7 +86,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         }
 
         await using (var past = PastTheAggregates())
-        using (TenancyCallers.Begin(HostCaller.SystemIn(harbor.Tenant)))
+        using (TenancyUsers.Begin(HostUser.SystemIn(harbor.Tenant)))
         {
             var seat = await past.Set<HostSeat>().SingleAsync(row => row.Id == grace, Cancellation);
             past.Entry(seat.Placements.Single(placement => placement.UnitId == north)).Property(placement => placement.IsPrimary).CurrentValue = true;
@@ -99,7 +99,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         // Nothing of the refused saves was written.
         _services.Database.CountRows("Tenants").Should().Be(2, "harbor and the orchard that got there first");
         _services.Database.CountRows("Seats").Should().Be(4, "an administrator each, grace and the one Bert");
-        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByPack.Count * 2 + 1, "each tenant's roles and the one Élan");
+        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByStarterRole.Count * 2 + 1, "each tenant's roles and the one Élan");
     }
 
     [Fact]

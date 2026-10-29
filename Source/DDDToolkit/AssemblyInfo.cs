@@ -4,4 +4,4 @@ using DDDToolkit.Access;
 // its token names: the core says so without a registration, and says so here for the generator, which reports [OrOwn]
 // and [Own] on a type nothing says the caller's own of. Only a signed-in user has a verified identity, so [SignedIn]
 // beside [OwnOnly] with [Own] on a Guid says nothing more.
-[assembly: CallersOwn(typeof(Guid), Implies = [typeof(SignedInAttribute)])]
+[assembly: OwnedByCurrentUser(typeof(Guid), Implies = [typeof(SignedInAttribute)])]

@@ -1,15 +1,14 @@
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.Supporting.Membership.TestHost.Persistence;
-using DDDToolkit.Supporting.Membership.UseCases;
 using Microsoft.EntityFrameworkCore;
 
 namespace DDDToolkit.Supporting.Membership.TestHost.Gardens;
 
 /// <summary>
 /// A role of plots, as the package declares one: an aggregate of the host's own, beside the plot, named for
-/// the plot it is a role of. The host adds whose it is, a garden's, and raises its own events from what the
-/// package's operations answer. Which garden's roles a request reads is the host's rule too, on its context.
+/// the plot it is a role of. The host adds whose it is, a garden's, and raises its own events in the hooks the
+/// generator declares, which the role calls after each change that changed anything. Which garden's roles a request reads is the host's rule too, on its context.
 /// </summary>
 [CustomRole<PlotRoleId, Plot>]
 public sealed partial class PlotRole
@@ -24,31 +23,21 @@ public sealed partial class PlotRole
     /// <summary>The garden the role is of: the host's own column, which the package knows nothing of.</summary>
     public GardenId GardenId { get; private set; }
 
-    /// <summary>Calls the role something else, and says so when that changed anything.</summary>
-    public void CallIt(string name, string? description)
-    {
-        if (Rename(name, description, PlotMembership.Rules))
-        {
-            RaiseDomainEvent(new PlotRoleRenamed(Id, Name));
-        }
-    }
+    /// <summary>Calls the role something else: what the role manager's RenameAsync does, for the tests to set a role up with.</summary>
+    public void CallIt(string name, string? description) => Rename(name, description, PlotMembership.Rules);
 
-    /// <summary>Has the role give these permissions, and says which came in and which went out.</summary>
-    public void HaveItGive(params string[] permissions)
-    {
-        var set = SetPermissions(permissions, PlotMembership.Rules);
-        if (set.Changed)
-        {
-            RaiseDomainEvent(new PlotRolePermissionsChanged(Id, set.Added, set.Removed));
-        }
-    }
+    /// <summary>Has the role give these permissions from now on.</summary>
+    public void HaveItGive(params string[] permissions) => SetPermissions(permissions, PlotMembership.Rules);
 
-    /// <summary>Puts the role away.</summary>
-    public void PutAway()
-    {
-        Archive(PlotMembership.Rules);
-        RaiseDomainEvent(new PlotRolePutAway(Id));
-    }
+    /// <summary>Puts the role away: it is archived.</summary>
+    public void PutAway() => Archive(PlotMembership.Rules);
+
+    /// <summary>The host's event for a new name: the hook the role calls after a rename that changed anything.</summary>
+    partial void OnRenamed() => RaiseDomainEvent(new PlotRoleRenamed(Id, Name));
+
+    partial void OnPermissionsSet(RolePermissionsSet set) => RaiseDomainEvent(new PlotRolePermissionsChanged(Id, set.Added, set.Removed));
+
+    partial void OnArchived() => RaiseDomainEvent(new PlotRolePutAway(Id));
 }
 
 /// <summary>A role of plots was made, by hand or from a starter role.</summary>
@@ -91,8 +80,9 @@ public static class GardenOfTheRequest
 
 /// <summary>
 /// The host's use case that gives a garden its first roles: the starter roles the plots' rules declare, each
-/// made once. The host says which garden it means by handing the package that garden's roles, and makes what
-/// is missing with its own constructor, which says whose the role is.
+/// made once, told by what it was made from. It reads the roles of the garden it is told, whichever garden the request
+/// is in, which the role manager does not: that reads the roles the request's context lets through. So it makes what is
+/// missing itself, with its own constructor, which says whose the role is.
 /// </summary>
 /// <param name="context">The host's context.</param>
 public sealed class GardenRoles(GardenContext context)
@@ -103,7 +93,11 @@ public sealed class GardenRoles(GardenContext context)
         // Every role of that garden, whichever garden this request is in: the scope is said here, not read from the air.
         var existing = await context.PlotRoles.IgnoreQueryFilters().Where(role => role.GardenId == garden).ToListAsync(cancellationToken);
 
-        List<PlotRole> made = [.. StarterRoles.Missing(PlotMembership.Rules, existing).Select(draft => new PlotRole(PlotRoleId.CreateSequential(), garden, draft))];
+        var rules = PlotMembership.Rules;
+        var there = existing.Select(role => role.MadeFrom).ToHashSet(StringComparer.Ordinal);
+        List<PlotRole> made = [.. rules.Roles.Declared
+            .Where(starter => !there.Contains(starter.Name))
+            .Select(starter => new PlotRole(PlotRoleId.CreateSequential(), garden, new CustomRoleDraft(starter.Name, null, rules.PermissionsOf(new NamedRole(starter.Name)), starter.Name)))];
         context.PlotRoles.AddRange(made);
         await context.SaveChangesAsync(cancellationToken);
         return made;

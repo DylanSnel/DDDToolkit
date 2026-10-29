@@ -7,8 +7,8 @@ namespace DDDToolkit.Startup;
 /// </summary>
 /// <remarks>
 /// The stages are the order in which one failure hides another. A context wired wrong fails every question put to
-/// the database through it; a login role that may not become the system caller fails every question asked as the
-/// system caller; a database that misses a migration misses the policies and functions that migration made. Each
+/// the database through it; a login role that may not switch to the system role fails every question asked as
+/// system work; a database that misses a migration misses the policies and functions that migration made. Each
 /// of those is said first, by the check that names it, so a host is told the cause rather than one of its effects.
 /// </remarks>
 public enum StartupCheckStage
@@ -22,8 +22,8 @@ public enum StartupCheckStage
 
     /// <summary>
     /// What the role the host logs in as may do, asked as that role, before anything sets a caller on a
-    /// connection: whether it may become every caller. The stages after it ask as the system caller, which
-    /// switches to the system caller's role, and a login role that may not would fail there, on the switch,
+    /// connection: whether it may switch to the role of every kind of user. The stages after it ask as system work, which
+    /// switches to the system role, and a login role that may not would fail there, on the switch,
     /// without saying why.
     /// </summary>
     Login = 1,
@@ -37,7 +37,7 @@ public enum StartupCheckStage
     /// <summary>
     /// Whether the database is set up as the application relies on: the role the host logs in as holds nothing,
     /// and the policies, functions, triggers, grants and extensions are the ones its code expects. Asked as the
-    /// system caller, of a database that has every migration.
+    /// system work, of a database that has every migration.
     /// </summary>
     Database = 3,
 }

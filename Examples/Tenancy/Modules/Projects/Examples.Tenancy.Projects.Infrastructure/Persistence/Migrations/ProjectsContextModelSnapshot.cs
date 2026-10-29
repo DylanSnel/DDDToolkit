@@ -156,10 +156,10 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.Access.RoleRow<Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId, Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>", b =>
                 {
-                    b.Property<string>("FromPack")
+                    b.Property<string>("FromStarterRole")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("FromPack");
+                        .HasColumnName("FromStarterRole");
 
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -182,7 +182,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence.Migrations
 
                     b.ToTable((string)null);
 
-                    b.ToFunction("tenant_roles_with_permissions");
+                    b.ToFunction("tenant_roles_with_starter_roles");
 
                     b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "TenantId");
                 });

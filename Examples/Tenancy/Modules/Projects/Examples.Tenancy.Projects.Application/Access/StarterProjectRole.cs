@@ -8,7 +8,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// <remarks>
 /// The application declares them, not this module, because a crew role gives permissions of every module that acts on a
 /// project, a surveyor's the permission to record an inspection say, and this module knows only its own. They are the
-/// application's data next to its role packs, handed to the module where the host adds it.
+/// application's data next to its starter roles, handed to the module where the host adds it.
 /// </remarks>
 /// <param name="Key">
 /// What the role is made from, and found by after that, whatever the tenant has called it since: lower case

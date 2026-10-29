@@ -20,7 +20,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <param name="Role">The role it is for: a symbolic one, such as <c>RowAccessRoles.User</c>, or a role's own name. Never <c>PUBLIC</c>.</param>
 /// <param name="Using">
 /// Which existing rows it lets the role see, change or remove: for every command but <c>INSERT</c>, which has
-/// none. It may ask functions by <c>{fn:owner/name}</c> and the caller by <c>{caller:...}</c>.
+/// none. It may ask functions by <c>{fn:owner/name}</c> and the caller by <c>{user:...}</c>.
 /// </param>
 /// <param name="WithCheck">
 /// Which rows it lets the role leave behind: for <c>INSERT</c>, and for <c>UPDATE</c> and <c>ALL</c>, where it

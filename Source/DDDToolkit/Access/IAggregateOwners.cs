@@ -5,8 +5,8 @@ namespace DDDToolkit.Access;
 /// <summary>
 /// Reads the owner of an aggregate whose id is <typeparamref name="TId"/>, as the caller, for a request about the owner's
 /// own (<see cref="AccessRequirement.OwnerOf{TId}"/>): the value of the property the aggregate marks <c>[Owner]</c>, in the
-/// one row the id names. The core's <see cref="CallerAccessCheck"/> asks it, and compares what it read with what the
-/// <see cref="ICallersOwn{TValue}"/> of the owner's type says is the caller's.
+/// one row the id names. The core's <see cref="CurrentUserAccessCheck"/> asks it, and compares what it read with what the
+/// <see cref="IOwnedByCurrentUser{TValue}"/> of the owner's type says is the caller's.
 /// </summary>
 /// <remarks>
 /// The Entity Framework package registers one for every id, with <c>AddDDDToolkitEntityFramework</c>, which a host on Entity

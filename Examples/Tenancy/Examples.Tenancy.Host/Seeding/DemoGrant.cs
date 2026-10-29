@@ -7,7 +7,7 @@ namespace Examples.Tenancy.Host.Seeding;
 /// </summary>
 /// <param name="Person">Whose seat is granted the role.</param>
 /// <param name="Unit">Where.</param>
-/// <param name="Pack">The pack the tenant's role was copied from.</param>
+/// <param name="StarterRole">The starter role the tenant's role was copied from.</param>
 /// <param name="From">How long before seeding the grant starts.</param>
 /// <param name="Until">How long after seeding it ends; negative for a grant that has ended already.</param>
-public sealed record DemoGrant(DemoPerson Person, OrganizationUnitId Unit, string Pack, TimeSpan? From = null, TimeSpan? Until = null);
+public sealed record DemoGrant(DemoPerson Person, OrganizationUnitId Unit, string StarterRole, TimeSpan? From = null, TimeSpan? Until = null);

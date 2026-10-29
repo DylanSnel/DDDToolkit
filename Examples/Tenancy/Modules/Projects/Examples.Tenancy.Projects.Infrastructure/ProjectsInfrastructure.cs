@@ -66,16 +66,18 @@ public static class ProjectsInfrastructure
         // or is an operator. The package's check for those cases, added for this module's request interface and
         // over this module's context, which maps Tenancy's read model. Projects declares none of Tenancy's classes,
         // so the application's four ids are written out, as where the read model is mapped.
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>();
+        services.AddTenancyAccess<IProjectsRequest, ProjectsContext>();
 
         // The projects as the Membership package keeps them, over this module's context, with the projects' rules:
-        // the access questions about a project, answered inside this context's statements, and the admission of a
-        // seat or a project role to a crew. A crew member is a seat, so what the rules ask of the organization is
-        // answered by a class the package's generator writes here from Tenancy's own answers. Projects declares
-        // none of Tenancy's classes, so the ids that class cannot be given are written out. Then the package's
-        // check, for a permission held on a project, added for this module's request interface: who may change a crew,
-        // or name an owner, is still what each command requires, here and in the database alike.
-        services.AddProjectMembershipWithTenancy<ProjectsContext, TenantId, OrganizationUnitId, RoleId>(membership.Rules);
+        // the access questions about a project, answered inside this context's statements, and the two managers the
+        // package's generator writes for the module, CrewMemberManager and ProjectRoleManager, which load and save on
+        // this context. A crew member is a seat, so what the rules and the managers ask of the organization is answered
+        // by a class the package's generator writes here from Tenancy's own queries: whether a seat is active, whether a
+        // caller holds the permission that changes the project roles for the whole tenant, and how a change to a
+        // caller's own place on a crew is saved. Then the package's check, for a permission held on a project, added
+        // for this module's request interface: who may change a crew, or name an owner, is what each command requires,
+        // in the crew manager, and in the database alike.
+        services.AddProjectMembershipWithTenancy<ProjectsContext>(membership.Rules);
         services.AddProjectMemberAccess<IProjectsRequest>();
 
         // The Membership package's start-up check: the database answers the projects' membership as the rules
@@ -93,7 +95,7 @@ public static class ProjectsInfrastructure
             host.Publish(outbox);
         }));
 
-        // The poller marks each stored event handled. It needs no Tenancy caller: the outbox is not kept to a tenant.
+        // The poller marks each stored event handled. It needs no Tenancy user: the outbox is not kept to a tenant.
         services.AddOutboxBackgroundService<ProjectsContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
         return services;

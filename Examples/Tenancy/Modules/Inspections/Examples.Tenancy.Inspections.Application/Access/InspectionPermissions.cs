@@ -11,7 +11,7 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// held on a project's crew, on that project alone, since the projects' crew roles take permissions of other modules.
 /// Projects answers both, although the permission is not Projects' own: its gate answers for any permission the catalogue knows.
 /// Recording on a project means seeing it, so the permission brings <see cref="ProjectPermissionNames.View"/> with it. The permission itself
-/// is published in the contracts (<see cref="InspectionPermissionNames"/>), where the host names it in its role packs.
+/// is published in the contracts (<see cref="InspectionPermissionNames"/>), where the host names it in its starter roles.
 /// </remarks>
 [Permissions]
 public static class InspectionPermissions

@@ -4,14 +4,14 @@ using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
-/// Where the use cases load and save, over Tenancy's context: one context is one unit of work. Every load goes
+/// Where Tenancy's managers load and save, over Tenancy's context: one context is one unit of work. Every load goes
 /// through the context's sets, so the tenant filter keeps it to the current caller's tenant, and a seat or role
 /// of another tenant is not found; an application's own filters apply as well.
 /// <para>
@@ -21,12 +21,12 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// or no, and the identity and the role name are asked within the caller's tenant.
 /// </para>
 /// <para>
-/// The tenants' directory looks past the tenant filter alone, and runs as whoever asks: it is an operator's, and
+/// The tenants' listing looks past the tenant filter alone, and runs as whoever asks: it is an operator's, and
 /// what an operator may read is the database's to say where it keeps tenants apart.
 /// </para>
 /// <para>
 /// A save that breaks one of Tenancy's unique indexes is refused with the code the index declares, by the
-/// toolkit's own interceptor, on any database: the answer the use case gives for the same rule, with the
+/// toolkit's own interceptor, on any database: the answer the manager gives for the same rule, with the
 /// failure as its inner exception. Such a refusal, and any other, leaves the store as it arrived.
 /// </para>
 /// <para>
@@ -41,7 +41,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// orders the two rows by key, not by an index filter it cannot read.
 /// </para>
 /// <para>
-/// What the use cases ask about every seat's rights, a tenant's administrators and the rights a move changes, is
+/// What the managers ask about every seat's rights, a tenant's administrators and the rights a move changes, is
 /// read from the rights themselves, unless the database keeps them (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>)
 /// and the caller is a seat: such a database shows a seat only its own rights, and answers these two questions
 /// through functions of its own (<see cref="TenancyFunctionNames"/>), which the store then asks.
@@ -51,7 +51,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     TContext context,
     IEnumerable<ITenancySaveFailures> failures,
     IOptions<TenancyStoreOptions> options)
-    : TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.IStore
+    : ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
     where TUnit : OrganizationUnitEntity<TUnitId>
@@ -88,12 +88,12 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
 
     /// <inheritdoc />
     /// <remarks>
-    /// One statement, past the tenant filter and no other: the directory looks across tenants, and an
+    /// One statement, past the tenant filter and no other: the operators' list looks across tenants, and an
     /// application's own filter, a soft delete say, still hides what it hides. It runs as whoever is calling, so on
     /// a database that keeps tenants apart by itself the caller's own policies decide the rows. The seats are
     /// counted in the database, and nothing of a seat leaves it.
     /// </remarks>
-    public async Task<IReadOnlyList<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.TenantListing>> ListTenantsAsync(
+    public async Task<IReadOnlyList<TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.TenantListing>> ListTenantsAsync(
         string? afterSlug,
         int take,
         CancellationToken cancellationToken)
@@ -109,16 +109,14 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
                      orderby tenant.Slug
                      select new
                      {
-                         tenant.Id,
-                         tenant.Slug,
+                         Tenant = tenant,
                          organization.Name,
-                         tenant.Status,
                          ActiveSeats = context.Set<TSeat>().Count(seat => seat.TenantId.Equals(tenant.Id) && seat.Status == SeatStatus.Active),
                      };
 
         var rows = await listed.Take(take).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return [.. rows.Select(row => new TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.TenantListing(
-            row.Id, row.Slug.Value, row.Name, row.Status, row.ActiveSeats))];
+        return [.. rows.Select(row => new TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.TenantListing(
+            row.Tenant, row.Name, row.ActiveSeats))];
     }
 
     /// <summary>
@@ -148,7 +146,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     /// <inheritdoc />
     /// <remarks>
     /// One statement, as <see cref="FindOrganizationAsync"/> reads the organization with its units, and not tracked:
-    /// the units are the application's own class, handed to it by the directory, and nothing done to one is saved.
+    /// the units are the application's own class, handed to it by a manager, and nothing done to one is saved.
     /// </remarks>
     public Task<TOrganization?> ReadOrganizationAsync(TTenantId id, CancellationToken cancellationToken)
         => context.Set<TOrganization>().AsNoTracking().Where(organization => organization.Id.Equals(id)).FirstOrDefaultAsync(cancellationToken);
@@ -166,7 +164,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     /// <inheritdoc />
     /// <remarks>
     /// One statement, over the seats with their placements and grants as <see cref="FindSeatAsync"/> reads them, and
-    /// not tracked: the seats are the application's own class, handed to it by the directory, and nothing done to
+    /// not tracked: the seats are the application's own class, handed to it by a manager, and nothing done to
     /// one is saved. It names the tenant next to the tenant filter: a person's seats in other tenants, which a
     /// database may let that person read, are not among the answer.
     /// </remarks>
@@ -273,13 +271,13 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
                     TenancyFunctionSql.Select(
                         context,
                         schema: null,
-                        TenancyFunctionNames.PermissionsAMoveChanges,
+                        TenancyFunctionNames.PermissionsAUnitMoveChanges,
                         parameters: 2,
                         nameof(MoveReach<TUnitId>.UnitId),
                         nameof(MoveReach<TUnitId>.Permission),
                         nameof(MoveReach<TUnitId>.EndsAt),
                         nameof(MoveReach<TUnitId>.Parent),
-                        nameof(MoveReach<TUnitId>.OfCaller)),
+                        nameof(MoveReach<TUnitId>.OfCurrentSeat)),
                     TenancyFunctionSql.Stored(context, parent),
                     TenancyFunctionSql.Stored(context, newParent))
                 .ToListAsync(cancellationToken)
@@ -392,7 +390,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     private async Task<bool> DatabaseSeesTheSeatAsync(CancellationToken cancellationToken)
     {
         var seen = await context.Database
-            .SqlQueryRaw<bool>(TenancyFunctionSql.Answers(context, schema: null, TenancyFunctionSql.CallerSeat))
+            .SqlQueryRaw<bool>(TenancyFunctionSql.Answers(context, schema: null, TenancyFunctionSql.CurrentSeat))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return seen is [true];
@@ -406,7 +404,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     private bool AsksTheDatabase
         => options.Value.DatabaseKeepsRights
            && context.Database.IsRelational()
-           && TenancyCallers.Current<TTenantId, TSeatId>().Kind == TenancyCallerKind.Seat;
+           && TenancyUsers.Current<TTenantId, TSeatId>().Kind == TenancyUserKind.Seat;
 
     /// <inheritdoc />
     public void Add(TTenant tenant) => context.Add(tenant);

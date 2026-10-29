@@ -48,7 +48,7 @@ public sealed class DutyRowAccess : IRowAccessContribution
 
         return new(
             [
-                new ContributedFunction("on_duty", "", "boolean", "SELECT coalesce(({caller:claims} ->> 'on_duty')::boolean, false)", GrantTo: [RowAccessRoles.User]),
+                new ContributedFunction("on_duty", "", "boolean", "SELECT coalesce(({user:claims} ->> 'on_duty')::boolean, false)", GrantTo: [RowAccessRoles.User]),
                 new ContributedFunction(
                     "duty_tickets",
                     "",

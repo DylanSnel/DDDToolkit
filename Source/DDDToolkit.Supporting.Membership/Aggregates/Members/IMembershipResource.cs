@@ -23,7 +23,7 @@ public interface IMembershipResource
     /// </summary>
     static abstract string MembershipName { get; }
 
-    /// <summary>The codes the resource refuses under: the member list's, the questions' and the admission's.</summary>
+    /// <summary>The codes the resource refuses under: the member list's, the questions' and the member manager's.</summary>
     static abstract MembershipCodes MembershipCodes { get; }
 
     /// <summary>

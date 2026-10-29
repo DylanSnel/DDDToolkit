@@ -72,7 +72,7 @@ public sealed class KeepersInMemory : IDepotKeepers
 }
 
 /// <summary>Decides <see cref="KeepsDepot"/> for the caller of the test.</summary>
-public sealed class KeeperCheck(Caller caller, IDepotKeepers keepers) : IAccessCheck
+public sealed class KeeperCheck(CurrentUserSnapshot caller, IDepotKeepers keepers) : IAccessCheck
 {
     /// <summary>The code a caller who does not keep the depot is refused with.</summary>
     public const string NotAKeeper = "depots.not-a-keeper";
@@ -81,7 +81,7 @@ public sealed class KeeperCheck(Caller caller, IDepotKeepers keepers) : IAccessC
 
     public async ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
     {
-        if (caller.UserId is not { } user || !await keepers.KeepsAsync(user, ((KeepsDepot)requirement).Depot, cancellationToken))
+        if (caller.Id is not { } user || !await keepers.KeepsAsync(user, ((KeepsDepot)requirement).Depot, cancellationToken))
         {
             throw new RefusalException(NotAKeeper, RefusalKind.NotPermitted, "Only a keeper of the depot does that.");
         }

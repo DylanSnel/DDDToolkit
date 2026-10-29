@@ -112,6 +112,22 @@ public static class PooledContexts
     }
 
     /// <summary>
+    /// The services of the scope this context was bound to for the rental it is in now, by <see cref="BindToScope{TContext}"/>
+    /// or by <see cref="AddScopedFromPool{TContext}"/> for a scope's own context; <see langword="null"/> when it was bound
+    /// to none, when the binding is an earlier rental's, and when the scope is gone. A package that asks the application's
+    /// scoped services about a statement of this context asks them here first, and of the provider the context's options
+    /// were built with after.
+    /// </summary>
+    /// <param name="context">The context.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
+    public static IServiceProvider? ScopeOf(this DbContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return ScopeBinding.Find(context);
+    }
+
+    /// <summary>
     /// Whether the context's options are a pool's: <c>AddPooledDbContextFactory</c>, <c>AddDbContextPool</c>
     /// and <c>PooledDbContextFactory&lt;TContext&gt;</c> all set <see cref="CoreOptionsExtension.MaxPoolSize"/>,
     /// and nothing else does.

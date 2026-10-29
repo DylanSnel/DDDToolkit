@@ -128,24 +128,24 @@ public class RoleTests
     }
 
     [Fact]
-    public void Pack_provenance_is_set_at_creation_only()
+    public void Starter_role_provenance_is_set_at_creation_only()
     {
         var catalogue = New.Catalogue();
-        var pack = catalogue.Packs.Single(candidate => candidate.Key == HostCatalogue.WatcherPack);
+        var starterRole = catalogue.StarterRoles.Single(candidate => candidate.Key == HostCatalogue.WatcherStarterRole);
 
         var role = TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(
-            RoleId.CreateSequential(), new TenantId(1), new RoleDraft(pack.Name, pack.Description, pack.Permissions, pack.Key), catalogue);
+            RoleId.CreateSequential(), new TenantId(1), new RoleDraft(starterRole.Name, starterRole.Description, starterRole.Permissions, starterRole.Key), catalogue);
 
-        role.FromPack.Should().Be(HostCatalogue.WatcherPack);
+        role.FromStarterRole.Should().Be(HostCatalogue.WatcherStarterRole);
         role.PendingEvents().RaisedExactly<RoleCreated<TenantId, RoleId, SeatId>>()
-            .SingleEvent<RoleCreated<TenantId, RoleId, SeatId>>().FromPack.Should().Be(HostCatalogue.WatcherPack);
+            .SingleEvent<RoleCreated<TenantId, RoleId, SeatId>>().FromStarterRole.Should().Be(HostCatalogue.WatcherStarterRole);
 
         role.Rename<SeatId>("Looker", "Looks");
         role.SetPermissions<SeatId>([HostCatalogue.WidgetChange], catalogue);
-        role.FromPack.Should().Be(HostCatalogue.WatcherPack, "the copy is the tenant's own now, and still says where it came from");
-        typeof(RoleAggregate<RoleId, TenantId>).GetProperty(nameof(role.FromPack))!.SetMethod!.IsPrivate.Should().BeTrue();
+        role.FromStarterRole.Should().Be(HostCatalogue.WatcherStarterRole, "the copy is the tenant's own now, and still says where it came from");
+        typeof(RoleAggregate<RoleId, TenantId>).GetProperty(nameof(role.FromStarterRole))!.SetMethod!.IsPrivate.Should().BeTrue();
 
-        New.Role(catalogue, "By hand", HostCatalogue.WidgetRead).FromPack.Should().BeNull();
+        New.Role(catalogue, "By hand", HostCatalogue.WidgetRead).FromStarterRole.Should().BeNull();
     }
 
     [Fact]

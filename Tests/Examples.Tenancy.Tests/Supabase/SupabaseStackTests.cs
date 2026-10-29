@@ -488,7 +488,7 @@ public sealed class SupabaseStackTests(SampleSupabaseStack stack)
         static async Task<IEnumerable<string?>> TenantsSeatedInAsync(HttpClient client)
         {
             var seats = await client.GetFromJsonAsync<JsonElement>("/me/seats", Cancellation);
-            return [.. seats.EnumerateArray().Select(seat => seat.GetProperty("tenant").GetProperty("slug").GetString())];
+            return [.. seats.EnumerateArray().Select(seat => seat.GetProperty("slug").GetString())];
         }
     }
 

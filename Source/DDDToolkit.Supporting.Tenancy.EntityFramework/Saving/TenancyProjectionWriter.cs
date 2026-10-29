@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <summary>
 /// Writes the rows the access questions read in the save that changes the aggregates they come from: the
 /// closure of every organization whose tree changed, and the rights of every seat a change reaches. What
-/// changed is read from the change tracker, so no use case has to say so, and the rows are written in the
+/// changed is read from the change tracker, so no manager has to say so, and the rows are written in the
 /// save's own transaction, so a save that fails writes none of them.
 /// <list type="bullet">
 /// <item>A seat that was added, or whose status or grants changed, has its rights written again in full,

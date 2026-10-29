@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Title>Domain Driven Design Toolkit - Supporting domain: Tenancy on Postgres</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;supporting;tenancy;multi-tenant;multitenancy;postgres;postgresql;rls;row-level-security</PackageTags>
-    <Description>Tenancy on Postgres with row level security: the tenant of the current Tenancy caller on every connection, next to the caller's role and claims, fail-closed callers, the SQL functions, policies and triggers of Tenancy's tables as a row access contribution, and the start-up checks.</Description>
+    <Description>Tenancy on Postgres with row level security: the tenant of the current Tenancy user on every connection, next to the caller's role and claims, fail-closed callers, the SQL functions, policies and triggers of Tenancy's tables as a row access contribution, and the start-up checks.</Description>
   </PropertyGroup>
 
   <!--

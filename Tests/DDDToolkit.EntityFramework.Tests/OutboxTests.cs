@@ -20,7 +20,7 @@ using Microsoft.Extensions.Hosting;
 namespace DDDToolkit.EntityFramework.Tests;
 
 /// <summary>Transactional delivery through the outbox table and its processor.</summary>
-public sealed class OutboxTests(ExplicitCallersPostgres postgres) : IDisposable
+public sealed class OutboxTests(ExplicitCurrentUserPostgres postgres) : IDisposable
 {
     private readonly SqliteDatabase _db = new();
     private readonly ManualClock _clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
@@ -56,22 +56,22 @@ public sealed class OutboxTests(ExplicitCallersPostgres postgres) : IDisposable
         var cancellation = TestContext.Current.CancellationToken;
         await using var work = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(cancellation),
-            module => module.Around(IntegrationEventScopes.System).Handle<ShelfOpenedV3, ReceiptWatch>(),
-            services: services => services.AddOutboxBackgroundService<CallerOutboxContext>(TimeSpan.FromMinutes(1)));
+            module => module.Around(IntegrationEventScopes.SystemBypassingRowAccess).Handle<ShelfOpenedV3, ReceiptWatch>(),
+            services: services => services.AddOutboxBackgroundService<UserOutboxContext>(TimeSpan.FromMinutes(1)));
         await work.QueueAsync("Fiction");
         await work.QueueAsync("Poetry");
 
         await using (var scope = work.Services.CreateAsyncScope())
         {
-            var read = () => scope.ServiceProvider.GetRequiredService<CallerOutboxContext>().Outbox.CountAsync(cancellation);
-            await read.Should().ThrowAsync<NoCallerException>("nothing said who a read of the outbox runs as");
+            var read = () => scope.ServiceProvider.GetRequiredService<UserOutboxContext>().Outbox.CountAsync(cancellation);
+            await read.Should().ThrowAsync<NoCurrentUserException>("nothing said who a read of the outbox runs as");
         }
 
-        var poller = work.Services.GetServices<IHostedService>().OfType<OutboxBackgroundService<CallerOutboxContext>>().Single();
+        var poller = work.Services.GetServices<IHostedService>().OfType<OutboxBackgroundService<UserOutboxContext>>().Single();
         await poller.DrainAsync(cancellation);
 
         (await work.OutboxAsync()).Should().HaveCount(2).And.OnlyContain(row => row.ProcessedAt != null && row.LastError == null);
-        work.Seen.Callers.Should().Equal([Caller.System, Caller.System], "the module said its handlers run as the system, and only then do they");
+        work.Seen.Callers.Should().Equal([CurrentUserSnapshot.System, CurrentUserSnapshot.System], "the module said its handlers run as the system, and only then do they");
     }
 
     [Fact]

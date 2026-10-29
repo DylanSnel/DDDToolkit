@@ -5,13 +5,14 @@
 //
 // The module's classes are not among these. Two features of this project are called Tenant and Organization, so
 // inside it those two words are the features' namespaces, whatever is imported: the classes of those names are
-// reached through Tenancy's use cases, and a file that names another of the classes imports its namespace itself.
+// reached through Tenancy's managers, and a file that names another of the classes imports its namespace itself.
 //
-// Those use cases are not closed here either. The package nests every use case, its store and its records in one
-// class generic over the module's five classes and four ids, and the toolkit's generator closes it over the classes
-// in the domain project that declares them, as TenancyUseCases, the package's class's own name. So a handler takes a
-// TenancyUseCases.SeatCommands, and the invitation use cases are TenancyUseCases.InvitationCommands<Invitation,
-// InvitationId>, closed over the module's invitation class as well.
+// Those managers are not closed here either. The package's managers are generic over the module's classes and ids, and
+// the toolkit's generator closes each over the classes in the domain project that declares them, under the package's
+// own names. So a handler takes a SeatManager, and the invitations are the InvitationManager, closed over the module's
+// invitation class as well. The stores the managers save through, for the few commands that change a field of the
+// module's own on one of Tenancy's aggregates, are TenancyStore and InvitationStore: aliases the generator writes into
+// every project that sees the module's classes, this one among them.
 global using DDDToolkit.Access;
 global using DDDToolkit.Supporting.Tenancy.Access;
 global using Examples.Tenancy.Tenants.Application.Access;
@@ -19,11 +20,3 @@ global using Examples.Tenancy.Tenants.Application.StoredTenancy;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 global using DDDToolkit.Supporting.Tenancy;
 
-// Tenancy's answers about the current caller, closed over the application's ids: the handlers that ask who is
-// calling, and AtTenantPermission, name it once. An alias is global only in the project that declares it, and reads its
-// target as if no other using existed, hence the full names.
-global using SampleAnswers = DDDToolkit.Supporting.Tenancy.Access.ITenancyAnswers<
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;

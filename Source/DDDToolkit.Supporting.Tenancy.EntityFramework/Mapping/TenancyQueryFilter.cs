@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
-/// The query filter that keeps every read of a tenant's rows to the current Tenancy caller's tenant. It
+/// The query filter that keeps every read of a tenant's rows to the current Tenancy user's tenant. It
 /// matches the rows of the tenant a seat or system work in a tenant acts in, and nothing for nobody and for
 /// system work outside any tenant.
 /// <para>
@@ -22,14 +22,14 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 public static class TenancyQueryFilter
 {
     /// <summary>The filter's name, for <c>IgnoreQueryFilters</c>.</summary>
-    public const string Name = "tenancy.caller-tenant";
+    public const string Name = "tenancy.current-tenant";
 
     private static readonly MethodInfo CurrentMethod = typeof(TenancyQueryFilter).GetMethod(nameof(Current))!;
 
     /// <summary>
-    /// The tenant the current Tenancy caller acts in, or <see langword="null"/> when it acts in none, which
+    /// The tenant the current Tenancy user acts in, or <see langword="null"/> when it acts in none, which
     /// the filter matches with nothing. The filter calls this; code that wants the tenant asks
-    /// <c>ITenancyAnswers.RequireTenant()</c>.
+    /// <c>access.CurrentTenant.Require()</c>.
     /// <para>
     /// The parameter is what makes the filter follow the caller. Entity Framework caches a query with the
     /// filter's expression in it, and it would evaluate a call that takes nothing once, when the query is
@@ -43,7 +43,7 @@ public static class TenancyQueryFilter
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static TTenantId? Current<TTenantId>(DbContext? context)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-        => TenancyCallers.CurrentTenantOrNull() as TTenantId?;
+        => TenancyUsers.CurrentTenantOrNull() as TTenantId?;
 
     /// <summary>
     /// The filter for an entity whose tenant <paramref name="tenant"/> reads:
@@ -52,12 +52,26 @@ public static class TenancyQueryFilter
     /// </summary>
     internal static Expression<Func<TEntity, bool>> Of<TEntity, TTenantId>(Expression<Func<TEntity, TTenantId>> tenant)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+        => (Expression<Func<TEntity, bool>>)Of(tenant.Parameters[0], tenant.Body, typeof(TTenantId));
+
+    /// <summary>
+    /// The filter for an entity whose tenant is <paramref name="property"/>, a property of the application's tenant id:
+    /// what <c>[OfTenant]</c> on the property gives, through <see cref="OfTenantConvention"/>, where no type argument
+    /// names the entity or the id.
+    /// </summary>
+    internal static LambdaExpression Of(Type entity, PropertyInfo property)
+    {
+        var row = Expression.Parameter(entity, "row");
+        return Of(row, Expression.Property(row, property), property.PropertyType);
+    }
+
+    private static LambdaExpression Of(ParameterExpression row, Expression tenant, Type tenantId)
     {
         var current = Expression.Call(
-            CurrentMethod.MakeGenericMethod(typeof(TTenantId)),
+            CurrentMethod.MakeGenericMethod(tenantId),
             Expression.Constant(null, typeof(DbContext)));
 
-        var body = Expression.Equal(Expression.Convert(tenant.Body, typeof(TTenantId?)), current);
-        return Expression.Lambda<Func<TEntity, bool>>(body, tenant.Parameters);
+        var body = Expression.Equal(Expression.Convert(tenant, typeof(Nullable<>).MakeGenericType(tenantId)), current);
+        return Expression.Lambda(body, row);
     }
 }

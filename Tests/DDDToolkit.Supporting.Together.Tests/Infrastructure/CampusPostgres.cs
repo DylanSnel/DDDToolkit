@@ -39,6 +39,7 @@ public sealed class CampusPostgres() : CampusPostgresServer(CampusSchemas.Defaul
     [
         RowAccessRule.For<Course>("Seats read the courses they see", RowOperations.Read, SeatsReadTheCoursesTheySee.RowAccessSql, RowAccessRoles.User),
         RowAccessRule.For<CourseRole>("Seats read the roles of courses of their college", RowOperations.Read, SeatsReadTheRolesOfCoursesOfTheirCollege.RowAccessSql, RowAccessRoles.User),
+        RowAccessRule.For<CourseRole>("Role managers change the roles of courses", RowOperations.Create | RowOperations.Change, RoleManagersChangeTheRolesOfCourses.RowAccessSql, RowAccessRoles.User),
         RowAccessRule.For<Lab>("Seats read the labs they see", RowOperations.Read, SeatsReadTheLabsTheySee.RowAccessSql, RowAccessRoles.User),
     ];
 
@@ -251,7 +252,7 @@ public abstract class CampusPostgresServer(CampusSchemas schemas) : CampusDataba
             contexts,
             new CampusScenario(clock.GetUtcNow()),
             "PostgreSQL",
-            Delimited(schemas.Tenancy) + ".caller_permissions()")
+            Delimited(schemas.Tenancy) + ".current_permissions()")
         {
             ConnectionString = connectionString,
         };
@@ -409,12 +410,12 @@ public abstract class CampusPostgresServer(CampusSchemas schemas) : CampusDataba
 /// the application, as its own SQL that forgot a condition would: only the policies, the privileges and the
 /// functions' grants stand in its way. Disposing it rolls it back.
 /// </summary>
-public sealed class CallerSession : IAsyncDisposable
+public sealed class UserSession : IAsyncDisposable
 {
     private readonly NpgsqlConnection _connection;
     private readonly NpgsqlTransaction _transaction;
 
-    private CallerSession(NpgsqlConnection connection, NpgsqlTransaction transaction)
+    private UserSession(NpgsqlConnection connection, NpgsqlTransaction transaction)
     {
         _connection = connection;
         _transaction = transaction;
@@ -427,11 +428,11 @@ public sealed class CallerSession : IAsyncDisposable
     /// <param name="connectionString">The test's database, as the login role.</param>
     /// <param name="person">Who signed in.</param>
     /// <param name="tenant">The tenant the connection names, or <see langword="null"/> for none.</param>
-    public static async Task<CallerSession> BeginAsync(string connectionString, CampusPerson person, TenantId? tenant)
+    public static async Task<UserSession> BeginAsync(string connectionString, CampusPerson person, TenantId? tenant)
     {
         var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken);
-        var session = new CallerSession(connection, await connection.BeginTransactionAsync(TestContext.Current.CancellationToken));
+        var session = new UserSession(connection, await connection.BeginTransactionAsync(TestContext.Current.CancellationToken));
 
         await using var command = new NpgsqlCommand(
             "SELECT set_config('role', $1, true), set_config('request.jwt.claims', $2, true), set_config($3, $4, true)",

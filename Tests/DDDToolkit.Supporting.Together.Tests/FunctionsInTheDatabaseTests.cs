@@ -33,7 +33,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
         foreach (var asking in data.Everybody)
         {
             // The tenant the connection names is the application's word: named for everybody, a suspended seat included.
-            await using var session = await CallerSession.BeginAsync(campus.ConnectionString!, asking.Person, data.TenantNamed(asking.College));
+            await using var session = await UserSession.BeginAsync(campus.ConnectionString!, asking.Person, data.TenantNamed(asking.College));
 
             var seen = data.CoursesSeenBy(asking).Select(id => id.Value).ToList();
             (await session.ListAsync<Guid>($"SELECT id FROM {Campus}{functions.Seen}() AS id")).Should().BeEquivalentTo(seen, "of the courses {0} sees", asking);
@@ -44,7 +44,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
             {
                 var heldInCSharp = await campus.Services.AsAsync(asking.Person, asking.College, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Course>>().Reach(permission);
                     return await provider.Campus().Courses.Within(reach).Select(course => course.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.CoursesHeldBy(asking, permission).Select(id => id.Value).ToList();
@@ -68,7 +68,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
 
         foreach (var asking in data.Everybody)
         {
-            await using var session = await CallerSession.BeginAsync(campus.ConnectionString!, asking.Person, data.TenantNamed(asking.College));
+            await using var session = await UserSession.BeginAsync(campus.ConnectionString!, asking.Person, data.TenantNamed(asking.College));
 
             (await session.ListAsync<Guid>($"SELECT id FROM {Campus}{functions.Seen}() AS id"))
                 .Should().BeEquivalentTo(data.LabsSeenBy(asking).Select(id => id.Value), "of the labs {0} sees", asking);
@@ -79,7 +79,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
             {
                 var heldInCSharp = await campus.Services.AsAsync(asking.Person, asking.College, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<LabId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Lab>>().Reach(permission);
                     return await provider.Campus().Labs.Within(reach).Select(lab => lab.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.LabsHeldBy(asking, permission).Select(id => id.Value).ToList();
@@ -102,7 +102,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
 
         async Task<List<string>> CoursesAsync(CampusPerson person, TenantId? tenant)
         {
-            await using var session = await CallerSession.BeginAsync(campus.ConnectionString!, person, tenant);
+            await using var session = await UserSession.BeginAsync(campus.ConnectionString!, person, tenant);
             return await session.ListAsync<string>($"SELECT \"Title\" FROM {Campus}\"Courses\" ORDER BY 1");
         }
 
@@ -119,7 +119,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
         (await CoursesAsync(data.Ada, null)).Should().BeEmpty();
 
         // The members and the roles they hold follow the course; the roles of courses are the college's to read.
-        await using var tom = await CallerSession.BeginAsync(campus.ConnectionString!, data.Tom, data.Alder);
+        await using var tom = await UserSession.BeginAsync(campus.ConnectionString!, data.Tom, data.Alder);
         (await tom.ListAsync<long>($"SELECT count(*) FROM {Campus}\"CourseTutors\"")).Should().ContainSingle().Which.Should().Be(5, "the owner and the four on Optics");
         (await tom.ListAsync<long>($"SELECT count(*) FROM {Campus}\"CourseRoles\"")).Should().ContainSingle().Which.Should().Be(2, "Alder's two, and none of Birch's");
         (await tom.ListAsync<string>($"SELECT \"Name\" FROM {Campus}\"Labs\"")).Should().Equal("Laser lab");
@@ -150,8 +150,8 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
         string Body(string name) => bodies.Single(body => body.StartsWith(name + ":", StringComparison.Ordinal));
 
         // Who the caller is as a member: the calling seat, as Tenancy answers it, in Tenancy's own schema.
-        Body("courses_as_member").Should().Contain($"m.\"MemberId\" = (SELECT {Tenancy}.caller_seat())");
-        Body("labs_as_member").Should().Contain($"m.\"MemberId\" = (SELECT {Tenancy}.caller_seat())");
+        Body("courses_as_member").Should().Contain($"m.\"MemberId\" = (SELECT {Tenancy}.current_seat())");
+        Body("labs_as_member").Should().Contain($"m.\"MemberId\" = (SELECT {Tenancy}.current_seat())");
 
         // Which roles give a permission: the rows of the courses' own role class, and Tenancy's answer for a lab, each behind
         // what the rules let a member's role give.
@@ -167,8 +167,8 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
         Body("courses_i_see").Should().Contain($"r.\"UnitId\" IN (SELECT reached.place FROM {Tenancy}.units_where_i_hold_permission('courses.see') AS reached(place))");
         Body("courses_where_i_hold").Should()
             .Contain($"r.\"UnitId\" IN (SELECT reached.place FROM {Tenancy}.units_where_i_hold_permission($1) AS reached(place))")
-            .And.Contain($"r.\"OwnerSeatId\" = (SELECT {Tenancy}.caller_seat())");
-        Body("labs_where_i_hold").Should().Contain($"{Tenancy}.units_where_i_hold_permission($1)").And.Contain($"r.\"OwnerSeatId\" = (SELECT {Tenancy}.caller_seat())", "a lab's owner holds its permissions by owning it");
+            .And.Contain($"r.\"OwnerSeatId\" = (SELECT {Tenancy}.current_seat())");
+        Body("labs_where_i_hold").Should().Contain($"{Tenancy}.units_where_i_hold_permission($1)").And.Contain($"r.\"OwnerSeatId\" = (SELECT {Tenancy}.current_seat())", "a lab's owner holds its permissions by owning it");
     }
 
     [Fact]
@@ -178,7 +178,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
 
         // One export, two contexts: Tenancy's file defines what the courses' file asks, so it runs first.
         scripts.Should().HaveCount(2);
-        scripts[0].Should().Contain($"FUNCTION {Tenancy}.caller_seat()").And.Contain($"FUNCTION {Tenancy}.units_where_i_hold_permission(permission text)").And.NotContain("courses_i_see");
+        scripts[0].Should().Contain($"FUNCTION {Tenancy}.current_seat()").And.Contain($"FUNCTION {Tenancy}.units_where_i_hold_permission(permission text)").And.NotContain("courses_i_see");
         scripts[1].Should().Contain($"FUNCTION {Campus}courses_i_see()").And.Contain($"FUNCTION {Campus}labs_where_i_hold(text)").And.NotContain($"FUNCTION {Tenancy}.");
 
         // Written with the resources' contributions and without Tenancy's, as for an application that leaves
@@ -226,10 +226,10 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
 
         // A function of Tenancy's that runs as its owner, given to every role by hand: the check looks for such grants
         // in the schema by the name the catalog keeps, capitals and all, and finds it.
-        await CampusPostgres.ExecuteAsync(campus.ConnectionString!, $"GRANT EXECUTE ON FUNCTION {Tenancy}.caller_seat() TO PUBLIC", Cancellation);
+        await CampusPostgres.ExecuteAsync(campus.ConnectionString!, $"GRANT EXECUTE ON FUNCTION {Tenancy}.current_seat() TO PUBLIC", Cancellation);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(campus.Services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage($"*- every role may execute {Tenancy}.caller_seat(), which runs as its owner: REVOKE EXECUTE ON FUNCTION {Tenancy}.caller_seat() FROM PUBLIC;*");
+            .WithMessage($"*- every role may execute {Tenancy}.current_seat(), which runs as its owner: REVOKE EXECUTE ON FUNCTION {Tenancy}.current_seat() FROM PUBLIC;*");
     }
 
     [Fact]
@@ -253,7 +253,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
             Cancellation);
         await FluentActions.Awaiting(() => PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(tenancy, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage($"Functions in the schemas of 'TenancyContext' run as their owner*- {Tenancy}.caller_seat() is owned by {CampusPostgres.LoginRole}. Fix: ALTER FUNCTION {Tenancy}.caller_seat() OWNER TO*");
+            .WithMessage($"Functions in the schemas of 'TenancyContext' run as their owner*- {Tenancy}.current_seat() is owned by {CampusPostgres.LoginRole}. Fix: ALTER FUNCTION {Tenancy}.current_seat() OWNER TO*");
         await FluentActions.Awaiting(() => PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(courses, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>()
             .WithMessage($"Functions in the schemas of 'CampusContext' run as their owner*- {Campus}courses_i_see() is owned by {CampusPostgres.LoginRole}. Fix: ALTER FUNCTION {Campus}courses_i_see() OWNER TO*");
@@ -282,10 +282,10 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
 
         // Where Tenancy's file makes a function, where the courses' functions ask it, and where each file finds the
         // functions it made before, by the schema and the name the catalog keeps: as they are, capitals and all.
-        scripts[0].Should().Contain($"CREATE OR REPLACE FUNCTION {Tenancy}.caller_seat()")
-            .And.Contain($"({RowAccessModel.Literal(postgres.Schemas.Tenancy)}, 'caller_seat')")
+        scripts[0].Should().Contain($"CREATE OR REPLACE FUNCTION {Tenancy}.current_seat()")
+            .And.Contain($"({RowAccessModel.Literal(postgres.Schemas.Tenancy)}, 'current_seat')")
             .And.Contain($"EXECUTE FUNCTION \"{postgres.Schemas.Tenancy}\".rights_follow_grants('grants')", "Tenancy's triggers name their functions with the schema quoted, as every name of the model is");
-        scripts[1].Should().Contain($"(SELECT {Tenancy}.caller_seat())")
+        scripts[1].Should().Contain($"(SELECT {Tenancy}.current_seat())")
             .And.Contain($"({RowAccessModel.Literal(postgres.Schemas.Campus)}, 'courses_i_see')");
 
         // No schema goes without its quotes, one Postgres would keep as it is written without them included: not before

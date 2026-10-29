@@ -101,8 +101,8 @@ public sealed class PostgresRowAccessRoleTests
         script.Should().Contain(
             "\n" +
             "CREATE POLICY \"Owners have their tickets (update) for anon\" ON \"desk\".\"Tickets\" FOR UPDATE TO anon\n" +
-            "    USING (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))\n" +
-            "    WITH CHECK (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())));\n" +
+            "    USING (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())))\n" +
+            "    WITH CHECK (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())));\n" +
             "COMMENT ON POLICY \"Owners have their tickets (update) for anon\" ON \"desk\".\"Tickets\" IS 'DDDToolkit row access rule';\n" +
             "\n" +
             "CREATE POLICY \"Owners have their tickets (update) for authenticated\" ON \"desk\".\"Tickets\" FOR UPDATE TO authenticated\n",
@@ -133,13 +133,13 @@ public sealed class PostgresRowAccessRoleTests
             "\n" +
             "-- Tickets (select) for anon asks the rules 'Owners have their tickets' and 'Public tickets are everyones': a row one of them allows is allowed.\n" +
             "CREATE POLICY \"Tickets (select) for anon\" ON \"desk\".\"Tickets\" FOR SELECT TO anon\n" +
-            "    USING ((((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))) OR (\"IsPublic\"));\n" +
+            "    USING ((((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))) OR (\"IsPublic\"));\n" +
             "COMMENT ON POLICY \"Tickets (select) for anon\" ON \"desk\".\"Tickets\" IS 'DDDToolkit row access rule';\n",
             "the rules' conditions are OR-ed, as Postgres ORs permissive policies, and the comment names the rules");
         script.Should().Contain(
             "-- Tickets (select) for authenticated asks the rules 'Auditors read every ticket', 'Owners have their tickets' and 'Public tickets are everyones': a row one of them allows is allowed.\n" +
             "CREATE POLICY \"Tickets (select) for authenticated\" ON \"desk\".\"Tickets\" FOR SELECT TO authenticated\n" +
-            "    USING ((TRUE) OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))) OR (\"IsPublic\"));\n",
+            "    USING ((TRUE) OR (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))) OR (\"IsPublic\"));\n",
             "a rule for one role merges into that role's policy only");
         Regex.Matches(script, "CREATE POLICY [^\\n]* FOR SELECT TO authenticated\\n").Count.Should().Be(1 + 3, "one on the tickets, and one on each table of their entities");
     }
@@ -168,9 +168,9 @@ public sealed class PostgresRowAccessRoleTests
             "                 AND pg_catalog.pg_has_role(scoped.oid, c.relowner, 'USAGE')) THEN\n" +
             "        RAISE EXCEPTION USING MESSAGE = 'The role ddd_system_in has the privileges of a role that owns tables, and Postgres does not hold an owner to row level security. It must neither own a table nor be granted a role that does.';\n" +
             "    END IF;\n" +
-            "    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles callers\n" +
-            "               WHERE scoped.rolname = 'ddd_system_in' AND callers.rolname IN ('authenticated', 'anon')\n" +
-            "                 AND pg_catalog.pg_has_role(callers.oid, scoped.oid, 'USAGE')) THEN\n" +
+            "    IF EXISTS (SELECT FROM pg_catalog.pg_roles scoped, pg_catalog.pg_roles users\n" +
+            "               WHERE scoped.rolname = 'ddd_system_in' AND users.rolname IN ('authenticated', 'anon')\n" +
+            "                 AND pg_catalog.pg_has_role(users.oid, scoped.oid, 'USAGE')) THEN\n" +
             "        RAISE EXCEPTION USING MESSAGE = 'The role ddd_system_in is granted to authenticated or anon, so their callers would get every policy written for it. Grant it only to the role the application logs in as.';\n" +
             "    END IF;\n" +
             "    IF NOT pg_catalog.pg_has_role(CURRENT_USER, 'ddd_system_in'::pg_catalog.name,\n" +
@@ -186,7 +186,7 @@ public sealed class PostgresRowAccessRoleTests
         with.IndexOf("CREATE ROLE ddd_system_in", StringComparison.Ordinal).Should().BeLessThan(
             with.IndexOf("GRANT USAGE ON SCHEMA \"ddd\" TO ddd_system_in", StringComparison.Ordinal), "the role exists before anything is granted to it");
         ScriptFor(Renamed, ScopedWork).Should().Contain("            CREATE ROLE desk_scoped NOLOGIN NOINHERIT;\n")
-            .And.Contain("callers.rolname IN ('desk_user', 'desk_guest')", "the check asks about the roles the host configured")
+            .And.Contain("users.rolname IN ('desk_user', 'desk_guest')", "the check asks about the roles the host configured")
             .And.NotContain("ddd_system_in");
         ScriptFor(RowAccessRoleNames.Default, RowAccessRule.For<Ticket>("Named by its own name", RowOperations.Read, "TRUE", "ddd_system_in"))
             .Should().Contain("CREATE ROLE ddd_system_in", "a rule that names the scoped role by its own name is for that role too");
@@ -269,11 +269,11 @@ public sealed class PostgresRowAccessRoleTests
         script.Should().Contain(
             "-- Crates (select) for anon asks the rules 'Ownerless express crates are open' and 'Owners have their crates': a row one of them allows is allowed.\n" +
             "CREATE POLICY \"Crates (select) for anon\" ON \"yard\".\"Crates\" FOR SELECT TO anon\n" +
-            "    USING (((\"Owner\" IS NULL) AND \"Discriminator\" = 'ExpressCrate') OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))));\n",
+            "    USING (((\"Owner\" IS NULL) AND \"Discriminator\" = 'ExpressCrate') OR (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))));\n",
             "a rule about express crates holds for the rows of express crates only, and the crates' own rule for every crate");
         script.Should().Contain(
             "CREATE POLICY \"CrateSticker (update) for anon\" ON \"yard\".\"CrateSticker\" FOR UPDATE TO anon\n" +
-            "    USING (EXISTS (SELECT 1 FROM \"yard\".\"Crates\" r WHERE r.\"Id\" = \"yard\".\"CrateSticker\".\"CrateId\" AND (((r.\"Owner\" IS NULL) AND r.\"Discriminator\" = 'ExpressCrate') OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))))))\n",
+            "    USING (EXISTS (SELECT 1 FROM \"yard\".\"Crates\" r WHERE r.\"Id\" = \"yard\".\"CrateSticker\".\"CrateId\" AND (((r.\"Owner\" IS NULL) AND r.\"Discriminator\" = 'ExpressCrate') OR (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))))))\n",
             "the stickers are written as the rules of both types let a caller write the crate, each about its own rows");
     }
 

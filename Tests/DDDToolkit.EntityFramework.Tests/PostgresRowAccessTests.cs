@@ -11,7 +11,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// <summary>
 /// The help desk's rules as policies on a Postgres that is not Supabase's: no <c>auth</c> schema, no
 /// PostgREST roles until <see cref="PostgresRowAccess.SetupScript"/> makes them, and the policies asking
-/// <c>ddd.caller_id()</c>. What the database lets each caller see is what the rules say in C#.
+/// <c>ddd.current_user_id()</c>. What the database lets each caller see is what the rules say in C#.
 /// </summary>
 /// <remarks>
 /// The tests that put policies of their own on the desk, the probes of how Postgres plans a set-shaped
@@ -21,20 +21,20 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static readonly Caller Alice = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
+    private static readonly CurrentUserSnapshot Alice = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
 
-    private static readonly Caller Bob = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
+    private static readonly CurrentUserSnapshot Bob = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
 
-    private static readonly Caller Carol = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Carol, team: "south"));
+    private static readonly CurrentUserSnapshot Carol = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Carol, team: "south"));
 
     public static TheoryData<string> CallerNames => ["Alice", "Bob", "Carol", "anonymous"];
 
-    private static Caller Named(string name) => name switch
+    private static CurrentUserSnapshot Named(string name) => name switch
     {
         "Alice" => Alice,
         "Bob" => Bob,
         "Carol" => Carol,
-        _ => Caller.Anonymous,
+        _ => CurrentUserSnapshot.Anonymous,
     };
 
     [Theory]
@@ -44,7 +44,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
         database.Require();
         var caller = Named(name);
 
-        var all = await database.TicketsAsync(Caller.System, Cancellation);
+        var all = await database.TicketsAsync(CurrentUserSnapshot.System, Cancellation);
         var seen = await database.TicketsAsync(caller, Cancellation);
 
         all.Should().HaveCount(PostgresRowAccessDatabase.TicketCount, "the application itself is not subject to the rules");
@@ -68,7 +68,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
     {
         database.Require();
 
-        var seen = await database.TicketsAsync(Caller.Anonymous, Cancellation);
+        var seen = await database.TicketsAsync(CurrentUserSnapshot.Anonymous, Cancellation);
 
         seen.Should().ContainSingle().Which.Title.Should().Be("Everyone's");
     }
@@ -78,7 +78,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
     {
         database.Require();
 
-        var seen = await database.TicketsAsync(Caller.User(PostgresRowAccessDatabase.Carol), Cancellation);
+        var seen = await database.TicketsAsync(CurrentUserSnapshot.User(PostgresRowAccessDatabase.Carol), Cancellation);
 
         seen.Select(ticket => ticket.Title).Should().BeEquivalentTo(["Carol's own", "Everyone's", "Nobody's"], "the interceptor gives the database her id and role as the claims");
     }
@@ -198,18 +198,18 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
     {
         database.Require();
 
-        // Anonymous has no seat, so desk.caller_seat() is null for it; two of the tickets have no owner.
-        (await SeenUnderAsync(DeskRules.OfTheCallersSeat, Caller.Anonymous)).Should().BeEmpty(
+        // Anonymous has no seat, so desk.current_seat() is null for it; two of the tickets have no owner.
+        (await SeenUnderAsync(DeskRules.OfTheCurrentSeat, CurrentUserSnapshot.Anonymous)).Should().BeEmpty(
             "a ticket without an owner is not the seat of a caller without one: a null matches no null");
-        (await SeenUnderAsync(DeskRules.OfAnotherSeat, Caller.Anonymous)).Should().BeEmpty(
+        (await SeenUnderAsync(DeskRules.OfAnotherSeat, CurrentUserSnapshot.Anonymous)).Should().BeEmpty(
             "an owner is not 'another seat' than a seat nobody knows");
-        (await SeenUnderAsync(DeskRules.NotOfTheCallersSeat, Caller.Anonymous)).Should().BeEmpty(
+        (await SeenUnderAsync(DeskRules.NotOfTheCurrentSeat, CurrentUserSnapshot.Anonymous)).Should().BeEmpty(
             "whether a ticket is not of a seat nobody knows is not known either, and NOT keeps it unknown");
 
-        (await SeenUnderAsync(DeskRules.OfTheCallersSeat, Alice)).Should().BeEquivalentTo(["Alice's, open for the north"]);
+        (await SeenUnderAsync(DeskRules.OfTheCurrentSeat, Alice)).Should().BeEquivalentTo(["Alice's, open for the north"]);
         (await SeenUnderAsync(DeskRules.OfAnotherSeat, Alice)).Should().BeEquivalentTo(
             ["Bob's own, closed", "Carol's own"], "the tickets of the other seats, and none of those without an owner");
-        (await SeenUnderAsync(DeskRules.NotOfTheCallersSeat, Alice)).Should().BeEquivalentTo(
+        (await SeenUnderAsync(DeskRules.NotOfTheCurrentSeat, Alice)).Should().BeEquivalentTo(
             ["Bob's own, closed", "Carol's own"], "not hers is another seat's, and a ticket without an owner is neither");
     }
 
@@ -218,7 +218,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
     {
         database.Require();
 
-        // The rule's whole body is the question, (SELECT desk.caller_on_duty()): those parentheses are the
+        // The rule's whole body is the question, (SELECT desk.current_on_duty()): those parentheses are the
         // subquery's own, and a policy wants a pair of its own around its condition as well.
         string script;
         await using (var model = DeskContext.Create())
@@ -226,14 +226,14 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
             script = PostgresRowAccess.Script(model, [DeskRules.OnDuty]);
         }
 
-        script.Should().Contain("\n    USING ((SELECT desk.caller_on_duty()))").And.Contain("\n    WITH CHECK ((SELECT desk.caller_on_duty()))")
+        script.Should().Contain("\n    USING ((SELECT desk.current_on_duty()))").And.Contain("\n    WITH CHECK ((SELECT desk.current_on_duty()))")
             .And.NotContain("USING (SELECT").And.NotContain("CHECK (SELECT");
 
         // On Postgres, with the rule as the tickets' only policy: Alice is on duty, and reads, files, changes and
         // removes tickets; Bob is not, and does none of it; nor does a caller the desk does not know.
         (await OnDutyAsync(Alice, script)).Should().Be(((long)PostgresRowAccessDatabase.TicketCount, true, PostgresRowAccessDatabase.TicketCount, PostgresRowAccessDatabase.TicketCount));
         (await OnDutyAsync(Bob, script)).Should().Be((0L, false, 0, 0));
-        (await OnDutyAsync(Caller.Anonymous, script)).Should().Be((0L, false, 0, 0));
+        (await OnDutyAsync(CurrentUserSnapshot.Anonymous, script)).Should().Be((0L, false, 0, 0));
 
         // The same rule written by hand with a comment at its end, which runs to the end of its line: the pair the
         // policy wants is closed on the next, and the access file is one Postgres reads.
@@ -243,7 +243,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
             commented = PostgresRowAccess.Script(model, [RowAccessRule.For<Ticket>(DeskRules.OnDuty.Name, DDDToolkit.Abstractions.Attributes.RowOperations.All, OnDutyHandleEveryTicket.RowAccessSql + " -- whoever is on duty")]);
         }
 
-        commented.Should().Contain("\n    USING ((SELECT desk.caller_on_duty()) -- whoever is on duty\n)\n    WITH CHECK ((SELECT desk.caller_on_duty()) -- whoever is on duty\n);");
+        commented.Should().Contain("\n    USING ((SELECT desk.current_on_duty()) -- whoever is on duty\n)\n    WITH CHECK ((SELECT desk.current_on_duty()) -- whoever is on duty\n);");
         (await OnDutyAsync(Alice, commented)).Should().Be(((long)PostgresRowAccessDatabase.TicketCount, true, PostgresRowAccessDatabase.TicketCount, PostgresRowAccessDatabase.TicketCount));
         (await OnDutyAsync(Bob, commented)).Should().Be((0L, false, 0, 0));
     }
@@ -300,7 +300,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
             $$"""
             CREATE FUNCTION desk.probe_owned_ticket_ids() RETURNS SETOF uuid
                 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-                SELECT "Id" FROM desk."Tickets" WHERE "Owner" = (SELECT ddd.caller_id())
+                SELECT "Id" FROM desk."Tickets" WHERE "Owner" = (SELECT ddd.current_user_id())
             $function$;
             CREATE POLICY "Probe" ON desk."Tickets" FOR SELECT TO authenticated USING ({{condition}});
             SET LOCAL enable_seqscan = off;
@@ -313,21 +313,21 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
 
     /// <summary>
     /// The titles <paramref name="caller"/> reads with <paramref name="rule"/> as the tickets' only policy, and
-    /// <c>desk.caller_seat()</c> answering the caller's own id, in a transaction that is rolled back.
+    /// <c>desk.current_seat()</c> answering the caller's own id, in a transaction that is rolled back.
     /// </summary>
-    private async Task<List<string>> SeenUnderAsync(RowAccessRule rule, Caller caller)
+    private async Task<List<string>> SeenUnderAsync(RowAccessRule rule, CurrentUserSnapshot caller)
     {
         await using var connection = await database.OpenAsOwnerAsync(Cancellation);
         await using var transaction = await connection.BeginTransactionAsync(Cancellation);
-        await RunAsync(connection, "CREATE FUNCTION desk.caller_seat() RETURNS uuid LANGUAGE sql STABLE AS $function$ SELECT ddd.caller_id() $function$;");
+        await RunAsync(connection, "CREATE FUNCTION desk.current_seat() RETURNS uuid LANGUAGE sql STABLE AS $function$ SELECT ddd.current_user_id() $function$;");
 
         await using (var model = DeskContext.Create())
         {
             await RunAsync(connection, PostgresRowAccess.Script(model, [rule]));
         }
 
-        var claims = caller.IsSignedIn ? PostgresRowAccessDatabase.ClaimsOf(caller.UserId!.Value, "north") : """{"role":"anon"}""";
-        await RunAsync(connection, $"SET LOCAL ROLE {(caller.IsSignedIn ? "authenticated" : "anon")}; SELECT set_config('request.jwt.claims', '{claims}', true);");
+        var claims = caller.IsAuthenticated ? PostgresRowAccessDatabase.ClaimsOf(caller.Id!.Value, "north") : """{"role":"anon"}""";
+        await RunAsync(connection, $"SET LOCAL ROLE {(caller.IsAuthenticated ? "authenticated" : "anon")}; SELECT set_config('request.jwt.claims', '{claims}', true);");
 
         var titles = new List<string>();
         await using var read = new NpgsqlCommand("""SELECT "Title" FROM desk."Tickets" """, connection);
@@ -341,19 +341,19 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
     }
 
     /// <summary>
-    /// What <paramref name="caller"/> does under <paramref name="script"/>, with <c>desk.caller_on_duty()</c>
+    /// What <paramref name="caller"/> does under <paramref name="script"/>, with <c>desk.current_on_duty()</c>
     /// answering whether the caller is Alice, in a transaction that is rolled back: how many tickets it reads,
     /// whether a ticket it files is let in, and how many it changes and removes.
     /// </summary>
-    private async Task<(long Read, bool Filed, int Changed, int Removed)> OnDutyAsync(Caller caller, string script)
+    private async Task<(long Read, bool Filed, int Changed, int Removed)> OnDutyAsync(CurrentUserSnapshot caller, string script)
     {
         await using var connection = await database.OpenAsOwnerAsync(Cancellation);
         await using var transaction = await connection.BeginTransactionAsync(Cancellation);
-        await RunAsync(connection, $"CREATE FUNCTION desk.caller_on_duty() RETURNS boolean LANGUAGE sql STABLE AS $function$ SELECT ddd.caller_id() = '{PostgresRowAccessDatabase.Alice}'::uuid $function$;");
+        await RunAsync(connection, $"CREATE FUNCTION desk.current_on_duty() RETURNS boolean LANGUAGE sql STABLE AS $function$ SELECT ddd.current_user_id() = '{PostgresRowAccessDatabase.Alice}'::uuid $function$;");
         await RunAsync(connection, script);
 
-        var claims = caller.IsSignedIn ? PostgresRowAccessDatabase.ClaimsOf(caller.UserId!.Value, "north") : """{"role":"anon"}""";
-        await RunAsync(connection, $"SET LOCAL ROLE {(caller.IsSignedIn ? "authenticated" : "anon")}; SELECT set_config('request.jwt.claims', '{claims}', true);");
+        var claims = caller.IsAuthenticated ? PostgresRowAccessDatabase.ClaimsOf(caller.Id!.Value, "north") : """{"role":"anon"}""";
+        await RunAsync(connection, $"SET LOCAL ROLE {(caller.IsAuthenticated ? "authenticated" : "anon")}; SELECT set_config('request.jwt.claims', '{claims}', true);");
 
         await using var read = new NpgsqlCommand("""SELECT count(*) FROM desk."Tickets" """, connection);
         var seen = (long)(await read.ExecuteScalarAsync(Cancellation))!;

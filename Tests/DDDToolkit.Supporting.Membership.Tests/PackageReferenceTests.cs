@@ -21,8 +21,8 @@ public sealed class PackageReferenceTests
         var packages = project.Descendants("PackageReference").Select(reference => (string)reference.Attribute("Include")!).ToArray();
 
         projects.Should().BeEquivalentTo(
-            ["DDDToolkit", "DDDToolkit.Analyzers", "DDDToolkit.Supporting.Membership.Analyzers"],
-            "the toolkit, its generator for the parent and the role name, and the generator the package ships, which runs in the application");
+            ["DDDToolkit", "DDDToolkit.Analyzers", "DDDToolkit.Supporting.Membership.Analyzers", "DDDToolkit.Supporting.Membership.Abstractions"],
+            "the toolkit, its generator for the parent and the role name, the generator the package ships, which runs in the application, and the package's markers");
         packages.Should().BeEmpty();
 
         // That generator knows the package by the names of its types, as text. It references the compiler and nothing else.
@@ -85,8 +85,8 @@ public sealed class PackageReferenceTests
     {
         typeof(MembershipRules).Assembly.GetExportedTypes().Select(type => type.Namespace).Distinct()
             .Should().BeEquivalentTo(
-                ["DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.Access", "DDDToolkit.Supporting.Membership.UseCases"],
-                "the model, the access questions and the use-case pieces, whatever folder a file is in");
+                ["DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.Access", "DDDToolkit.Supporting.Membership.Managers"],
+                "the model, the access questions and the managers with what they take, whatever folder a file is in");
     }
 
     [Fact]
@@ -105,7 +105,8 @@ public sealed class PackageReferenceTests
         const string Generator = "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers";
 
         membership.Select(Path.GetFileName).Should().BeEquivalentTo(
-            "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.EntityFramework", "DDDToolkit.Supporting.Membership.Postgres",
+            "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.Abstractions", "DDDToolkit.Supporting.Membership.EntityFramework",
+            "DDDToolkit.Supporting.Membership.Postgres",
             "DDDToolkit.Supporting.Membership.Analyzers",
             Generator,
             "DDDToolkit.Supporting.Membership.Tests", "DDDToolkit.Supporting.Membership.EntityFramework.Tests", "DDDToolkit.Supporting.Membership.Postgres.Tests",
@@ -117,15 +118,22 @@ public sealed class PackageReferenceTests
             "no project of Membership references the other package, its generator included");
 
         var apart = membership.Where(project => Path.GetFileName(project) != Generator).ToList();
-        SourcesOf(apart).Where(source => File.ReadAllText(source).Contains(other, StringComparison.Ordinal))
-            .Should().BeEmpty("no file of Membership names the other package");
+        // One file of the mapping names the other package's marker of a row's tenant, as text, for the two indexes a
+        // role class of a tenant gets. It is the only one, and it names nothing else of the other package.
+        var indexes = Path.Combine(root, "Source", "DDDToolkit.Supporting.Membership.EntityFramework", "Mapping", "OrganizationRoleIndexes.cs");
+        File.ReadAllText(indexes).Should().Contain("\"DDDToolkit." + other + ".OfTenantAttribute\"");
+        System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(indexes), other + @"\.\w+").Select(match => match.Value).Distinct()
+            .Should().Equal(other + ".OfTenantAttribute");
+
+        SourcesOf(apart).Where(source => source != indexes && File.ReadAllText(source).Contains(other, StringComparison.Ordinal))
+            .Should().BeEmpty("no other file of Membership names the other package");
 
         // The packages themselves do not so much as say the word: what an application answers is named for
         // what it answers, a member, a role, a place, and not after one application of it.
         SourcesOf(apart.Where(project => project.StartsWith(Path.Combine(root, "Source"), StringComparison.Ordinal)).ToList())
-            .Where(source => File.ReadAllText(source).Contains("tenan", StringComparison.OrdinalIgnoreCase))
+            .Where(source => source != indexes && File.ReadAllText(source).Contains("tenan", StringComparison.OrdinalIgnoreCase))
             .Select(Path.GetFileName)
-            .Should().BeEmpty("nothing in the packages is named after a tenant or its tenancy");
+            .Should().BeEmpty("nothing else in the packages is named after a tenant or its tenancy");
 
         ReferencesOf(tenancy.Where(project => !Path.GetFileName(project).Contains("Test", StringComparison.Ordinal)).ToList())
             .Should().NotContain(reference => reference.Contains("Membership", StringComparison.OrdinalIgnoreCase));

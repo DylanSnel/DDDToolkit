@@ -7,20 +7,24 @@ namespace DDDToolkit.Supporting.Membership;
 /// <summary>
 /// The members of one resource, with the rules about them: who is a member for which period, which roles
 /// each member holds for which period, and what the owner may not lose. The resource's aggregate holds one
-/// over its own member collection, and its methods that change members go through it:
+/// over its own member collection, which the package's generator writes as <c>Members</c>. Its constructor opens
+/// the list, and every other change goes through the member manager the generator writes for the member class:
 /// <code>
 /// [AggregateRoot&lt;DocumentId&gt;]
 /// public sealed partial class Document
 /// {
+///     public Document(DocumentId id, UserId owner, DateTimeOffset now) : base(id)
+///     {
+///         OwnerId = owner;
+///         Members.Open(now);
+///     }
+///
 ///     [Owner] public UserId OwnerId { get; private set; }
 ///
 ///     public partial IReadOnlyList&lt;DocumentShare&gt; Shares { get; }
 ///
-///     public void ShareWith(UserId user, NamedRole role, MemberPeriod period, DateTimeOffset now, UserId? by)
-///     {
-///         RequireNotArchived();
-///         Members.Add(user, role, period, now, by);
-///     }
+///     partial void OnChangingMembers() =&gt; RequireNotArchived();
+///     partial void OnMemberAdded(DocumentShare share) =&gt; RaiseDomainEvent(new DocumentShared(Id, share.MemberId));
 /// }
 /// </code>
 /// <para>
@@ -37,14 +41,14 @@ namespace DDDToolkit.Supporting.Membership;
 /// </para>
 /// <para>
 /// It is not an aggregate and keeps nothing itself: the members live inside the resource's aggregate, so they
-/// share its version, its save and whatever the aggregate refuses for its own reasons. The aggregate's own
-/// guard, a closed or archived resource say, runs in front of each call here, and that is the whole hook: a
-/// resource that changes no more simply does not call.
+/// share its version, its save and whatever the aggregate refuses for its own reasons. The generator writes the
+/// manager's way to it onto the resource as well (<see cref="IMembershipResource{TMember, TMemberId, TRoleId}"/>): each
+/// change calls the aggregate's guard, <c>OnChangingMembers()</c>, a closed or archived resource say, then the list,
+/// then the hook that says what happened, where the aggregate raises its own events under its own names.
 /// </para>
 /// <para>
 /// Each method refuses what would break a rule with a coded <see cref="RefusalException"/>, under the
-/// resource's own codes, before it changes anything, and answers what it did. It raises no events: the
-/// aggregate raises its own from the answer, under its own names. The rules:
+/// resource's own codes, before it changes anything, and answers what it did. It raises no events. The rules:
 /// </para>
 /// <list type="bullet">
 /// <item>A member is on the list once, for a period. A membership that has ended is over for good: the member
@@ -63,9 +67,9 @@ namespace DDDToolkit.Supporting.Membership;
 /// call, under the aggregate's own codes. The third, one hold per role, a member checks by itself.
 /// </para>
 /// <para>
-/// Whether a member or a role may go on the list at all cannot be told from the list: the use case asks (<see cref="UseCases.MemberAdmission{TResourceId, TMemberId, TRoleId}"/>) and
-/// passes the answer in. Neither can who may change the list, which no part of the package decides: the
-/// application's command requires what its caller needs before any of these methods is reached.
+/// Whether a member or a role may go on the list at all cannot be told from the list, and neither can who may change
+/// it: the member manager asks both before it calls the list, the caller's permission that manages the members and
+/// what the application answers about who may be a member and which roles go to one.
 /// </para>
 /// </summary>
 /// <typeparam name="TMember">The application's member class.</typeparam>
@@ -122,7 +126,7 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     /// would start. One that has ended by <paramref name="now"/> is replaced, with the roles that were held
     /// in it, whatever start the new one is given.
     /// </summary>
-    /// <param name="member">The member; the use case has checked it may be one.</param>
+    /// <param name="member">The member; the member manager has checked it may be one.</param>
     /// <param name="period">When the membership counts.</param>
     /// <param name="now">
     /// When the member is added: what a membership it had before is judged by. Not the period's start, which
@@ -153,8 +157,8 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     /// Adds a member for <paramref name="period"/> and gives it <paramref name="role"/> for the same period, in
     /// one change.
     /// </summary>
-    /// <param name="member">The member; the use case has checked it may be one.</param>
-    /// <param name="role">The role; the use case has checked it may go to a member.</param>
+    /// <param name="member">The member; the member manager has checked it may be one.</param>
+    /// <param name="role">The role; the member manager has checked it may go to a member.</param>
     /// <param name="period">When the membership, and the role, count.</param>
     /// <param name="now">When the member is added: what a membership it had before is judged by.</param>
     /// <param name="by">Who adds it, or <see langword="null"/> for system work.</param>
@@ -176,7 +180,7 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     /// first.
     /// </summary>
     /// <param name="member">The member.</param>
-    /// <param name="role">The role; the use case has checked it may go to a member.</param>
+    /// <param name="role">The role; the member manager has checked it may go to a member.</param>
     /// <param name="period">When the role counts. It counts only while the membership does.</param>
     /// <param name="now">
     /// When the role is given: what the membership, and a hold of the role from before, are judged by. Not
@@ -259,9 +263,9 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     /// <see cref="Remove"/>.
     /// </para>
     /// </summary>
-    /// <param name="member">The member that is to own the resource; the use case has checked it may be one.</param>
+    /// <param name="member">The member that is to own the resource; the member manager has checked it may be one.</param>
     /// <param name="formerOwner">
-    /// What the owner before becomes: <see cref="FormerOwner.StaysAs{TRoleId}"/> a role, which the use case has checked
+    /// What the owner before becomes: <see cref="FormerOwner.StaysAs{TRoleId}"/> a role, which the member manager has checked
     /// may go to a member, or <see cref="FormerOwner.Leaves"/>.
     /// </param>
     /// <param name="now">When the owner is named.</param>

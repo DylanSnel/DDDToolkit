@@ -1,5 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
@@ -18,7 +19,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     private const string OperatorRole = "operator";
 
     private TestServices _services = null!;
-    private HostTenancy.ProvisionedTenant _harbor = null!;
+    private ProvisionedTenant _harbor = null!;
     private OrganizationUnitId _north;
     private SeatId _seth;
     private SeatId _wes;
@@ -50,8 +51,8 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         // Harbor: Ada administers it. Seth supervises North, where he manages seats; Wes only looks at widgets.
         _harbor = await _services.ProvisionAsync("harbor");
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
-        _seth = await _services.SeatAtAsync(_harbor, "Seth", _north, HostCatalogue.SupervisorPack);
-        _wes = await _services.SeatAtAsync(_harbor, "Wes", _harbor.RootUnit, HostCatalogue.WatcherPack);
+        _seth = await _services.SeatAtAsync(_harbor, "Seth", _north, HostCatalogue.SupervisorStarterRole);
+        _wes = await _services.SeatAtAsync(_harbor, "Wes", _harbor.RootUnit, HostCatalogue.WatcherStarterRole);
         _services.Commands.Reset();
     }
 
@@ -73,7 +74,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
             pooled: pooled,
 
             // A module that only asks Tenancy declares none of its classes, and writes the four ids out.
-            afterTenancy: registered => registered.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, TestWidgetContext>());
+            afterTenancy: registered => registered.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, TestWidgetContext>());
         services.Provider.GetRequiredService<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>>().OperatorTokenRoles.Add(OperatorRole);
         return services;
     }
@@ -88,14 +89,14 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
 
         // A person who signed in and has no seat yet, as when accepting an invitation: Tenancy is not asked.
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.User(Guid.NewGuid())))
-        using (TenancyCallers.BeginNone())
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
+        using (TenancyUsers.BeginNone())
         {
             await RequireAsync(scope.ServiceProvider, signedIn);
         }
 
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             await RefusedByTheToolkitAsync(ToolkitRefusals.NotSignedIn, () => RequireAsync(scope.ServiceProvider, signedIn));
         }
@@ -225,32 +226,32 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task Only_an_operator_passes_what_is_for_operators()
     {
-        var operators = new Declaring(TenancyAccess.RequiresOperator());
+        var operators = new Declaring(TenancyAccess.Operator());
         var odette = Guid.NewGuid();
 
-        // An operator works in no tenant: the toolkit's caller says who it is, and to Tenancy it is nobody.
+        // An operator works in no tenant: the toolkit's current user says who it is, and to Tenancy it is nobody.
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.User(odette, OperatorRole)))
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(odette, OperatorRole)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             await RequireAsync(scope.ServiceProvider, operators);
         }
 
         // Everybody else: the tenant's administrator, signed in as a user; a user with another token role; one
         // with the operators' role and no verified identity; nobody at all; and system work in the tenant.
-        (Caller? Toolkit, ITenancyCaller Tenancy)[] others =
+        (CurrentUserSnapshot? Toolkit, ITenancyUser Tenancy)[] others =
         [
-            (Caller.User(Guid.NewGuid()), HostCaller.InSeat(_harbor.Tenant, _harbor.AdminSeat)),
-            (Caller.User(odette, "analyst"), HostCaller.Nobody(TenancyRefusals.NotSeated)),
-            (Caller.User(null, OperatorRole), HostCaller.Nobody(TenancyRefusals.NotSeated)),
-            (Caller.Anonymous, HostCaller.Nobody(TenancyRefusals.NotSeated)),
-            (null, HostCaller.SystemIn(_harbor.Tenant)),
+            (CurrentUserSnapshot.User(Guid.NewGuid()), HostUser.InSeat(_harbor.Tenant, _harbor.AdminSeat)),
+            (CurrentUserSnapshot.User(odette, "analyst"), HostUser.Nobody(TenancyRefusals.NotSeated)),
+            (CurrentUserSnapshot.User(null, OperatorRole), HostUser.Nobody(TenancyRefusals.NotSeated)),
+            (CurrentUserSnapshot.Anonymous, HostUser.Nobody(TenancyRefusals.NotSeated)),
+            (null, HostUser.SystemIn(_harbor.Tenant)),
         ];
         foreach (var (toolkit, tenancy) in others)
         {
             await using var scope = _services.Scope();
-            using (toolkit is null ? null : Callers.Begin(toolkit))
-            using (TenancyCallers.Begin(tenancy))
+            using (toolkit is null ? null : TestAccess.BeginAs(toolkit))
+            using (TenancyUsers.Begin(tenancy))
             {
                 var refusal = await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => RequireAsync(scope.ServiceProvider, operators), $"{toolkit?.ToString() ?? "system work"} is no operator");
                 refusal.Kind.Should().Be(DDDToolkit.Exceptions.RefusalKind.NotPermitted);
@@ -258,6 +259,196 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         }
 
         _services.Commands.Commands.Should().BeEmpty("an operator is told by its token's role: nothing is read for it");
+    }
+
+    [Fact]
+    public async Task Every_operator_case_refuses_a_caller_who_is_no_operator_before_anything()
+    {
+        AccessRequirement[] cases = [TenancyAccess.Operator(), TenancyAccess.Operator(_harbor.Tenant), TenancyAccess.Operator(OperatorTenant.FromRequest)];
+        foreach (var required in cases)
+        {
+            // The tenant's administrator, signed in as a user, and system work in the tenant: neither is an operator.
+            await using (var scope = _services.Scope())
+            using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
+            using (TenancyUsers.Begin(HostUser.InSeat(_harbor.Tenant, _harbor.AdminSeat)))
+            {
+                await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => RequireAsync(scope.ServiceProvider, new Declaring(required)), $"{required} is for operators");
+            }
+
+            using (TenancyWork.BeginSystemIn<TenantId, SeatId>(_harbor.Tenant))
+            {
+                await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => InScope(new Declaring(required)), "system work is no operator");
+            }
+        }
+
+        _services.Commands.Commands.Should().BeEmpty();
+    }
+
+    // ------------------------------------------------------------------ the work an operator's command runs in
+
+    [Fact]
+    public async Task An_operators_command_runs_as_operator_work_in_the_tenant_its_ForTenant_member_names()
+    {
+        var odette = Guid.NewGuid();
+        var suspend = new StatedRequests.ForOperatorsInTenant(_harbor.Tenant);
+        ((IHostRequest)suspend).RequiredAccess.Should().Be(TenancyAccess.Operator(_harbor.Tenant), "[ForTenant] marks the tenant the command names");
+
+        await using var scope = _services.Scope();
+        var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IHostRequest>>();
+
+        // The request names Harbor beside the command as well, as a client that always sends the tenant does.
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(odette, OperatorRole)))
+        using (TenancyUsers.Begin(HostUser.OperatorNaming(_harbor.Tenant)))
+        {
+            await checks.RequireAsync(suspend, Cancellation);
+            using (checks.BeginWork(suspend, isQuery: false))
+            {
+                // Operator work in Harbor, recorded as Odette: system work, whose power the tenant's use cases accept.
+                TenancyUsers.Current<TenantId, SeatId>().Should().Be(HostUser.SystemIn(_harbor.Tenant, TenancyActor<SeatId>.OfOperator(odette, TenancyWork.SystemScope)));
+                BegunUser!.Kind.Should().Be(CurrentUserKind.SystemIn);
+                BegunUser.Id.Should().BeNull("the operator is who the work is recorded as, never who it runs as");
+
+                var suspended = await scope.ServiceProvider.Tenants().SuspendAsync("Asked for by the owner", Cancellation);
+                suspended.Status.Should().Be(TenantStatus.Suspended);
+
+                // Asked again inside the work, as the toolkit asks when the database refuses a save, the check still passes.
+                (await RequestInHand.Current!.StillPassesAsync(Cancellation)).Should().BeTrue("the operator who was let through is who the work is recorded as");
+            }
+
+            TenancyUsers.Current<TenantId, SeatId>().Should().Be(HostUser.OperatorNaming(_harbor.Tenant), "the work ends with the handler");
+            BegunUser!.Id.Should().Be(odette);
+        }
+
+        // The event the suspension raised names the operator, by identity, in the access history.
+        var kept = await scope.ServiceProvider.TenancyContext().Set<EventLogEntry>()
+            .Where(entry => entry.EventName == "tenancy.tenant-suspended")
+            .Select(entry => new { entry.ActedByKind, entry.ActedById })
+            .SingleAsync(Cancellation);
+        kept.ActedByKind.Should().Be("operator");
+        kept.ActedById.Should().Be(odette.ToString("D"));
+    }
+
+    [Fact]
+    public async Task A_request_that_names_another_tenant_than_its_command_is_refused()
+    {
+        var orchard = await _services.ProvisionAsync("orchard");
+        var suspend = new StatedRequests.ForOperatorsInTenant(_harbor.Tenant);
+
+        await using var scope = _services.Scope();
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid(), OperatorRole)))
+        using (TenancyUsers.Begin(HostUser.OperatorNaming(orchard.Tenant)))
+        {
+            var refusal = await Refused.WithCodeAsync(TenancyRefusals.TenantMismatch, () => Stated(scope.ServiceProvider, suspend));
+            refusal.Kind.Should().Be(RefusalKind.Invalid);
+            refusal.Message.Should().Be("This request names two different tenants.");
+        }
+
+        // A request that names no tenant beside the command is let through: the command names it.
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid(), OperatorRole)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.TenantRequired)))
+        {
+            await Stated(scope.ServiceProvider, suspend);
+        }
+    }
+
+    [Fact]
+    public async Task FromRequest_runs_in_the_tenant_the_request_names_and_refuses_a_request_that_names_none()
+    {
+        var odette = Guid.NewGuid();
+        var close = new StatedRequests.ForOperatorsInTheNamedTenant();
+        ((IHostRequest)close).RequiredAccess.Should().Be(TenancyAccess.Operator(OperatorTenant.FromRequest));
+
+        await using var scope = _services.Scope();
+        var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IHostRequest>>();
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(odette, OperatorRole)))
+        {
+            using (TenancyUsers.Begin(HostUser.OperatorNaming(_harbor.Tenant)))
+            {
+                await checks.RequireAsync(close, Cancellation);
+                using (checks.BeginWork(close, isQuery: false))
+                {
+                    TenancyUsers.Current<TenantId, SeatId>().Should().Be(HostUser.SystemIn(_harbor.Tenant, TenancyActor<SeatId>.OfOperator(odette, TenancyWork.SystemScope)));
+                }
+            }
+
+            // No tenant named, and one nobody has: refused as a seat is, before the handler.
+            using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.TenantRequired)))
+            {
+                await Refused.WithCodeAsync(TenancyRefusals.TenantRequired, () => Stated(scope.ServiceProvider, close));
+            }
+
+            using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
+            {
+                await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => Stated(scope.ServiceProvider, close));
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Without_a_tenant_an_operators_command_runs_in_none_and_the_tenant_the_request_names_is_ignored()
+    {
+        var odette = Guid.NewGuid();
+        var provision = new StatedRequests.ForOperators();
+
+        await using var scope = _services.Scope();
+        var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IHostRequest>>();
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(odette, OperatorRole)))
+        using (TenancyUsers.Begin(HostUser.OperatorNaming(_harbor.Tenant)))
+        {
+            await checks.RequireAsync(provision, Cancellation);
+            using (checks.BeginWork(provision, isQuery: false))
+            {
+                var current = TenancyUsers.Current<TenantId, SeatId>();
+                current.Kind.Should().Be(TenancyUserKind.System, "it acts in no tenant, which is what provisioning needs");
+                current.Tenant.Should().BeNull("a tenant the request names cannot move the command into it");
+                current.Actor.Should().Be(TenancyActor<SeatId>.OfOperator(odette, TenancyWork.SystemScope));
+            }
+        }
+    }
+
+    [Fact]
+    public async Task A_query_for_operators_begins_nothing()
+    {
+        var reading = new StatedRequests.ForOperatorsInTenant(_harbor.Tenant);
+
+        await using var scope = _services.Scope();
+        var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IHostRequest>>();
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid(), OperatorRole)))
+        using (TenancyUsers.Begin(HostUser.OperatorNaming(_harbor.Tenant)))
+        {
+            await checks.RequireAsync(reading, Cancellation);
+            checks.BeginWork(reading, isQuery: true).Should().BeNull("an operator reads across tenants through its own database role");
+            TenancyUsers.Current<TenantId, SeatId>().Should().Be(HostUser.OperatorNaming(_harbor.Tenant));
+        }
+    }
+
+    [Fact]
+    public async Task A_caller_another_case_let_through_begins_no_operator_work()
+    {
+        // The tenant's access history: an operator, or a seat that manages seats for the whole tenant. Ada is the second.
+        var auditLog = new Declaring(AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)));
+
+        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, async scoped =>
+        {
+            var checks = scoped.GetRequiredService<AccessChecks<IHostRequest>>();
+            await checks.RequireAsync(auditLog, Cancellation);
+            checks.BeginWork(auditLog, isQuery: false).Should().BeNull("a seat is no operator, whichever case let it through");
+            TenancyUsers.Current<TenantId, SeatId>().Should().Be(HostUser.InSeat(_harbor.Tenant, _harbor.AdminSeat));
+        });
+    }
+
+    [Fact]
+    public async Task Work_is_begun_only_for_a_request_its_checks_let_through()
+    {
+        await using var scope = _services.Scope();
+        var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IHostRequest>>();
+
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid(), OperatorRole)))
+        {
+            FluentActions.Invoking(() => checks.BeginWork(new StatedRequests.ForOperators(), isQuery: false))
+                .Should().Throw<InvalidOperationException>("a request its checks were not asked about is in nobody's hand")
+                .WithMessage("*is not in hand in this flow of work*");
+        }
     }
 
     // ------------------------------------------------------------------ the cases, stated with attributes
@@ -274,7 +465,9 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         Of(new StatedRequests.InTheTenant()).Should().Be(TenancyAccess.InTenant());
         Of(new StatedRequests.ManageEverySeat()).Should().Be(TenancyAccess.AtTenant(TenancyPermissions.SeatsManage), "a permission without a marker is held for the whole tenant");
         Of(new StatedRequests.ManageSeatsAt(_north)).Should().Be(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, _north), "[AtUnit] marks the unit");
-        Of(new StatedRequests.ForOperators()).Should().Be(TenancyAccess.RequiresOperator());
+        Of(new StatedRequests.ForOperators()).Should().Be(TenancyAccess.Operator());
+        Of(new StatedRequests.ForOperatorsInTenant(_harbor.Tenant)).Should().Be(TenancyAccess.Operator(_harbor.Tenant), "[ForTenant] marks the tenant");
+        Of(new StatedRequests.ForOperatorsInTheNamedTenant()).Should().Be(TenancyAccess.Operator(OperatorTenant.FromRequest));
     }
 
     [Fact]
@@ -294,8 +487,8 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         await _services.BySystemIn(_harbor.Tenant, scoped => Stated(scoped, new StatedRequests.ManageSeatsAt(_north)));
 
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.Anonymous))
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             await Stated(scope.ServiceProvider, new StatedRequests.ForAnyone());
             await RefusedByTheToolkitAsync(ToolkitRefusals.NotSignedIn, () => Stated(scope.ServiceProvider, new StatedRequests.ForTheSignedIn()));
@@ -331,7 +524,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         await _services.BySystemIn(_harbor.Tenant, scoped => Stated(scoped, renameWes));
 
         // Nobody has no seat, and is refused by the permission as nobody, with the reason it was given.
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             await using var scope = _services.Scope();
             Reasons(await RefusedOnceAsync(() => Stated(scope.ServiceProvider, renameWes))).Select(reason => reason.Code)
@@ -361,7 +554,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         ((IHostRequest)asAPerson).RequiredAccess.Should().Be(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)));
 
         // Ada signed in, and administers Harbor.
-        using (Callers.Begin(Caller.User(Guid.NewGuid())))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
         {
             await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => Stated(scoped, asAPerson));
             (await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(_harbor.Tenant, _seth, scoped => Stated(scoped, asAPerson))))
@@ -382,13 +575,13 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     public async Task One_caller_or_another_is_let_through_by_the_first_case_it_meets_and_refused_once_with_each_reason()
     {
         // The tenant's access history: one of the application's operators, or a seat that manages seats for the whole tenant.
-        var auditLog = new Declaring(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)));
+        var auditLog = new Declaring(AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)));
 
         // An operator is let through by the first case, with nothing read.
         _services.Commands.Reset();
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.User(Guid.NewGuid(), OperatorRole)))
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid(), OperatorRole)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             await RequireAsync(scope.ServiceProvider, auditLog);
         }
@@ -437,13 +630,14 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         [
             TenancyAccess.InTenant(),
             TenancyAccess.AtTenant(TenancyPermissions.SeatsManage),
-            TenancyAccess.RequiresOperator(),
+            TenancyAccess.Operator(),
+            TenancyAccess.Operator(_harbor.Tenant),
             TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, _north),
         ];
         ofTenancy.Should().OnlyContain(requirement => checks.Decides(requirement));
         checks.Decides(new OnWidget(Guid.NewGuid())).Should().BeFalse("a module's own case takes a check of the module's own");
 
-        using (TenancyCallers.Begin(HostCaller.SystemIn(_harbor.Tenant)))
+        using (TenancyUsers.Begin(HostUser.SystemIn(_harbor.Tenant)))
         {
             (await FluentActions.Awaiting(() => checks.RequireAsync(new Declaring(new OnWidget(Guid.NewGuid())), Cancellation).AsTask())
                     .Should().ThrowAsync<InvalidOperationException>("a requirement nothing checks lets nobody through, system work included"))
@@ -489,7 +683,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, async scoped =>
         {
             await RequireAsync(scoped, seats);
-            _services.Commands.Sent.Should().ContainSingle().Which.Context.Should().BeSameAs(scoped.Tenancy());
+            _services.Commands.Sent.Should().ContainSingle().Which.Context.Should().BeSameAs(scoped.TenancyContext());
         });
     }
 
@@ -503,7 +697,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         await pooled.BySeat(harbor.Tenant, harbor.AdminSeat, async scoped =>
         {
             // The scope's own context, the unit of work of its commands, rented before the check runs.
-            var ofTheScope = scoped.Tenancy();
+            var ofTheScope = scoped.TenancyContext();
             pooled.Commands.Reset();
 
             // Two requests of one scope, checked side by side: each on a context of its own, taken from the pool.
@@ -519,14 +713,15 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     public void Adding_the_check_for_an_interface_twice_adds_it_once()
     {
         var services = new ServiceCollection();
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, TestWidgetContext>();
+        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, TestWidgetContext>();
         var registered = services.Count;
 
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, TestWidgetContext>();
+        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, TestWidgetContext>();
 
         services.Should().HaveCount(registered);
-        services.Should().OnlyContain(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped, "the check, the set and what a check keeps live as long as a request");
-        FluentActions.Invoking(() => TenancyEntityFrameworkServiceCollectionExtensions.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, TestWidgetContext>(null!))
+        services.Where(descriptor => descriptor.ServiceType != typeof(ICurrentUser) && descriptor.ServiceType != typeof(AccessManager))
+            .Should().OnlyContain(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped, "the check, the set and what a check keeps live as long as a request");
+        FluentActions.Invoking(() => TenancyEntityFrameworkServiceCollectionExtensions.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, TestWidgetContext>(null!))
             .Should().Throw<ArgumentNullException>();
     }
 
@@ -572,7 +767,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     /// <summary>Holds <paramref name="request"/> to what it declares as a caller that is nobody to Tenancy, for <paramref name="reason"/>.</summary>
     private async Task ByNobody(Declaring request, string reason = TenancyRefusals.NotSeated)
     {
-        using (TenancyCallers.Begin(HostCaller.Nobody(reason)))
+        using (TenancyUsers.Begin(HostUser.Nobody(reason)))
         {
             await InScope(request);
         }

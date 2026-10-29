@@ -6,20 +6,20 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 /// </summary>
 public class CatalogueTests
 {
-    private static readonly RolePack Administrators = new("host-admin", "Administrator", "Runs the tenant", [], Administers: true);
+    private static readonly StarterRole Administrators = new("host-admin", "Administrator", "Runs the tenant", [], Administers: true);
 
-    /// <summary>Tenancy's own permissions, as an administrators' pack that lists its permissions writes them.</summary>
+    /// <summary>Tenancy's own permissions, as an administrators' starter role that lists its permissions writes them.</summary>
     private static readonly string[] TenancysOwn = [.. TenancyPermissions.All.Select(permission => permission.Name)];
 
-    /// <summary>The problem of an administrators' pack that lists permissions and leaves <paramref name="permission"/> out.</summary>
-    private static string LeftOut(string pack, string permission, string because)
-        => "The administrators' pack '" + pack + "' lists permissions but not '" + permission + "', which " + because
+    /// <summary>The problem of an administrators' starter role that lists permissions and leaves <paramref name="permission"/> out.</summary>
+    private static string LeftOut(string starterRole, string permission, string because)
+        => "The administrators' starter role '" + starterRole + "' lists permissions but not '" + permission + "', which " + because
            + ": an administrator holds every permission that manages access, and Tenancy's own.";
 
     private static ApplicationCatalogue Application(
-        IReadOnlyList<RolePack>? packs = null,
+        IReadOnlyList<StarterRole>? starterRoles = null,
         IReadOnlyList<Permission>? permissions = null)
-        => new(packs ?? [Administrators], permissions ?? HostCatalogue.Permissions);
+        => new(starterRoles ?? [Administrators], permissions ?? HostCatalogue.Permissions);
 
     private static IReadOnlyList<string> Problems(ApplicationCatalogue application, params Permission[] contributed)
         => FluentActions.Invoking(() => TenancyCatalogue.Build(application, contributed))
@@ -91,28 +91,28 @@ public class CatalogueTests
     }
 
     [Fact]
-    public void A_pack_naming_an_unknown_or_retired_permission_is_refused()
+    public void A_starter_role_naming_an_unknown_or_retired_permission_is_refused()
     {
         var problems = Problems(Application(
-            packs: [Administrators, new RolePack("painter", "Painter", "Paints", ["widget.paint", "widget.old"])],
+            starterRoles: [Administrators, new StarterRole("painter", "Painter", "Paints", ["widget.paint", "widget.old"])],
             permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]));
 
         problems.Should().BeEquivalentTo(
-            "The pack 'painter' lists 'widget.old', which is retired.",
-            "The pack 'painter' lists 'widget.paint', which is unknown to the catalogue.");
+            "The starter role 'painter' lists 'widget.old', which is retired.",
+            "The starter role 'painter' lists 'widget.paint', which is unknown to the catalogue.");
     }
 
     [Fact]
     public void A_permission_unknown_to_the_catalogue_is_told_with_how_a_modules_permissions_reach_it()
     {
-        // What a host that leaves out services.AddTenancyPermissionsOfModules() meets: a pack names a module's permission
-        // that never reached the catalogue, or, with no pack naming one, the first question about it.
+        // What a host that leaves out services.AddTenancyPermissionsOfModules() meets: a starter role names a module's permission
+        // that never reached the catalogue, or, with no starter role naming one, the first question about it.
         const string Cure = "*[Permissions]*services.AddTenancyPermissionsOfModules()*";
-        var refused = FluentActions.Invoking(() => TenancyCatalogue.Build(Application(packs: [Administrators, new RolePack("viewer", "Viewer", "Looks", ["orders.view"])]), []))
+        var refused = FluentActions.Invoking(() => TenancyCatalogue.Build(Application(starterRoles: [Administrators, new StarterRole("viewer", "Viewer", "Looks", ["orders.view"])]), []))
             .Should().Throw<TenancyCatalogueException>().Which;
 
         refused.Problems.Should().ContainSingle().Which.Should().Be(
-            "The pack 'viewer' lists 'orders.view', which is unknown to the catalogue.", "the problems stay what is wrong, one sentence each");
+            "The starter role 'viewer' lists 'orders.view', which is unknown to the catalogue.", "the problems stay what is wrong, one sentence each");
         refused.Message.Should().Match(Cure, "the cure is said once, after the problems")
             .And.EndWith("in a project that references the module.");
 
@@ -120,32 +120,32 @@ public class CatalogueTests
             .Should().Throw<ArgumentException>().WithMessage("'orders.view' is not a permission of the permission catalogue. " + Cure);
 
         // A catalogue that names no unknown permission hears nothing about modules.
-        FluentActions.Invoking(() => TenancyCatalogue.Build(Application(packs: [Administrators, Administrators]), []))
+        FluentActions.Invoking(() => TenancyCatalogue.Build(Application(starterRoles: [Administrators, Administrators]), []))
             .Should().Throw<TenancyCatalogueException>().Which.Message.Should().NotContain("[Permissions]");
     }
 
     [Fact]
-    public void A_duplicate_pack_is_refused()
+    public void A_duplicate_starter_role_is_refused()
     {
-        var watcher = new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetRead]);
+        var watcher = new StarterRole("watcher", "Watcher", "Looks", [HostCatalogue.WidgetRead]);
 
-        Problems(Application(packs: [Administrators, watcher, watcher with { Name = "Other watcher" }]))
-            .Should().ContainSingle().Which.Should().Be("The pack 'watcher' is declared more than once.");
+        Problems(Application(starterRoles: [Administrators, watcher, watcher with { Name = "Other watcher" }]))
+            .Should().ContainSingle().Which.Should().Be("The starter role 'watcher' is declared more than once.");
     }
 
     [Fact]
-    public void Each_shape_has_exactly_one_administrators_pack()
+    public void Each_shape_has_exactly_one_administrators_starter_role()
     {
         // The cure keeps one for the shape, however many there are and whichever shapes they are seeded for.
-        static string MoreThanOne(string shape, string packs)
-            => "A " + shape + " tenant needs exactly one administrators' pack seeded for it, and has " + packs + ". Keep one of them for it: seed the "
+        static string MoreThanOne(string shape, string starterRoles)
+            => "A " + shape + " tenant needs exactly one administrators' starter role seeded for it, and has " + starterRoles + ". Keep one of them for it: seed the "
                + "others for another shape with SeededFor, or declare them without Administers.";
 
-        Problems(Application(packs: [Administrators, Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat }]))
+        Problems(Application(starterRoles: [Administrators, Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat }]))
             .Should().ContainSingle().Which.Should().Be(MoreThanOne("flat", "2: host-admin, flat-admin"));
 
         // Two seeded for the same shape already.
-        Problems(Application(packs:
+        Problems(Application(starterRoles:
             [
                 Administrators with { Key = "owner", Name = "Owner", SeededFor = TenantShape.Flat },
                 Administrators with { Key = "manager", Name = "Manager", SeededFor = TenantShape.Flat },
@@ -154,7 +154,7 @@ public class CatalogueTests
             .Should().ContainSingle().Which.Should().Be(MoreThanOne("flat", "2: owner, manager"));
 
         // Three for two shapes: no SeededFor gives each shape one of them, so one goes without Administers.
-        Problems(Application(packs:
+        Problems(Application(starterRoles:
             [
                 Administrators,
                 Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat },
@@ -162,111 +162,111 @@ public class CatalogueTests
             ]))
             .Should().Equal(MoreThanOne("flat", "2: host-admin, flat-admin"), MoreThanOne("hierarchical", "2: host-admin, tree-admin"));
 
-        var perShape = TenancyCatalogue.Build(Application(packs:
+        var perShape = TenancyCatalogue.Build(Application(starterRoles:
         [
-            // Named apart: a flat tenant that turns hierarchical is given the other pack's role next to its own.
+            // Named apart: a flat tenant that turns hierarchical is given the role of the other starter role next to its own.
             Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat },
             Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical },
         ]), []);
-        perShape.AdministratorPackFor(TenantShape.Flat).Key.Should().Be("flat-admin");
-        perShape.AdministratorPackFor(TenantShape.Hierarchical).Key.Should().Be("tree-admin");
+        perShape.AdministratorStarterRoleFor(TenantShape.Flat).Key.Should().Be("flat-admin");
+        perShape.AdministratorStarterRoleFor(TenantShape.Hierarchical).Key.Should().Be("tree-admin");
         perShape.HasDefaultAdministrators.Should().BeFalse();
     }
 
     [Fact]
-    public void An_application_that_declares_no_packs_gets_the_default_administrators_pack_for_every_shape()
+    public void An_application_that_declares_no_starter_roles_gets_the_default_administrators_starter_role_for_every_shape()
     {
-        var catalogue = TenancyCatalogue.Build(Application(packs: []), []);
+        var catalogue = TenancyCatalogue.Build(Application(starterRoles: []), []);
 
-        var administrators = catalogue.Packs.Should().ContainSingle().Which;
-        administrators.Should().BeEquivalentTo(TenancyPacks.DefaultAdministrators with { Permissions = catalogue.LivePermissions }, options => options.ComparingByMembers<RolePack>());
+        var administrators = catalogue.StarterRoles.Should().ContainSingle().Which;
+        administrators.Should().BeEquivalentTo(TenancyStarterRoles.DefaultAdministrators with { Permissions = catalogue.LivePermissions }, options => options.ComparingByMembers<StarterRole>());
         administrators.Key.Should().Be("administrator");
         administrators.Name.Should().Be("Administrator");
         administrators.Description.Should().NotBeNullOrWhiteSpace("the screens that assign roles show it");
-        administrators.Should().Match<RolePack>(pack => pack.Administers && pack.SeedOnProvision && pack.SeededFor == null);
+        administrators.Should().Match<StarterRole>(starterRole => starterRole.Administers && starterRole.SeedOnProvision && starterRole.SeededFor == null);
         administrators.Permissions.Should().Equal(catalogue.LivePermissions, "it lists nothing, and so holds every live permission, Tenancy's and the application's");
         catalogue.HasDefaultAdministrators.Should().BeTrue();
 
         foreach (var shape in Enum.GetValues<TenantShape>())
         {
-            catalogue.AdministratorPackFor(shape).Should().BeSameAs(administrators);
-            catalogue.PacksFor(shape).Should().Equal([administrators], "a new tenant of every shape gets a copy");
+            catalogue.AdministratorStarterRoleFor(shape).Should().BeSameAs(administrators);
+            catalogue.StarterRolesFor(shape).Should().Equal([administrators], "a new tenant of every shape gets a copy");
         }
 
-        // The application leaves the packs out altogether, and names its permissions.
-        var withoutPacks = TenancyCatalogue.Build(new ApplicationCatalogue(Permissions: HostCatalogue.Permissions), []);
-        withoutPacks.Packs.Should().BeEquivalentTo(catalogue.Packs, options => options.ComparingByMembers<RolePack>());
-        withoutPacks.LivePermissions.Should().Equal(catalogue.LivePermissions).And.Contain(HostCatalogue.WidgetCreate);
+        // The application leaves the starter roles out altogether, and names its permissions.
+        var withoutStarterRoles = TenancyCatalogue.Build(new ApplicationCatalogue(Permissions: HostCatalogue.Permissions), []);
+        withoutStarterRoles.StarterRoles.Should().BeEquivalentTo(catalogue.StarterRoles, options => options.ComparingByMembers<StarterRole>());
+        withoutStarterRoles.LivePermissions.Should().Equal(catalogue.LivePermissions).And.Contain(HostCatalogue.WidgetCreate);
 
         var marked = new ApplicationCatalogue(Permissions: HostCatalogue.Permissions, AccessManagingPermissions: [HostCatalogue.WidgetCreate]);
-        marked.Packs.Should().BeEmpty();
+        marked.StarterRoles.Should().BeEmpty();
         marked.Permissions.Should().BeSameAs(HostCatalogue.Permissions);
-        TenancyCatalogue.Build(marked, []).AccessManagingPermissions.Should().Contain(HostCatalogue.WidgetCreate, "the permissions it marks reach the catalogue without a pack of its own");
+        TenancyCatalogue.Build(marked, []).AccessManagingPermissions.Should().Contain(HostCatalogue.WidgetCreate, "the permissions it marks reach the catalogue without a starter role of its own");
 
-        New.Catalogue().HasDefaultAdministrators.Should().BeFalse("the host declares an administrators' pack of its own");
-        New.Catalogue().Packs.Should().NotContain(pack => pack.Key == TenancyPacks.DefaultAdministratorsKey);
+        New.Catalogue().HasDefaultAdministrators.Should().BeFalse("the host declares an administrators' starter role of its own");
+        New.Catalogue().StarterRoles.Should().NotContain(starterRole => starterRole.Key == TenancyStarterRoles.DefaultAdministratorsKey);
     }
 
     [Fact]
-    public void The_default_administrators_pack_comes_first_next_to_the_packs_the_application_declares()
+    public void The_default_administrators_starter_role_comes_first_next_to_the_starter_roles_the_application_declares()
     {
-        var watcher = new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetChange], Order: 10);
-        var supervisor = new RolePack("supervisor", "Supervisor", "Runs a part", [TenancyPermissions.UnitsManage], SeededFor: TenantShape.Hierarchical, Order: 20);
+        var watcher = new StarterRole("watcher", "Watcher", "Looks", [HostCatalogue.WidgetChange], Order: 10);
+        var supervisor = new StarterRole("supervisor", "Supervisor", "Runs a part", [TenancyPermissions.UnitsManage], SeededFor: TenantShape.Hierarchical, Order: 20);
 
-        var catalogue = TenancyCatalogue.Build(Application(packs: [watcher, supervisor]), []);
+        var catalogue = TenancyCatalogue.Build(Application(starterRoles: [watcher, supervisor]), []);
 
-        catalogue.HasDefaultAdministrators.Should().BeTrue("no pack the application declares administers");
-        catalogue.Packs.Select(pack => pack.Key).Should().Equal(TenancyPacks.DefaultAdministratorsKey, "watcher", "supervisor");
-        catalogue.PacksFor(TenantShape.Hierarchical).Select(pack => pack.Key).Should().Equal(TenancyPacks.DefaultAdministratorsKey, "watcher", "supervisor");
-        catalogue.PacksFor(TenantShape.Flat).Select(pack => pack.Key).Should().Equal(TenancyPacks.DefaultAdministratorsKey, "watcher");
-        catalogue.Packs.Single(pack => pack.Key == "watcher").Permissions.Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetRead], "the application's packs are built as they were");
-        catalogue.AdministratorPackFor(TenantShape.Flat).Permissions.Should().Equal(catalogue.LivePermissions);
+        catalogue.HasDefaultAdministrators.Should().BeTrue("no starter role the application declares administers");
+        catalogue.StarterRoles.Select(starterRole => starterRole.Key).Should().Equal(TenancyStarterRoles.DefaultAdministratorsKey, "watcher", "supervisor");
+        catalogue.StarterRolesFor(TenantShape.Hierarchical).Select(starterRole => starterRole.Key).Should().Equal(TenancyStarterRoles.DefaultAdministratorsKey, "watcher", "supervisor");
+        catalogue.StarterRolesFor(TenantShape.Flat).Select(starterRole => starterRole.Key).Should().Equal(TenancyStarterRoles.DefaultAdministratorsKey, "watcher");
+        catalogue.StarterRoles.Single(starterRole => starterRole.Key == "watcher").Permissions.Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetRead], "the application's starter roles are built as they were");
+        catalogue.AdministratorStarterRoleFor(TenantShape.Flat).Permissions.Should().Equal(catalogue.LivePermissions);
     }
 
     [Fact]
-    public void The_default_administrators_pack_holds_a_permission_declared_later_as_a_pack_that_lists_none_does()
+    public void The_default_administrators_starter_role_holds_a_permission_declared_later_as_a_starter_role_that_lists_none_does()
     {
-        var application = Application(packs: [], permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]);
+        var application = Application(starterRoles: [], permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]);
 
         var before = TenancyCatalogue.Build(application, []);
         var later = TenancyCatalogue.Build(application, [new Permission("gauges.read", "Gauges", "Read gauges"), new Permission("gauges.lock", "Gauges", "Lock gauges", ManagesAccess: true)]);
 
-        before.AdministratorPackFor(TenantShape.Flat).Permissions.Should().Equal(before.LivePermissions).And.NotContain("widget.old", "a retired permission is not live");
-        later.AdministratorPackFor(TenantShape.Hierarchical).Permissions.Should().Equal(later.LivePermissions)
+        before.AdministratorStarterRoleFor(TenantShape.Flat).Permissions.Should().Equal(before.LivePermissions).And.NotContain("widget.old", "a retired permission is not live");
+        later.AdministratorStarterRoleFor(TenantShape.Hierarchical).Permissions.Should().Equal(later.LivePermissions)
             .And.Contain(["gauges.read", "gauges.lock"], "a module's permission comes with it, one that manages access included, as the application never lists it")
             .And.Contain(before.LivePermissions);
     }
 
     [Fact]
-    public void Administrators_packs_seeded_for_some_shapes_and_not_others_are_refused()
+    public void Administrators_starter_roles_seeded_for_some_shapes_and_not_others_are_refused()
     {
-        // The problem names the property to write, with the shape the catalogue lacks a pack for.
+        // The problem names the property to write, with the shape the catalogue lacks a starter role for.
         static string NoneFor(string shape, string property)
-            => "A " + shape + " tenant needs exactly one administrators' pack seeded for it, and has none. The default one, 'administrator', is added only "
-               + "when the application declares no administrators' pack at all: declare one with SeededFor: " + property + " as well, or declare none.";
+            => "A " + shape + " tenant needs exactly one administrators' starter role seeded for it, and has none. The default one, 'administrator', is added only "
+               + "when the application declares no administrators' starter role at all: declare one with SeededFor: " + property + " as well, or declare none.";
 
-        Problems(Application(packs: [Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat }]))
+        Problems(Application(starterRoles: [Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat }]))
             .Should().ContainSingle().Which.Should().Be(NoneFor("hierarchical", "TenantShape.Hierarchical"));
 
-        // A pack that administers counts as declared even when something else about it is refused.
-        Problems(Application(packs: [Administrators with { Key = " " }]))
-            .Should().BeEquivalentTo("A pack has no key.", NoneFor("flat", "TenantShape.Flat"), NoneFor("hierarchical", "TenantShape.Hierarchical"));
+        // A starter role that administers counts as declared even when something else about it is refused.
+        Problems(Application(starterRoles: [Administrators with { Key = " " }]))
+            .Should().BeEquivalentTo("A starter role has no key.", NoneFor("flat", "TenantShape.Flat"), NoneFor("hierarchical", "TenantShape.Hierarchical"));
     }
 
     [Fact]
-    public void An_administrators_pack_seeded_for_a_shape_but_not_on_provision_is_named_as_the_one_it_lacks()
+    public void An_administrators_starter_role_seeded_for_a_shape_but_not_on_provision_is_named_as_the_one_it_lacks()
     {
         // Not seeded, it gives a new tenant no administrator, and the default is not added in its place. Its
-        // SeededFor is right already, so the problem names SeedOnProvision, not another pack to declare.
-        static string Unseeded(string shape, string packs, bool several)
-            => "A " + shape + " tenant needs exactly one administrators' pack seeded for it, and has none: " + packs
+        // SeededFor is right already, so the problem names SeedOnProvision, not another starter role to declare.
+        static string Unseeded(string shape, string starterRoles, bool several)
+            => "A " + shape + " tenant needs exactly one administrators' starter role seeded for it, and has none: " + starterRoles
                + (several ? " would be, but are" : " would be, but is") + " declared with SeedOnProvision: false, and the default one, 'administrator', "
                + (several ? "is not added in their place. Leave SeedOnProvision: false off one of them." : "is not added in its place. Leave SeedOnProvision: false off it.");
 
-        Problems(Application(packs: [Administrators with { SeedOnProvision = false }]))
+        Problems(Application(starterRoles: [Administrators with { SeedOnProvision = false }]))
             .Should().Equal(Unseeded("flat", "'host-admin'", several: false), Unseeded("hierarchical", "'host-admin'", several: false));
 
-        Problems(Application(packs:
+        Problems(Application(starterRoles:
             [
                 Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat },
                 Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical, SeedOnProvision = false },
@@ -274,7 +274,7 @@ public class CatalogueTests
             .Should().ContainSingle().Which.Should().Be(Unseeded("hierarchical", "'tree-admin'", several: false));
 
         // Two that a hierarchical tenant would get: seeding either is enough for it.
-        Problems(Application(packs:
+        Problems(Application(starterRoles:
             [
                 Administrators with { SeedOnProvision = false },
                 Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical, SeedOnProvision = false },
@@ -283,57 +283,57 @@ public class CatalogueTests
     }
 
     [Fact]
-    public void A_pack_that_takes_the_default_administrators_permission_or_name_is_refused()
+    public void A_starter_role_that_takes_the_default_administrators_permission_or_name_is_refused()
     {
-        const string Added = "the default administrators' pack, added because the application declares no administrators' pack";
-        const string Fix = ", or declare it with Administers: true to make it the administrators' pack instead.";
+        const string Added = "the default administrators' starter role, added because the application declares no administrators' starter role";
+        const string Fix = ", or declare it with Administers: true to make it the administrators' starter role instead.";
 
-        Problems(Application(packs: [new RolePack("administrator", "Keeper", "Keeps widgets", [HostCatalogue.WidgetRead])]))
-            .Should().ContainSingle().Which.Should().Be("The pack 'administrator' has the permission of " + Added + ". Give the pack another permission" + Fix);
+        Problems(Application(starterRoles: [new StarterRole("administrator", "Keeper", "Keeps widgets", [HostCatalogue.WidgetRead])]))
+            .Should().ContainSingle().Which.Should().Be("The starter role 'administrator' has the permission of " + Added + ". Give the starter role another permission" + Fix);
 
-        Problems(Application(packs: [new RolePack("chief", " ADMINISTRATOR ", "Runs widgets", [HostCatalogue.WidgetChange])]))
+        Problems(Application(starterRoles: [new StarterRole("chief", " ADMINISTRATOR ", "Runs widgets", [HostCatalogue.WidgetChange])]))
             .Should().ContainSingle().Which.Should().Be(
-                "The pack 'chief' is named 'ADMINISTRATOR', and " + Added + ", is named 'Administrator'; a tenant's roles have names of their own, "
-                + "ignoring case. Give the pack another name" + Fix);
+                "The starter role 'chief' is named 'ADMINISTRATOR', and " + Added + ", is named 'Administrator'; a tenant's roles have names of their own, "
+                + "ignoring case. Give the starter role another name" + Fix);
 
-        Problems(Application(packs: [new RolePack("administrator", "Administrator", "Runs widgets", [HostCatalogue.WidgetChange])]))
+        Problems(Application(starterRoles: [new StarterRole("administrator", "Administrator", "Runs widgets", [HostCatalogue.WidgetChange])]))
             .Should().HaveCount(2, "the permission and the name are each taken");
     }
 
     [Fact]
-    public void A_pack_named_like_the_default_administrators_pack_in_dutch_is_refused_as_well()
+    public void A_starter_role_named_like_the_default_administrators_starter_role_in_dutch_is_refused_as_well()
     {
-        // A tenant provisioned in Dutch gets the default's role as Beheerder, from the package's own texts, and a pack
+        // A tenant provisioned in Dutch gets the default's role as Beheerder, from the package's own texts, and a starter role
         // the application named Beheerder would then be refused half way through provisioning, by a name the
         // application never wrote.
-        Problems(Application(packs: [new RolePack("keeper", " beheerder ", "Keeps widgets", [HostCatalogue.WidgetRead])]))
+        Problems(Application(starterRoles: [new StarterRole("keeper", " beheerder ", "Keeps widgets", [HostCatalogue.WidgetRead])]))
             .Should().ContainSingle().Which.Should().Be(
-                "The pack 'keeper' is named 'beheerder', and the default administrators' pack, added because the application declares no "
-                + "administrators' pack, is named 'Beheerder' in Dutch; a tenant's roles have names of their own, ignoring case. Give the pack "
-                + "another name, or declare it with Administers: true to make it the administrators' pack instead.");
+                "The starter role 'keeper' is named 'beheerder', and the default administrators' starter role, added because the application declares no "
+                + "administrators' starter role, is named 'Beheerder' in Dutch; a tenant's roles have names of their own, ignoring case. Give the starter role "
+                + "another name, or declare it with Administers: true to make it the administrators' starter role instead.");
 
-        // An administrators' pack of the application's own may be called anything: no default is added next to it.
-        TenancyCatalogue.Build(Application(packs: [Administrators with { Name = "Beheerder" }]), []).HasDefaultAdministrators.Should().BeFalse();
+        // An administrators' starter role of the application's own may be called anything: no default is added next to it.
+        TenancyCatalogue.Build(Application(starterRoles: [Administrators with { Name = "Beheerder" }]), []).HasDefaultAdministrators.Should().BeFalse();
 
-        // Declared as the administrators' pack, it is the application's own, and nothing is added.
-        var own = TenancyCatalogue.Build(Application(packs: [new RolePack("administrator", "Administrator", "Runs widgets", [], Administers: true)]), []);
+        // Declared as the administrators' starter role, it is the application's own, and nothing is added.
+        var own = TenancyCatalogue.Build(Application(starterRoles: [new StarterRole("administrator", "Administrator", "Runs widgets", [], Administers: true)]), []);
         own.HasDefaultAdministrators.Should().BeFalse();
-        own.Packs.Should().ContainSingle().Which.Description.Should().Be("Runs widgets");
+        own.StarterRoles.Should().ContainSingle().Which.Description.Should().Be("Runs widgets");
     }
 
     [Fact]
-    public void Packs_for_a_shape_are_the_seeded_ones_of_that_shape_in_order()
+    public void Starter_roles_for_a_shape_are_the_seeded_ones_of_that_shape_in_order()
     {
         var catalogue = New.Catalogue();
 
-        catalogue.PacksFor(TenantShape.Hierarchical).Select(pack => pack.Key).Should().Equal("host-admin", "supervisor", "operator", "watcher");
-        catalogue.PacksFor(TenantShape.Flat).Select(pack => pack.Key).Should().Equal("host-admin", "operator", "watcher");
-        catalogue.Packs.Single(pack => pack.Key == "operator").Permissions
-            .Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], "a pack's permissions are stored expanded");
+        catalogue.StarterRolesFor(TenantShape.Hierarchical).Select(starterRole => starterRole.Key).Should().Equal("host-admin", "supervisor", "operator", "watcher");
+        catalogue.StarterRolesFor(TenantShape.Flat).Select(starterRole => starterRole.Key).Should().Equal("host-admin", "operator", "watcher");
+        catalogue.StarterRoles.Single(starterRole => starterRole.Key == "operator").Permissions
+            .Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], "a starter role's permissions are stored expanded");
     }
 
     [Fact]
-    public void The_administrators_pack_holds_every_live_permission()
+    public void The_administrators_starter_role_holds_every_live_permission()
     {
         PermissionContribution[] contributions =
         [
@@ -344,7 +344,7 @@ public class CatalogueTests
             Application(permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]),
             contributions.SelectMany(contribution => contribution.Permissions));
 
-        var administrators = catalogue.AdministratorPackFor(TenantShape.Hierarchical);
+        var administrators = catalogue.AdministratorStarterRoleFor(TenantShape.Hierarchical);
 
         administrators.Permissions.Should().Equal(catalogue.LivePermissions);
         administrators.Permissions.Should().Contain([TenancyPermissions.RolesManage, HostCatalogue.WidgetCreate, "gadget.read", "gizmo.read"],
@@ -355,48 +355,48 @@ public class CatalogueTests
     }
 
     [Fact]
-    public void An_administering_pack_may_list_permissions()
+    public void An_administering_starter_role_may_list_permissions()
     {
         var assign = new Permission("widget.assign", "Widgets", "Hand widgets to people", Implies: [HostCatalogue.WidgetRead], ManagesAccess: true);
         var catalogue = TenancyCatalogue.Build(
             Application(
-                packs: [Administrators with { Permissions = [.. TenancysOwn, " widget.assign ", TenancyPermissions.RolesManage] }],
+                starterRoles: [Administrators with { Permissions = [.. TenancysOwn, " widget.assign ", TenancyPermissions.RolesManage] }],
                 permissions: [.. HostCatalogue.Permissions, assign]),
             [new Permission("gauges.read", "Gauges", "Read gauges")]);
 
-        var administrators = catalogue.AdministratorPackFor(TenantShape.Hierarchical);
+        var administrators = catalogue.AdministratorStarterRoleFor(TenantShape.Hierarchical);
 
         administrators.Permissions.Should().Equal(
             [
                 TenancyPermissions.GrantsManage, TenancyPermissions.HistoryView, TenancyPermissions.RolesManage, TenancyPermissions.SeatsManage, TenancyPermissions.SettingsManage, TenancyPermissions.UnitsManage,
                 "widget.assign", HostCatalogue.WidgetRead,
             ],
-            "it holds what it lists, expanded as any pack is: trimmed, each permission once, with what a permission implies, in ordinal order");
+            "it holds what it lists, expanded as any starter role is: trimmed, each permission once, with what a permission implies, in ordinal order");
         administrators.Permissions.Should().NotContain([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, "gauges.read"], "a live permission it does not list is not its");
         catalogue.LivePermissions.Should().Contain([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, "gauges.read"]);
         administrators.Administers.Should().BeTrue();
-        catalogue.AdministratorPackFor(TenantShape.Flat).Should().BeSameAs(administrators, "the one pack is for every shape");
-        catalogue.Packs.Should().ContainSingle().Which.Should().BeSameAs(administrators);
+        catalogue.AdministratorStarterRoleFor(TenantShape.Flat).Should().BeSameAs(administrators, "the one starter role is for every shape");
+        catalogue.StarterRoles.Should().ContainSingle().Which.Should().BeSameAs(administrators);
 
-        // What it lists is checked as any pack's list is.
+        // What it lists is checked as any starter role's list is.
         Problems(Application(
-                packs: [Administrators with { Permissions = [.. TenancysOwn, "widget.fly", "widget.old"] }],
+                starterRoles: [Administrators with { Permissions = [.. TenancysOwn, "widget.fly", "widget.old"] }],
                 permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]))
             .Should().BeEquivalentTo(
-                "The pack 'host-admin' lists 'widget.fly', which is unknown to the catalogue.",
-                "The pack 'host-admin' lists 'widget.old', which is retired.");
+                "The starter role 'host-admin' lists 'widget.fly', which is unknown to the catalogue.",
+                "The starter role 'host-admin' lists 'widget.old', which is retired.");
     }
 
     [Fact]
-    public void A_listing_administering_pack_must_hold_every_tenancy_permission()
+    public void A_listing_administering_starter_role_must_hold_every_tenancy_permission()
     {
-        Problems(Application(packs: [Administrators with { Permissions = [.. TenancysOwn.Where(permission => permission != TenancyPermissions.SettingsManage)] }]))
+        Problems(Application(starterRoles: [Administrators with { Permissions = [.. TenancysOwn.Where(permission => permission != TenancyPermissions.SettingsManage)] }]))
             .Should().ContainSingle().Which.Should().Be(
-                "The administrators' pack 'host-admin' lists permissions but not 'tenancy.settings.manage', which is one of Tenancy's own: "
+                "The administrators' starter role 'host-admin' lists permissions but not 'tenancy.settings.manage', which is one of Tenancy's own: "
                 + "an administrator holds every permission that manages access, and Tenancy's own.");
 
         // Every permission it leaves out is named, each in a problem of its own, the administrator's permission among them.
-        Problems(Application(packs: [Administrators with { Permissions = [HostCatalogue.WidgetRead, TenancyPermissions.GrantsManage] }]))
+        Problems(Application(starterRoles: [Administrators with { Permissions = [HostCatalogue.WidgetRead, TenancyPermissions.GrantsManage] }]))
             .Should().Equal(
                 LeftOut("host-admin", TenancyPermissions.HistoryView, "is one of Tenancy's own"),
                 LeftOut("host-admin", TenancyPermissions.RolesManage, "is one of Tenancy's own"),
@@ -404,9 +404,9 @@ public class CatalogueTests
                 LeftOut("host-admin", TenancyPermissions.SettingsManage, "is one of Tenancy's own"),
                 LeftOut("host-admin", TenancyPermissions.UnitsManage, "is one of Tenancy's own"));
 
-        // Each pack answers for its own list: the one that lists nothing is not asked, and a flat tenant's
+        // Each starter role answers for its own list: the one that lists nothing is not asked, and a flat tenant's
         // administrators hold the units permission like any other of Tenancy's.
-        Problems(Application(packs:
+        Problems(Application(starterRoles:
             [
                 Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat, Permissions = [.. TenancysOwn.Where(permission => permission != TenancyPermissions.UnitsManage)] },
                 Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical },
@@ -415,7 +415,7 @@ public class CatalogueTests
     }
 
     [Fact]
-    public void A_listing_administering_pack_must_hold_every_permission_that_manages_access()
+    public void A_listing_administering_starter_role_must_hold_every_permission_that_manages_access()
     {
         var assign = new Permission("widget.assign", "Widgets", "Hand widgets to people", ManagesAccess: true);
         var retired = new Permission("widget.old", "Widgets", "Old", Retired: true, ManagesAccess: true);
@@ -425,7 +425,7 @@ public class CatalogueTests
         // Marked where the application declares it, where a module does, and by the application for a module.
         ApplicationCatalogue Listing(params string[] permissions)
             => Application(
-                packs: [Administrators with { Permissions = [.. TenancysOwn, .. permissions] }],
+                starterRoles: [Administrators with { Permissions = [.. TenancysOwn, .. permissions] }],
                 permissions: [.. HostCatalogue.Permissions, assign, retired]) with { AccessManagingPermissions = ["gauges.assign"] };
 
         Problems(Listing(HostCatalogue.WidgetCreate), locks, hands)
@@ -435,35 +435,35 @@ public class CatalogueTests
                 LeftOut("host-admin", "widget.assign", "manages access"));
         Problems(Listing("gauges.assign", "gauges.lock"), locks, hands)
             .Should().ContainSingle().Which.Should().Be(
-                "The administrators' pack 'host-admin' lists permissions but not 'widget.assign', which manages access: "
+                "The administrators' starter role 'host-admin' lists permissions but not 'widget.assign', which manages access: "
                 + "an administrator holds every permission that manages access, and Tenancy's own.");
 
         var catalogue = TenancyCatalogue.Build(Listing("gauges.assign", "gauges.lock", "widget.assign"), [locks, hands]);
-        catalogue.AdministratorPackFor(TenantShape.Flat).Permissions
+        catalogue.AdministratorStarterRoleFor(TenantShape.Flat).Permissions
             .Should().Equal(
                 catalogue.AccessManagingPermissions.Append(TenancyPermissions.HistoryView).Order(StringComparer.Ordinal),
-                "this pack lists the permissions that manage access and Tenancy's own, and no others")
+                "this starter role lists the permissions that manage access and Tenancy's own, and no others")
             .And.NotContain([HostCatalogue.WidgetRead, "widget.old"], "neither a permission of the application that manages no access nor a retired one is asked of it");
 
         // A permission it holds through one that implies it counts: what is checked is what the role made from it holds.
         var rule = new Permission("widget.rule", "Widgets", "Rule widgets", Implies: ["widget.assign"], ManagesAccess: true);
         TenancyCatalogue.Build(
-                Application(packs: [Administrators with { Permissions = [.. TenancysOwn, "widget.rule"] }], permissions: [.. HostCatalogue.Permissions, assign, rule]),
+                Application(starterRoles: [Administrators with { Permissions = [.. TenancysOwn, "widget.rule"] }], permissions: [.. HostCatalogue.Permissions, assign, rule]),
                 [])
-            .AdministratorPackFor(TenantShape.Flat).Permissions.Should().Contain(["widget.assign", "widget.rule"]);
+            .AdministratorStarterRoleFor(TenantShape.Flat).Permissions.Should().Contain(["widget.assign", "widget.rule"]);
 
-        // A permission that starts to manage access stops a catalogue that built until then: the pack lists it first.
-        var tenancysOnly = Application(packs: [Administrators with { Permissions = TenancysOwn }]);
-        TenancyCatalogue.Build(tenancysOnly, []).AdministratorPackFor(TenantShape.Flat).Permissions.Should().BeEquivalentTo(TenancysOwn);
+        // A permission that starts to manage access stops a catalogue that built until then: the starter role lists it first.
+        var tenancysOnly = Application(starterRoles: [Administrators with { Permissions = TenancysOwn }]);
+        TenancyCatalogue.Build(tenancysOnly, []).AdministratorStarterRoleFor(TenantShape.Flat).Permissions.Should().BeEquivalentTo(TenancysOwn);
         Problems(tenancysOnly with { AccessManagingPermissions = [HostCatalogue.WidgetCreate] })
             .Should().ContainSingle().Which.Should().Be(LeftOut("host-admin", HostCatalogue.WidgetCreate, "manages access"));
     }
 
     [Fact]
-    public void An_administering_pack_that_lists_nothing_still_holds_every_live_permission()
+    public void An_administering_starter_role_that_lists_nothing_still_holds_every_live_permission()
     {
         var application = Application(
-            packs:
+            starterRoles:
             [
                 Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat },
                 Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical, Permissions = [.. TenancysOwn, "widget.assign"] },
@@ -477,19 +477,19 @@ public class CatalogueTests
 
         var catalogue = TenancyCatalogue.Build(application, []);
 
-        catalogue.AdministratorPackFor(TenantShape.Flat).Permissions.Should().Equal(catalogue.LivePermissions, "a pack that lists nothing holds every live permission, next to one that lists its own")
+        catalogue.AdministratorStarterRoleFor(TenantShape.Flat).Permissions.Should().Equal(catalogue.LivePermissions, "a starter role that lists nothing holds every live permission, next to one that lists its own")
             .And.Contain([HostCatalogue.WidgetRead, HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, "widget.assign"])
             .And.NotContain("widget.old", "a retired permission is not live");
-        catalogue.AdministratorPackFor(TenantShape.Hierarchical).Permissions.Should().BeEquivalentTo([.. TenancysOwn, "widget.assign"]);
+        catalogue.AdministratorStarterRoleFor(TenantShape.Hierarchical).Permissions.Should().BeEquivalentTo([.. TenancysOwn, "widget.assign"]);
 
         // A list that is not there is one that lists nothing.
-        var unlisted = TenancyCatalogue.Build(Application(packs: [Administrators with { Permissions = null! }]), []);
-        unlisted.AdministratorPackFor(TenantShape.Hierarchical).Permissions.Should().Equal(unlisted.LivePermissions);
+        var unlisted = TenancyCatalogue.Build(Application(starterRoles: [Administrators with { Permissions = null! }]), []);
+        unlisted.AdministratorStarterRoleFor(TenantShape.Hierarchical).Permissions.Should().Equal(unlisted.LivePermissions);
 
-        // A permission declared later comes with the pack that lists nothing, and not with the one that lists.
+        // A permission declared later comes with the starter role that lists nothing, and not with the one that lists.
         var later = TenancyCatalogue.Build(application, [new Permission("gauges.read", "Gauges", "Read gauges")]);
-        later.AdministratorPackFor(TenantShape.Flat).Permissions.Should().Equal(later.LivePermissions).And.Contain("gauges.read");
-        later.AdministratorPackFor(TenantShape.Hierarchical).Permissions.Should().Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Permissions);
+        later.AdministratorStarterRoleFor(TenantShape.Flat).Permissions.Should().Equal(later.LivePermissions).And.Contain("gauges.read");
+        later.AdministratorStarterRoleFor(TenantShape.Hierarchical).Permissions.Should().Equal(catalogue.AdministratorStarterRoleFor(TenantShape.Hierarchical).Permissions);
     }
 
     [Fact]
@@ -518,16 +518,16 @@ public class CatalogueTests
         var catalogue = TenancyCatalogue.Build(new ApplicationCatalogue(), [gadgets]);
 
         catalogue.LivePermissions.Should().BeEquivalentTo([.. TenancyPermissions.All.Select(permission => permission.Name), gadgets.Name]);
-        catalogue.Packs.Should().ContainSingle().Which.Key.Should().Be(TenancyPacks.DefaultAdministratorsKey);
-        catalogue.Packs[0].Permissions.Should().Contain(gadgets.Name, "the default administrators' pack holds every live permission, a module's included");
+        catalogue.StarterRoles.Should().ContainSingle().Which.Key.Should().Be(TenancyStarterRoles.DefaultAdministratorsKey);
+        catalogue.StarterRoles[0].Permissions.Should().Contain(gadgets.Name, "the default administrators' starter role holds every live permission, a module's included");
         catalogue.HasDefaultAdministrators.Should().BeTrue();
-        new ApplicationCatalogue().Packs.Should().BeEmpty("every part of it is optional, and a pack list that is not given is empty");
+        new ApplicationCatalogue().StarterRoles.Should().BeEmpty("every part of it is optional, and a starter role list that is not given is empty");
 
         // An export that builds the catalogue without the registration names the modules' permissions alone, and gets the same.
         var fromTheModules = TenancyCatalogue.Build([gadgets]);
         fromTheModules.LivePermissions.Should().Equal(catalogue.LivePermissions);
         fromTheModules.AccessManagingPermissions.Should().Equal(catalogue.AccessManagingPermissions);
-        fromTheModules.Packs.Select(pack => (pack.Key, pack.Permissions.Count)).Should().Equal(catalogue.Packs.Select(pack => (pack.Key, pack.Permissions.Count)));
+        fromTheModules.StarterRoles.Select(starterRole => (starterRole.Key, starterRole.Permissions.Count)).Should().Equal(catalogue.StarterRoles.Select(starterRole => (starterRole.Key, starterRole.Permissions.Count)));
         fromTheModules.HasDefaultAdministrators.Should().BeTrue();
     }
 
@@ -553,16 +553,16 @@ public class CatalogueTests
     {
         var exception = FluentActions.Invoking(() => TenancyCatalogue.Build(
                 new ApplicationCatalogue(
-                    Packs:
+                    StarterRoles:
                     [
-                        new RolePack("watcher", "Watcher", "Looks", ["widget.fly"]),
-                        new RolePack("flat-admin", "Flat administrator", "Runs a flat tenant", [], SeededFor: TenantShape.Flat, Administers: true),
+                        new StarterRole("watcher", "Watcher", "Looks", ["widget.fly"]),
+                        new StarterRole("flat-admin", "Flat administrator", "Runs a flat tenant", [], SeededFor: TenantShape.Flat, Administers: true),
                     ],
                     Permissions: [new Permission("tenancy.extra", "Tenancy", "Taken")]),
                 [new Permission("Bad Key", "Gadgets", "Bad")]))
             .Should().Throw<TenancyCatalogueException>().Which;
 
-        exception.Problems.Should().HaveCount(4, "a tenancy permission, a malformed permission, an unknown pack key, and no administrators' pack for a hierarchical tenant");
+        exception.Problems.Should().HaveCount(4, "a tenancy permission, a malformed permission, an unknown starter role key, and no administrators' starter role for a hierarchical tenant");
         exception.Message.Should().StartWith("The Tenancy catalogue has 4 problems:");
         foreach (var problem in exception.Problems)
         {
@@ -571,23 +571,23 @@ public class CatalogueTests
     }
 
     [Fact]
-    public void Pack_names_follow_the_role_rules_and_are_unique_ignoring_case()
+    public void Starter_role_names_follow_the_role_rules_and_are_unique_ignoring_case()
     {
-        var problems = Problems(Application(packs:
+        var problems = Problems(Application(starterRoles:
         [
             Administrators,
-            new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetRead]),
-            new RolePack("lookout", " watcher ", "Looks too", [HostCatalogue.WidgetRead]),
-            new RolePack("blank-name", " ", "Has no name", [HostCatalogue.WidgetRead]),
-            new RolePack("wordy", "Wordy", new string('d', 1001), [HostCatalogue.WidgetRead]),
-            new RolePack("long", new string('n', 121), "Long", [HostCatalogue.WidgetRead]),
+            new StarterRole("watcher", "Watcher", "Looks", [HostCatalogue.WidgetRead]),
+            new StarterRole("lookout", " watcher ", "Looks too", [HostCatalogue.WidgetRead]),
+            new StarterRole("blank-name", " ", "Has no name", [HostCatalogue.WidgetRead]),
+            new StarterRole("wordy", "Wordy", new string('d', 1001), [HostCatalogue.WidgetRead]),
+            new StarterRole("long", new string('n', 121), "Long", [HostCatalogue.WidgetRead]),
         ]));
 
         problems.Should().BeEquivalentTo(
-            "The packs 'watcher' and 'lookout' are both named 'watcher', ignoring case; a tenant's roles have names of their own.",
-            "The pack 'blank-name' has a name of 0 characters; a role's name is 1 to 120.",
-            "The pack 'wordy' has a description longer than 1000 characters.",
-            "The pack 'long' has a name of 121 characters; a role's name is 1 to 120.");
+            "The starter roles 'watcher' and 'lookout' are both named 'watcher', ignoring case; a tenant's roles have names of their own.",
+            "The starter role 'blank-name' has a name of 0 characters; a role's name is 1 to 120.",
+            "The starter role 'wordy' has a description longer than 1000 characters.",
+            "The starter role 'long' has a name of 121 characters; a role's name is 1 to 120.");
     }
 
     [Fact]
@@ -596,19 +596,19 @@ public class CatalogueTests
         // The longest permission that fits: a word, a dot and a word, 128 characters in all.
         var fits = "widget." + new string('k', Permission.MaxNameLength - "widget.".Length);
         var tooLong = fits + "k";
-        var longPack = new string('p', RolePack.MaxKeyLength + 1);
+        var longStarterRole = new string('p', StarterRole.MaxKeyLength + 1);
 
         TenancyCatalogue.Build(Application(permissions: [.. HostCatalogue.Permissions, new Permission(fits, "Widgets", "Fits")]), [])
             .LivePermissions.Should().Contain(fits);
 
         Problems(Application(
-                packs: [Administrators, new RolePack(longPack, "Long", "Long permission", [HostCatalogue.WidgetRead])],
+                starterRoles: [Administrators, new StarterRole(longStarterRole, "Long", "Long permission", [HostCatalogue.WidgetRead])],
                 permissions: [.. HostCatalogue.Permissions, new Permission(tooLong, "Widgets", "Too long")]),
                 new Permission("gadget." + tooLong, "Gadgets", "Too long as well"))
             .Should().BeEquivalentTo(
                 "The application declares the permission '" + tooLong + "', which is longer than 128 characters.",
                 "A contribution declares the permission 'gadget." + tooLong + "', which is longer than 128 characters.",
-                "The pack '" + longPack + "' has a key longer than 64 characters.");
+                "The starter role '" + longStarterRole + "' has a key longer than 64 characters.");
     }
 
     [Fact]

@@ -43,7 +43,7 @@ public sealed class OpeningForAnOwnerScenarios(SampleHosts sample) : IClassFixtu
             made.StatusCode.Should().Be(HttpStatusCode.Created, await made.Content.ReadAsStringAsync(Cancellation));
             var opener = (await made.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
             using var given = await ada.PostAsJsonAsync($"/tenancy/seats/{juno}/grants", new { unitId = northCoast, roleId = opener }, Cancellation);
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent, await given.Content.ReadAsStringAsync(Cancellation));
+            given.StatusCode.Should().Be(HttpStatusCode.OK, await given.Content.ReadAsStringAsync(Cancellation));
         }
 
         using var asJuno = await host.ClientAsync("juno", Harbor.Slug);

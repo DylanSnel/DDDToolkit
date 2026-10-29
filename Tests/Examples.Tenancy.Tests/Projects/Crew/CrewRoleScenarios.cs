@@ -336,10 +336,11 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
     /// <summary>
     /// A seat that gives up a role of its own is saved as the application's own work, which no row rule judges,
     /// so that save writes the one project it changed. With a change to another aggregate in the same unit of
-    /// work, left by an earlier command of the scope, it refuses, and writes neither.
+    /// work, left by an earlier command of the scope, the crew manager saves as the seat instead. The row rules then
+    /// judge every row, the database refuses the project she does not see, and neither change is written.
     /// </summary>
     [Fact]
-    public async Task The_save_of_a_seats_own_place_refuses_when_the_unit_of_work_holds_another_change()
+    public async Task A_seats_own_place_is_saved_as_the_seat_when_the_unit_of_work_holds_another_change()
     {
         var bridge = Harbor.ProjectNamed("Bay bridge");
         var (juno, lead, surveyor) = (Harbor.SeatOf(DemoPeople.Juno), Harbor.ProjectRoles[SampleCatalogue.CrewLead], Harbor.ProjectRoles[SampleCatalogue.Surveyor]);
@@ -361,18 +362,18 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
             // and never saved. The policies show it to no statement of hers, so it is loaded as harbor's own work,
             // which ends before she is the caller.
             Project leftover;
-            using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+            using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
             {
                 leftover = await db.Projects.AsTracking().SingleAsync(project => project.Id == bridge.Id, Cancellation);
             }
 
             leftover.Rename("Not hers to rename");
 
-            using (SampleCallers.BeginSeatOf(DemoPeople.Juno, Harbor))
+            using (SampleUsers.BeginSeatOf(DemoPeople.Juno, Harbor))
             {
                 var taking = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(new TakeCrewRole(PierSeven.Id, juno, surveyor), Cancellation);
 
-                (await taking.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain(nameof(Project));
+                (await taking.Should().ThrowAsync<ConcurrencyConflictException>()).Which.Message.Should().Contain(nameof(Project));
             }
         }
 
@@ -423,7 +424,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
         // Juno manages North's crews for a week, through an area manager's grant that ends then.
         using (var placed = await ada.PostAsJsonAsync($"/tenancy/seats/{junoSeat}/placements", new { unitId = north, primary = false }, Cancellation))
         {
-            placed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            placed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var granted = await ada.PostAsJsonAsync(
@@ -431,7 +432,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
                    new { unitId = north, roleId = Harbor.Roles[SampleCatalogue.AreaManager].Value, until },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Giving a crew role is positional, and a membership ends when whoever gives it says, not when their own
@@ -651,16 +652,16 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
 
         // Written as the projects' system work in harbor, since no command puts a membership that ended already on
         // a crew: Juno's ended yesterday, Leo's ends tomorrow.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
             var project = await projects.Projects.SingleAsync(candidate => candidate.Id == depot.Id, Cancellation);
             var then = now.AddDays(-30);
-            project.AddToCrew(Harbor.SeatOf(DemoPeople.Juno), MemberPeriod.Between(then, now.AddDays(-1)), then, addedBy: null);
-            project.GiveCrewRole(Harbor.SeatOf(DemoPeople.Juno), surveyor, MemberPeriod.Open(then), then, givenBy: null);
-            project.AddToCrew(Harbor.SeatOf(DemoPeople.Leo), MemberPeriod.Between(then, now.AddDays(1)), then, addedBy: null);
-            project.GiveCrewRole(Harbor.SeatOf(DemoPeople.Leo), surveyor, MemberPeriod.Open(then), then, givenBy: null);
+            project.Managed().AddMember(Harbor.SeatOf(DemoPeople.Juno), null, MemberPeriod.Between(then, now.AddDays(-1)), then, null);
+            project.Managed().GiveRole(Harbor.SeatOf(DemoPeople.Juno), surveyor, MemberPeriod.Open(then), then, null);
+            project.Managed().AddMember(Harbor.SeatOf(DemoPeople.Leo), null, MemberPeriod.Between(then, now.AddDays(1)), then, null);
+            project.Managed().GiveRole(Harbor.SeatOf(DemoPeople.Leo), surveyor, MemberPeriod.Open(then), then, null);
             await projects.SaveChangesAsync(Cancellation);
         }
 
@@ -670,8 +671,8 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
         // looked for is the comparison of a crew member's own columns: the alias the crew's table has where the
         // seat's membership is looked up. A provider quotes an alias or leaves it bare, and names the table's
         // schema or has none, so the pattern takes both. Asked as a request asks: as the person, in her seat.
-        using (Callers.Begin(Caller.User(DemoPeople.Juno.Id)))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Juno))))
+        using (TestAccess.BeginAs(DemoPeople.Juno.Id))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Juno))))
         {
             await using var scope = host.Services.CreateAsyncScope();
             counter.WatchThisFlow();

@@ -1,6 +1,9 @@
 using System.Text.Json.Serialization;
+using Examples.Tenancy.Tenants.Api.Seats.Rest;
+using Examples.Tenancy.Tenants.Api.Tenant.Rest;
 using Examples.Tenancy.Tenants.Application.Invitations.Commands;
 using Examples.Tenancy.Tenants.Application.Invitations.Queries;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -36,28 +39,27 @@ internal static class InvitationsEndpoints
         group.MapGet("/tenancy/invitations", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new OpenInvitations(), cancellationToken)).Select(Describe)));
 
-        // The one answer that carries the token, which nothing keeps: not this API, and no cache on the way.
-        // It says nothing of whether the address had an account.
+        // The one answer that carries the token, which nothing keeps: not this API, and no cache on the way. It is the
+        // invitation manager's record: the invitation, as the list writes it, and its token. It says nothing of
+        // whether the address had an account.
         group.MapPost("/tenancy/invitations", async (PersonToInvite body, ISender sender, HttpContext http, CancellationToken cancellationToken) =>
         {
             var issued = await sender.Send(new InvitePerson(body.Address, body.UnitId, body.RoleId, body.EndsAt), cancellationToken);
             http.Response.Headers.CacheControl = "no-store";
-            return Results.Ok(new { invitationId = issued.Id, token = issued.Token, expiresAt = issued.ExpiresAt });
+            return Results.Ok(new { invitation = Describe(issued.Invitation), issued.Token });
         });
 
-        group.MapDelete("/tenancy/invitations/{invitationId}", async (InvitationId invitationId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new CancelInvitation(invitationId), cancellationToken);
-            return Results.NoContent();
-        });
+        // The answer is the invitation as the command answers it: cancelled, and with the address it was for forgotten.
+        group.MapDelete("/tenancy/invitations/{invitationId}", async (InvitationId invitationId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new CancelInvitation(invitationId), cancellationToken))));
 
         return group;
     }
 
     /// <summary>
     /// <c>POST /invitations/accept</c>: the signed-in person accepts the invitation their token is for, and is
-    /// answered the seat they now have; <c>GET /me/seats</c> then lists it with its tenant. It needs a token and
-    /// no tenant, so it is mapped outside the group that requires a seat.
+    /// answered the invitation manager's record: the tenant, whose slug the next request names, and the seat they now
+    /// have. It needs a token and no tenant, so it is mapped outside the group that requires a seat.
     /// </summary>
     public static IEndpointRouteBuilder MapInvitationAcceptance(this IEndpointRouteBuilder group)
     {
@@ -65,21 +67,25 @@ internal static class InvitationsEndpoints
 
         group.MapPost("/invitations/accept", async (InvitationToAccept body, ISender sender, CancellationToken cancellationToken) =>
         {
-            var seat = await sender.Send(new AcceptInvitation(body.Token, body.DisplayName), cancellationToken);
-            return Results.Ok(new { seatId = seat });
+            var accepted = await sender.Send(new AcceptInvitation(body.Token, body.DisplayName), cancellationToken);
+            return Results.Ok(new { tenant = TenantEndpoints.Describe(accepted.Tenant), seat = SeatsEndpoints.Describe(accepted.Seat) });
         });
 
         return group;
     }
 
-    /// <summary>An open invitation as this project writes it: who it is for, and what it offers and who issued it, by id.</summary>
-    private static object Describe(TenancyUseCases.OpenInvitation<InvitationId> invitation) => new
+    /// <summary>
+    /// An invitation as this project writes it: who it is for, and what it offers and who issued it, by id, under the
+    /// invitation's own names. Never a token, which the invitation does not hold, and never the account the identity
+    /// provider made for the address, which it does.
+    /// </summary>
+    private static object Describe(Invitation invitation) => new
     {
         invitation.Id,
         invitation.Address,
         invitation.UnitId,
         invitation.RoleId,
-        until = invitation.GrantUntil,
+        invitation.GrantUntil,
         invitation.IssuedAt,
         invitation.ExpiresAt,
         invitation.IssuedBy,

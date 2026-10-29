@@ -14,20 +14,20 @@ namespace Campus.Tenants;
 /// </summary>
 public static class CampusCatalogue
 {
-    /// <summary>The administrators' pack: every permission, for the whole college.</summary>
-    public const string AdministratorPack = "campus-admin";
+    /// <summary>The administrators' starter role: every permission, for the whole college.</summary>
+    public const string AdministratorStarterRole = "campus-admin";
 
     /// <summary>Runs a faculty: sees and grades its courses, and sees and equips its labs, wherever the role is held and below.</summary>
-    public const string DeanPack = "dean";
+    public const string DeanStarterRole = "dean";
 
     /// <summary>The role of the college's own that the owner of a lab holds on it.</summary>
-    public const string LabChiefPack = "lab-chief";
+    public const string LabChiefStarterRole = "lab-chief";
 
     /// <summary>
     /// A role of the college's own for those who show a lab's equipment: it sees and equips, and reads the
     /// college's access history, which is no permission a lab's member gets by it.
     /// </summary>
-    public const string LabDemonstratorPack = "lab-demonstrator";
+    public const string LabDemonstratorStarterRole = "lab-demonstrator";
 
     /// <summary>
     /// The permissions of the courses and the labs that the organization's roles can hold: what the module adds to
@@ -45,12 +45,12 @@ public static class CampusCatalogue
 
     /// <summary>What the application passes as <c>TenancyOptions.Catalogue</c>.</summary>
     public static ApplicationCatalogue Application { get; } = new(
-        Packs:
+        StarterRoles:
         [
-            new(AdministratorPack, "Administrator", "Runs the college", [], Administers: true, Order: 10),
-            new(DeanPack, "Dean", "Runs a faculty", [CoursePermissions.See, CoursePermissions.Grade, LabPermissions.See, LabPermissions.Equip], Order: 20),
-            new(LabChiefPack, "Lab chief", "Is responsible for a lab", [LabPermissions.See, LabPermissions.Equip, LabPermissions.Calibrate], Order: 30),
-            new(LabDemonstratorPack, "Lab demonstrator", "Shows a lab's equipment", [LabPermissions.See, LabPermissions.Equip, TenancyPermissions.HistoryView], Order: 40),
+            new(AdministratorStarterRole, "Administrator", "Runs the college", [], Administers: true, Order: 10),
+            new(DeanStarterRole, "Dean", "Runs a faculty", [CoursePermissions.See, CoursePermissions.Grade, LabPermissions.See, LabPermissions.Equip], Order: 20),
+            new(LabChiefStarterRole, "Lab chief", "Is responsible for a lab", [LabPermissions.See, LabPermissions.Equip, LabPermissions.Calibrate], Order: 30),
+            new(LabDemonstratorStarterRole, "Lab demonstrator", "Shows a lab's equipment", [LabPermissions.See, LabPermissions.Equip, TenancyPermissions.HistoryView], Order: 40),
         ]);
 
     /// <summary>The catalogue as the application runs with it, for whatever is written before its services exist.</summary>

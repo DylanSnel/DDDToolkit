@@ -23,7 +23,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// The receiving half: running a handler once for a message and consumer, with the effect and the
 /// "already applied" marker in one transaction.
 /// </summary>
-public sealed class InboxTests(ExplicitCallersPostgres postgres) : IDisposable
+public sealed class InboxTests(ExplicitCurrentUserPostgres postgres) : IDisposable
 {
     private const string Consumer = "billing.person-projector";
 
@@ -61,7 +61,7 @@ public sealed class InboxTests(ExplicitCallersPostgres postgres) : IDisposable
         await using var work = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(cancellation),
             module => module
-                .Around((_, _, _) => Callers.Begin(Caller.SystemIn(ToolkitWork.ReceivingScope)))
+                .Around((_, _, _) => TestAccess.BeginSystem(ToolkitWork.ReceivingScope))
                 .Handle<ShelfOpenedV3, ReceiptLog>());
         var receiver = work.Services.GetRequiredService<IntegrationEventReceiver>();
         var message = ToolkitWork.Opened("Fiction");
@@ -71,9 +71,9 @@ public sealed class InboxTests(ExplicitCallersPostgres postgres) : IDisposable
 
         work.Seen.Callers.Should().ContainSingle("the second delivery found the inbox row the first one wrote")
             .Which!.ToString().Should().Be($"system in {ToolkitWork.ReceivingScope}");
-        var claims = $$"""{"role":"{{ExplicitCallersPostgres.SystemInRole}}","scope":"{{ToolkitWork.ReceivingScope}}"}""";
-        (await work.InboxAsync()).Should().Equal(new Written("callers.receipt-log", ExplicitCallersPostgres.SystemInRole, claims));
-        (await work.ReceiptsAsync()).Should().Equal(new Written("Fiction", ExplicitCallersPostgres.SystemInRole, claims));
+        var claims = $$"""{"role":"{{ExplicitCurrentUserPostgres.SystemInRole}}","scope":"{{ToolkitWork.ReceivingScope}}"}""";
+        (await work.InboxAsync()).Should().Equal(new Written("callers.receipt-log", ExplicitCurrentUserPostgres.SystemInRole, claims));
+        (await work.ReceiptsAsync()).Should().Equal(new Written("Fiction", ExplicitCurrentUserPostgres.SystemInRole, claims));
     }
 
     /// <summary>Runs the inbox in a fresh scope, the way a consumer of one delivery would.</summary>

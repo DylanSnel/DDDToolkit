@@ -15,8 +15,8 @@ namespace Examples.Tenancy.Tests.Infrastructure;
 /// <param name="Rental">The instance and how many times it had been taken from the pool then: which rental this was.</param>
 /// <param name="Pooled">Whether the context came from a pool.</param>
 /// <param name="Statement">The statement's text; <see langword="null"/> for a save.</param>
-/// <param name="Caller">The toolkit's caller of the flow of work it ran in, if any was begun.</param>
-public sealed record RentedUse(DbContext Context, DbContextId Rental, bool Pooled, string? Statement, Caller? Caller)
+/// <param name="Caller">The toolkit's current user of the flow of work it ran in, if any was begun.</param>
+public sealed record RentedUse(DbContext Context, DbContextId Rental, bool Pooled, string? Statement, CurrentUserSnapshot? Caller)
 {
     /// <summary>Whether this is a save that began, rather than a statement.</summary>
     public bool IsSave => Statement is null;
@@ -107,7 +107,7 @@ public sealed class RentalLog : DbCommandInterceptor, ISaveChangesInterceptor
     {
         if (context is not null)
         {
-            _uses.Enqueue(new RentedUse(context, context.ContextId, context.IsPooled(), statement, Callers.Ambient));
+            _uses.Enqueue(new RentedUse(context, context.ContextId, context.IsPooled(), statement, BegunUser));
         }
     }
 }

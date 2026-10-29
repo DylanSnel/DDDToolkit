@@ -10,7 +10,7 @@ internal static class CrewOverviews
     /// The crew of a project: the owner first, then by when each membership starts, then by seat, and each
     /// member's roles by when each starts, then by role. The roles are there only for a caller who manages the
     /// crew, which the reading answered in the statement that read it
-    /// (<see cref="ProjectCrewData.CallerManagesCrew"/>); for anybody else each member is answered without them.
+    /// (<see cref="ProjectCrewData.CurrentSeatManagesCrew"/>); for anybody else each member is answered without them.
     /// </summary>
     /// <param name="project">The project's crew, as the reading returned it.</param>
     /// <param name="now">The moment a membership, and a role held in it, must apply at to count now.</param>
@@ -32,7 +32,7 @@ internal static class CrewOverviews
                     member.StartsAt,
                     member.EndsAt,
                     applies,
-                    project.CallerManagesCrew
+                    project.CurrentSeatManagesCrew
                         ? [.. member.Roles
                             .OrderBy(held => held.StartsAt)
                             .ThenBy(held => held.RoleId.Value)

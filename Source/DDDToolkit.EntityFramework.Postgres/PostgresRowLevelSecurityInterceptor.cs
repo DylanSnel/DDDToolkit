@@ -19,13 +19,13 @@ namespace DDDToolkit.EntityFramework.Postgres;
 
 /// <summary>
 /// Makes Postgres apply row level security to a context's queries. Every time the context opens a
-/// connection, this sets the role and the token's claims for the caller <see cref="ICallerAccessor"/>
-/// names, the way PostgREST does for each request, together with the settings every registered
+/// connection, this sets the role and the token's claims for the user <see cref="ICurrentUser"/>
+/// answers, the way PostgREST does for each request, together with the settings every registered
 /// <see cref="IRowLevelSecuritySettings"/> gives, in one statement:
 /// <code>
 /// SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"…"}', false), …
 /// </code>
-/// after which the caller functions answer for that user, <c>"ddd".caller_id()</c> on a Postgres of your
+/// after which the current user functions answer for that user, <c>"ddd".current_user_id()</c> on a Postgres of your
 /// own and <c>auth.uid()</c> on Supabase, and every policy on every table the context touches applies.
 /// </summary>
 /// <remarks>
@@ -48,7 +48,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <para>
 /// <b>In <see cref="RowLevelSecurityScope.Transaction"/> scope nothing is ever set on a session</b>, so a
 /// pooler that hands each transaction any free server connection carries nothing from one client to the
-/// next. A command outside a transaction gets <c>RESET ROLE; CALL "ddd".use_caller(…);</c> in front of its
+/// next. A command outside a transaction gets <c>RESET ROLE; CALL "ddd".use_current_user(…);</c> in front of its
 /// text, which sets the same role, claims and settings for the transaction that one command is; the provider
 /// sends them together, so it costs no round trip. The reset takes off a role some other client left on the
 /// server connection, so the call is always made by the role the application logged in as, the only one that
@@ -78,7 +78,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// transaction begins, the interceptor works the role, the claims and the settings out again and compares
 /// them with what it set. Outside a transaction a change is set first, with the same statement. Inside
 /// one it is not, because a transaction runs as one caller and a setting made inside it is undone by its
-/// rollback: with <see cref="CallerOptions.RequireExplicitCallers"/> the command is refused with an
+/// rollback: with <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/> the command is refused with an
 /// <see cref="InvalidOperationException"/>, and without it a warning is logged, once per connection, and
 /// the transaction goes on as the caller it began with. A connection opened inside a
 /// <c>TransactionScope</c> sets the caller inside that transaction; when the transaction is rolled back,
@@ -96,26 +96,26 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// read once, when the interceptor is built.
 /// </para>
 /// <para>
-/// With <see cref="CallerOptions.RequireExplicitCallers"/>, the system is the caller only where something
-/// began it, <c>Callers.Begin(Caller.System)</c>: an <see cref="ICallerAccessor"/> that answers
-/// <see cref="Caller.System"/> for work that began nothing is refused with <see cref="NoCallerException"/>,
-/// whichever accessor the host registered.
+/// With <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/>, work runs as system work without a scope only
+/// where code began it, with <see cref="AccessManager.BeginSystemBypassingRowAccess"/>. An <see cref="ICurrentUser"/> that answers
+/// <see cref="CurrentUserSnapshot.System"/> for work that began nothing is refused with
+/// <see cref="NoCurrentUserException"/>, whichever <see cref="ICurrentUserSource"/> the host registered.
 /// </para>
 /// <para>
 /// <b>What a connection carries is remembered for the whole process</b>, not per interceptor: a connection one
 /// context opened is known to every other context it is handed to, whichever instance of this class each has,
-/// and so is one that <see cref="CallerConnections"/> opened. What was set for one transaction is marked on
+/// and so is one that <see cref="CurrentUserConnections"/> opened. What was set for one transaction is marked on
 /// the server, and a context that uses the connection without having been handed the transaction asks the
 /// server for the mark, at the cost of a round trip per command, and then runs as the transaction's caller:
 /// hand the transaction over with <c>UseTransaction</c> and it asks once. A connection nobody set a caller on, one opened
 /// outside Entity Framework and passed to <c>UseNpgsql(connection)</c> already open, gets the caller before its
 /// first command, at the cost of that one round trip. Where a transaction is already open on it the caller
-/// cannot be set safely: with <see cref="CallerOptions.RequireExplicitCallers"/> the command is refused, and
+/// cannot be set safely: with <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/> the command is refused, and
 /// without it a warning is logged, once per connection, and the command runs as whatever the connection
 /// carries, which is the role the application logged in as.
 /// </para>
 /// <para>
-/// <b>A statement timeout per kind of caller</b>, <see cref="PostgresRowLevelSecurityOptions.StatementTimeouts"/>,
+/// <b>A statement timeout per kind of user</b>, <see cref="PostgresRowLevelSecurityOptions.StatementTimeouts"/>,
 /// travels in the same statement, and a kind without one gets the login role's own back.
 /// </para>
 /// <para>
@@ -149,7 +149,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// asks the server for it, rather than trust what was remembered about a transaction object: a provider may
     /// hand the same object out again for the next transaction, which carries nothing.
     /// </summary>
-    internal const string MarkSetting = "ddd.caller_mark";
+    internal const string MarkSetting = "ddd.current_user_mark";
 
     private const string RoleParameter = "__ddd_role";
 
@@ -170,7 +170,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// as that role, and refused. Nothing of a caller lives on a session in this scope, so taking a role off it
     /// loses nothing.
     /// </remarks>
-    private const string Call = "RESET ROLE;\nCALL \"ddd\".use_caller(@" + RoleParameter + ", @" + ClaimsParameter + ", @" + NamesParameter + ", @" + ValuesParameter + ");\n";
+    private const string Call = "RESET ROLE;\nCALL \"ddd\".use_current_user(@" + RoleParameter + ", @" + ClaimsParameter + ", @" + NamesParameter + ", @" + ValuesParameter + ");\n";
 
     private const string TimeoutSetting = "statement_timeout";
 
@@ -188,10 +188,10 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// </summary>
     private static readonly ConditionalWeakTable<DbConnection, Carried> Connections = new();
 
-    private readonly ICallerAccessor _callers;
+    private readonly ICurrentUser _user;
     private readonly PostgresRowLevelSecurityOptions _options;
     private readonly RowLevelSecurityScope _scope;
-    private readonly bool _requireExplicitCallers;
+    private readonly bool _requireExplicitCurrentUser;
     private readonly ILogger _logger;
     private readonly string _anonymousClaims;
     private readonly string _systemClaims;
@@ -199,15 +199,15 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     private readonly string[] _names;
     private readonly Dictionary<string, int> _positions;
 
-    /// <summary>The timeout of each kind of caller that has one, in milliseconds as Postgres reads it; empty where the host configured none.</summary>
-    private readonly Dictionary<CallerKind, string> _timeouts;
+    /// <summary>The timeout of each kind of user that has one, in milliseconds as Postgres reads it; empty where the host configured none.</summary>
+    private readonly Dictionary<CurrentUserKind, string> _timeouts;
 
     /// <summary>The statements that set a caller, by how many settings they carry, how long they last and whether a timeout follows.</summary>
     private readonly ConcurrentDictionary<(int Settings, bool Local, bool Timed), string> _statements = new();
 
     /// <summary>
-    /// The roles this interceptor gives each kind of caller and how long the settings last: what
-    /// <see cref="PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync"/> holds the database to. Public so a
+    /// The roles this interceptor gives each kind of user and how long the settings last: what
+    /// <see cref="PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync"/> holds the database to. Public so a
     /// start-up check of another package, such as Supabase's check that these are the roles the access files were
     /// written for, asks about the roles a context really runs with, found among its interceptors, and a host that
     /// runs such a check by hand hands over the context alone. Read them; a change made here after the first
@@ -215,37 +215,37 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// </summary>
     public PostgresRowLevelSecurityOptions Options => _options;
 
-    /// <summary>An interceptor that asks <paramref name="callers"/> who is calling, and gives each kind of caller the role <paramref name="options"/> names.</summary>
-    /// <exception cref="ArgumentNullException"><paramref name="callers"/> or <paramref name="options"/> is null.</exception>
+    /// <summary>An interceptor that asks <paramref name="user"/> who is calling, and gives each kind of user the role <paramref name="options"/> names.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="user"/> or <paramref name="options"/> is null.</exception>
     /// <exception cref="ArgumentException">A role in <paramref name="options"/> is empty.</exception>
-    public PostgresRowLevelSecurityInterceptor(ICallerAccessor callers, PostgresRowLevelSecurityOptions options)
-        : this(callers, options, [])
+    public PostgresRowLevelSecurityInterceptor(ICurrentUser user, PostgresRowLevelSecurityOptions options)
+        : this(user, options, [])
     {
     }
 
     /// <summary>
-    /// An interceptor that asks <paramref name="callers"/> who is calling, gives each kind of caller the role
+    /// An interceptor that asks <paramref name="user"/> who is calling, gives each kind of user the role
     /// <paramref name="options"/> names, and sets the settings of <paramref name="settings"/> in the same
     /// statement.
     /// </summary>
-    /// <param name="callers">Says who is calling.</param>
+    /// <param name="user">Says who is calling.</param>
     /// <param name="options">The roles, how long the settings last, and the statement timeouts.</param>
     /// <param name="settings">The modules' settings; every name each one declares is checked here, once.</param>
-    /// <param name="callerOptions">Whether a caller that changes inside a transaction is refused rather than logged.</param>
+    /// <param name="userOptions">Whether a user that changes inside a transaction is refused rather than logged.</param>
     /// <param name="logger">Where that warning goes.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="callers"/>, <paramref name="options"/> or <paramref name="settings"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="user"/>, <paramref name="options"/> or <paramref name="settings"/> is null.</exception>
     /// <exception cref="ArgumentException">
     /// A role in <paramref name="options"/> is empty, or a setting name is not <c>prefix.name</c> in lower
     /// case, is one of PostgREST's <c>request.*</c> or the toolkit's own, or is declared twice.
     /// </exception>
     public PostgresRowLevelSecurityInterceptor(
-        ICallerAccessor callers,
+        ICurrentUser user,
         PostgresRowLevelSecurityOptions options,
         IEnumerable<IRowLevelSecuritySettings> settings,
-        CallerOptions? callerOptions = null,
+        CurrentUserOptions? userOptions = null,
         ILogger<PostgresRowLevelSecurityInterceptor>? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(callers);
+        ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -253,8 +253,8 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         // reach a connection without the claims that go with it, and without the check.
         _options = options.Snapshot();
         _scope = _options.Scope;
-        _callers = callers;
-        _requireExplicitCallers = callerOptions?.RequireExplicitCallers == true;
+        _user = user;
+        _requireExplicitCurrentUser = userOptions?.RequireExplicitCurrentUser == true;
         _logger = logger ?? (ILogger)NullLogger.Instance;
 
         // PostgREST gives a request without a user the claims {"role":"anon"}, so the role and claims
@@ -271,18 +271,18 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     }
 
     /// <summary>
-    /// Whether this interceptor was built requiring explicit callers: it refuses a caller that changes inside a
-    /// transaction, and a system answer nothing began. It reads <see cref="CallerOptions"/> once, when it is
-    /// built, so a start-up check that needs explicit callers asks the interceptor the contexts use, not only
-    /// the options: a later registration of the options, or an interceptor built by hand without them, would
-    /// leave the two apart.
+    /// Whether this interceptor was built requiring every flow of work to begin its user. It then refuses a user that
+    /// changes inside a transaction, and system work that nothing began. It reads <see cref="CurrentUserOptions"/>
+    /// once, when it is built. So a start-up check that needs the requirement asks the interceptor the contexts use,
+    /// not only the options: a later registration of the options, or an interceptor built by hand without them,
+    /// would leave the two apart.
     /// </summary>
-    public bool RequireExplicitCallers => _requireExplicitCallers;
+    public bool RequireExplicitCurrentUser => _requireExplicitCurrentUser;
 
     /// <summary>
     /// How long what this interceptor sets lasts, as it read it when it was built: what a start-up check, or
     /// code that sends SQL of its own, asks instead of the options, for the same reason as
-    /// <see cref="RequireExplicitCallers"/>.
+    /// <see cref="RequireExplicitCurrentUser"/>.
     /// </summary>
     public RowLevelSecurityScope Scope => _scope;
 
@@ -408,8 +408,8 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     /// <inheritdoc />
     /// <remarks>
-    /// A caller begun after the connection opened and before the transaction is set here, so the advice to
-    /// begin the caller before the transaction holds for a connection opened earlier as well. Where the
+    /// A user begun after the connection opened and before the transaction is set here, so the advice to
+    /// begin the user before the transaction holds for a connection opened earlier as well. Where the
     /// settings last one transaction, the caller is only worked out here, so one that cannot run fails before
     /// the transaction begins rather than after.
     /// </remarks>
@@ -481,7 +481,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <remarks>
     /// A transaction handed to a context with <c>UseTransaction</c>. Where it is remembered as carrying a
     /// caller, the server is asked whether it still does: it does when another context began it, or
-    /// <see cref="CallerConnections"/> did, and then it goes on as that caller, a different one being refused
+    /// <see cref="CurrentUserConnections"/> did, and then it goes on as that caller, a different one being refused
     /// or logged as any change inside a transaction is. Otherwise, where the settings last one transaction, they
     /// are set here.
     /// </remarks>
@@ -669,15 +669,15 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     /// <summary>
     /// The claims a user made without a token gets: their id as <c>sub</c> and their role, which is all
-    /// the caller functions read. A user of a token gets the token's claims as they were signed.
+    /// the current user functions read. A user of a token gets the token's claims as they were signed.
     /// </summary>
-    internal static string ClaimsOf(Caller user)
+    internal static string ClaimsOf(CurrentUserSnapshot user)
     {
         using var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
-            if (user.UserId is { } id)
+            if (user.Id is { } id)
             {
                 writer.WriteString("sub", id.ToString("D", CultureInfo.InvariantCulture));
             }
@@ -694,7 +694,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     }
 
     /// <summary>
-    /// The claims of a scoped system caller: its role and its scope, <c>{"role":"ddd_system_in","scope":"projects"}</c>,
+    /// The claims of scoped system work: its role and its scope, <c>{"role":"ddd_system_in","scope":"projects"}</c>,
     /// so the role function answers the role, and a policy may ask whose work it is.
     /// </summary>
     internal static string ScopedClaims(string role, string scope)
@@ -713,15 +713,15 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     /// <summary>
     /// Refuses a connection whose settings could reach somebody else, and a caller that cannot run, before
-    /// anything connects: what <see cref="CallerConnections"/> asks before it opens a connection, as a context
+    /// anything connects: what <see cref="CurrentUserConnections"/> asks before it opens a connection, as a context
     /// does.
     /// </summary>
     /// <exception cref="InvalidOperationException">The connection string would hand the settings on, or the caller has no role to run as.</exception>
-    /// <exception cref="NoCallerException">Nobody is calling, in a host that requires explicit callers.</exception>
+    /// <exception cref="NoCurrentUserException">Nobody is calling, in a host that requires an explicit current user.</exception>
     /// <exception cref="RefusalException">The caller's token carries a role that is on no list.</exception>
     internal void EnsureConnects(DbConnection connection)
     {
-        EnsureSettingsStayWithTheCaller(connection);
+        EnsureSettingsStayWithTheUser(connection);
 
         // Worked out before connecting, so a caller that cannot run fails before anything reaches the server.
         _ = Desired(applied: null);
@@ -741,7 +741,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
             cancellationToken);
     }
 
-    private void EnsureSettingsStayWithTheCaller(DbConnection connection)
+    private void EnsureSettingsStayWithTheUser(DbConnection connection)
     {
         var scope = _scope;
         if (Refusals.GetOrAdd((scope, connection.ConnectionString ?? string.Empty), static key => RefusalFor(key.Scope, key.ConnectionString)) is { } refusal)
@@ -806,7 +806,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     }
 
     /// <summary>
-    /// The statement that sets a caller: the role, the claims, and the four settings Supabase's caller functions
+    /// The statement that sets a caller: the role, the claims, and the four settings Supabase's current user functions
     /// read before the claims, emptied, then one <c>set_config</c> pair of parameters per module setting.
     /// Positional parameters, which Npgsql binds with or without its SQL rewriting.
     /// </summary>
@@ -814,7 +814,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <param name="local">Whether the settings last the transaction, and the statement marks it, or the session.</param>
     /// <param name="timed">Whether a statement timeout follows.</param>
     /// <remarks>
-    /// For a session the timeout is the caller's kind's, or the login role's own where the kind has none: its
+    /// For a session the timeout is the user's kind's, or the login role's own where the kind has none: its
     /// reset value, read in the same statement, so a timeout set for one caller never outlives it. For a
     /// transaction a timeout is only ever set, since it ends with the transaction.
     /// </remarks>
@@ -849,28 +849,28 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     /// <summary>
     /// What the connection should carry now: the current caller's role and claims, every setting's value, and
-    /// the statement timeout of the caller's kind. The role and the claims of the caller
+    /// the statement timeout of the user's kind. The role and the claims of the caller
     /// <paramref name="applied"/> was made for are taken as they were, since they follow from the caller alone,
     /// where this interceptor worked them out.
     /// </summary>
     private Applied Desired(Applied? applied)
     {
-        var caller = _callers.Current
-            ?? throw new InvalidOperationException($"{_callers.GetType().Name} said nobody is calling. An {nameof(ICallerAccessor)} answers {nameof(Caller)}.{nameof(Caller.System)} for background work, or throws {nameof(NoCallerException)}, not null.");
+        var user = _user.Snapshot
+            ?? throw new InvalidOperationException($"{_user.GetType().Name} answered no user. An {nameof(ICurrentUser)} answers {nameof(CurrentUserSnapshot)}.{nameof(CurrentUserSnapshot.System)} for background work, or throws {nameof(NoCurrentUserException)}, never null.");
 
-        // Where every flow of work has to say who it runs as, the system is only ever begun on purpose: an
-        // accessor that falls back to it by itself would give work nobody said anything about the login role.
-        if (_requireExplicitCallers && caller.IsSystem && Callers.Ambient?.IsSystem != true)
+        // Where every flow of work has to say who it runs as, system work without a scope is only ever begun on
+        // purpose: a source that falls back to it by itself would give work nobody said anything about the login role.
+        if (_requireExplicitCurrentUser && user.Kind == CurrentUserKind.System && !_user.IsBegun)
         {
-            throw new NoCallerException(
-                $"{_callers.GetType().Name} answered the system, but nothing began Caller.System, and this host requires every flow of work to say who it runs as (RequireExplicitCallers). " +
-                "Begin Callers.Begin(Caller.System) around the application's own work, or a scoped caller a module gives you.");
+            throw new NoCurrentUserException(
+                $"{_user.GetType().Name} answered system work that nothing began, and this host requires every flow of work to say who it runs as (RequireExplicitCurrentUser). " +
+                "Begin a module's system work with AccessManager.BeginSystem(scope), or system work past every row access rule with BeginSystemBypassingRowAccess().");
         }
 
         string role;
         string claims;
         bool asAnonymous;
-        if (applied is not null && !applied.IsUndone && ReferenceEquals(applied.Owner, this) && ReferenceEquals(applied.Caller, caller))
+        if (applied is not null && !applied.IsUndone && ReferenceEquals(applied.Owner, this) && ReferenceEquals(applied.User, user))
         {
             role = applied.Role;
             claims = applied.Claims;
@@ -878,31 +878,31 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         }
         else
         {
-            role = _options.RoleOf(caller, out asAnonymous);
-            claims = caller.Kind switch
+            role = _options.RoleOf(user, out asAnonymous);
+            claims = user.Kind switch
             {
-                // A user whose token's role is on no list, where the host has such a caller run as an anonymous
+                // A user whose token's role is on no list, where the host has such a user run as an anonymous
                 // one: the token's claims stay behind, so the database sees no user.
-                CallerKind.User when asAnonymous => _anonymousClaims,
-                CallerKind.User => caller.Claims ?? ClaimsOf(caller),
-                CallerKind.Anonymous => _anonymousClaims,
-                CallerKind.System => _systemClaims,
-                CallerKind.SystemIn => ScopedClaims(role, caller.Scope!),
-                _ => throw new InvalidOperationException($"No claims are defined for a caller of kind {caller.Kind}."),
+                CurrentUserKind.User when asAnonymous => _anonymousClaims,
+                CurrentUserKind.User => user.Claims ?? ClaimsOf(user),
+                CurrentUserKind.Anonymous => _anonymousClaims,
+                CurrentUserKind.System => _systemClaims,
+                CurrentUserKind.SystemIn => ScopedClaims(role, user.SystemScope!),
+                _ => throw new InvalidOperationException($"No claims are defined for a user of kind {user.Kind}."),
             };
         }
 
         // A user who runs as an anonymous caller is one to the modules' settings and to the timeouts too: a
         // setting made from the user's id or claims would show the database the user its role and claims no
         // longer name.
-        var kind = asAnonymous ? CallerKind.Anonymous : caller.Kind;
+        var kind = asAnonymous ? CurrentUserKind.Anonymous : user.Kind;
         var timeout = _timeouts.Count == 0 ? null : _timeouts.GetValueOrDefault(kind, string.Empty);
 
-        return new Applied(this, caller, role, claims, _names, ValuesFor(asAnonymous ? Caller.Anonymous : caller), timeout, asAnonymous);
+        return new Applied(this, user, role, claims, _names, ValuesFor(asAnonymous ? CurrentUserSnapshot.Anonymous : user), timeout, asAnonymous);
     }
 
-    /// <summary>Every setting's value for <paramref name="caller"/>, in the order of the statement's parameters; <c>''</c> where a provider gave none.</summary>
-    private string[] ValuesFor(Caller caller)
+    /// <summary>Every setting's value for <paramref name="user"/>, in the order of the statement's parameters; <c>''</c> where a provider gave none.</summary>
+    private string[] ValuesFor(CurrentUserSnapshot user)
     {
         if (_names.Length == 0)
         {
@@ -914,7 +914,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
         foreach (var (provider, declared) in _providers)
         {
-            foreach (var (name, value) in provider.For(caller) ?? [])
+            foreach (var (name, value) in provider.For(user) ?? [])
             {
                 if (name is null || !declared.Contains(name))
                 {
@@ -1034,7 +1034,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// What to set on <paramref name="connection"/>, for its session, before its next statement, or
     /// <see langword="null"/> when what it carries is current. Inside a transaction nothing is set: a change of
     /// caller, and a connection that carries no caller at all, are refused with
-    /// <see cref="CallerOptions.RequireExplicitCallers"/>, and logged once otherwise.
+    /// <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/>, and logged once otherwise.
     /// </summary>
     /// <param name="connection">The connection the statement is for.</param>
     /// <param name="transaction">The transaction the statement runs in, as far as Entity Framework knows of one.</param>
@@ -1060,29 +1060,29 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         if (applied is null)
         {
             // A connection opened outside Entity Framework, so nothing set a caller on it.
-            EnsureSettingsStayWithTheCaller(connection);
-            var caller = Desired(applied: null);
+            EnsureSettingsStayWithTheUser(connection);
+            var unset = Desired(applied: null);
             if (!inTransaction)
             {
-                return caller;
+                return unset;
             }
 
-            const string NoCaller =
-                "This connection was opened outside Entity Framework and carries no caller, and a transaction is open on it, so the caller cannot be set safely.";
-            if (_requireExplicitCallers)
+            const string NoUser =
+                "This connection was opened outside Entity Framework and carries no user, and a transaction is open on it, so the user cannot be set safely.";
+            if (_requireExplicitCurrentUser)
             {
                 throw new InvalidOperationException(
-                    NoCaller + $" Open the connection through a context, begin the transaction after a context opened it, or use {nameof(CallerConnections)}.");
+                    NoUser + $" Open the connection through a context, begin the transaction after a context opened it, or use {nameof(CurrentUserConnections)}.");
             }
 
             var entry = EntryOf(connection);
-            if (!entry.WarnedNoCaller)
+            if (!entry.WarnedNoUser)
             {
-                entry.WarnedNoCaller = true;
+                entry.WarnedNoUser = true;
                 _logger.LogWarning(
-                    NoCaller + " The command runs as the role the connection carries, not as {Caller}. " +
-                    "Open the connection through a context, begin the transaction after a context opened it, or use CallerConnections; with RequireExplicitCallers this is refused.",
-                    caller.Caller);
+                    NoUser + " The command runs as the role the connection carries, not as {User}. " +
+                    "Open the connection through a context, begin the transaction after a context opened it, or use CurrentUserConnections; with RequireExplicitCurrentUser this is refused.",
+                    unset.User);
             }
 
             return null;
@@ -1106,25 +1106,25 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     }
 
     /// <summary>
-    /// A caller that changed inside a transaction: refused with <see cref="CallerOptions.RequireExplicitCallers"/>,
-    /// and otherwise logged, once per connection, after which the transaction goes on as the caller it began with.
+    /// A user that changed inside a transaction: refused with <see cref="CurrentUserOptions.RequireExplicitCurrentUser"/>,
+    /// and otherwise logged, once per connection, after which the transaction goes on as the user it began with.
     /// </summary>
     private void RefuseOrLog(Applied applied, Applied desired)
     {
         var (from, to) = Applied.Describe(applied, desired);
-        if (_requireExplicitCallers)
+        if (_requireExplicitCurrentUser)
         {
             throw new InvalidOperationException(
-                $"The caller changed from {from} to {to} while a transaction was open on this connection. " +
-                "A transaction runs as one caller: begin the caller before the transaction, or run the work on a context of its own.");
+                $"The current user changed from {from} to {to} while a transaction was open on this connection. " +
+                "A transaction runs as one user: begin the user before the transaction, or run the work on a context of its own.");
         }
 
         if (!applied.Warned)
         {
             applied.Warned = true;
             _logger.LogWarning(
-                "The caller changed from {From} to {To} while a transaction was open on this connection, so the transaction goes on as {From}. " +
-                "Begin the caller before the transaction, or run the work on a context of its own; with RequireExplicitCallers this is refused.",
+                "The current user changed from {From} to {To} while a transaction was open on this connection, so the transaction goes on as {From}. " +
+                "Begin the user before the transaction, or run the work on a context of its own; with RequireExplicitCurrentUser this is refused.",
                 from,
                 to,
                 from);
@@ -1195,8 +1195,8 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
             // so this is a transaction whose settings went with something that happened behind the context's
             // back. Nothing can be set for it safely now, and a command in it would run as the login role.
             throw new InvalidOperationException(
-                "This command runs in a transaction that no caller was set for: it was neither begun through a context nor handed to one with UseTransaction, or it has ended since. " +
-                $"Begin the transaction through the context, hand it over with Database.UseTransaction, or take it from {nameof(CallerConnections)}.{nameof(CallerConnections.BeginTransactionAsync)}.");
+                "This command runs in a transaction that no user was set for: it was neither begun through a context nor handed to one with UseTransaction, or it has ended since. " +
+                $"Begin the transaction through the context, hand it over with Database.UseTransaction, or take it from {nameof(CurrentUserConnections)}.{nameof(CurrentUserConnections.BeginTransactionAsync)}.");
         }
 
         if (AmbientOf(context) is { } ambient)
@@ -1534,20 +1534,20 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         public Applied? Applied { get; set; }
 
         /// <summary>Whether a command on it inside a transaction nobody set a caller for was logged already, so it is logged once while the connection is open.</summary>
-        public bool WarnedNoCaller { get; set; }
+        public bool WarnedNoUser { get; set; }
 
         /// <summary>The connection closed, broke or opened: whatever was set is gone, or was never there.</summary>
         public void Forget(object sender, StateChangeEventArgs change)
         {
             Applied = null;
-            WarnedNoCaller = false;
+            WarnedNoUser = false;
         }
     }
 
     /// <summary>What one statement set on a connection, and for whom.</summary>
     private sealed class Applied(
         PostgresRowLevelSecurityInterceptor owner,
-        Caller caller,
+        CurrentUserSnapshot user,
         string role,
         string claims,
         string[] names,
@@ -1559,7 +1559,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         /// <summary>The interceptor that worked it out, with its own roles and settings.</summary>
         public PostgresRowLevelSecurityInterceptor Owner { get; } = owner;
 
-        public Caller Caller { get; } = caller;
+        public CurrentUserSnapshot User { get; } = user;
 
         public string Role { get; } = role;
 
@@ -1601,15 +1601,15 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
         public bool Warned { get; set; }
 
         /// <summary>The same, undone by the rollback of the transaction it was set in.</summary>
-        public Applied Undone() => new(Owner, Caller, Role, Claims, Names, Values, Timeout, AsAnonymous, undone: true) { Warned = Warned };
+        public Applied Undone() => new(Owner, User, Role, Claims, Names, Values, Timeout, AsAnonymous, undone: true) { Warned = Warned };
 
         /// <summary>The same, set for one transaction and with a mark of its own.</summary>
         public Applied In(DbTransaction transaction, bool afterItBegan = false)
-            => new(Owner, Caller, Role, Claims, Names, Values, Timeout, AsAnonymous) { Transaction = transaction, Mark = Guid.NewGuid().ToString("N"), SetAfterItBegan = afterItBegan };
+            => new(Owner, User, Role, Claims, Names, Values, Timeout, AsAnonymous) { Transaction = transaction, Mark = Guid.NewGuid().ToString("N"), SetAfterItBegan = afterItBegan };
 
         /// <summary>The same, set for one System.Transactions transaction.</summary>
         public Applied In(System.Transactions.Transaction ambient)
-            => new(Owner, Caller, Role, Claims, Names, Values, Timeout, AsAnonymous) { Ambient = ambient, Mark = Guid.NewGuid().ToString("N") };
+            => new(Owner, User, Role, Claims, Names, Values, Timeout, AsAnonymous) { Ambient = ambient, Mark = Guid.NewGuid().ToString("N") };
 
         /// <summary>
         /// Whether what was set is there for a statement that runs in <paramref name="transaction"/> and
@@ -1629,15 +1629,15 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
                && Names.AsSpan().SequenceEqual(other.Names)
                && Values.AsSpan().SequenceEqual(other.Values);
 
-        /// <summary>The two callers for a message: by who they are, and by their settings when that is all that differs.</summary>
+        /// <summary>The two users for a message: by who they are, and by their settings when that is all that differs.</summary>
         public static (string From, string To) Describe(Applied from, Applied to)
         {
             if (from.IsUndone)
             {
-                return ($"{from.Caller} (undone by the rollback of the transaction it was set in)", to.Caller.ToString());
+                return ($"{from.User} (undone by the rollback of the transaction it was set in)", to.User.ToString());
             }
 
-            var (a, b) = (from.Caller.ToString(), to.Caller.ToString());
+            var (a, b) = (from.User.ToString(), to.User.ToString());
             if (!string.Equals(a, b, StringComparison.Ordinal))
             {
                 return (a, b);

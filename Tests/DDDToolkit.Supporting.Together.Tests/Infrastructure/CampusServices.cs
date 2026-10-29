@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Globalization;
 using System.Text.Json;
 using DDDToolkit.EntityFramework;
@@ -11,7 +12,7 @@ namespace DDDToolkit.Supporting.Together.Tests.Infrastructure;
 public sealed record CampusPerson(string Name, Guid Identity)
 {
     /// <summary>The caller as the toolkit knows it: a signed-in user, with nothing of any college in its token.</summary>
-    public Caller Caller => Callers.FromClaims(Claims);
+    public CurrentUserSnapshot Caller => CurrentUserSnapshot.FromClaims(Claims);
 
     /// <summary>The claims of the person's token, as JSON: what a database is given for the caller as well.</summary>
     public string Claims => JsonSerializer.Serialize(new Dictionary<string, object>
@@ -108,17 +109,17 @@ public sealed class CampusServices : IDisposable
 
     /// <summary>
     /// Asks something as <paramref name="person"/> in the college <paramref name="college"/> names, in a scope
-    /// of its own, as a request does: the toolkit's caller is the signed-in user, and the Tenancy caller is
+    /// of its own, as a request does: the toolkit's current user is the signed-in user, and the Tenancy user is
     /// what tenant selection finds for that user there, a seat or nobody.
     /// </summary>
     public async Task<T> AsAsync<T>(CampusPerson person, string? college, Func<IServiceProvider, Task<T>> ask)
     {
         var caller = person.Caller;
-        using (Callers.Begin(caller))
+        using (TestAccess.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             var seat = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(caller, college, TestContext.Current.CancellationToken);
-            using (TenancyCallers.Begin(seat))
+            using (TenancyUsers.Begin(seat))
             {
                 return await ask(scope.ServiceProvider);
             }
@@ -134,12 +135,12 @@ public sealed class CampusServices : IDisposable
         });
 
     /// <summary>The access questions about courses, asked as <paramref name="person"/> in a college.</summary>
-    public Task<T> CoursesAsync<T>(CampusPerson person, string? college, Func<IMemberQuestions<CourseId>, Task<T>> ask)
-        => AsAsync(person, college, provider => ask(provider.GetRequiredService<IMemberQuestions<CourseId>>()));
+    public Task<T> CoursesAsync<T>(CampusPerson person, string? college, Func<MembershipAccessManager<Course>, Task<T>> ask)
+        => AsAsync(person, college, provider => ask(provider.GetRequiredService<MembershipAccessManager<Course>>()));
 
     /// <summary>The access questions about labs, asked as <paramref name="person"/> in a college.</summary>
-    public Task<T> LabsAsync<T>(CampusPerson person, string? college, Func<IMemberQuestions<LabId>, Task<T>> ask)
-        => AsAsync(person, college, provider => ask(provider.GetRequiredService<IMemberQuestions<LabId>>()));
+    public Task<T> LabsAsync<T>(CampusPerson person, string? college, Func<MembershipAccessManager<Lab>, Task<T>> ask)
+        => AsAsync(person, college, provider => ask(provider.GetRequiredService<MembershipAccessManager<Lab>>()));
 
     /// <summary>Runs <paramref name="work"/> as system work outside any tenant, in a scope of its own: what provisions a college.</summary>
     public async Task<T> BySystemAsync<T>(Func<IServiceProvider, Task<T>> work)
@@ -205,13 +206,13 @@ public sealed class CampusServices : IDisposable
 /// <summary>What a test resolves from a scope, by name.</summary>
 public static class ScopedServices
 {
-    public static TenancyUseCases.TenantCommands Tenants(this IServiceProvider services) => services.GetRequiredService<TenancyUseCases.TenantCommands>();
+    public static TenantManager Tenants(this IServiceProvider services) => services.GetRequiredService<TenantManager>();
 
-    public static TenancyUseCases.OrganizationCommands Organization(this IServiceProvider services) => services.GetRequiredService<TenancyUseCases.OrganizationCommands>();
+    public static OrganizationManager Organization(this IServiceProvider services) => services.GetRequiredService<OrganizationManager>();
 
-    public static TenancyUseCases.SeatCommands Seats(this IServiceProvider services) => services.GetRequiredService<TenancyUseCases.SeatCommands>();
+    public static SeatManager Seats(this IServiceProvider services) => services.GetRequiredService<SeatManager>();
 
-    public static TenancyUseCases.RoleCommands Roles(this IServiceProvider services) => services.GetRequiredService<TenancyUseCases.RoleCommands>();
+    public static RoleManager Roles(this IServiceProvider services) => services.GetRequiredService<RoleManager>();
 
     public static CampusContext Campus(this IServiceProvider services) => services.GetRequiredService<CampusContext>();
 }

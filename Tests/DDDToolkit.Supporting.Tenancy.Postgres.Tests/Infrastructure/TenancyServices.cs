@@ -151,13 +151,13 @@ public sealed class TenancyServices : IAsyncDisposable
 
     /// <summary>
     /// Runs <paramref name="act"/> as a person signed in with <paramref name="identity"/>, through their seat in
-    /// <paramref name="tenant"/>: the toolkit's caller is the user, whose role and claims reach Postgres, and the
-    /// Tenancy caller the seat, whose tenant does.
+    /// <paramref name="tenant"/>: the toolkit's current user is the user, whose role and claims reach Postgres, and the
+    /// Tenancy user the seat, whose tenant does.
     /// </summary>
     public async Task<T> BySeat<T>(Guid identity, TenantId tenant, SeatId seat, Func<IServiceProvider, Task<T>> act)
     {
-        using (Callers.Begin(Caller.User(identity)))
-        using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
+        using (TestAccess.BeginAs(identity))
+        using (TenancyUsers.Begin(HostUser.InSeat(tenant, seat)))
         {
             return await InScopeAsync(act);
         }
@@ -173,12 +173,12 @@ public sealed class TenancyServices : IAsyncDisposable
 
     /// <summary>
     /// Runs <paramref name="act"/> as a person signed in with <paramref name="identity"/> who names no tenant: the
-    /// toolkit's caller is the user, and there is no Tenancy caller, as in a request that accepts an invitation.
+    /// toolkit's current user is the user, and there is no Tenancy user, as in a request that accepts an invitation.
     /// </summary>
     public async Task<T> BySignedInUser<T>(Guid identity, Func<IServiceProvider, Task<T>> act)
     {
-        using (Callers.Begin(Caller.User(identity)))
-        using (TenancyCallers.BeginNone())
+        using (TestAccess.BeginAs(identity))
+        using (TenancyUsers.BeginNone())
         {
             return await InScopeAsync(act);
         }
@@ -206,29 +206,32 @@ public sealed class TenancyServices : IAsyncDisposable
 /// <summary>What a test resolves from a scope, by name.</summary>
 public static class ScopedServices
 {
-    public static HostTenancy.TenantCommands Tenants(this IServiceProvider services) => services.GetRequiredService<HostTenancy.TenantCommands>();
+    public static TenantManager Tenants(this IServiceProvider services) => services.GetRequiredService<TenantManager>();
 
-    public static HostTenancy.OrganizationCommands Organization(this IServiceProvider services) => services.GetRequiredService<HostTenancy.OrganizationCommands>();
+    public static OrganizationManager Organization(this IServiceProvider services) => services.GetRequiredService<OrganizationManager>();
 
-    public static HostTenancy.SeatCommands Seats(this IServiceProvider services) => services.GetRequiredService<HostTenancy.SeatCommands>();
+    public static SeatManager Seats(this IServiceProvider services) => services.GetRequiredService<SeatManager>();
 
-    public static HostTenancy.RoleCommands Roles(this IServiceProvider services) => services.GetRequiredService<HostTenancy.RoleCommands>();
+    public static HostRoleManager Roles(this IServiceProvider services) => services.GetRequiredService<HostRoleManager>();
 
-    public static TestTenancyContext Tenancy(this IServiceProvider services) => services.GetRequiredService<TestTenancyContext>();
+    public static TestTenancyContext TenancyContext(this IServiceProvider services) => services.GetRequiredService<TestTenancyContext>();
 
     public static WidgetContext Widgets(this IServiceProvider services) => services.GetRequiredService<WidgetContext>();
 
-    public static HostTenancy.TenancyDirectory Directory(this IServiceProvider services) => services.GetRequiredService<HostTenancy.TenancyDirectory>();
-
-    public static HostTenancy.TenantDirectory TenantDirectory(this IServiceProvider services) => services.GetRequiredService<HostTenancy.TenantDirectory>();
-
-    public static HostTenancy.InvitationCommands<DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostInvitation, InvitationId> Invitations(this IServiceProvider services)
-        => services.GetRequiredService<HostTenancy.InvitationCommands<DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostInvitation, InvitationId>>();
+    public static InvitationManager Invitations(this IServiceProvider services)
+        => services.GetRequiredService<InvitationManager>();
 
     public static TallyContext Tallies(this IServiceProvider services) => services.GetRequiredService<TallyContext>();
 
-    public static ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> Answers(this IServiceProvider services)
-        => services.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>();
+    /// <summary>The access manager the test host's code takes: the class the generator wrote into the test host.</summary>
+    public static TenancyAccessManager Access(this IServiceProvider services) => services.GetRequiredService<TenancyAccessManager>();
+
+    /// <summary>
+    /// Tenancy's queries over <paramref name="context"/>, as an application's <c>db.Tenancy()</c> asks them: the
+    /// package's method with the host's ids, which the generator closes over them in the test host, internal to it.
+    /// </summary>
+    public static ITenancyQueries<TenantId, SeatId, OrganizationUnitId, RoleId> Tenancy(this DbContext context)
+        => context.Tenancy<TenantId, SeatId, OrganizationUnitId, RoleId>();
 
     /// <summary>
     /// The host's own use case that renames a seat by the name the host keeps on it: Tenancy has none. It loads the
@@ -238,7 +241,7 @@ public static class ScopedServices
     /// <exception cref="InvalidOperationException">The caller may not read the seat.</exception>
     public static async Task RenameSeatAsync(this IServiceProvider services, SeatId seat, string name, CancellationToken cancellationToken)
     {
-        var store = services.GetRequiredService<HostTenancy.IStore>();
+        var store = services.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
         var renamed = await store.FindSeatAsync(seat, cancellationToken) ?? throw new InvalidOperationException("No seat " + seat + " is the caller's to read.");
         renamed.Rename(name);
         await store.SaveAsync(cancellationToken);

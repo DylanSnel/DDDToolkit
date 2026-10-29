@@ -60,7 +60,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
 
             me.GetProperty("seat").GetProperty("id").GetGuid().Should().Be(seat.Id.Value);
             me.GetProperty("placements").EnumerateArray()
-                .Select(placement => (Unit: placement.GetProperty("unit").GetProperty("id").GetGuid(), Primary: placement.GetProperty("isPrimary").GetBoolean()))
+                .Select(placement => (Unit: placement.GetProperty("unitId").GetGuid(), Primary: placement.GetProperty("isPrimary").GetBoolean()))
                 .Should().ContainSingle("{0} is placed in one unit", seat.Person.Name)
                 .Which.Should().Be((seat.PlacedIn.Value, true));
         }
@@ -86,12 +86,12 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
             me.GetProperty("tenant").GetProperty("shape").GetString().Should().Be(tenant.Shape.OnTheWire());
             var grants = me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which.GetProperty("grants").EnumerateArray().ToList();
             grants.Select(grant => grant.GetProperty("roleId").GetGuid())
-                .Should().BeEquivalentTo(expected[tenant.Slug].Select(pack => tenant.Roles[pack].Value));
+                .Should().BeEquivalentTo(expected[tenant.Slug].Select(starterRole => tenant.Roles[starterRole].Value));
             grants.Should().Contain(grant => grant.GetProperty("roleId").GetGuid() == tenant.AdministratorsRole.Value);
             foreach (var grant in grants)
             {
                 grant.GetProperty("endsAt").ValueKind.Should().Be(JsonValueKind.Null);
-                grant.GetProperty("appliesNow").GetBoolean().Should().BeTrue();
+                me.AppliesNow(grant).Should().BeTrue();
             }
 
             // Either way every live permission of the catalogue is hers, for the whole tenant.
@@ -191,11 +191,11 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
         await using var onPostgres = await sample.StartOnPostgresAsync(
             settings: new Dictionary<string, string> { [DemoSeeder.Setting] = "false" },
             seeded: false);
-        using (TenancyUseCases.BeginSystem())
+        using (SampleAccess.Manager.BeginSystem())
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
-                new TenancyUseCases.TenantToProvision(
+            await scope.ServiceProvider.GetRequiredService<TenantManager>().ProvisionAsync(
+                new TenantToProvision(
                     harbor.Slug,
                     harbor.Name,
                     harbor.Shape,

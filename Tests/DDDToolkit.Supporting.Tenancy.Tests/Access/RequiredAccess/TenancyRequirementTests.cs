@@ -18,12 +18,12 @@ public class TenancyRequirementTests
     public void Two_requirements_that_say_the_same_are_equal()
     {
         TenancyAccess.InTenant().Should().Be(TenancyAccess.InTenant());
-        TenancyAccess.RequiresOperator().Should().Be(TenancyAccess.RequiresOperator());
+        TenancyAccess.Operator().Should().Be(TenancyAccess.Operator());
         TenancyAccess.AtTenant(TenancyPermissions.RolesManage).Should().Be(TenancyAccess.AtTenant(TenancyPermissions.RolesManage))
             .And.NotBe(TenancyAccess.AtTenant(TenancyPermissions.SeatsManage), "another permission is another requirement");
 
         AccessRequirement inTenant = TenancyAccess.InTenant();
-        inTenant.Should().NotBe(TenancyAccess.RequiresOperator(), "two cases are never each other")
+        inTenant.Should().NotBe(TenancyAccess.Operator(), "two cases are never each other")
             .And.NotBe(AccessRequirement.SignedIn(), "nor one of the core's");
         TenancyAccess.AtTenant(TenancyPermissions.RolesManage).Permission.Should().Be(TenancyPermissions.RolesManage);
 
@@ -37,6 +37,36 @@ public class TenancyRequirementTests
     }
 
     [Fact]
+    public void An_operators_requirement_says_where_its_commands_work_acts_and_in_which_scope()
+    {
+        var harbor = new TenantId(1);
+
+        TenancyAccess.Operator().Should().Be(TenancyAccess.Operator(OperatorTenant.FromCommand, TenancyWork.SystemScope), "no tenant and Tenancy's own scope by default");
+        TenancyAccess.Operator().Should().NotBe(TenancyAccess.Operator(OperatorTenant.FromRequest), "the tenant the request names is another place")
+            .And.NotBe(TenancyAccess.Operator(scope: "projects"), "and another scope is other work");
+        (TenancyAccess.Operator(OperatorTenant.FromRequest, "projects").Tenant, TenancyAccess.Operator(OperatorTenant.FromRequest, "projects").Scope)
+            .Should().Be((OperatorTenant.FromRequest, "projects"));
+
+        TenancyAccess.Operator(harbor).Should().BeOfType<TenancyRequirement.OperatorIn<TenantId>>("the tenant's type is taken from the argument")
+            .Which.Should().Be(TenancyAccess.Operator(harbor, scope: TenancyWork.SystemScope));
+        TenancyAccess.Operator(harbor).Should().NotBe(TenancyAccess.Operator(new TenantId(2)), "another tenant is another requirement");
+        ((AccessRequirement)TenancyAccess.Operator(harbor)).Should().NotBe(TenancyAccess.Operator());
+        TenancyAccess.Operator(harbor, scope: "projects").Scope.Should().Be("projects");
+    }
+
+    [Fact]
+    public void An_operators_requirement_names_one_tenant_and_a_scope_that_is_one()
+    {
+        var harbor = new TenantId(1);
+
+        FluentActions.Invoking(() => TenancyAccess.Operator(harbor, OperatorTenant.FromRequest))
+            .Should().Throw<ArgumentException>("a request that names its tenant acts in that one").WithParameterName("tenant");
+        FluentActions.Invoking(() => TenancyAccess.Operator(scope: "Not A Scope")).Should().Throw<ArgumentException>().WithParameterName("scope");
+        FluentActions.Invoking(() => TenancyAccess.Operator(harbor, scope: "")).Should().Throw<ArgumentException>().WithParameterName("scope");
+        FluentActions.Invoking(() => TenancyAccess.Operator((OperatorTenant)7)).Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public void Each_method_answers_its_case_closed_over_the_unit_id_it_is_given()
     {
         var north = OrganizationUnitId.CreateSequential();
@@ -45,7 +75,8 @@ public class TenancyRequirementTests
         TenancyAccess.AtTenant(TenancyPermissions.RolesManage).Should().BeOfType<TenancyRequirement.AtTenant>();
         TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, north).Should().BeOfType<TenancyRequirement.AtUnit<OrganizationUnitId>>("the unit's type is taken from the argument")
             .Which.Unit.Should().Be(north);
-        TenancyAccess.RequiresOperator().Should().BeOfType<TenancyRequirement.Operator>();
+        TenancyAccess.Operator().Should().BeOfType<TenancyRequirement.Operator>();
+        TenancyAccess.Operator(new TenantId(1)).Should().BeOfType<TenancyRequirement.OperatorIn<TenantId>>();
     }
 
     [Fact]
@@ -57,6 +88,7 @@ public class TenancyRequirementTests
             typeof(TenancyRequirement.AtTenant),
             typeof(TenancyRequirement.AtUnit<OrganizationUnitId>),
             typeof(TenancyRequirement.Operator),
+            typeof(TenancyRequirement.OperatorIn<TenantId>),
         ];
 
         cases.Should().AllSatisfy(type => type.GetConstructors().Should().BeEmpty("{0} is made by TenancyAccess, as the core's cases are made by AccessRequirement", type.Name));
@@ -77,7 +109,7 @@ public class TenancyRequirementTests
         => FluentActions.Invoking(() => TenancyAccess.AtUnit(permission!, OrganizationUnitId.CreateSequential())).Should().Throw<ArgumentException>();
 
     [Fact]
-    public void The_cases_are_these_four_and_nobody_adds_one()
+    public void The_cases_are_these_five_and_nobody_adds_one()
     {
         // No case says that the package decides: every request says what it requires. Anyone, a signed-in user and
         // system work are the core's, which a host without Tenancy has too.
@@ -87,7 +119,8 @@ public class TenancyRequirementTests
             nameof(TenancyRequirement.InTenant),
             nameof(TenancyRequirement.AtTenant),
             typeof(TenancyRequirement.AtUnit<>).Name,
-            nameof(TenancyRequirement.Operator));
+            nameof(TenancyRequirement.Operator),
+            typeof(TenancyRequirement.OperatorIn<>).Name);
         cases.Should().OnlyContain(each => each.IsSealed && each.IsNestedPublic && each.BaseType == typeof(TenancyRequirement));
 
         typeof(TenancyRequirement).IsAbstract.Should().BeTrue();
@@ -98,9 +131,9 @@ public class TenancyRequirementTests
     }
 
     [Fact]
-    public void The_requirements_live_with_the_access_questions()
+    public void The_requirements_live_with_the_access_manager()
     {
-        typeof(TenancyRequirement).Namespace.Should().Be(typeof(ITenancyAnswers<,,,>).Namespace, "a module that asks Tenancy names both with one using");
+        typeof(TenancyRequirement).Namespace.Should().Be(typeof(TenancyAccessManager<,,,>).Namespace, "a module that asks Tenancy names both with one using");
         typeof(TenancyAccess).Namespace.Should().Be(typeof(TenancyRequirement).Namespace, "and the methods a request spells them with as well");
     }
 
@@ -110,21 +143,21 @@ public class TenancyRequirementTests
         var options = new TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>();
         var odette = Guid.NewGuid();
 
-        options.IsOperator(Caller.User(odette, OperatorRole)).Should().BeFalse("an application has no operators until it lists a token role");
+        options.IsOperator(CurrentUserSnapshot.User(odette, OperatorRole)).Should().BeFalse("an application has no operators until it lists a token role");
 
         options.OperatorTokenRoles.Add(OperatorRole);
 
-        options.IsOperator(Caller.User(odette, OperatorRole)).Should().BeTrue();
-        Caller?[] others =
+        options.IsOperator(CurrentUserSnapshot.User(odette, OperatorRole)).Should().BeTrue();
+        CurrentUserSnapshot?[] others =
         [
-            Caller.User(odette),
-            Caller.User(odette, "analyst"),
-            Caller.User(odette, role: null),
-            Caller.User(odette, "Operator"),
-            Caller.User(null, OperatorRole),
-            Caller.Anonymous,
-            Caller.System,
-            Caller.SystemIn(TenancyWork.SystemScope),
+            CurrentUserSnapshot.User(odette),
+            CurrentUserSnapshot.User(odette, "analyst"),
+            CurrentUserSnapshot.User(odette, role: null),
+            CurrentUserSnapshot.User(odette, "Operator"),
+            CurrentUserSnapshot.User(null, OperatorRole),
+            CurrentUserSnapshot.Anonymous,
+            CurrentUserSnapshot.System,
+            CurrentUserSnapshot.SystemIn(TenancyWork.SystemScope),
             null,
         ];
         foreach (var other in others)

@@ -7,7 +7,7 @@ using DDDToolkit.BaseTypes;
 using DDDToolkit.Interfaces;
 using DDDToolkit.Localization;
 using DDDToolkit.Supporting.Membership.Access;
-using DDDToolkit.Supporting.Membership.UseCases;
+using DDDToolkit.Supporting.Membership.Managers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -20,6 +20,12 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     private static readonly MethodInfo MakerMethod =
         typeof(MembershipEntityFrameworkServiceCollectionExtensions).GetMethod(nameof(Maker), BindingFlags.NonPublic | BindingFlags.Static)!;
 
+    private static readonly MethodInfo ManagersOfMethod =
+        typeof(MembershipEntityFrameworkServiceCollectionExtensions).GetMethod(nameof(ManagersOf), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    private static readonly MethodInfo AddRoleStoreMethod =
+        typeof(MembershipEntityFrameworkServiceCollectionExtensions).GetMethod(nameof(AddRoleStore), BindingFlags.NonPublic | BindingFlags.Static)!;
+
     /// <summary>
     /// Registers one kind of resource with members, kept in <typeparamref name="TContext"/>, the context whose
     /// model calls <c>HasMembers</c> on it, under <paramref name="rules"/>. An application calls the
@@ -31,16 +37,21 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// application has members on, its documents and its folders, in one container, and none gets another's
     /// rules:
     /// <list type="bullet">
-    /// <item><see cref="IMemberQuestions{TResourceId}"/>, the access questions of the resource, answered inside the
-    /// context's own statements, which is what <see cref="MemberAccessCheck{TResource, TResourceId}"/> asks
+    /// <item><see cref="MembershipAccessManager{TResource}"/>, the access manager of the resource, per scope, answered
+    /// inside the context's own statements, which is what <see cref="MemberAccessCheck{TResource, TResourceId}"/> asks
     /// before a handler runs. That check is added for the module's request interface by the registration
     /// generated beside this one: <c>services.AddDocumentMemberAccess&lt;IDocumentsRequest&gt;()</c>
     /// (<see cref="AddMemberAccess{TResource, TResourceId, TRequests}"/>).</item>
-    /// <item><see cref="MemberAdmission{TResourceId, TMemberId, TRoleId}"/>, what a handler asks before it
-    /// changes the members, over the roles the rules declare (<see cref="NamedRoles{TResourceId}"/>) or the
-    /// rows of the roles kept for the resource, with the application's
-    /// <see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
-    /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/> where it registered them.</item>
+    /// <item>What the queries on the resource's own set ask, <c>db.Documents.WhereIHold(permission)</c>
+    /// (<see cref="MemberQueryableExtensions"/>): they find it in the services the context was made with.</item>
+    /// <item>The managers the generator wrote for the resource, per scope: the member manager,
+    /// <c>DocumentShareManager</c> for the member class <c>DocumentShare</c>, and the role manager of the role class
+    /// kept for the resource, where there is one. Each is read off the resource, which names them, and each loads and
+    /// saves on the request's own context, through the store registered beside it. The member manager asks the
+    /// application's <see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
+    /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/> where it registered them, and answers which roles there are
+    /// from the rules, from the rows of the roles kept for the resource, or from what the application answers for roles
+    /// kept elsewhere.</item>
     /// <item>A <see cref="MembershipRegistration"/>, which a start-up check reads.</item>
     /// <item>The <see cref="MemberHoldInterceptor"/>, one for every resource registered, which nothing uses
     /// until a context asks for the expert hold with
@@ -57,10 +68,10 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// with what to register, rather than read as something they are not:
     /// </para>
     /// <list type="bullet">
-    /// <item><b>Who a member is.</b> The caller's user id (<see cref="MemberSource.CallerId"/>), for a member
+    /// <item><b>Who a member is.</b> The caller's user id (<see cref="MemberSource.CurrentUserId"/>), for a member
     /// id over a <see cref="Guid"/>; a claim of its token (<see cref="MemberSource.Claim"/>), for one over a
     /// text; or what the application resolves for the caller (<see cref="MemberSource.Resolved"/>), which
-    /// needs an <see cref="ICallerMember{TResourceId, TMemberId}"/>.</item>
+    /// needs an <see cref="ICurrentMember{TResourceId, TMemberId}"/>.</item>
     /// <item><b>Where the roles come from.</b> The rules declare them, and a member holds them as
     /// <see cref="NamedRole"/>; or a customer makes them (<see cref="Roles.Custom"/>), as
     /// rows of the application's role class, which needs nothing registered: the context maps that class
@@ -83,18 +94,19 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// <c>AddScopedFromPool</c> say, since the questions of one request may be asked side by side; otherwise on
     /// the request's own context. Where the resource, or the role class of a resource whose roles are kept,
     /// has a query filter that reads a member of the context it runs on, the questions read on the request's
-    /// own context wherever the scope has one, as the admission does: a rule kept on the request's context
+    /// own context wherever the scope has one, as the member manager does: a rule kept on the request's context
     /// applies to both alike, and questions asked side by side then each take a scope of their own. A filter
     /// that reads what is around the work, and no member of its context, holds on every context.
-    /// A <see cref="TimeProvider"/> and an <see cref="ICallerAccessor"/> registered before stay; otherwise the
-    /// system clock and the ambient caller are used.
+    /// A <see cref="TimeProvider"/> and an <see cref="ICurrentUser"/> registered before stay; otherwise the
+    /// system clock and the toolkit's <see cref="CurrentUser"/> are used.
     /// </para>
     /// <para>
-    /// The ambient caller answers <see cref="Caller.System"/> where nobody began one, and the application
-    /// itself holds every permission on every resource. An application whose requests each have a caller says so,
-    /// with <c>services.RequireExplicitCallers()</c>, and a request that reaches the questions with no caller
+    /// The current user answers system work that no row access rule holds where nothing began a user, the work
+    /// <see cref="AccessManager.BeginSystemBypassingRowAccess"/> begins. That work holds every permission on every
+    /// resource. An application whose work always begins its user says so,
+    /// with <c>services.RequireExplicitCurrentUser()</c>, and a request that reaches the questions with no user
     /// then fails rather than passes as the application. Work in a scope
-    /// (<see cref="Caller.SystemIn"/>) holds nothing on a resource unless the rules name that scope
+    /// (<see cref="AccessManager.BeginSystem"/>) holds nothing on a resource unless the rules name that scope
     /// (<see cref="MembershipRules.SystemScopes"/>).
     /// </para>
     /// <para>
@@ -152,7 +164,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(rules);
 
-        var asMember = CallerAsMember<TResource, TResourceId, TMemberId>(services, rules);
+        var asMember = CurrentUserAsMember<TResource, TResourceId, TMemberId>(services, rules);
         RequireRoles<TResource, TResourceId, TId, TMemberId, TRoleId>(services, rules);
         RequirePlacesReached<TResource, TResourceId>(services, rules);
 
@@ -168,35 +180,47 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         // One for the application, made when a context first asks; nothing uses it until then.
         services.TryAddSingleton(provider => new MemberHoldInterceptor(
             provider.GetServices<MembershipRegistration>(),
-            provider.GetRequiredService<ICallerAccessor>()));
+            provider.GetRequiredService<ICurrentUser>()));
 
         // The texts of what this resource refuses with, under its own codes. Offered, not added: only an
         // application that localizes its failures reads them, and its own texts for these codes come first.
         services.AddFailureTexts<MembershipFailures>(rules.Codes.TextKeys);
         services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
+        services.AddCurrentUser();
         services.AddSingleton(new MemberNamesOf<TContext, TResource, TRoleId>());
 
         // Each made by a factory that holds this resource's rules: the rules themselves are never a service,
         // since a second resource would be handed the first one's.
-        services.AddScoped<IMemberQuestions<TResourceId>>(provider =>
-            new EfMemberQuestions<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember, provider));
+        services.AddScoped(provider => MembershipAccessManager.Over(
+            new EfMemberQuestions<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember, provider)));
+
+        // What db.Documents.WhereIHold(permission) finds in the services its context was made with: the same questions,
+        // made for the scope the context is in when the query is made.
+        services.AddSingleton<MemberQueriesOf<TResource>>(new MemberQueriesOf<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember));
         if (rules.Roles.Kind == RolesKind.Custom)
         {
             // The rows of the application's role class, read on the request's own context. One the
             // application registered before stays, as every answer of its own does.
             services.TryAddScoped<IMemberRoles<TResourceId, TRoleId>>(provider => new CustomMemberRoles<TContext, TResource, TResourceId, TRoleId>(registration, provider));
         }
-        else if (rules.Roles.Kind == RolesKind.Fixed)
-        {
-            services.TryAddSingleton(_ => (IMemberRoles<TResourceId, TRoleId>)(object)new NamedRoles<TResourceId>(rules));
-        }
 
-        services.AddScoped(provider => new MemberAdmission<TResourceId, TMemberId, TRoleId>(
-            rules,
-            provider.GetRequiredService<IMemberRoles<TResourceId, TRoleId>>(),
-            provider.GetService<IMemberDirectory<TResourceId, TMemberId>>(),
-            provider.GetService<IMemberRolePolicy<TResourceId, TRoleId>>()));
+        // The managers the generator wrote for the resource, which names them, each with the store it loads and saves through.
+        if (typeof(IMembershipResource<TMember, TMemberId, TRoleId>).IsAssignableFrom(typeof(TResource)))
+        {
+            services.TryAddScoped<IMemberStore<TResource, TResourceId, TMemberId>>(provider =>
+                new EfMemberStore<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember, provider));
+
+            var managers = (IReadOnlyList<Type>)ManagersOfMethod.MakeGenericMethod(typeof(TResource), typeof(TMember), typeof(TMemberId), typeof(TRoleId)).Invoke(null, null)!;
+            foreach (var manager in managers)
+            {
+                if (RoleClassOf(manager, typeof(TResource)) is { } role)
+                {
+                    AddRoleStoreMethod.MakeGenericMethod(typeof(TContext), role.Role, role.Id).Invoke(null, [services]);
+                }
+
+                services.TryAddScoped(manager);
+            }
+        }
 
         return services;
     }
@@ -212,7 +236,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// <typeparamref name="TPorts"/> is registered, one for each scope, and every port of this resource it
     /// implements is answered by that one instance:
     /// <list type="bullet">
-    /// <item><see cref="ICallerMember{TResourceId, TMemberId}"/>: who the caller is as a member, for rules with
+    /// <item><see cref="ICurrentMember{TResourceId, TMemberId}"/>: who the caller is as a member, for rules with
     /// <see cref="MemberSource.Resolved"/>.</item>
     /// <item><see cref="IRolesWithPermission{TResourceId, TRoleId}"/> and
     /// <see cref="IMemberRoles{TResourceId, TRoleId}"/>: which roles give a permission, and which roles there are, for
@@ -221,7 +245,10 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// let a resource be reached from above.</item>
     /// <item><see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
     /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/>, which no rules need: who can be made a member,
-    /// and which roles go to one.</item>
+    /// and which roles go to one, as the member manager asks.</item>
+    /// <item><see cref="IOwnPlaceWork{TResourceId, TMemberId}"/>: how the save of a change to the caller's own place
+    /// begins as the resource's own work. <see cref="ICustomRoleAccess{TResource}"/>: whether the caller may change the
+    /// roles a customer makes for the resource.</item>
     /// </list>
     /// <para>
     /// A port registered before stays, so an application can answer one of them elsewhere. What the rules
@@ -276,11 +303,13 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         [
             .. new[]
             {
-                typeof(ICallerMember<TResourceId, TMemberId>),
+                typeof(ICurrentMember<TResourceId, TMemberId>),
                 typeof(IRolesWithPermission<TResourceId, TRoleId>),
                 typeof(IMemberRoles<TResourceId, TRoleId>),
                 typeof(IMemberDirectory<TResourceId, TMemberId>),
                 typeof(IMemberRolePolicy<TResourceId, TRoleId>),
+                typeof(IOwnPlaceWork<TResourceId, TMemberId>),
+                typeof(ICustomRoleAccess<TResource>),
             }.Where(port => port.IsAssignableFrom(typeof(TPorts))),
             .. typeof(TPorts).GetInterfaces().Where(IsPlacesReached<TResourceId>),
         ];
@@ -288,10 +317,11 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         if (filled.Count == 0)
         {
             throw new ArgumentException(
-                typeof(TPorts).Name + " answers nothing of " + typeof(TResource).Name + ": it implements none of ICallerMember<" + typeof(TResourceId).Name + ", "
+                typeof(TPorts).Name + " answers nothing of " + typeof(TResource).Name + ": it implements none of ICurrentMember<" + typeof(TResourceId).Name + ", "
                 + typeof(TMemberId).Name + ">, IRolesWithPermission<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IMemberRoles<" + typeof(TResourceId).Name + ", "
                 + typeof(TRoleId).Name + ">, IPlacesReached<" + typeof(TResourceId).Name + ", TPlaceId>, IMemberDirectory<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
-                + "> and IMemberRolePolicy<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">. Hand over the class that does, or register the resource without one.",
+                + ">, IMemberRolePolicy<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IOwnPlaceWork<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
+                + "> and ICustomRoleAccess<" + typeof(TResource).Name + ">. Hand over the class that does, or register the resource without one.",
                 nameof(TPorts));
         }
 
@@ -351,6 +381,35 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         return services.AddAccessCheck<TRequests, MemberAccessCheck<TResource, TResourceId>>();
     }
 
+    /// <summary>The manager classes the generator wrote for <typeparamref name="TResource"/>, which the resource names.</summary>
+    private static IReadOnlyList<Type> ManagersOf<TResource, TMember, TMemberId, TRoleId>()
+        where TResource : IMembershipResource<TMember, TMemberId, TRoleId>
+        where TMember : class
+        where TMemberId : struct, IEntityId, IEquatable<TMemberId>
+        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        => TResource.MembershipManagers;
+
+    /// <summary>The role class and its id a role manager of <paramref name="resource"/> is closed over, or <see langword="null"/> for a member manager.</summary>
+    private static (Type Role, Type Id)? RoleClassOf(Type manager, Type resource)
+    {
+        for (var type = manager; type is not null; type = type.BaseType)
+        {
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CustomRoleManager<,,>) && type.GenericTypeArguments[2] == resource)
+            {
+                return (type.GenericTypeArguments[0], type.GenericTypeArguments[1]);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Registers the store a role manager loads and saves through, over the context that maps the role class.</summary>
+    private static void AddRoleStore<TContext, TRole, TRoleId>(IServiceCollection services)
+        where TContext : DbContext
+        where TRole : CustomRoleAggregate<TRoleId>
+        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        => services.TryAddScoped<ICustomRoleStore<TRole, TRoleId>>(provider => new EfCustomRoleStore<TContext, TRole, TRoleId>(provider));
+
     /// <summary>
     /// Whether <paramref name="registration"/> is in <paramref name="services"/> already, exactly as it is: a
     /// second call that says the same is harmless.
@@ -404,13 +463,13 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// The rules take the members from a value the member id is not over, or from the application, which
     /// registered nothing that answers.
     /// </exception>
-    private static Func<Caller, TMemberId?>? CallerAsMember<TResource, TResourceId, TMemberId>(IServiceCollection services, MembershipRules rules)
+    private static Func<CurrentUserSnapshot, TMemberId?>? CurrentUserAsMember<TResource, TResourceId, TMemberId>(IServiceCollection services, MembershipRules rules)
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
         where TMemberId : struct, IEntityId, IEquatable<TMemberId>
     {
         switch (rules.Members.Kind)
         {
-            case MemberSourceKind.Inferred when IsRegistered(services, typeof(ICallerMember<TResourceId, TMemberId>)):
+            case MemberSourceKind.Inferred when IsRegistered(services, typeof(ICurrentMember<TResourceId, TMemberId>)):
                 // Something answers who the caller is as a member of this kind, an organization package's join for a seat among them:
                 // it is asked, about each caller.
                 return null;
@@ -420,25 +479,25 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                 var known = FromValue<TMemberId, Guid>()
                     ?? throw new ArgumentException(
                         "Who a caller is as a member of " + typeof(TResource).Name + " follows from what a member is known by, " + typeof(TMemberId).Name
-                        + ", and that is no id over a Guid, the caller's user id, and nothing answers it: no ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
+                        + ", and that is no id over a Guid, the caller's user id, and nothing answers it: no ICurrentMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
                         + "> is registered. Register the resource with the join the package that keeps the seats writes, where its members are an organization's seats; "
                         + "say members: MemberSource.Claim(path) for an id over a text a token carries; or "
-                        + HowToAnswer<TResource>("ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
+                        + HowToAnswer<TResource>("ICurrentMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
                         nameof(rules));
 
-                return caller => caller.UserId is { } user ? known(user) : null;
+                return user => user.Id is { } id ? known(id) : null;
             }
 
-            case MemberSourceKind.CallerId:
+            case MemberSourceKind.CurrentUserId:
             {
                 var known = FromValue<TMemberId, Guid>()
                     ?? throw new ArgumentException(
-                        "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CallerId, the caller's user id, and the members of " + typeof(TResource).Name
+                        "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CurrentUserId, the caller's user id, and the members of " + typeof(TResource).Name
                         + " are known by " + typeof(TMemberId).Name + ", which is not an id over a Guid. Declare it with [EntityId<Guid>], take the members from "
                         + "MemberSource.Claim(path) for an id over a text, or leave members out and register what answers who the caller is.",
                         nameof(rules));
 
-                return caller => caller.UserId is { } user ? known(user) : null;
+                return user => user.Id is { } id ? known(id) : null;
             }
 
             case MemberSourceKind.Claim:
@@ -447,20 +506,20 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                 var known = FromValue<TMemberId, string>()
                     ?? throw new ArgumentException(
                         "The rules '" + rules.Name + "' take the caller's member id from the claim '" + path + "', a text, and the members of " + typeof(TResource).Name
-                        + " are known by " + typeof(TMemberId).Name + ", which is not an id over a text. Declare it with [EntityId<string>], or take the members from MemberSource.CallerId for an id over a Guid.",
+                        + " are known by " + typeof(TMemberId).Name + ", which is not an id over a text. Declare it with [EntityId<string>], or take the members from MemberSource.CurrentUserId for an id over a Guid.",
                         nameof(rules));
 
-                return caller => caller.Claim(path) is { } claimed ? known(claimed) : null;
+                return user => user.FindClaim(path) is { } claimed ? known(claimed) : null;
             }
 
             default:
                 // Asked of the application, about each caller: never read from the caller's own id instead.
-                return IsRegistered(services, typeof(ICallerMember<TResourceId, TMemberId>))
+                return IsRegistered(services, typeof(ICurrentMember<TResourceId, TMemberId>))
                     ? null
                     : throw new ArgumentException(
                         "The rules '" + rules.Name + "' have the application resolve who a caller is as a member (MemberSource.Resolved), and nothing answers that for "
-                        + typeof(TResource).Name + ": no ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + "> is registered. "
-                        + HowToAnswer<TResource>("ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
+                        + typeof(TResource).Name + ": no ICurrentMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + "> is registered. "
+                        + HowToAnswer<TResource>("ICurrentMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
                         nameof(rules));
         }
     }

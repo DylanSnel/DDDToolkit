@@ -54,7 +54,7 @@ public sealed class PackageReferenceTests
 
         reached.Keys.Should().NotContain(name => Unwanted.Any(unwanted => name.Contains(unwanted, StringComparison.OrdinalIgnoreCase)));
         reached.Keys.Where(name => name.StartsWith("DDDToolkit", StringComparison.Ordinal))
-            .Should().BeEquivalentTo("DDDToolkit", "DDDToolkit.Abstractions", "DDDToolkit.EntityFramework", "DDDToolkit.Supporting.Membership");
+            .Should().BeEquivalentTo("DDDToolkit", "DDDToolkit.Abstractions", "DDDToolkit.EntityFramework", "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.Abstractions");
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class PackageReferenceTests
             "IRolesWithPermission`2",
             "MemberFound`1",
             "MemberHoldDbContextOptionsExtensions",
-            "MemberPermissionOn`1",
+            "PermissionOn`1",
             "MemberMapping",
             "MemberQueryableExtensions",
             "MemberTableNames",

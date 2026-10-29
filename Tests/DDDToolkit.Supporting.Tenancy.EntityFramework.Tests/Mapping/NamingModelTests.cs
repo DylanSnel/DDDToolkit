@@ -102,7 +102,7 @@ public sealed partial class NamingModelTests
 
         // What a function answers under is its own, in Tenancy's context and in a module's.
         tenancy.Model.FindEntityType(typeof(MoveReach<OrganizationUnitId>))!.GetProperties().Select(property => property.GetColumnName())
-            .Should().BeEquivalentTo(["UnitId", "Permission", "EndsAt", "Parent", "OfCaller"]);
+            .Should().BeEquivalentTo(["UnitId", "Permission", "EndsAt", "Parent", "OfCurrentSeat"]);
         module.Model.GetEntityTypes().Single(entityType => entityType.GetFunctionName() is null).GetProperties().Select(property => property.GetColumnName())
             .Should().Equal(["SeatId"], "who holds a permission at a unit is the one row a module reads from SQL of the store's");
     }

@@ -274,19 +274,26 @@ public class MembershipWithTenancyGeneratorTests
         // Tenancy's four ids are taken from the classes the application declares with Tenancy's templates.
         result.ShouldContain(
             File,
-            "ITenancyAnswers<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _tenancy;");
+            "TenancyAccessManager<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _access;");
 
         // Every question is forwarded: who the caller is, who can be made a member, and where a permission is held.
-        result.ShouldContain(File, "return current.Kind == global::DDDToolkit.Supporting.Tenancy.Access.TenancyCallerKind.Seat ? current.Seat : null;");
-        result.ShouldContain(File, "=> _tenancy.RequireTenant();");
+        result.ShouldContain(File, "return current.Kind == global::DDDToolkit.Supporting.Tenancy.Access.TenancyUserKind.Seat ? current.Seat : null;");
+        result.ShouldContain(File, "=> _access.CurrentTenant.Require();");
         result.ShouldContain(File, "seat => seat.Id.Equals(member) && seat.Status == global::DDDToolkit.Supporting.Tenancy.SeatStatus.Active,");
-        result.ShouldContain(File, "? tenancy.UnitsWhereIHold(permission)");
+        result.ShouldContain(File, "? queries.UnitsWhereIHold(permission)");
 
         RegistrationsOf(result).Should().BeEquivalentTo(["AddCourseMembershipWithTenancy<TContext>"]);
         PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().BeEquivalentTo(
-            ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2"],
-            "a course's roles are kept for it, so nothing is answered about roles: the package reads them where they are kept");
+            ["ICurrentMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1"],
+            "a course's roles are kept for it, so nothing is answered about which roles there are: the package reads them where they are kept");
         result.ShouldNotContain(File, "RolesWithPermission");
+
+        // The managers' two: the save of the caller's own place begins Tenancy's system work in the caller's tenant, for
+        // its seat, and the permission that changes the roles a customer makes is asked for the whole tenant.
+        result.ShouldContain(File, "? _access.BeginSystemIn(_access.CurrentTenant.Require().Id, member)");
+        result.ShouldContain(File, ": _access.BeginSystemIn(_access.CurrentTenant.Require().Id, member, scope);");
+        result.ShouldContain(File, "|| !await AskAsync(queries => queries.HoldsAtTenantAsync(permission, cancellationToken), cancellationToken).ConfigureAwait(false))");
+        result.ShouldContain(File, "throw global::DDDToolkit.Supporting.Tenancy.TenancyRefusals.Refuse(global::DDDToolkit.Supporting.Tenancy.TenancyRefusals.NotPermitted, (\"Permission\", permission));");
     }
 
     [Fact]
@@ -299,10 +306,10 @@ public class MembershipWithTenancyGeneratorTests
 
         const string File = "GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy";
         PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().BeEquivalentTo(
-            "ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IRolesWithPermission`2", "IMemberRoles`2");
+            "ICurrentMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1", "IRolesWithPermission`2", "IMemberRoles`2");
 
         // Which roles give a permission, and which roles there are: the tenant's, asked of Tenancy. None is the owner's.
-        result.ShouldContain(File, "? tenancy.RolesWithPermission(permission)");
+        result.ShouldContain(File, "? queries.RolesWithPermission(permission)");
         result.ShouldContain(File, "row => row.Id.Equals(role) && row.Status == global::DDDToolkit.Supporting.Tenancy.RoleStatus.Active,");
         result.ShouldNotContain(File, "_ownerRole", "the owner holds no role");
     }
@@ -328,8 +335,8 @@ public class MembershipWithTenancyGeneratorTests
         var lab = result.Source("AddLabMembershipWithTenancy");
         course.Should().NotContain("Lab");
         lab.Should().NotContain("Course");
-        PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().HaveCount(3);
-        PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().HaveCount(5);
+        PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().HaveCount(5);
+        PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().HaveCount(7);
 
         // The resources' own registrations are there as they were: the written ones stand beside them.
         MethodsOf(result, Package + "GeneratedMembershipEntityFrameworkServiceCollectionExtensions").Should().BeEquivalentTo(
@@ -352,8 +359,8 @@ public class MembershipWithTenancyGeneratorTests
         alone.ReportedDiagnostics.Should().BeEmpty();
         alone.HintNames.Should().NotContain(Written);
 
-        // And in one that references Tenancy without its Entity Framework package: its questions could not be asked
-        // over a context there, so there is nothing to write the class with.
+        // And in one that references Tenancy without its Entity Framework package: its queries could not be asked
+        // in a context there, so there is nothing to write the class with.
         var withoutItsStorage = Run(GeneratorTestHost.Create(TenancyIds, "Ids.cs")
             .WithSource(Courses, "Courses.cs")
             .WithSource(Startup("services.AddCourseMembership<CampusContext>(rules);"), "Startup.cs")
@@ -479,6 +486,36 @@ public class MembershipWithTenancyGeneratorTests
     // ------------------------------------------------------------------ a module that knows the organization by its ids
 
     [Fact]
+    public void A_module_that_says_which_of_its_ids_are_tenancys_is_closed_over_them()
+    {
+        // The same module with the one line that says which of the ids it sees are Tenancy's: the registrations are
+        // closed over them, and the module writes none of them where it registers.
+        var result = Run(GeneratorTestHost.Create(Courses, "Courses.cs")
+            .WithSource(Labs, "Labs.cs")
+            .WithSource(
+                "[assembly: DDDToolkit.Supporting.Tenancy.TenancyIds<Campus.Tenants.TenantId, Campus.Tenants.SeatId, Campus.Tenants.OrganizationUnitId, Campus.Tenants.RoleId>]",
+                "TenancyIds.cs")
+            .WithSource(
+                Startup(
+                    """
+                    services.AddCourseMembershipWithTenancy<CampusContext>(rules);
+                            services.AddLabMembershipWithTenancy<CampusContext>(rules);
+                    """),
+                "Startup.cs")
+            .WithReferencedAssembly(TenancyIds, "Campus.Tenants.Contracts")
+            .WithMembership()
+            .WithTenancyOnEntityFramework());
+
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty();
+        RegistrationsOf(result).Should().BeEquivalentTo(["AddCourseMembershipWithTenancy<TContext>", "AddLabMembershipWithTenancy<TContext>"]);
+        result.ShouldContain(
+            "AddCourseMembershipWithTenancy",
+            "TenancyAccessManager<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _access;",
+            "the line says which ids are the organization's");
+    }
+
+    [Fact]
     public void A_module_that_knows_the_organization_only_by_its_ids_names_them_where_it_registers()
     {
         // The organization's classes are another module's, which this one does not reference: it has the ids, from that
@@ -506,17 +543,17 @@ public class MembershipWithTenancyGeneratorTests
 
         const string Course = "GeneratedMembershipWithTenancyExtensions.AddCourseMembershipWithTenancy";
         result.ShouldContain(Course, "where TTenantId : struct, global::DDDToolkit.Abstractions.Interfaces.IEntityId, global::System.IEquatable<TTenantId>");
-        result.ShouldContain(Course, "ITenancyAnswers<TTenantId, global::Campus.Tenants.SeatId, TUnitId, TRoleId> _tenancy;", "the seat is the member, whatever the others are");
+        result.ShouldContain(Course, "TenancyAccessManager<TTenantId, global::Campus.Tenants.SeatId, TUnitId, TRoleId> _access;", "the seat is the member, whatever the others are");
         result.ShouldContain(Course, "IPlacesReached<global::Campus.Courses.CourseId, TUnitId>");
         result.ShouldContain(
             Course,
             "/// <typeparam name=\"TUnitId\">The id of the application's organization unit class, which this project sees no class of and so cannot be given.</typeparam>",
             "whoever writes the call is told which id goes where");
-        PortsOf(result, "GeneratedCourseMembershipWithTenancy`4").Should().HaveCount(3, "a course's roles are kept for it: its role class says so");
+        PortsOf(result, "GeneratedCourseMembershipWithTenancy`4").Should().HaveCount(5, "a course's roles are kept for it: its role class says so");
 
         const string Lab = "GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy";
-        result.ShouldContain(Lab, "ITenancyAnswers<TTenantId, global::Campus.Tenants.SeatId, TUnitId, global::Campus.Tenants.RoleId> _tenancy;");
-        PortsOf(result, "GeneratedLabMembershipWithTenancy`3").Should().HaveCount(5);
+        result.ShouldContain(Lab, "TenancyAccessManager<TTenantId, global::Campus.Tenants.SeatId, TUnitId, global::Campus.Tenants.RoleId> _access;");
+        PortsOf(result, "GeneratedLabMembershipWithTenancy`3").Should().HaveCount(7);
     }
 
     [Fact]
@@ -560,7 +597,7 @@ public class MembershipWithTenancyGeneratorTests
 
         result.ShouldCompile();
         RegistrationsOf(result).Should().BeEquivalentTo(["AddClubMembershipWithTenancy<TContext, TTenantId, TUnitId, TRoleId>"]);
-        PortsOf(result, "GeneratedClubMembershipWithTenancy`4").Should().HaveCount(3, "roles the rules declare are held by name, and are nobody's to answer");
+        PortsOf(result, "GeneratedClubMembershipWithTenancy`4").Should().HaveCount(5, "roles the rules declare are held by name, and are nobody's to answer");
     }
 
     [Fact]
@@ -587,11 +624,11 @@ public class MembershipWithTenancyGeneratorTests
         RegistrationsOf(result).Should().BeEquivalentTo(
             "AddCourseMembershipWithTenancy<TContext, TTenantId, TUnitId, TRoleId>", "AddBulletinMembershipWithTenancy<TContext, TTenantId, TUnitId, TRoleId>");
 
-        // Called for a resource whose members are no seats, it would ask for answers of Tenancy's about a seat known by
+        // Called for a resource whose members are no seats, it would ask for an access manager whose seat is known by
         // a user's id, which no application registers: a mistake that is found when the first question is asked.
         result.ShouldContain(
             "AddBulletinMembershipWithTenancy",
-            "ITenancyAnswers<TTenantId, global::Campus.Bulletins.UserId, TUnitId, TRoleId> _tenancy;");
+            "TenancyAccessManager<TTenantId, global::Campus.Bulletins.UserId, TUnitId, TRoleId> _access;");
     }
 
     [Fact]
@@ -677,7 +714,7 @@ public class MembershipWithTenancyGeneratorTests
         RegistrationsOf(infrastructure).Should().BeEquivalentTo(["AddCourseMembershipWithTenancy<TContext>"]);
         infrastructure.ShouldContain(
             "AddCourseMembershipWithTenancy",
-            "ITenancyAnswers<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _tenancy;",
+            "TenancyAccessManager<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _access;",
             "the organization's ids are taken from the classes the domain project declares");
     }
 
@@ -741,9 +778,9 @@ public class MembershipWithTenancyGeneratorTests
         services.Should().ContainSingle(descriptor => descriptor.ServiceType == written).Which.Lifetime.Should().Be(ServiceLifetime.Scoped);
         services.Where(descriptor => written.GetInterfaces().Contains(descriptor.ServiceType)).Select(descriptor => descriptor.ServiceType.Name)
             .Should().BeEquivalentTo(
-                ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2"],
-                "what the rules ask of the organization is answered by the written class, one for a scope");
-        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(IMemberQuestions<>).MakeGenericType(emitted.Type("Campus.Courses.CourseId")));
+                ["ICurrentMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1"],
+                "what the rules and the managers ask of the organization is answered by the written class, one for a scope");
+        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<>).MakeGenericType(emitted.Type("Campus.Courses.Course")));
 
         // Said twice it is said once, as for the resource's own registration.
         var registered = services.Count;
@@ -783,7 +820,7 @@ public class MembershipWithTenancyGeneratorTests
         // accepted by the resource's own registration, and read a user for a seat. Here that is a mistake, and said.
         var emitted = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), (Courses, "Courses.cs"))).Emit();
 
-        foreach (var (members, said) in new[] { (MemberSource.CallerId, "MemberSource.CallerId"), (MemberSource.Claim("app_metadata.seat"), "MemberSource.Claim") })
+        foreach (var (members, said) in new[] { (MemberSource.CurrentUserId, "MemberSource.CurrentUserId"), (MemberSource.Claim("app_metadata.seat"), "MemberSource.Claim") })
         {
             var services = new ServiceCollection();
 

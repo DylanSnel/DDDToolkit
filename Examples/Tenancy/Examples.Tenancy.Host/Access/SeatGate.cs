@@ -1,5 +1,7 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy;
+using DDDToolkit.Supporting.Tenancy.Access;
 using Examples.Tenancy.Tenants.Contracts.TokenRoles;
 using HotChocolate.Configuration;
 using HotChocolate.Language;
@@ -37,7 +39,7 @@ public sealed class SeatGate(IEnumerable<string> openFields, IEnumerable<string>
     private static readonly FieldMiddlewareConfiguration Seated = new(next => context =>
     {
         // The caller the request's flow carries: the gateway calls a module's schema in that flow.
-        if (SeatRequirement.RefusalFor(TenancyUseCases.CurrentCaller()) is { } refusal)
+        if (SeatRequirement.RefusalFor(TenancyUsers.Ambient) is { } refusal)
         {
             throw refusal;
         }
@@ -48,7 +50,7 @@ public sealed class SeatGate(IEnumerable<string> openFields, IEnumerable<string>
     private static readonly FieldMiddlewareConfiguration OperatorsOnly = new(next => context =>
     {
         // What the token says, as the routes' policy and the modules' own checks ask it.
-        if (!SampleTokenRoles.IsOperator(Callers.Ambient))
+        if (!SampleTokenRoles.IsOperator(context.Services.GetRequiredService<ICurrentUser>()))
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
         }

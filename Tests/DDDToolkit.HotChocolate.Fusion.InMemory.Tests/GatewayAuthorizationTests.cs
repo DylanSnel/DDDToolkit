@@ -22,7 +22,7 @@ public sealed class GatewayAuthorizationTests
         await using var app = await StartAsync(endpoints =>
         {
             endpoints.MapInMemoryFusionGateway("/graphql", "user").RequireAuthorization();
-            endpoints.MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization(NamedCallers.Administrators);
+            endpoints.MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization(NamedUsers.Administrators);
         });
 
         using (var anonymous = await app.SendAsync("/graphql", Product))
@@ -40,7 +40,7 @@ public sealed class GatewayAuthorizationTests
         await using var app = await StartAsync(endpoints =>
         {
             endpoints.MapInMemoryFusionGateway("/graphql", "user").RequireAuthorization();
-            endpoints.MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization(NamedCallers.Administrators);
+            endpoints.MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization(NamedUsers.Administrators);
         });
 
         // Bob is signed in, and no administrator: the user's gateway answers him, the administration's forbids him.
@@ -168,7 +168,7 @@ public sealed class GatewayAuthorizationTests
 
     private static void Registered(WebApplicationBuilder builder)
     {
-        builder.Services.AddNamedCallers();
+        builder.Services.AddNamedUsers();
         builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddQueryType<CatalogQuery>(q => q.Name("Query"));
         builder.Services.AddGraphQLServer("admin").AddSourceSchemaDefaults().AddQueryType<AdminQuery>(q => q.Name("Query"));
         builder.Services.AddInMemoryFusionGateway("user", ["catalog"]);

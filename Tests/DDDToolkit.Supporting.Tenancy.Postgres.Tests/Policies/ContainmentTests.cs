@@ -53,7 +53,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
     {
         var database = await ForcedAsync(contained: true);
 
-        await using (var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
+        await using (var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
         {
             var toOli = () => hiro.AttemptAsync(Give, Cancellation, Oli.Seat.Value, NorthPier.Value, HarborRoles.Supervisor.Value, Hiro.Seat.Value);
             (await toOli.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
@@ -67,7 +67,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
 
         // The use cases refuse it first, in their own words.
         await using var services = new TenancyServices(database);
-        await FluentActions.Awaiting(() => services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Oli.Seat, NorthPier, HarborRoles.Supervisor, null, null, Cancellation)))
+        await FluentActions.Awaiting(() => services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Oli.Seat, HarborRoles.Supervisor, NorthPier, null, null, Cancellation)))
             .Should().ThrowAsync<RefusalException>().Where(refusal => refusal.Code == TenancyRefusals.GrantExceedsOwn);
     }
 
@@ -76,7 +76,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
     {
         var database = await ForcedAsync(contained: false);
 
-        await using (var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
+        await using (var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
         {
             (await hiro.ExecuteAsync(Give, Cancellation, Oli.Seat.Value, NorthPier.Value, HarborRoles.Supervisor.Value, Hiro.Seat.Value)).Should().Be(1);
             (await hiro.ExecuteAsync(Shorten, Cancellation, Seth.Seat.Value, North.Value, HarborRoles.Supervisor.Value)).Should().Be(1);
@@ -87,11 +87,11 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         // Through the use cases of an application that runs with it off, he gives himself the Supervisor at North.
         await using (var services = new TenancyServices(database, catalogue: Off))
         {
-            await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Hiro.Seat, North, HarborRoles.Supervisor, null, null, Cancellation));
+            await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Hiro.Seat, HarborRoles.Supervisor, North, null, null, Cancellation));
         }
 
         // Read as Tenancy's system work in Harbor, which reads every seat's rights there: the login role owns nothing here.
-        await using var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
+        await using var system = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
         (await system.ScalarAsync<long>(
                 "SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.units.manage'",
                 Cancellation,
@@ -113,7 +113,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         await TenancyPostgres.ForceAsync(database, Cancellation, catalogue: Catalogue(contained));
 
         // Eve manages seats for the whole tenant, and holds none of the Supervisor's other permissions.
-        await using var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation);
+        await using var eve = await AsUser.PersonAsync(database, Eve.Identity, Harbor, Cancellation);
         if (contained)
         {
             var refused = (await FluentActions.Awaiting(() => eve.ExecuteAsync(Suspend, Cancellation, Seth.Seat.Value)).Should().ThrowAsync<PostgresException>()).Which;
@@ -125,7 +125,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         await eve.CommitAsync(Cancellation);
 
         // The seats permission for the whole tenant is asked either way: Hiro, who may write Oli's row, may not stop him.
-        await using var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
+        await using var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
         var stopping = (await FluentActions.Awaiting(() => hiro.ExecuteAsync(Suspend, Cancellation, Oli.Seat.Value)).Should().ThrowAsync<PostgresException>()).Which;
         stopping.ConstraintName.Should().Be("tenancy_seat_status_is_managed");
     }
@@ -140,7 +140,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         await TenancyPostgres.ForceAsync(database, Cancellation, catalogue: Catalogue(contained));
 
         // Eve manages seats and grants for the whole tenant, and does not hold the Supervisor's tenancy.units.manage.
-        await using (var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation))
+        await using (var eve = await AsUser.PersonAsync(database, Eve.Identity, Harbor, Cancellation))
         {
             var offering = () => eve.AttemptAsync(Invite, Cancellation, Guid.NewGuid(), Harbor.Value, North.Value, HarborRoles.Supervisor.Value, Eve.Seat.Value);
             if (contained)
@@ -165,8 +165,8 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         var issued = await issuing();
         var accepted = await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, verifiedAddress: null, Cancellation, configure: seat => seat.Rename("Wren")));
 
-        await using var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
-        (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.units.manage' AND \"UnitId\" = $2", Cancellation, accepted.Seat.Value, North.Value))
+        await using var system = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
+        (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.units.manage' AND \"UnitId\" = $2", Cancellation, accepted.Seat.Id.Value, North.Value))
             .Should().Be(1, "accepting asks the issuer again, by the same setting, and the database lets the grant through");
     }
 
@@ -176,7 +176,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         var database = await ForcedAsync(contained: false);
 
         // Ada takes away her own administrators' role, which a seat may: the last administrator stays, at commit.
-        await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
+        await using (var ada = await AsUser.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync(TakeAway, Cancellation, Ada.Seat.Value, HarborRoot.Value, HarborRoles.Administrator.Value)).Should().Be(1);
             var committing = (await FluentActions.Awaiting(() => ada.CommitAsync(Cancellation)).Should().ThrowAsync<PostgresException>()).Which;
@@ -184,7 +184,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         }
 
         // Hiro may write Oli's row, and hands it to no other account.
-        await using var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
+        await using var hiro = await AsUser.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
         var linking = (await FluentActions.Awaiting(() => hiro.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Identity\" = gen_random_uuid() WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value))
             .Should().ThrowAsync<PostgresException>()).Which;
         (linking.SqlState, linking.ConstraintName).Should().Be((PostgresErrorCodes.InsufficientPrivilege, "tenancy_seat_identity_is_fixed"));
@@ -197,7 +197,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database);
 
         // Hiro gives himself nothing that manages access.
-        await FluentActions.Awaiting(() => services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Hiro.Seat, North, HarborRoles.Supervisor, null, null, Cancellation)))
+        await FluentActions.Awaiting(() => services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Hiro.Seat, HarborRoles.Supervisor, North, null, null, Cancellation)))
             .Should().ThrowAsync<RefusalException>().Where(refusal => refusal.Code == TenancyRefusals.SelfAppointment);
 
         // He passed the supervisors' quiz, which the application checked itself: its handler, which takes his seat
@@ -205,10 +205,10 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         // Tenancy's system work in Harbor, for his seat, which the policies let write the tenant's grants.
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor, Hiro.Seat))
         {
-            await services.InScopeAsync(scoped => scoped.Seats().GrantAsync(Hiro.Seat, North, HarborRoles.Supervisor, until: null, "passed the supervisors' quiz", Cancellation));
+            await services.InScopeAsync(scoped => scoped.Seats().GrantAsync(Hiro.Seat, HarborRoles.Supervisor, North, until: null, "passed the supervisors' quiz", Cancellation));
         }
 
-        await using var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
+        await using var system = await AsUser.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
         (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.units.manage' AND \"UnitId\" = $2", Cancellation, Hiro.Seat.Value, North.Value))
             .Should().Be(1);
     }

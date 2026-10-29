@@ -33,7 +33,7 @@ public sealed class PeriodsInBothDomainsTests
         // He is made a dean of Arts for three days.
         await campus.Services.BySystemInAsync(
             data.Alder,
-            provider => provider.Seats().GrantAsync(data.NedSeat, data.Arts, data.AlderDean, until: data.Now + threeDays, reason: null, Cancellation));
+            provider => provider.Seats().GrantAsync(data.NedSeat, data.AlderDean, data.Arts, until: data.Now + threeDays, reason: null, Cancellation));
 
         // From then on he grades what is given at Arts. The hold names no end: when a role of the organization ends is
         // Tenancy's to know, so a permission held from above is held for as long as the course is seen.
@@ -58,7 +58,7 @@ public sealed class PeriodsInBothDomainsTests
 
         // His seat is as active as it was: he is refused for the course, and not as nobody.
         await campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, provider =>
-            provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>().RequireMemberAsync(data.NedSeat, Cancellation).AsTask());
+            new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes).RequireMemberAsync(data.NedSeat, Cancellation).AsTask());
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class PeriodsInBothDomainsTests
         (grade!.Via, grade.Until).Should().Be((MemberVia.Above, (DateTimeOffset?)null));
         (await campus.Services.AsAsync(data.Ada, CampusScenario.InAlder, async provider =>
             {
-                var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(CoursePermissions.Grade);
+                var reach = provider.GetRequiredService<MembershipAccessManager<Course>>().Reach(CoursePermissions.Grade);
                 return await provider.Campus().Courses.Reached(reach).Where(found => found.Resource.Id == data.Optics).Select(found => new { found.AsMember, found.FromAbove }).SingleAsync(Cancellation);
             }))
             .Should().Be(new { AsMember = false, FromAbove = true });

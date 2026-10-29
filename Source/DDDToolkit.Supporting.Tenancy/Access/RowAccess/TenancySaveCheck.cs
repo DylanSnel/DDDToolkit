@@ -3,7 +3,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <summary>
 /// The rule every write of a tenant's row passes, whatever wrote it: a seat and system work in a tenant only
 /// write their own tenant's rows, and nobody writes any. The storage applies it to every changed row that
-/// belongs to a tenant, before anything is written, so a use case that loaded the wrong row cannot save it.
+/// belongs to a tenant, before anything is written, so a handler that loaded the wrong row cannot save it.
 /// <para>
 /// System work outside any tenant writes no tenant's rows either. It acts in no tenant, so every tenant's row
 /// is another tenant's to it. Provisioning, the one thing it starts, saves as system work inside the tenant it
@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </summary>
 public static class TenancySaveCheck
 {
-    /// <summary>Checks one changed row against the current Tenancy caller.</summary>
+    /// <summary>Checks one changed row against the current Tenancy user.</summary>
     /// <param name="entryTenant">The tenant the row belongs to, boxed: its tenant id.</param>
     /// <exception cref="ArgumentNullException"><paramref name="entryTenant"/> is null.</exception>
     /// <exception cref="Exceptions.RefusalException">
@@ -25,15 +25,15 @@ public static class TenancySaveCheck
     {
         ArgumentNullException.ThrowIfNull(entryTenant);
 
-        var caller = TenancyCallers.Ambient;
-        switch (caller?.Kind)
+        var user = TenancyUsers.Ambient;
+        switch (user?.Kind)
         {
-            case TenancyCallerKind.System:
+            case TenancyUserKind.System:
                 // It acts in no tenant; provisioning saves as system work in the tenant it makes.
                 throw TenancyRefusals.Refuse(TenancyRefusals.OtherTenant);
 
-            case TenancyCallerKind.Seat or TenancyCallerKind.SystemInTenant:
-                if (!Equals(caller.TenantId, entryTenant))
+            case TenancyUserKind.Seat or TenancyUserKind.SystemInTenant:
+                if (!Equals(user.TenantId, entryTenant))
                 {
                     throw TenancyRefusals.Refuse(TenancyRefusals.OtherTenant);
                 }

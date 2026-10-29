@@ -4,7 +4,7 @@ using DDDToolkit.Exceptions;
 namespace DDDToolkit.EntityFramework.Postgres;
 
 /// <summary>
-/// Which Postgres role each kind of <see cref="Caller"/> gets. The defaults are PostgREST's, which is
+/// Which Postgres role each kind of <see cref="CurrentUserSnapshot"/> gets. The defaults are PostgREST's, which is
 /// also what every Supabase project has, so policies written for Supabase's Data API apply unchanged, and
 /// <see cref="PostgresRowAccess.SetupScript"/> makes the same two on a Postgres of your own, together with
 /// <see cref="SystemInRole"/> and the roles of <see cref="TokenRoles"/>.
@@ -24,7 +24,7 @@ public sealed class PostgresRowLevelSecurityOptions
     /// <summary>The role PostgREST, and so Supabase, gives a request without a user.</summary>
     public const string AnonRole = "anon";
 
-    /// <summary>The role a scoped system caller, <c>Caller.SystemIn(scope)</c>, runs as unless another is configured.</summary>
+    /// <summary>The role scoped system work, <c>CurrentUserSnapshot.SystemIn(scope)</c>, runs as unless another is configured.</summary>
     public const string DefaultSystemInRole = "ddd_system_in";
 
     /// <summary>The role a signed-in user's queries run as. <c>authenticated</c> by default.</summary>
@@ -34,7 +34,7 @@ public sealed class PostgresRowLevelSecurityOptions
     public string AnonymousRole { get; set; } = AnonRole;
 
     /// <summary>
-    /// The role a scoped system caller, <c>Caller.SystemIn(scope)</c>, runs as: the application's own work
+    /// The role scoped system work, <c>CurrentUserSnapshot.SystemIn(scope)</c>, runs as: the application's own work
     /// that stays inside the policies. <c>ddd_system_in</c> by default, a role that can neither log in nor
     /// bypass row level security. Its claims are <c>{"role":"ddd_system_in","scope":"…"}</c>, so a policy
     /// may ask the scope. <see cref="PostgresRowAccess.SetupScript"/> makes it, and a script written with
@@ -42,7 +42,7 @@ public sealed class PostgresRowLevelSecurityOptions
     /// <c>RowAccessRoles.SystemIn</c> for it.
     /// <para>
     /// <see langword="null"/> leaves it out of <see cref="PostgresRowAccess.SetupScript"/>, and a scoped
-    /// system caller then fails when a context opens a connection for it, rather than running as another
+    /// system work then fails when a context opens a connection for it, rather than running as another
     /// role. It does not take the rules for <c>RowAccessRoles.SystemIn</c> out of a script:
     /// <see cref="RowAccessRoleNames.From"/> writes those for <c>ddd_system_in</c>, and the script makes that
     /// role where it is missing.
@@ -64,9 +64,9 @@ public sealed class PostgresRowLevelSecurityOptions
     /// <c>ddd_system</c> say, that can neither log in nor bypass row level security and holds only the outbox,
     /// the inbox, the migration history and the rows of an event log that may go. A script written with
     /// <see cref="RowAccessRoleNames.From"/> these options and <see cref="RowAccessExport.WriteGrants"/> makes
-    /// that role and gives it exactly those privileges; grant the role to the login role, and the system caller
+    /// that role and gives it exactly those privileges; grant the role to the login role, and system work
     /// can do the toolkit's bookkeeping and nothing else. System work that reads a module's own tables then
-    /// fails, which is the point: it runs as a scoped system caller, inside the policies, instead.
+    /// fails, which is the point: it runs as scoped system work, inside the policies, instead.
     /// </para>
     /// </summary>
     public string? SystemRole { get; set; }
@@ -102,7 +102,7 @@ public sealed class PostgresRowLevelSecurityOptions
     /// Set <see cref="RowLevelSecurityScope.Transaction"/> where a pooler hands each transaction whichever server
     /// connection is free, PgBouncer in transaction mode or Supabase's transaction pooler: a setting made for a
     /// session there reaches whoever is given that server connection next. Nothing guesses it from the
-    /// connection string. It needs the procedure <c>"ddd".use_caller</c>, which
+    /// connection string. It needs the procedure <c>"ddd".use_current_user</c>, which
     /// <see cref="PostgresRowAccess.SetupScript"/> and every script and access file make, and the role the
     /// application logs in as must be allowed to call it.
     /// </para>
@@ -111,8 +111,8 @@ public sealed class PostgresRowLevelSecurityOptions
     public RowLevelSecurityScope Scope { get; set; } = RowLevelSecurityScope.Connection;
 
     /// <summary>
-    /// The <c>statement_timeout</c> a caller's statements run under, per kind of caller:
-    /// <c>StatementTimeouts[CallerKind.User] = TimeSpan.FromSeconds(8)</c>. A kind left out gets the login
+    /// The <c>statement_timeout</c> a user's statements run under, per kind of user:
+    /// <c>StatementTimeouts[CurrentUserKind.User] = TimeSpan.FromSeconds(8)</c>. A kind left out gets the login
     /// role's own again, its reset value, so a timeout never outlives the caller it was set for.
     /// <para>
     /// Postgres applies the settings stored on a role, <c>ALTER ROLE authenticated SET statement_timeout</c>, when
@@ -125,40 +125,40 @@ public sealed class PostgresRowLevelSecurityOptions
     /// reads the map once, when it is built.
     /// </para>
     /// </summary>
-    public IDictionary<CallerKind, TimeSpan> StatementTimeouts { get; } = new Dictionary<CallerKind, TimeSpan>();
+    public IDictionary<CurrentUserKind, TimeSpan> StatementTimeouts { get; } = new Dictionary<CurrentUserKind, TimeSpan>();
 
     /// <summary>
-    /// The role <paramref name="caller"/> runs as; <c>none</c> means the role the application logged in as.
+    /// The role <paramref name="user"/> runs as; <c>none</c> means the role the application logged in as.
     /// Every kind has an arm of its own and nothing falls through to the system's role, so a kind added
     /// later fails here until it is given one, rather than running with the application's power.
     /// </summary>
-    /// <param name="caller">Who is calling.</param>
+    /// <param name="user">Who is calling.</param>
     /// <param name="asAnonymous">
     /// Whether the caller is a signed-in user who runs as an anonymous caller after all, because its token's role
     /// is on no list and <see cref="UnknownTokenRole"/> says so: the database is then given the anonymous
     /// caller's claims, not the token's, and the modules' settings for an anonymous caller.
     /// </param>
     /// <exception cref="InvalidOperationException">
-    /// The caller is a scoped system caller and <see cref="SystemInRole"/> is <see langword="null"/>, or it is
+    /// The user is scoped system work and <see cref="SystemInRole"/> is <see langword="null"/>, or it is
     /// of a kind no role is configured for.
     /// </exception>
     /// <exception cref="RefusalException">
     /// The caller is a signed-in user whose token's role is on no list, and <see cref="UnknownTokenRole"/> refuses
     /// it: <see cref="ToolkitRefusals.RoleNotAllowed"/>.
     /// </exception>
-    internal string RoleOf(Caller caller, out bool asAnonymous)
+    internal string RoleOf(CurrentUserSnapshot user, out bool asAnonymous)
     {
         asAnonymous = false;
-        return caller.Kind switch
+        return user.Kind switch
         {
-            CallerKind.User => RoleOfUser(caller.Role, out asAnonymous),
-            CallerKind.Anonymous => AnonymousRole,
-            CallerKind.System => SystemRole ?? "none",
-            CallerKind.SystemIn => SystemInRole ?? throw new InvalidOperationException(
-                $"The caller is {caller}, a scoped system caller, and PostgresRowLevelSecurityOptions.{nameof(SystemInRole)} is null, so there is no role for it to run as. " +
-                $"Set {nameof(SystemInRole)}, '{DefaultSystemInRole}' by default, or do not begin Caller.SystemIn in this host."),
+            CurrentUserKind.User => RoleOfUser(user.Role, out asAnonymous),
+            CurrentUserKind.Anonymous => AnonymousRole,
+            CurrentUserKind.System => SystemRole ?? "none",
+            CurrentUserKind.SystemIn => SystemInRole ?? throw new InvalidOperationException(
+                $"The current user is {user}, scoped system work, and PostgresRowLevelSecurityOptions.{nameof(SystemInRole)} is null, so there is no role for it to run as. " +
+                $"Set {nameof(SystemInRole)}, '{DefaultSystemInRole}' by default, or do not begin scoped system work (AccessManager.BeginSystem(scope)) in this host."),
             _ => throw new InvalidOperationException(
-                $"No role is configured for a caller of kind {caller.Kind}, so its queries cannot run. A kind of caller needs a role of its own before row level security can apply to it."),
+                $"No role is configured for a user of kind {user.Kind}, so its queries cannot run. A kind of user needs a role of its own before row level security can apply to it."),
         };
     }
 
@@ -206,7 +206,7 @@ public sealed class PostgresRowLevelSecurityOptions
     /// roles <see cref="PostgresRowAccess.SetupScript"/> makes are the roles a script writes policies for.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// A role is empty or cannot be a policy's, <see cref="SystemInRole"/> is another kind of caller's role as
+    /// A role is empty or cannot be a policy's, <see cref="SystemInRole"/> is another kind of user's role as
     /// well, or <see cref="TokenRoles"/> maps a token role without a name, or one to a role a token must never
     /// run as.
     /// </exception>

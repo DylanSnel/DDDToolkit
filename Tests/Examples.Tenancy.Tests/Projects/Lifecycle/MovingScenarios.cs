@@ -40,7 +40,7 @@ public sealed class MovingScenarios(SampleHosts sample) : IClassFixture<SampleHo
                    new { parentId = Harbor.UnitNamed("South").Value },
                    Cancellation))
         {
-            moved.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            moved.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         (await rhea.VisibleProjectsAsync()).Names().Should().Equal("Inland depot");
@@ -102,7 +102,7 @@ public sealed class MovingScenarios(SampleHosts sample) : IClassFixture<SampleHo
         var harborArea = (await added.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
         using (var archived = await ada.PostAsync($"/tenancy/units/{harborArea}/archive", content: null, Cancellation))
         {
-            archived.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            archived.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using var moved = await ada.PutAsJsonAsync($"/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}/unit", new { unitId = harborArea }, Cancellation);

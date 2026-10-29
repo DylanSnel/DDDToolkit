@@ -3,7 +3,7 @@ using DDDToolkit.HotChocolate.Authorization;
 using Examples.Hosting;
 using Examples.Tenancy.Tenants.Api.Roles.GraphQL;
 using Examples.Tenancy.Tenants.Api.GraphQl;
-using Examples.Tenancy.Tenants.Application.Roles;
+using Examples.Tenancy.Tenants.Domain;
 using HotChocolate.Execution.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,9 +19,11 @@ namespace Examples.Tenancy.Tenants.Api.GraphQL;
 /// fetches the rest here, through the three lookups of the <c>Directory</c> feature. Each feature's queries,
 /// mutations and types are in its own <c>GraphQL</c> folder, beside its routes; this class only puts them together.
 /// <para>
-/// A type of the schema is declared over the record the application layer answers, in a type class beside the
-/// fields that answer it, so no record is copied for the schema's sake. HotChocolate's generator registers the
-/// type classes, the fields and the data loaders, in both schemas; what is left to say here is who answers a
+/// A type of the schema is declared over what the application layer answers, in a type class beside the fields
+/// that answer it: Tenancy's classes, <c>Tenant</c>, <c>Seat</c>, <c>Role</c>, <c>OrganizationUnit</c> and
+/// <c>Invitation</c>, and the records of Tenancy's managers that hold them beside what they lack. A type class lists
+/// the fields it shows of a class, and adds a field the class lacks as a resolver. HotChocolate's generator registers
+/// the type classes, the fields and the data loaders, in both schemas; what is left to say here is who answers a
 /// field's permission. No record exists only for the schema.
 /// </para>
 /// <para>
@@ -61,7 +63,7 @@ internal static class TenantsGraphQL
         }
 
         // Who answers the permission a field of a role asks for. The host's conventions add the handler that asks.
-        services.AddScoped<IFieldPermissions<RoleListing>, RoleFieldPermissions>();
+        services.AddScoped<IFieldPermissions<Role>, RoleFieldPermissions>();
 
         // Two schemas a gateway composes: their lookups are how a gateway finds an entity by its key.
         var schema = Tenancy(services.AddGraphQLServer(SourceSchemaName).AddSourceSchemaDefaults());

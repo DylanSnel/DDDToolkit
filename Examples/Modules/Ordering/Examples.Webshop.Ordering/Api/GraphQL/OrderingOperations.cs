@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
 using Examples.Webshop.Ordering.Contracts;
@@ -33,7 +34,7 @@ public static class OrderingQueries
 public static class OrderingMutations
 {
     [Mutation]
-    public static async Task<Order> PlaceOrderAsync(PlaceOrderInput input, [Service] ICallerAccessor callers, [Service] OrderingContext orders, CancellationToken cancellationToken)
+    public static async Task<Order> PlaceOrderAsync(PlaceOrderInput input, [Service] ICurrentUser user, [Service] OrderingContext orders, CancellationToken cancellationToken)
     {
         var shipTo = new Address(input.Street, input.City, input.PostalCode).ToValid();
 
@@ -50,7 +51,7 @@ public static class OrderingMutations
                 .ToArray());
         }
 
-        var order = new Order(OrderId.Create(), shipTo, priced.Lines, CustomerId.From(callers.Current));
+        var order = new Order(OrderId.Create(), shipTo, priced.Lines, CustomerId.From(user));
         order.EnsureInvariants();
 
         orders.Add(order);

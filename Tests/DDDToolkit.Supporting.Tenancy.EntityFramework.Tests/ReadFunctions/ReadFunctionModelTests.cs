@@ -19,7 +19,7 @@ public sealed class ReadFunctionModelTests
     /// <summary>The rows of the read model, with the function that answers each.</summary>
     private static readonly Dictionary<Type, string> Functions = new()
     {
-        [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = TenancyFunctionNames.CallerPermissions,
+        [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = TenancyFunctionNames.CurrentPermissions,
         [typeof(OrganizationUnitPath<TenantId, OrganizationUnitId>)] = TenancyFunctionNames.TenantUnitPaths,
         [typeof(OrganizationUnitRow<TenantId, OrganizationUnitId>)] = TenancyFunctionNames.TenantUnits,
         [typeof(RoleRow<TenantId, RoleId>)] = TenancyFunctionNames.TenantRoles,
@@ -33,7 +33,7 @@ public sealed class ReadFunctionModelTests
         [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = ["TenantId", "SeatId", "UnitId", "RoleId", "Permission", "StartsAt", "EndsAt"],
         [typeof(OrganizationUnitPath<TenantId, OrganizationUnitId>)] = ["TenantId", "AncestorId", "DescendantId", "Distance"],
         [typeof(OrganizationUnitRow<TenantId, OrganizationUnitId>)] = ["Id", "TenantId", "ParentId", "Status"],
-        [typeof(RoleRow<TenantId, RoleId>)] = ["Id", "TenantId", "FromPack", "Status", "Permissions"],
+        [typeof(RoleRow<TenantId, RoleId>)] = ["Id", "TenantId", "FromStarterRole", "Status", "Permissions"],
         [typeof(PlacementRow<SeatId, OrganizationUnitId>)] = ["SeatId", "UnitId", "IsPrimary", "TenantId"],
         [typeof(SeatRow<TenantId, SeatId>)] = ["Id", "TenantId", "Status"],
     };
@@ -95,7 +95,7 @@ public sealed class ReadFunctionModelTests
         PropertiesOfTheRowNamed(tenancy.Model, "TenantToSweepRow").Should().BeEquivalentTo(["TenantId"]);
         PropertiesOfTheRowNamed(tenancy.Model, "SeatHolderRow").Should().BeEquivalentTo(["SeatId"]);
         PropertiesOfTheRowNamed(module.Model, "SeatHolderRow").Should().BeEquivalentTo(["SeatId"]);
-        PropertiesOfTheRowNamed(tenancy.Model, "MoveReach").Should().BeEquivalentTo(["UnitId", "Permission", "EndsAt", "Parent", "OfCaller"]);
+        PropertiesOfTheRowNamed(tenancy.Model, "MoveReach").Should().BeEquivalentTo(["UnitId", "Permission", "EndsAt", "Parent", "OfCurrentSeat"]);
 
         // And what the units asked about are called, which is a name and a path and nothing more of a unit.
         PropertiesOfTheRowNamed(tenancy.Model, "NamedUnit").Should().BeEquivalentTo(["Id", "Name", "Path", "Depth"]);
@@ -179,8 +179,8 @@ public sealed class ReadFunctionModelTests
         named.Model.GetDbFunctions().Should().HaveCount(6).And.OnlyContain(function => function.Schema == TestTenancyContext.Schema);
         own.Model.GetDbFunctions().Should().HaveCount(6).And.OnlyContain(function => function.Schema == TestWidgetContext.Schema, "without a schema, the functions are looked for where the model's own tables are");
 
-        named.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM tenancy.caller_permissions() AS");
-        own.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM widgets.caller_permissions() AS");
+        named.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM tenancy.current_permissions() AS");
+        own.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM widgets.current_permissions() AS");
 
         // On Npgsql a role's permissions are the array the function answers, asked in SQL.
         named.Model.FindEntityType(typeof(RoleRow<TenantId, RoleId>))!.FindProperty(nameof(RoleRow<TenantId, RoleId>.Permissions))!.GetColumnType().Should().Be("text[]");
@@ -205,7 +205,7 @@ public sealed class ReadFunctionModelTests
                 .Should().Equal(functions.Model.FindEntityType(row)!.GetProperties().Select(property => property.Name), "{0} answers under the properties' names", name);
         }
 
-        functions.Set<RoleRow<TenantId, RoleId>>().ToQueryString().Should().Contain("\"FromPack\"").And.NotContain("frompack");
+        functions.Set<RoleRow<TenantId, RoleId>>().ToQueryString().Should().Contain("\"FromStarterRole\"").And.NotContain("frompack");
     }
 
     [Fact]
@@ -215,7 +215,7 @@ public sealed class ReadFunctionModelTests
         using var scope = services.Scope();
 
         TenancyModel.ReadsThroughFunctions(scope.ServiceProvider.Widgets().Model).Should().BeFalse("it maps the views");
-        TenancyModel.ReadsThroughFunctions(scope.ServiceProvider.Tenancy().Model).Should().BeFalse("it maps the tables");
+        TenancyModel.ReadsThroughFunctions(scope.ServiceProvider.TenancyContext().Model).Should().BeFalse("it maps the tables");
         scope.ServiceProvider.Widgets().Model.GetDbFunctions().Should().BeEmpty();
     }
 
@@ -227,21 +227,21 @@ public sealed class ReadFunctionModelTests
         using var keeping = new TestServices(configure: services => services.Configure<TenancyStoreOptions>(options => options.DatabaseKeepsRights = true));
         await keeping.BySystemIn(new TenantId(1), scoped =>
         {
-            var answers = scoped.Answers();
-
-            FluentActions.Invoking(() => answers.Over(scoped.Widgets())).Should().Throw<InvalidOperationException>().WithMessage(
+            FluentActions.Invoking(() => scoped.Widgets().Tenancy()).Should().Throw<InvalidOperationException>().WithMessage(
                 "'TestWidgetContext' maps Tenancy's read model as views over Tenancy's tables, with AddTenancyReadModel, and the database keeps the rights*" +
                 "no module reads Tenancy's tables*Map the read model with modelBuilder.AddTenancyReadFunctions<TTenantId, TSeatId, TUnitId, TRoleId>(schema)*");
             FluentActions.Invoking(() => new EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>(scoped.Widgets())).Should().Throw<InvalidOperationException>();
 
             // Tenancy's own context reads its own tables, and a module that maps the functions reads none of them.
-            FluentActions.Invoking(() => answers.Over(scoped.Tenancy())).Should().NotThrow();
+            FluentActions.Invoking(() => scoped.TenancyContext().Tenancy()).Should().NotThrow();
             using var functions = new ThroughFunctions(new DbContextOptionsBuilder<ThroughFunctions>().UseSqlite(keeping.Sqlite.Connection).UseApplicationServiceProvider(scoped).Options);
-            FluentActions.Invoking(() => answers.Over(functions)).Should().NotThrow();
+            FluentActions.Invoking(() => functions.Tenancy()).Should().NotThrow();
 
-            // A context made by hand, which knows no application, is read as one whose database does not keep them.
+            // A context made by hand, which knows no application, is read as one whose database does not keep them: over
+            // the long form, since db.Tenancy() finds the catalogue in the application's services, which it has none of.
             using var byHand = new TestWidgetContext(new DbContextOptionsBuilder<TestWidgetContext>().UseSqlite(keeping.Sqlite.Connection).Options);
-            FluentActions.Invoking(() => answers.Over(byHand)).Should().NotThrow();
+            FluentActions.Invoking(() => scoped.Access().In(new EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>(byHand), EfQueryExecutor.Instance)).Should().NotThrow();
+            FluentActions.Invoking(() => byHand.Tenancy()).Should().Throw<InvalidOperationException>().WithMessage("*UseDDDToolkit(serviceProvider)*");
             return Task.CompletedTask;
         });
 
@@ -249,7 +249,7 @@ public sealed class ReadFunctionModelTests
         using var writing = new TestServices();
         await writing.BySystemIn(new TenantId(1), scoped =>
         {
-            FluentActions.Invoking(() => scoped.Answers().Over(scoped.Widgets())).Should().NotThrow();
+            FluentActions.Invoking(() => scoped.Widgets().Tenancy()).Should().NotThrow();
             return Task.CompletedTask;
         });
     }

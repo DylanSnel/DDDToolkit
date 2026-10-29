@@ -22,7 +22,7 @@ public sealed partial class SourceTreeTests
     public void Each_package_keeps_its_files_in_folders_by_concern()
     {
         FoldersOf(Core).Should().Equal(
-            "Access/Callers",
+            "Access/Members",
             "Access/Questions",
             "Access/RequiredAccess",
             "Access/Rules",
@@ -33,18 +33,19 @@ public sealed partial class SourceTreeTests
             "Aggregates/Roles",
             "Aggregates/Roles/Invariants",
             "Aggregates/Roles/ValueObjects",
+            "Managers/Admission",
+            "Managers/Members",
+            "Managers/Roles",
             "Refusals",
             "Resources",
-            "Services",
-            "UseCases/Admission",
-            "UseCases/Overview",
-            "UseCases/Roles");
+            "Services");
 
         FoldersOf(EntityFramework).Should().Equal(
             "Access/Ports",
             "Access/Queries",
             "Access/Questions",
             "Access/Reach",
+            "Managers",
             "Mapping",
             "Registration",
             "Saving");
@@ -103,7 +104,7 @@ public sealed partial class SourceTreeTests
     public void A_folder_says_nothing_about_a_namespace()
     {
         NamespacesOf(Core).Should().BeEquivalentTo(
-            "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.Access", "DDDToolkit.Supporting.Membership.UseCases");
+            "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.Access", "DDDToolkit.Supporting.Membership.Managers");
         NamespacesOf(EntityFramework).Should().Equal("DDDToolkit.Supporting.Membership.EntityFramework");
         NamespacesOf(Postgres).Should().Equal("DDDToolkit.Supporting.Membership.Postgres");
     }

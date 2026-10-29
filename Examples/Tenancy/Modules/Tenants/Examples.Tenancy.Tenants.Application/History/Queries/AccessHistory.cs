@@ -23,9 +23,9 @@ public sealed record AccessHistory(PagingArguments Paging) : IQuery<Page<AccessH
 }
 
 /// <summary>Answers <see cref="AccessHistory"/> for the tenant the caller works in, on a context of the read's own.</summary>
-/// <param name="answers">Tenancy's answers about the current caller: which tenant it works in.</param>
+/// <param name="tenancy">Tenancy, asked about the current caller: which tenant it works in.</param>
 /// <param name="reads">Where the history is read.</param>
-public sealed class AccessHistoryHandler(SampleAnswers answers, ITenancyReads reads) : IQueryHandler<AccessHistory, Page<AccessHistoryEntry>>
+public sealed class AccessHistoryHandler(TenancyAccessManager tenancy, ITenancyReads reads) : IQueryHandler<AccessHistory, Page<AccessHistoryEntry>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
@@ -33,5 +33,5 @@ public sealed class AccessHistoryHandler(SampleAnswers answers, ITenancyReads re
     /// not this list's.
     /// </exception>
     public async ValueTask<Page<AccessHistoryEntry>> Handle(AccessHistory query, CancellationToken cancellationToken)
-        => await reads.HistoryAsync(answers.RequireTenant().Tenant, HistoryRefusals.Checked(query.Paging), cancellationToken);
+        => await reads.HistoryAsync(tenancy.CurrentTenant.Require().Id, HistoryRefusals.Checked(query.Paging), cancellationToken);
 }

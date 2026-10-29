@@ -3,16 +3,14 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DDDToolkit.Supporting.Tenancy;
 using FluentAssertions;
-using Mediator;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Examples.Tenancy.Tests.Projects.Overview;
 
 /// <summary>
 /// A project and an inspection each say who changed their row last: the kind of actor and, for a seat, its id.
 /// The save that wrote the row filled it in from the caller it ran as, so a seat's change names that seat, the
-/// application's own work names the system, and work carried out for an operator names the operator, by its kind
-/// alone. What an operator tries itself is refused, and leaves the row saying what it said.
+/// application's own work names the system, and an operator's command, which runs as operator work, names the
+/// operator, by its kind alone. What an operator tries as a seat is refused, and leaves the row saying what it said.
 /// </summary>
 /// <remarks>
 /// The class's hosts run on Supabase's own Postgres image, with the exported policies and privileges under the
@@ -69,13 +67,13 @@ public sealed class WhoChangedScenarios(SampleHosts sample) : IClassFixture<Samp
     }
 
     [Fact]
-    public async Task What_an_operator_tries_is_refused_and_work_done_for_an_operator_is_recorded_as_an_operators()
+    public async Task What_an_operator_tries_as_a_seat_is_refused_and_an_operators_command_is_recorded_as_an_operators()
     {
         await using var host = await sample.StartAsync();
         using var rhea = await host.ClientAsync("rhea", Harbor.Slug);
         using var orla = await host.ClientAsync("orla", Harbor.Slug);
 
-        // The operator herself changes nothing: she has no seat, and the row keeps saying what it said.
+        // The operator changes nothing through a seat's route: she has no seat, and the row keeps saying what it said.
         using (var tried = await orla.PutAsJsonAsync($"/projects/{Pier.Id.Value}/name", new { name = "Renamed by staff" }, Cancellation))
         {
             await tried.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotSeated);
@@ -85,12 +83,17 @@ public sealed class WhoChangedScenarios(SampleHosts sample) : IClassFixture<Samp
         untouched.Text("name").Should().Be("Pier 7");
         ChangedBy(untouched).Should().Be(("system", null));
 
-        // What an operator asked for is carried out by the application's own work in the tenant, which names the
-        // operator: the row then says an operator changed it, and no seat.
-        using (TenancyUseCases.BeginOperatorIn(Harbor.Id, DemoPeople.Orla.Id, scope: "projects"))
+        // A seat cannot send the operators' command, whichever tenant it names.
+        using (var bySeat = await rhea.PutAsJsonAsync($"/operations/tenants/{Harbor.Id.Value}/projects/{Pier.Id.Value}/name", new { name = "Renamed by a seat" }, Cancellation))
         {
-            await using var scope = host.Services.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<ISender>().Send(new ChangeProjectName(Pier.Id, "Pier 7, as support renamed it"), Cancellation);
+            bySeat.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        // Her command is: it runs as operator work in the tenant it names, in the projects' scope, which names the
+        // operator. The row then says an operator changed it, and no seat.
+        using (var sent = await orla.PutAsJsonAsync($"/operations/tenants/{Harbor.Id.Value}/projects/{Pier.Id.Value}/name", new { name = "Pier 7, as support renamed it" }, Cancellation))
+        {
+            sent.StatusCode.Should().Be(HttpStatusCode.NoContent, await sent.Content.ReadAsStringAsync(Cancellation));
         }
 
         var renamed = await rhea.ProjectDetailAsync(Pier);

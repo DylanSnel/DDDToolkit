@@ -1,5 +1,4 @@
 using DDDToolkit.EntityFramework.Conventions;
-using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Membership.TestHost.Converters;
 using DDDToolkit.Supporting.Membership.TestHost.Gardens;
 using Microsoft.EntityFrameworkCore;
@@ -7,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace DDDToolkit.Supporting.Membership.TestHost.Persistence;
 
 /// <summary>
-/// The gardens' context: two kinds of resource whose roles are kept, each with its members mapped by
-/// <c>HasMembers</c> and its role class by <c>IsCustomRole</c>. Everything about whose a role of plots is, is
+/// The gardens' context: two kinds of resource whose roles are kept, each with its members and its role class mapped
+/// by the package's convention, with no call here. Everything about whose a role of plots is, is
 /// the host's own and said here: the column, the two indexes over it, and the rule that a request reads the
 /// roles of the garden it is in. The roles of sheds are the whole application's, so nothing of the kind is
 /// said for them. The gardens have this context to themselves, so the documents, the folders and the depot
@@ -54,15 +53,12 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
         {
             plot.Property(row => row.Id).ValueGeneratedNever();
             plot.Property(row => row.Name).HasMaxLength(100);
-            plot.HasMembers(row => row.Gardeners);
         });
 
         modelBuilder.Entity<PlotRole>(role =>
         {
-            // The package's part of a role: its name, what it is for, its permissions, its status, and the starter role it came from.
-            role.IsCustomRole();
-
-            // The host's part. A name is used once in a garden, and a garden has each starter role once: two
+            // The package's part of a role, its name, what it is for, its permissions, its status and the starter role it
+            // came from, is mapped by its convention. The host's part. A name is used once in a garden, and a garden has each starter role once: two
             // indexes over the host's own column, the first refusing in the host's own code.
             role.HasIndex(row => new { row.GardenId, row.Name }).IsUnique().RefusesAs(PlotMembership.RoleNameTaken, "Another role of this garden is called {Name} already.");
             role.HasIndex(row => new { row.GardenId, row.MadeFrom }).IsUnique();
@@ -75,13 +71,10 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
         {
             shed.Property(row => row.Id).ValueGeneratedNever();
             shed.Property(row => row.Name).HasMaxLength(100);
-            shed.HasMembers(row => row.Hands);
         });
 
         modelBuilder.Entity<ShedRole>(role =>
         {
-            role.IsCustomRole();
-
             // One set of roles for the whole application: a name once, and each starter role once, with no column in front.
             role.HasIndex(row => row.Name).IsUnique();
             role.HasIndex(row => row.MadeFrom).IsUnique();

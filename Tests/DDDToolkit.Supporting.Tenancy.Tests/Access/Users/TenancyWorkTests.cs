@@ -1,0 +1,218 @@
+using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Access;
+
+namespace DDDToolkit.Supporting.Tenancy.Tests;
+
+/// <summary>
+/// System work in Tenancy begins two callers in one scope: Tenancy's, which says in which tenant the work acts, and
+/// the toolkit's scoped system caller, which says what kind of work it is. Never the toolkit's own system caller,
+/// which stands for the application past every policy: provisioning narrows itself to the tenant it makes, and the
+/// few reads across tenants belong to the storage package, each named, which begins them in no tenant at all.
+/// </summary>
+public class TenancyWorkTests
+{
+    private static readonly TenantId Harbor = new(1);
+    private static readonly SeatId Ada = SeatId.CreateSequential();
+
+    [Fact]
+    public void BeginSystem_begins_the_core_scoped_system_caller_with_no_tenant()
+    {
+        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        {
+            var core = BegunUser!;
+            core.Kind.Should().Be(CurrentUserKind.SystemIn);
+            core.SystemScope.Should().Be(TenancyWork.SystemScope).And.Be("tenancy");
+            core.Kind.Should().NotBe(CurrentUserKind.System, "scoped system work does not run past every policy");
+
+            TenancyUsers.Ambient!.Kind.Should().Be(TenancyUserKind.System);
+            TenancyUsers.CurrentTenantOrNull().Should().BeNull("system work outside any tenant has no tenant to act in");
+        }
+
+        BegunUser.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
+    }
+
+    [Fact]
+    public void BeginSystemIn_begins_both_callers_and_disposing_ends_both()
+    {
+        var person = CurrentUserSnapshot.User(Guid.NewGuid());
+        var seat = HostUser.InSeat(Harbor, Ada);
+
+        using (TestAccess.BeginAs(person))
+        using (TenancyUsers.Begin(seat))
+        {
+            var work = TenancyWork.BeginSystemIn(Harbor, (SeatId?)Ada);
+
+            BegunUser!.Kind.Should().Be(CurrentUserKind.SystemIn);
+            BegunUser.SystemScope.Should().Be(TenancyWork.SystemScope);
+            TenancyUsers.Current<TenantId, SeatId>().Should().Be(HostUser.SystemIn(Harbor, Ada));
+
+            work.Dispose();
+            BegunUser.Should().BeSameAs(person, "the toolkit's current user before it is back");
+            TenancyUsers.Ambient.Should().BeSameAs(seat, "and so is Tenancy's");
+
+            work.Dispose();
+            BegunUser.Should().BeSameAs(person, "disposing twice ends nothing more");
+            TenancyUsers.Ambient.Should().BeSameAs(seat);
+        }
+
+        BegunUser.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
+    }
+
+    [Fact]
+    public void BeginNone_leaves_no_tenancy_caller_until_it_is_disposed()
+    {
+        var seat = HostUser.InSeat(Harbor, Ada);
+
+        using (TenancyUsers.Begin(seat))
+        {
+            var none = TenancyUsers.BeginNone();
+
+            // What runs inside acts in no tenant, as it would outside any scope: nobody, to whoever asks.
+            TenancyUsers.Ambient.Should().BeNull();
+            TenancyUsers.CurrentTenantOrNull().Should().BeNull("the tenant of the seat around it does not travel inside");
+            TenancyUsers.Current<TenantId, SeatId>().Kind.Should().Be(TenancyUserKind.Nobody);
+
+            // System work begun inside it is itself, and ends back at none.
+            using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor))
+            {
+                TenancyUsers.CurrentTenantOrNull().Should().Be(Harbor);
+            }
+
+            TenancyUsers.Ambient.Should().BeNull();
+
+            none.Dispose();
+            TenancyUsers.Ambient.Should().BeSameAs(seat, "the caller before it is back");
+
+            none.Dispose();
+            TenancyUsers.Ambient.Should().BeSameAs(seat, "disposing twice ends nothing more");
+        }
+
+        TenancyUsers.Ambient.Should().BeNull();
+    }
+
+    [Fact]
+    public void BeginSystemIn_carries_its_scope_to_the_core_caller()
+    {
+        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor, scope: "projects"))
+        {
+            BegunUser!.SystemScope.Should().Be("projects", "a module's own work in a tenant says whose it is");
+            TenancyUsers.CurrentTenantOrNull().Should().Be(Harbor, "the scope says whose work it is, not where it acts");
+        }
+
+        // A scope that is not one begins neither caller.
+        FluentActions.Invoking(() => TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor, scope: "Projects!")).Should().Throw<ArgumentException>();
+        BegunUser.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Provisioning_runs_inside_the_new_tenant()
+    {
+        var harness = new Harness(New.Catalogue());
+
+        ProvisionedTenant provisioned;
+        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        {
+            harness.Store.BeginUnitOfWork();
+            provisioned = await harness.Tenants.ProvisionWithIdsAsync(harness.Catalogue,
+                new TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid()),
+                TestContext.Current.CancellationToken);
+        }
+
+        // Every read and the save: system work in the new tenant, in Tenancy's own scope.
+        var inTheNewTenant = HostUser.SystemIn(provisioned.Tenant);
+        harness.Store.Observed.Select(call => call.Name).Should().Contain([nameof(InMemoryTenancyStore.SlugTakenAsync), nameof(InMemoryTenancyStore.SaveAsync)]);
+        harness.Store.Observed.Should().OnlyContain(
+            call => Equals(call.Tenancy, inTheNewTenant) && call.Core != null && call.Core.Kind == CurrentUserKind.SystemIn && call.Core.SystemScope == TenancyWork.SystemScope,
+            "provisioning sees and writes only the tenant it makes");
+    }
+
+    [Fact]
+    public async Task Nothing_in_Tenancy_begins_the_core_System_caller_but_the_listed_reads()
+    {
+        // Every use case, as the application runs them: system work begun with TenancyWork, a person as their seat.
+        var harness = new Harness(New.Catalogue());
+        ProvisionedTenant harbor;
+        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        {
+            harness.Store.BeginUnitOfWork();
+            harbor = await harness.Tenants.ProvisionWithIdsAsync(harness.Catalogue,
+                new TenantToProvision("harbor", "Harbor Works", TenantShape.Flat, "Harbor Works", Guid.NewGuid()),
+                TestContext.Current.CancellationToken);
+        }
+
+        var tenant = harbor.Tenant;
+        var root = harbor.RootUnit;
+        var watchers = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
+
+        await BySystemIn(harness, tenant, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
+        await BySystemIn(harness, tenant, h => h.Organization.RenameAsync("Harbor Works Ltd", default));
+        var north = (await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "North", default))).Id;
+        var south = (await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "South", default))).Id;
+        var coast = (await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(north, "Coast", default))).Id;
+        await BySystemIn(harness, tenant, h => h.Organization.RenameUnitAsync(coast, "North Coast", default));
+        await BySystemIn(harness, tenant, h => h.Organization.MoveUnitAsync(coast, south, default));
+
+        var grace = (await BySystemIn(harness, tenant, h => h.Seats.AddAsync(Guid.NewGuid(), default, configure: seat => seat.Rename("Grace")))).Id;
+        await BySystemIn(harness, tenant, h => h.Seats.PlaceAsync(grace, north, primary: true, default));
+        await BySystemIn(harness, tenant, h => h.Seats.PlaceAsync(grace, south, primary: false, default));
+        await BySystemIn(harness, tenant, h => h.Seats.MakePrimaryAsync(grace, south, default));
+        await BySystemIn(harness, tenant, h => h.Seats.GrantAsync(grace, watchers, south, until: null, reason: null, default));
+
+        var clerks = (await BySystemIn(harness, tenant, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default))).Id;
+        await BySystemIn(harness, tenant, h => h.Roles.RenameAsync(clerks, "Filing clerk", "Files widgets", default));
+        await BySystemIn(harness, tenant, h => h.Roles.SetPermissionsAsync(clerks, [HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], default));
+        await BySystemIn(harness, tenant, h => h.Seats.GrantAsync(grace, clerks, south, until: null, reason: null, default));
+
+        // A person, as their seat: the directory and a command.
+        var administrator = HostUser.InSeat(tenant, harbor.AdminSeat);
+        using (TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
+        {
+            await harness.Run(administrator, h => h.Seats.WhoAmIAsync(default));
+            await harness.Run(administrator, h => h.Seats.ListAsync(default));
+            await harness.Run(administrator, h => h.Roles.ListAsync(default));
+            await harness.Run(administrator, h => h.Organization.ListUnitsAsync(default));
+            await harness.Run(administrator, h => h.Seats.RevokeAsync(grace, clerks, south, default));
+        }
+
+        await BySystemIn(harness, tenant, h => h.Roles.ArchiveAsync(clerks, default));
+        await BySystemIn(harness, tenant, h => h.Seats.WithdrawAsync(grace, north, default));
+        await BySystemIn(harness, tenant, h => h.Seats.SuspendAsync(grace, default));
+        await BySystemIn(harness, tenant, h => h.Seats.ReactivateAsync(grace, default));
+        await BySystemIn(harness, tenant, h => h.Seats.DeactivateAsync(grace, default));
+        await BySystemIn(harness, tenant, h => h.Organization.ArchiveUnitAsync(coast, default));
+        await BySystemIn(harness, tenant, h => h.Tenants.SuspendAsync("Unpaid invoices", default));
+        await BySystemIn(harness, tenant, h => h.Tenants.ReactivateAsync(default));
+        await BySystemIn(harness, tenant, h => h.Tenants.CloseAsync("Moved away", default));
+
+        // The reads across tenants that run as the toolkit's System are the storage package's, each on a context
+        // of its own; none of them goes through this store, so here nothing is exempt.
+        string[] listedReads = [];
+        harness.Store.Observed.Should().HaveCountGreaterThan(50, "the use cases above all went through the store");
+        harness.Store.Observed
+            .Where(call => !listedReads.Contains(call.Name))
+            .Should().NotContain(
+                call => call.Core != null && (call.Core.Kind == CurrentUserKind.System || ReferenceEquals(call.Core, CurrentUserSnapshot.System)),
+                "nothing in Tenancy runs as the application past every policy");
+    }
+
+    /// <summary>Runs <paramref name="act"/> as system work in <paramref name="tenant"/>, begun as an application begins it, in a new unit of work.</summary>
+    private static async Task<T> BySystemIn<T>(Harness harness, TenantId tenant, Func<Harness, Task<T>> act)
+    {
+        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant))
+        {
+            harness.Store.BeginUnitOfWork();
+            return await act(harness);
+        }
+    }
+
+    /// <summary>Runs <paramref name="act"/> as system work in <paramref name="tenant"/>, begun as an application begins it, in a new unit of work.</summary>
+    private static Task BySystemIn(Harness harness, TenantId tenant, Func<Harness, Task> act)
+        => BySystemIn(harness, tenant, async h =>
+        {
+            await act(h);
+            return true;
+        });
+}

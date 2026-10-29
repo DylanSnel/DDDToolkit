@@ -15,7 +15,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// {
 ///     public IReadOnlyCollection&lt;string&gt; Names { get; } = ["teams.current"];
 ///
-///     public IEnumerable&lt;KeyValuePair&lt;string, string&gt;&gt; For(Caller caller)
+///     public IEnumerable&lt;KeyValuePair&lt;string, string&gt;&gt; For(CurrentUserSnapshot user)
 ///         => TeamScope.Current is { } team ? [new("teams.current", team.ToString())] : [];
 /// }
 /// </code>
@@ -36,14 +36,14 @@ public interface IRowLevelSecuritySettings
     IReadOnlyCollection<string> Names { get; }
 
     /// <summary>
-    /// The values of this provider's settings for <paramref name="caller"/>, and for whatever else is
+    /// The values of this provider's settings for <paramref name="user"/>, and for whatever else is
     /// current in this flow of work. A name it leaves out is <c>''</c>, and so is a value that is
     /// <see langword="null"/> after all; a name that is not one of <see cref="Names"/> fails the connection.
     /// </summary>
-    /// <param name="caller">
+    /// <param name="user">
     /// Who the connection is set for. A signed-in user whose token's role is on no list, in a host that has
-    /// such a caller run as an anonymous one (<see cref="UnknownTokenRole.Anonymous"/>), is
-    /// <see cref="Caller.Anonymous"/> here, as it is to the database.
+    /// such a user run as an anonymous caller (<see cref="UnknownTokenRole.Anonymous"/>), is
+    /// <see cref="CurrentUserSnapshot.Anonymous"/> here, as it is to the database.
     /// </param>
-    IEnumerable<KeyValuePair<string, string>> For(Caller caller);
+    IEnumerable<KeyValuePair<string, string>> For(CurrentUserSnapshot user);
 }

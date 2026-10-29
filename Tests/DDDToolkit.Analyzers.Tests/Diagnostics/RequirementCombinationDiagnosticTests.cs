@@ -24,7 +24,7 @@ public class RequirementCombinationDiagnosticTests
     [Theory]
     [InlineData("[InTenant, RequiresPermission(\"billing.close\")] public sealed record CloseTheBooks(int Year) : IBillingRequest;", "InTenant", "[InTenant] beside [RequiresPermission], which requires it already")]
     [InlineData("[RequiresPermission(\"billing.close\"), InTenant] public sealed record CloseTheBooks([AtUnit] OrganizationUnitId Unit) : IBillingRequest;", "InTenant", "[InTenant] beside [RequiresPermission] with [AtUnit], which requires it already")]
-    [InlineData("[SignedIn, RequiresOperator] public sealed record CloseTheBooks(int Year) : IBillingRequest;", "SignedIn", "[SignedIn] beside [RequiresOperator], which requires it already")]
+    [InlineData("[SignedIn, Operator] public sealed record CloseTheBooks(int Year) : IBillingRequest;", "SignedIn", "[SignedIn] beside [Operator], which requires it already")]
     public void A_requirement_attribute_its_neighbour_already_requires_is_DDD00084_a_warning_and_the_line_is_written(string request, string at, string said)
     {
         var result = Run(request);
@@ -138,7 +138,7 @@ public class RequirementCombinationDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00086");
         Message(result, "DDD00086", at: "OrOwn").Should().Contain("marks 'User' [OrOwn], which is a 'UserId': nothing says what the caller's own UserId is")
-            .And.Contain("services.AddCallersOwn<UserId, ...>()");
+            .And.Contain("services.AddOwnedByCurrentUser<UserId, ...>()");
         result.ShouldNotContain("BillingAccessBehavior.", "EditProfile", "a request stopped every time it is sent gets no line");
     }
 

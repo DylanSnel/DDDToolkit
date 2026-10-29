@@ -216,7 +216,7 @@ public sealed class UiSession
     {
         ArgumentNullException.ThrowIfNull(seats);
 
-        var bySlug = seats.OrderBy(mine => mine.Tenant.Slug, StringComparer.Ordinal).ToList();
-        return (bySlug.FirstOrDefault(mine => mine.Seat.IsActive) ?? bySlug.FirstOrDefault())?.Tenant.Slug;
+        var bySlug = seats.OrderBy(mine => mine.Slug, StringComparer.Ordinal).ToList();
+        return (bySlug.FirstOrDefault(mine => mine.Seat.IsActive) ?? bySlug.FirstOrDefault())?.Slug;
     }
 }

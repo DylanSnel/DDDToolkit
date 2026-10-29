@@ -12,8 +12,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 ///     [AccessSet("tickets_i_watch")]
 ///     public static partial AccessSet&lt;TicketId&gt; TicketsIWatch();
 ///
-///     [AccessScalar("caller_team")]
-///     public static partial string CallerTeam();
+///     [AccessScalar("current_team")]
+///     public static partial string CurrentTeam();
 /// }
 /// </code>
 /// </summary>

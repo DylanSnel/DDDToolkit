@@ -1,8 +1,10 @@
+using DDDToolkit.Supporting.Tenancy.Access;
 using Examples.Tenancy.Tenants.Api.Organization.Rest;
 using Examples.Tenancy.Tenants.Api.Roles.Rest;
-using Examples.Tenancy.Tenants.Application.Seats;
+using Examples.Tenancy.Tenants.Api.Tenant.Rest;
 using Examples.Tenancy.Tenants.Application.Seats.Commands;
 using Examples.Tenancy.Tenants.Application.Seats.Queries;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -17,8 +19,9 @@ namespace Examples.Tenancy.Tenants.Api.Seats.Rest;
 /// </summary>
 /// <remarks>
 /// Like every route of this project, these decide nothing and take only the sender;
-/// <see cref="TenantsModule"/> says what all of them keep to. Internal: the module's entry maps them into the
-/// groups the host hands it.
+/// <see cref="TenantsModule"/> says what all of them keep to. An answer writes each object with the fields the
+/// object's GraphQL type shows, under the object's own names: a seat is its id, its name and its status, and never
+/// its identity. Internal: the module's entry maps them into the groups the host hands it.
 /// </remarks>
 internal static class SeatsEndpoints
 {
@@ -45,13 +48,13 @@ internal static class SeatsEndpoints
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        // Who the calling seat is, where it is placed, which roles it holds for which period, and every permission it
-        // holds now with where it reaches. Only a seat has a self: everything else is refused.
+        // Who the calling seat is: the seat manager's overview, with the tenant, the seat, where it is placed with which
+        // roles for which period, the path of each unit, the roles its grants name, and every permission it holds now with
+        // where it reaches. Only a seat has a self: everything else is refused.
         group.MapGet("/me", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(Describe(await sender.Send(new OverviewOfMine(), cancellationToken))));
 
-        // Every seat of the tenant, by name, for the pickers: id, the name this application keeps and status, never an
-        // identity.
+        // Every seat of the tenant, by name, for the pickers.
         group.MapGet("/tenancy/seats", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new TenantSeats(), cancellationToken)).Select(Describe)));
 
@@ -71,65 +74,52 @@ internal static class SeatsEndpoints
             })));
 
         // The name a seat is shown by is this application's field, and renaming it this application's own command: a
-        // seat renames itself, another seat takes tenancy.seats.manage for the whole tenant.
-        group.MapPut("/tenancy/seats/{seatId}/name", async (SeatId seatId, NewName body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new RenameSeat(seatId, body.DisplayName), cancellationToken);
-            return Results.NoContent();
-        });
+        // seat renames itself, another seat takes tenancy.seats.manage for the whole tenant. Each change answers the
+        // seat as its command answers it.
+        group.MapPut("/tenancy/seats/{seatId}/name", async (SeatId seatId, NewName body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new RenameSeat(seatId, body.DisplayName), cancellationToken))));
 
-        group.MapPost("/tenancy/seats/{seatId}/suspend", async (SeatId seatId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new SuspendTenantSeat(seatId), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/seats/{seatId}/suspend", async (SeatId seatId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new SuspendTenantSeat(seatId), cancellationToken))));
 
-        group.MapPost("/tenancy/seats/{seatId}/reactivate", async (SeatId seatId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new ReactivateTenantSeat(seatId), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/seats/{seatId}/reactivate", async (SeatId seatId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new ReactivateTenantSeat(seatId), cancellationToken))));
 
-        group.MapPost("/tenancy/seats/{seatId}/deactivate", async (SeatId seatId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new DeactivateTenantSeat(seatId), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/seats/{seatId}/deactivate", async (SeatId seatId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new DeactivateTenantSeat(seatId), cancellationToken))));
 
         return group;
     }
 
     /// <summary>
     /// A seat as every answer of this project writes it: its id, the name this application keeps on it and its status,
-    /// never an identity.
+    /// the fields of its GraphQL type. Never the identity.
     /// </summary>
-    internal static object Describe(SeatListing seat) => new { seat.Id, seat.DisplayName, seat.Status };
+    internal static object Describe(Seat seat) => new { seat.Id, seat.DisplayName, seat.Status };
 
-    // One of the caller's own seats: its tenant, and the seat as every answer writes it, by the name that tenant keeps.
-    private static object Describe(SeatOfMine mine) => new
+    // One of the caller's own seats: the seat as every answer writes it, beside its tenant's slug, name and status.
+    private static object Describe(SeatInTenant<Seat> mine) => new
     {
-        tenant = new { mine.Tenant.Id, mine.Tenant.Slug, mine.Tenant.Name, mine.Tenant.Status },
         seat = Describe(mine.Seat),
+        mine.Slug,
+        mine.OrganizationName,
+        mine.TenantStatus,
     };
 
-    // A seat's own overview shows units and roles too, each as the feature that owns it writes it.
-    private static object Describe(SeatOverviewListing overview) => new
+    // The seat manager's overview, as its GraphQL type shows it: the tenant, the seat and its own placements with their
+    // grants, each object written as the feature that owns it writes it, and what the manager read beside them.
+    private static object Describe(SeatManager.SeatOverview overview) => new
     {
-        tenant = new
-        {
-            overview.Tenant.Id,
-            overview.Tenant.Slug,
-            overview.Tenant.Name,
-            overview.Tenant.Shape,
-            overview.Tenant.Status,
-        },
+        tenant = TenantEndpoints.Describe(overview.Tenant),
+        overview.TenantName,
         seat = Describe(overview.Seat),
-        placements = overview.Placements.Select(placement => new
+        placements = overview.Seat.Placements.Select(placement => new
         {
-            unit = OrganizationEndpoints.Describe(placement.Unit),
+            placement.UnitId,
             placement.IsPrimary,
-            grants = placement.Grants.Select(grant => new { grant.RoleId, grant.Role, grant.StartsAt, grant.EndsAt, grant.AppliesNow }),
+            grants = placement.Grants.Select(grant => new { grant.RoleId, grant.StartsAt, grant.EndsAt }),
         }),
+        units = overview.Units.Select(OrganizationEndpoints.Describe),
         roles = overview.Roles.Select(RolesEndpoints.Describe),
         permissions = overview.Permissions.Select(reach => new
         {
@@ -138,6 +128,7 @@ internal static class SeatsEndpoints
             grantedAt = reach.GrantedAt.Select(OrganizationEndpoints.Describe),
             reaches = reach.Reaches.Select(OrganizationEndpoints.Describe),
         }),
+        overview.AsOf,
     };
 
     /// <summary>The name a seat is shown by from now on, by the rule of the seat class: 1 to 200 characters.</summary>

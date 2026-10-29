@@ -1,54 +1,44 @@
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Examples.Tenancy.Tenants.Domain;
 
 namespace Examples.Tenancy.Tenants.Application.Roles;
 
 /// <summary>
-/// A role as this application lists it: what the Tenancy package says of it, with its permissions only for whoever
-/// decides them.
+/// A role of the tenant as the role manager read it, with two facts the role does not hold: whether it manages access,
+/// and whether the caller reads its permissions.
 /// </summary>
 /// <remarks>
 /// Anybody who works in the tenant reads what a role is called. What it lets its holder do, its permissions, is for
-/// those who decide that: a caller who holds <see cref="ManageRolesPermission"/> for the whole tenant.
-/// The queries that list roles hold that themselves, so every way a role is answered keeps to it: a route, a
-/// GraphQL field, the answer of a mutation. The record is the application's own for that reason: it has no way
-/// to carry the permissions of a role to a caller they are not for. The roles a seat holds itself are another answer,
-/// its own overview, and those it may always read.
+/// those who decide that: a caller who holds <see cref="ManageRolesPermission"/> for the whole tenant. The role holds
+/// its permissions all the same, so whatever shows a listing writes them only when <see cref="PermissionsShown"/> is
+/// true. A route writes them as <see langword="null"/> otherwise. A GraphQL field asks the same permission itself.
+/// The permissions a seat holds itself are in its own overview, with where each reaches.
 /// </remarks>
-/// <param name="Id">The role.</param>
-/// <param name="Name">Its name.</param>
-/// <param name="FromPack">The pack it was copied from, or <see langword="null"/> for a role the tenant made.</param>
-/// <param name="Status">Whether it can still be given.</param>
-/// <param name="Permissions">
-/// The permissions it brings, or <see langword="null"/> for a caller who does not hold <see cref="ManageRolesPermission"/>:
-/// not an empty list, which would say the role brings none.
-/// </param>
+/// <param name="Role">The role, read for the question and tracked by nobody.</param>
 /// <param name="ManagesAccess">
-/// Whether one of its permissions manages access, and so, while containment is on, as it is in the sample, it is given only
-/// by a seat that holds those permissions.
+/// Whether one of its permissions manages access, as the role manager says. While containment is on, as it is in the
+/// sample, such a role is given only by a seat that holds those permissions.
 /// </param>
-public sealed record RoleListing(
-    RoleId Id,
-    string Name,
-    string? FromPack,
-    RoleStatus Status,
-    IReadOnlyList<string>? Permissions,
-    bool ManagesAccess)
+/// <param name="PermissionsShown">
+/// Whether the caller holds <see cref="ManageRolesPermission"/> for the whole tenant, and so reads the role's permissions.
+/// </param>
+public sealed record RoleListing(Role Role, bool ManagesAccess, bool PermissionsShown)
 {
-    /// <summary>The permission a caller holds for the whole tenant to be answered <see cref="Keys"/>: the one that manages the tenant's roles.</summary>
+    /// <summary>The permission a caller holds for the whole tenant to read a role's permissions: the one that manages the tenant's roles.</summary>
     public const string ManageRolesPermission = TenancyPermissions.RolesManage;
 
     /// <summary>
-    /// <paramref name="roles"/>, in the order the directory answered them, each with its permissions only when
-    /// <paramref name="withKeys"/>.
+    /// <paramref name="roles"/>, in the order the role manager answered them, each with
+    /// <paramref name="permissionsShown"/>.
     /// </summary>
-    /// <param name="roles">The roles, as the package's directory answered them.</param>
-    /// <param name="withKeys">Whether the caller holds <see cref="ManageRolesPermission"/> for the whole tenant.</param>
-    internal static IReadOnlyList<RoleListing> From(IReadOnlyList<TenancyUseCases.RoleSummary> roles, bool withKeys)
-        => [.. roles.Select(role => new RoleListing(
-            role.Id,
-            role.Name,
-            role.FromPack,
-            role.Status,
-            withKeys ? role.Permissions : null,
-            role.ManagesAccess))];
+    /// <param name="roles">The roles, each with whether it manages access, as the role manager said.</param>
+    /// <param name="permissionsShown">Whether the caller holds <see cref="ManageRolesPermission"/> for the whole tenant.</param>
+    internal static IReadOnlyList<RoleListing> Listed(IReadOnlyList<(Role Role, bool ManagesAccess)> roles, bool permissionsShown)
+        => [.. roles.Select(each => new RoleListing(each.Role, each.ManagesAccess, permissionsShown))];
+
+    /// <summary>The roles, each with whether it manages access, as the role manager <paramref name="manager"/> says.</summary>
+    /// <param name="roles">The roles the role manager answered.</param>
+    /// <param name="manager">The role manager that answered them. It reads nothing for this.</param>
+    internal static IReadOnlyList<(Role Role, bool ManagesAccess)> Judged(IReadOnlyList<Role> roles, RoleManager manager)
+        => [.. roles.Select(role => (role, manager.ManagesAccess(role)))];
 }

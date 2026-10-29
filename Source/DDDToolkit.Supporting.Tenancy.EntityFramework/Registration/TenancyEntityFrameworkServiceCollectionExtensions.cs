@@ -3,7 +3,7 @@ using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.Supporting.Tenancy.Access;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -15,15 +15,15 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
 {
     /// <summary>
     /// Registers Tenancy over <typeparamref name="TContext"/>, the context whose model calls <c>AddTenancy</c>:
-    /// everything <see cref="TenancyServiceCollectionExtensions.AddTenancyCore"/> registers, the store the use
-    /// cases load and save through, the seat directory tenant selection asks, the save interceptor, brought to
+    /// everything <see cref="TenancyServiceCollectionExtensions.AddTenancyCore"/> registers, the store the
+    /// managers load and save through, the seat directory tenant selection asks, the save interceptor, brought to
     /// every context <c>UseDDDToolkit</c> wires as Tenancy's part (<see cref="TenancySaveInterceptor.PartName"/>),
     /// the query executor, and what an event log asks: who acted, as Tenancy knows the caller
     /// (<see cref="TenancyActedByAccessor"/>, put around the accessor registered before this call, or around the
     /// toolkit's default), and the tenant of each row of the log <c>AddTenancyEventLogTable</c> maps.
     /// <code>
     /// services.AddTenancy&lt;TenancyContext&gt;(options =&gt;
-    ///     options.Catalogue = ShopCatalogue.Application);   // optional: packs, permissions of its own, marks
+    ///     options.Catalogue = ShopCatalogue.Application);   // optional: starter roles, permissions of its own, marks
     /// services.AddDbContext&lt;TenancyContext&gt;((serviceProvider, options) =&gt; options
     ///     .UseNpgsql(connectionString)
     ///     .UseDDDToolkit(serviceProvider));
@@ -39,7 +39,20 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// them (<see cref="TemplateRegistrationAttribute"/>), or into a project of the same <c>[assembly: Module]</c>
     /// that declares none, such as the module's infrastructure project next to its domain project. It calls this
     /// method with the classes and ids filled in; the context is still the caller's to name. This method can be
-    /// called as well, with all ten.
+    /// called as well, with all fifteen.
+    /// </para>
+    /// <para>
+    /// It registers the access manager per scope: <typeparamref name="TAccessManager"/>, the application's
+    /// <c>TenancyAccessManager</c>, which the generator writes into the project that declares the classes and fills in
+    /// here, or the package's class itself where a call names it; and the package's <see cref="TenancyAccessManager{TTenantId, TSeatId, TUnitId, TRoleId}"/> it derives from.
+    /// It registers the read of the tenants a round of system work visits over the context as well, which the access
+    /// manager asks.
+    /// </para>
+    /// <para>
+    /// It registers the managers per scope the same way: <typeparamref name="TTenantManager"/>,
+    /// <typeparamref name="TOrganizationManager"/>, <typeparamref name="TSeatManager"/> and <typeparamref name="TRoleManager"/>,
+    /// the application's <c>TenantManager</c>, <c>OrganizationManager</c>, <c>SeatManager</c> and <c>RoleManager</c>, and the
+    /// package's classes they derive from.
     /// </para>
     /// <para>
     /// It brings the start-up checks of <see cref="TenancyChecks"/>, which a host runs with
@@ -47,8 +60,8 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// its saves, and a permission a role holds that the catalogue has lost is logged.
     /// </para>
     /// <para>
-    /// And it registers <see cref="IRolePackSync"/> over the context, which brings every tenant's roles up to the
-    /// packs they were made from: <c>services.SyncRolePacks()</c> runs it once the host has started, and a host may
+    /// And it registers <see cref="IStarterRoleSync"/> over the context, which brings every tenant's roles up to the
+    /// starter roles they were made from: <c>services.SyncStarterRoles()</c> runs it once the host has started, and a host may
     /// run it itself.
     /// </para>
     /// </summary>
@@ -67,6 +80,11 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
         [TemplateType(typeof(RoleAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TRole,
         [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId,
+        [TemplateFacade(typeof(TenancyAccessManager<,,,>))] TAccessManager,
+        [TemplateFacade(typeof(TenantManager<,,,,,,,,>))] TTenantManager,
+        [TemplateFacade(typeof(OrganizationManager<,,,,,,,,>))] TOrganizationManager,
+        [TemplateFacade(typeof(SeatManager<,,,,,,,,>))] TSeatManager,
+        [TemplateFacade(typeof(RoleManager<,,,,,,,,>))] TRoleManager,
         TContext>(
         this IServiceCollection services,
         Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>? configure = null)
@@ -79,24 +97,39 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
         where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
         where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+        where TAccessManager : TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>
+        where TTenantManager : TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+        where TOrganizationManager : OrganizationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+        where TSeatManager : SeatManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+        where TRoleManager : RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>(configure);
 
+        // The access manager the application's code takes, one per scope, and the read of the tenants to visit it asks.
+        services.TryAddScoped<TAccessManager>();
+
+        // The managers the application's code takes, one per scope each.
+        services.TryAddScoped<TTenantManager>();
+        services.TryAddScoped<TOrganizationManager>();
+        services.TryAddScoped<TSeatManager>();
+        services.TryAddScoped<TRoleManager>();
+        services.TryAddScoped<ITenantsToSweep<TTenantId>, EfTenantsToSweep<TTenant, TTenantId, TContext>>();
+
         // What the store leaves to the database: nothing, unless a package for one database says otherwise.
         services.AddOptions<TenancyStoreOptions>();
 
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.IStore,
+        services.AddScoped<ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>,
             EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>>();
         services.AddScoped<ISeatDirectory<TTenantId, TSeatId>,
             EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRoleId, TContext>>();
 
-        // What services.SyncRolePacks() runs once the host has started, and a host runs itself from a deployment step
-        // or an operator's endpoint: every tenant's roles follow their packs, tenant by tenant, over this context.
-        services.TryAddSingleton<IRolePackSync,
-            EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>>();
+        // What services.SyncStarterRoles() runs once the host has started, and a host runs itself from a deployment step
+        // or an operator's endpoint: every tenant's roles follow their starter roles, tenant by tenant, over this context.
+        services.TryAddSingleton<IStarterRoleSync,
+            EfStarterRoleSync<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>>();
 
         // One interceptor for every context: it keeps no state, and every context that keeps entities to a
         // tenant adds the same one. UseDDDToolkit adds it to every context it wires, as Tenancy's part.
@@ -121,18 +154,18 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
 
     /// <summary>
     /// Registers invitations over <typeparamref name="TContext"/>, the context whose model calls
-    /// <c>AddTenancyInvitations</c>, for an application that invites people into a tenant: the invitation use
-    /// cases (<c>InvitationCommands</c>) and the store they load and keep invitations through. Call it after
-    /// <c>AddTenancy</c>, with the application's invitation class, its id and the context:
+    /// <c>AddTenancyInvitations</c>, for an application that invites people into a tenant: the invitation
+    /// manager, <typeparamref name="TInvitationManager"/>, the application's <c>InvitationManager</c>, and the store it loads
+    /// and keeps invitations through. Call it after <c>AddTenancy</c>, with the context:
     /// <code>
     /// services.AddTenancy&lt;TenancyContext&gt;();
-    /// services.AddTenancyInvitations&lt;ShopInvitation, InvitationId, TenancyContext&gt;();
+    /// services.AddTenancyInvitations&lt;TenancyContext&gt;();
     /// </code>
     /// <para>
     /// That call is generated into the project that declares Tenancy's classes, closed over them, as
-    /// <c>AddTenancy&lt;TenancyContext&gt;</c> is (<see cref="TemplateRegistrationAttribute"/>). The invitation
-    /// class and its id are named in the call, since an application may have none. This method can be called as
-    /// well, with all twelve. A new invitation's id is made by the id itself, <c>InvitationId.Create()</c>.
+    /// <c>AddTenancy&lt;TenancyContext&gt;</c> is (<see cref="TemplateRegistrationAttribute"/>), invitation class included.
+    /// An application may have no invitation class: then no project gets the call, and none is told of it. This
+    /// method can be called as well, with all thirteen. A new invitation's id is made by the id itself, <c>InvitationId.Create()</c>.
     /// </para>
     /// <para>
     /// The store is scoped, and works in the unit of work of Tenancy's own store: an invitation is saved, and its
@@ -143,7 +176,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// <param name="configure">Changes how long an invitation stays open, which has defaults; leave it out to keep them.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     /// <exception cref="InvalidOperationException">Tenancy itself is not registered yet; or the lifetimes are out of order.</exception>
-    [TemplateRegistration]
+    [TemplateRegistration(OnlyWith = typeof(InvitationAggregateAttribute<>))]
     public static IServiceCollection AddTenancyInvitations<
         [TemplateType(typeof(TenantAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TTenant,
         [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
@@ -154,8 +187,9 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
         [TemplateType(typeof(RoleAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TRole,
         [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId,
-        TInvitation,
-        TInvitationId,
+        [TemplateType(typeof(InvitationAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TInvitation,
+        [TemplateType(typeof(InvitationAggregateAttribute<>))] TInvitationId,
+        [TemplateFacade(typeof(InvitationManager<,,,,,,,,,,>))] TInvitationManager,
         TContext>(
         this IServiceCollection services,
         Action<TenancyInvitationOptions<TInvitationId>>? configure = null)
@@ -170,12 +204,14 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
         where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
         where TInvitationId : struct, ICreatableEntityId<TInvitationId>, IEquatable<TInvitationId>
+        where TInvitationManager : InvitationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddTenancyInvitationsCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>(configure);
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.IInvitationStore<TInvitation, TInvitationId>,
+        services.TryAddScoped<TInvitationManager>();
+        services.AddScoped<IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>,
             EfInvitationStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId, TContext>>();
 
         return services;
@@ -203,18 +239,31 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// writes for an interface marked <c>[AccessRequests]</c>.
     /// </para>
     /// <para>
+    /// The operator cases, <c>[Operator]</c>, are decided by the check <c>AddTenancyOperatorAccess</c> adds, which this
+    /// adds as well. That check reads nothing, and begins the operator work a command an operator sends runs in, through
+    /// <see cref="AccessChecks{TRequests}.BeginWork"/>.
+    /// </para>
+    /// <para>
     /// <c>AddTenancyAccess&lt;IBillingRequest, BillingContext&gt;</c> is generated into the project that declares
     /// Tenancy's classes, closed over their four ids (<see cref="TemplateRegistrationAttribute"/>), or into a
     /// project of the same <c>[assembly: Module]</c> that declares none. A module that only asks Tenancy
-    /// declares none of the classes and calls this method itself, with the application's four ids written out,
-    /// as it maps the read model. Tenancy itself is registered by <c>AddTenancy</c>, in the same container;
-    /// adding the check for an interface more than once is harmless.
+    /// declares none of the classes, and says which of its ids are Tenancy's once, with
+    /// <c>[assembly: TenancyIds&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;]</c> in its application project: the
+    /// project of the module that holds its context then gets it too. Tenancy itself is registered by
+    /// <c>AddTenancy</c>, in the same container; adding the check for an interface more than once is harmless.
+    /// </para>
+    /// <para>
+    /// It registers the module's access manager per scope as well: <typeparamref name="TAccessManager"/>, the
+    /// <c>TenancyAccessManager</c> the generator writes for the module and fills in here.
     /// </para>
     /// </summary>
     /// <typeparam name="TTenantId">The application's tenant id.</typeparam>
     /// <typeparam name="TSeatId">The application's seat id.</typeparam>
     /// <typeparam name="TUnitId">The application's unit id.</typeparam>
     /// <typeparam name="TRoleId">The application's role id.</typeparam>
+    /// <typeparam name="TAccessManager">
+    /// The access manager the module's code takes: the module's <c>TenancyAccessManager</c>, or the package's class itself.
+    /// </typeparam>
     /// <typeparam name="TRequests">The module's request interface, which every command and query of the module implements.</typeparam>
     /// <typeparam name="TContext">The module's context, which a permission for the whole tenant is asked over.</typeparam>
     /// <param name="services">The service collection.</param>
@@ -225,6 +274,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
         [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
         [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId,
+        [TemplateFacade(typeof(TenancyAccessManager<,,,>))] TAccessManager,
         TRequests,
         TContext>(
         this IServiceCollection services)
@@ -232,11 +282,19 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        where TAccessManager : TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>
         where TRequests : class, IRequireAccess
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // The module's access manager, one per scope, and the package's it derives from, which the check asks.
+        services.TryAddScoped<TAccessManager>();
+        services.TryAddScoped<TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>>();
+
+        // The operator cases, [Operator], are the package's own check's, which reads nothing and begins the operator work
+        // of a command; the others are asked over the module's context.
+        services.AddTenancyOperatorAccess<TTenantId, TSeatId, TUnitId, TRoleId, TRequests>();
         return services.AddAccessCheck<TRequests, TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, TContext>>();
     }
 }

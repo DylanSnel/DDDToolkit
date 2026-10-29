@@ -18,15 +18,15 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// package writes it, and the application writes nothing for it but, where it has them, two marks:
 /// <code>
 /// [TenancyCatalogue]
-/// public static ApplicationCatalogue Application { get; } = new(Packs: [...]);
+/// public static ApplicationCatalogue Application { get; } = new(StarterRoles: [...]);
 ///
 /// [TenancyOperators]
 /// public static IReadOnlyList&lt;string&gt; OperatorTokenRoles { get; } = ["operator"];
 /// </code>
 /// The catalogue is the one the application runs with, the application's part and every module's permissions: its
 /// marks decide which roles manage access, its <see cref="ApplicationCatalogue.ContainAccessManagingPermissions"/> whether
-/// the policies contain the grants of those roles, and its packs which roles a settings manager may add. When any of
-/// them changes, a permission added to a pack or to the administrators' pack included, the next export writes the access
+/// the policies contain the grants of those roles, and its starter roles which roles a settings manager may add. When any of
+/// them changes, a permission added to a starter role or to the administrators' starter role included, the next export writes the access
 /// file again. The export makes the class before the application starts, so it builds the catalogue as the host's
 /// registration does, without the application's services: from the member marked
 /// <see cref="TenancyCatalogueAttribute"/>, or <c>new ApplicationCatalogue()</c> where none is, and the lists every
@@ -37,11 +37,11 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For the context that maps Tenancy's tables, in its default schema: the functions <c>caller_seat</c>,
-/// <c>caller_tenant</c>, <c>system_tenant</c>, <c>units_where_i_hold_permission</c>, <c>readable_units</c>,
+/// For the context that maps Tenancy's tables, in its default schema: the functions <c>current_seat</c>,
+/// <c>current_tenant</c>, <c>system_tenant</c>, <c>units_where_i_hold_permission</c>, <c>readable_units</c>,
 /// <c>seats_in_my_units</c>, <c>roles_with_permission</c>, <c>holds_permission</c>, <c>holds_at_tenant</c>,
 /// <c>identity_tenants</c>, <c>unit_parent</c>,
-/// <c>permission_manages_access</c>, <c>permission_is_contained</c> and <c>pack_permissions</c>, executable by signed-in users and by system
+/// <c>permission_manages_access</c>, <c>permission_is_contained</c> and <c>starter_role_permissions</c>, executable by signed-in users and by system
 /// work in a tenant; the
 /// policies on Tenancy's tables, which only this contribution writes; and the triggers that keep an administrator
 /// in every active or suspended tenant, every right backed by a grant, the closure of the tree exact, and fixed
@@ -65,20 +65,20 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// seats or units at its unit, held there or above it, and by the seats that manage roles for the whole tenant. What
 /// a seat may learn of other seats' rights, three functions answer, executable by signed-in users alone, as ids,
 /// permissions and dates: <c>tenant_administrators</c> and <c>seats_holding_permission_at</c> each right whose grant the seat may read,
-/// and <c>permissions_a_move_changes</c> to a seat that manages units at both parents of the move, of another seat's
+/// and <c>permissions_a_unit_move_changes</c> to a seat that manages units at both parents of the move, of another seat's
 /// rights only those the move changes, which reach one parent and not the other. Tenancy's own
 /// system work in a tenant writes that tenant's rights again with <c>rewrite_tenant_rights</c>, after rows were
 /// written past the trigger.
 /// </para>
 /// <para>
 /// A module reads Tenancy through six more functions, one for each row of the read model, which its context maps
-/// with <c>AddTenancyReadFunctions</c>: <c>caller_permissions</c>, <c>tenant_unit_paths</c>, <c>tenant_units</c>,
-/// <c>tenant_roles_with_permissions</c>, <c>tenant_placements</c> and <c>tenant_seats</c>. They are executable by signed-in users
+/// with <c>AddTenancyReadFunctions</c>: <c>current_permissions</c>, <c>tenant_unit_paths</c>, <c>tenant_units</c>,
+/// <c>tenant_roles_with_starter_roles</c>, <c>tenant_placements</c> and <c>tenant_seats</c>. They are executable by signed-in users
 /// and by system work in a tenant, run as their caller, so the policies on Tenancy's tables decide their rows, and
 /// are written for Postgres to fold into the query that asks them: a module's question is planned over the
 /// tables, with their indexes. They answer under column names of their own and a status as the name of its enum
 /// member, whatever the application calls Tenancy's tables and columns and however it stores them. They answer
-/// access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's pack and permissions, and never what a
+/// access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions, and never what a
 /// seat, a unit or a role is called. A start-up check compares the columns each answers with the read model's
 /// (<see cref="TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync"/>).
 /// </para>
@@ -151,11 +151,11 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <para>
 /// A signed-in user is found as the active seat of the verified identity in the tenant the connection names,
 /// in an active tenant; the tenant is the application's word and cannot reach a seat the identity does not
-/// have. This is a second lock behind the application, against its own queries that forget a condition, not
+/// have. RLS backs up the application against its own queries that forget a condition. It does not protect
 /// against SQL an attacker runs on its connection, which can switch roles and set anything.
 /// </para>
 /// </remarks>
-public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunctions
+public class TenancyRowAccessContribution : IRowAccessContribution, ICurrentUserFunctions
 {
     /// <summary>The ids of the seat and the unit each model keeps, read once per model.</summary>
     private static readonly ConditionalWeakTable<IModel, Ids> IdsOfModels = new();
@@ -320,16 +320,16 @@ public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunct
 
     /// <inheritdoc />
     /// <remarks>
-    /// <see cref="TenancyFunctions.CallerSeat"/> for the application's seat id, where the context maps Tenancy's
+    /// <see cref="TenancyFunctions.CurrentSeat"/> for the application's seat id, where the context maps Tenancy's
     /// tables or its read model, which knows it: so a resource whose members are seats has its functions ask the
     /// caller's seat without its rules naming one.
     /// </remarks>
-    public DatabaseFunction? CallerAs(DbContext context, Type id)
+    public DatabaseFunction? CurrentUserAs(DbContext context, Type id)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(id);
 
-        return IdsOf(context.Model).Seat == id ? TenancyFunctions.CallerSeat : null;
+        return IdsOf(context.Model).Seat == id ? TenancyFunctions.CurrentSeat : null;
     }
 
     /// <inheritdoc />
@@ -338,7 +338,7 @@ public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunct
     /// tables or its read model: so a resource that hangs at a unit is reached from above through Tenancy's grants
     /// without its rules naming a function.
     /// </remarks>
-    public DatabaseFunction? PlacesWhereCallerHolds(DbContext context, Type place)
+    public DatabaseFunction? PlacesWhereCurrentUserHolds(DbContext context, Type place)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(place);

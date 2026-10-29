@@ -1,8 +1,8 @@
 using DDDToolkit.HotChocolate.Attributes;
+using DDDToolkit.Supporting.Tenancy.Access;
 using Examples.Tenancy.Tenants.Api.GraphQL;
-using Examples.Tenancy.Tenants.Application.Directory;
-using Examples.Tenancy.Tenants.Application.Roles;
-using Examples.Tenancy.Tenants.Application.Seats;
+using Examples.Tenancy.Tenants.Domain;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 using HotChocolate.CostAnalysis.Types;
 using HotChocolate.Language;
 using HotChocolate.Types.Composite;
@@ -42,20 +42,20 @@ internal static class DirectoryQueries
     [Lookup]
     [Internal]
     [Cost(LoadedForTheRequest)]
-    public static async Task<SeatListing?> GetSeatAsync(SeatId id, ISeatByIdDataLoader seats, CancellationToken cancellationToken)
+    public static async Task<Seat?> GetSeatAsync(SeatId id, ISeatByIdDataLoader seats, CancellationToken cancellationToken)
         => await seats.LoadAsync(id, cancellationToken);
 
     /// <summary>What a unit is called, by its id, or nothing.</summary>
     [Lookup]
     [Internal]
     [Cost(LoadedForTheRequest)]
-    public static async Task<UnitName?> GetOrganizationUnitNameAsync(OrganizationUnitId id, IOrganizationUnitNameByIdDataLoader units, CancellationToken cancellationToken)
+    public static async Task<NamedUnit<OrganizationUnitId>?> GetOrganizationUnitNameAsync(OrganizationUnitId id, IOrganizationUnitNameByIdDataLoader units, CancellationToken cancellationToken)
         => await units.LoadAsync(id, cancellationToken);
 
     /// <summary>A role by its id, or nothing.</summary>
     [Lookup]
     [Internal]
     [Cost(LoadedForTheRequest)]
-    public static async Task<RoleListing?> GetRoleAsync(RoleId id, IRoleByIdDataLoader roles, CancellationToken cancellationToken)
-        => await roles.LoadAsync(id, cancellationToken);
+    public static async Task<Role?> GetRoleAsync(RoleId id, IRoleByIdDataLoader roles, CancellationToken cancellationToken)
+        => (await roles.LoadAsync(id, cancellationToken))?.Role;
 }

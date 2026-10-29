@@ -23,9 +23,9 @@ public sealed class DatabaseRefusalPostgresTests(PalletDepotDatabase database) :
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static Caller Alice => PalletDepotDatabase.Alice;
+    private static CurrentUserSnapshot Alice => PalletDepotDatabase.Alice;
 
-    private static Caller Bob => PalletDepotDatabase.Bob;
+    private static CurrentUserSnapshot Bob => PalletDepotDatabase.Bob;
 
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
@@ -186,7 +186,7 @@ public sealed class DatabaseRefusalPostgresTests(PalletDepotDatabase database) :
             held = await alice.Pallets.AsNoTracking().SingleAsync(pallet => pallet.Id == PalletDepotDatabase.BobsPallet, Cancellation);
         }
 
-        await using var context = database.CreateSavingContext(Caller.Anonymous);
+        await using var context = database.CreateSavingContext(CurrentUserSnapshot.Anonymous);
         (await context.Pallets.AsNoTracking().CountAsync(Cancellation)).Should().Be(0, "the caller reads no pallet");
         context.Attach(held);
         held.Retitle("Nobody was here");

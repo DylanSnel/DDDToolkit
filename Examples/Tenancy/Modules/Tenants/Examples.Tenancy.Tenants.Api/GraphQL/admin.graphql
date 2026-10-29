@@ -48,7 +48,7 @@ type Query {
   unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
   catalogue: Catalogue! @cost(weight: "10")
   openInvitations: [Invitation!]! @cost(weight: "10")
-  tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
+  tenants(after: String, size: Int): TenantPage! @cost(weight: "10")
   organizationUnits: [OrganizationUnit!]! @cost(weight: "10")
   roles: [Role!]! @cost(weight: "10")
   overviewOfMine: SeatOverview! @cost(weight: "10")
@@ -86,6 +86,11 @@ type Mutation {
     @cost(weight: "10")
   tenantShapeChange(input: TenantShapeChangeInput!): TenantShapeChangePayload!
     @cost(weight: "10")
+}
+
+type AcceptedInvitation {
+  tenant: Tenant!
+  seat: Seat!
 }
 
 type AccessHistoryEntry {
@@ -131,7 +136,7 @@ type BrokenRulesError implements CodedError @shareable {
 
 type Catalogue {
   permissions: [Permission!]!
-  packs: [RolePack!]!
+  starterRoles: [StarterRole!]!
 }
 
 "A change that lost a race: somebody else changed the same thing after the caller read it, or the version the caller expected is not the one that is stored. Read again, and decide again."
@@ -150,14 +155,6 @@ type FailureArgument @shareable {
   name: String!
   "The value as text: a string as it is, true or false, a number as JSON writes it, and anything else, such as an id, as its own text. Null when there was none."
   value: String
-}
-
-type GrantOfMine {
-  roleId: UUID!
-  role: String!
-  startsAt: DateTime!
-  endsAt: DateTime
-  appliesNow: Boolean!
 }
 
 type HeldUnits {
@@ -181,37 +178,36 @@ type Invitation {
   unit: OrganizationUnitName
   role: Role
   issuedBy: Seat
-  until: DateTime
   id: UUID!
-  address: String!
+  address: String
+  grantUntil: DateTime
   issuedAt: DateTime!
   expiresAt: DateTime!
 }
 
 type InvitationAcceptPayload {
-  seatId: UUID
+  acceptedInvitation: AcceptedInvitation
   errors: [InvitationAcceptError!]
 }
 
 type InvitationCancelPayload {
-  invitationId: UUID
+  invitation: Invitation
   errors: [InvitationCancelError!]
 }
 
 type IssuedInvitation {
-  id: UUID!
+  invitation: Invitation!
   token: String!
-  expiresAt: DateTime!
 }
 
 type OrganizationUnit {
+  path: String @cost(weight: "1")
+  depth: Int @cost(weight: "1")
   id: UUID!
   parentId: UUID
   name: String!
   kind: UnitKind
   status: UnitStatus!
-  path: String!
-  depth: Int!
 }
 
 type OrganizationUnitAddPayload {
@@ -281,10 +277,10 @@ type PersonInvitePayload {
   errors: [PersonInviteError!]
 }
 
-type PlacementOfMine {
-  unit: UnitPath!
+type Placement {
+  unitId: UUID!
   isPrimary: Boolean!
-  grants: [GrantOfMine!]!
+  grants: [RoleGrant!]!
 }
 
 type PlacementWithdrawPayload {
@@ -307,12 +303,12 @@ type RefusalError implements CodedError @shareable {
 }
 
 type Role @key(fields: "id") {
+  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
+  managesAccess: Boolean @cost(weight: "1")
   id: UUID!
   name: String
-  fromPack: String
+  fromStarterRole: String
   status: RoleStatus
-  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
-  managesAccess: Boolean
 }
 
 type RoleArchivePayload {
@@ -325,27 +321,15 @@ type RoleCreatePayload {
   errors: [RoleCreateError!]
 }
 
+type RoleGrant {
+  roleId: UUID!
+  startsAt: DateTime!
+  endsAt: DateTime
+}
+
 type RoleGrantPayload {
   seat: Seat
   errors: [RoleGrantError!]
-}
-
-type RoleOfMine {
-  id: UUID!
-  name: String!
-  fromPack: String
-  status: RoleStatus!
-  permissions: [String!]!
-  managesAccess: Boolean!
-}
-
-type RolePack {
-  key: String!
-  permissions: [String!]!
-  name: String!
-  description: String!
-  seededFor: TenantShape
-  administers: Boolean!
 }
 
 type RolePermissionsSetPayload {
@@ -394,16 +378,21 @@ type SeatGrant {
 }
 
 type SeatOfMine {
-  tenant: TenantOfSeat!
   seat: Seat!
+  slug: String!
+  organizationName: String!
+  tenantStatus: TenantStatus!
 }
 
 type SeatOverview {
-  tenant: TenantOfMine!
+  placements: [Placement!]!
+  tenant: Tenant!
+  tenantName: String!
   seat: Seat!
-  placements: [PlacementOfMine!]!
-  roles: [RoleOfMine!]!
+  units: [UnitPath!]!
+  roles: [Role!]!
   permissions: [PermissionOfMine!]!
+  asOf: DateTime!
 }
 
 type SeatPlacePayload {
@@ -426,36 +415,35 @@ type SeatSuspendPayload {
   errors: [SeatSuspendError!]
 }
 
-type TenantDirectoryPage {
-  items: [TenantListing!]!
-  next: String
+type StarterRole {
+  key: String!
+  permissions: [String!]!
+  name: String!
+  description: String!
+  seededFor: TenantShape
+  administers: Boolean!
 }
 
-type TenantListing {
-  id: UUID!
+type Tenant {
   slug: String!
-  name: String!
-  status: TenantStatus!
-  activeSeats: Int!
-}
-
-type TenantOfMine {
   id: UUID!
-  slug: String!
-  name: String!
   shape: TenantShape!
   status: TenantStatus!
 }
 
-type TenantOfSeat {
-  id: UUID!
-  slug: String!
+type TenantListing {
+  tenant: Tenant!
   name: String!
-  status: TenantStatus!
+  activeSeats: Int!
+}
+
+type TenantPage {
+  items: [TenantListing!]!
+  next: String
 }
 
 type TenantShapeChangePayload {
-  shape: TenantShape
+  tenant: Tenant
   errors: [TenantShapeChangeError!]
 }
 

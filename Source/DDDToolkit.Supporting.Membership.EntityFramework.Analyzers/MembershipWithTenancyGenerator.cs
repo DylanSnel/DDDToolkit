@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Analyzers;
 /// Joins a resource with members to an organization of the Tenancy packages, in an application that has both.
 /// The two packages do not know each other, so what joins them is written into the application: for each
 /// member class whose members are seats of a tenant, the class that answers what the resource's rules ask of
-/// the organization, from Tenancy's own answers, and a registration named after the resource:
+/// the organization, from Tenancy's own queries, and a registration named after the resource:
 /// <code>
 /// services.AddCourseMembershipWithTenancy&lt;CampusContext&gt;(CourseMembership.Rules);
 /// </code>
@@ -25,19 +25,21 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Analyzers;
 /// about the same class, the same types, the same resource and the same project.
 /// </para>
 /// <para>
-/// <b>When.</b> Only where the project can see what the written class is made of: Tenancy's questions and
-/// answers, its way of asking them over a context, and its catalogue. Without them nothing is written, so an
-/// application without an organization gets nothing it could not compile.
+/// <b>When.</b> Only where the project can see what the written class is made of: Tenancy's access manager and its
+/// queries, its read source over a context, and its catalogue. Without them nothing is written, so an application
+/// without an organization gets nothing it could not compile.
 /// </para>
 /// <para>
 /// <b>Which ids.</b> A member is a seat, so the member class's member id is Tenancy's seat id. Tenancy's
 /// tenant, unit and role id are the application's own as well, and are taken from the classes it declares
 /// with Tenancy's templates, in the project or in the projects it references. A member class whose member id
 /// is not the seat's id is no member list of seats, and gets nothing. A project that sees none of those
-/// classes, a module that knows the organization only by its ids, cannot be told which of its ids they are:
-/// its registration leaves them for the application to write. Nor can it be told a seat's id from another,
-/// so there each member class gets the registration, which takes its member id for the seat's, and the
-/// application calls it for the resources whose members are seats.
+/// classes, a module that knows the organization only by its ids, is told which of its ids they are by the line
+/// <c>[assembly: TenancyIds&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;]</c>, in the project or in a project of
+/// its module it references, and is then closed over them as well. Without the line it cannot be told: its
+/// registration leaves them for the application to write. Nor can it be told a seat's id from another, so there each
+/// member class gets the registration, which takes its member id for the seat's, and the application calls it for the
+/// resources whose members are seats.
 /// </para>
 /// <para>
 /// <b>Which roles.</b> A member that holds roles by the id of Tenancy's role class holds the tenant's own
@@ -71,10 +73,10 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
     /// <summary>What the written class is made of. A project that cannot see every one of them gets nothing.</summary>
     private static readonly string[] Needed =
     [
-        Tenancy + ".Access.ITenancyAnswers`4",
-        Tenancy + ".Access.ITenancyQuestions`4",
+        Tenancy + ".Access.TenancyAccessManager`4",
+        Tenancy + ".Access.ITenancyQueries`4",
         Tenancy + ".Catalogue.TenancyCatalogue",
-        Tenancy + ".EntityFramework.TenancyAnswersEntityFrameworkExtensions",
+        Tenancy + ".EntityFramework.EfTenancyReadSource`4",
     ];
 
     /// <inheritdoc />
@@ -220,6 +222,18 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             }
         }
 
+        // A module that sees only the ids says which they are with a line, in the project or in a project of its module.
+        if (!everywhere && ids.Count == 0)
+        {
+            var lines = TemplateIdLines.Here(compilation, cancellationToken);
+            lines.AddRange(TemplateIdLines.InModule(compilation, ModuleBoundary.ModuleOf(compilation.Assembly), cancellationToken));
+            var take = new TemplateRegistrations.Take(permission, string.Empty, template, TakeType: false, Argument: 0, IdOfArgument: false, AllowSeveral: false);
+            foreach (var source in TemplateIdLines.SourcesFor(take, lines))
+            {
+                ids.Add(source.IdIsEntityId ? source.IdType : null);
+            }
+        }
+
         return ids;
     }
 
@@ -267,9 +281,9 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
     private const string EntityFramework = "global::Microsoft.EntityFrameworkCore";
     private const string Membership = "global::DDDToolkit.Supporting.Membership";
     private const string TenancyAccessNamespace = "global::" + Tenancy + ".Access";
-    private const string Caller = "global::DDDToolkit.Abstractions.Access.Caller";
+    private const string CurrentUserSnapshot = "global::DDDToolkit.Abstractions.Access.CurrentUserSnapshot";
     private const string CancellationTokenType = "global::System.Threading.CancellationToken";
-    private const string Over = "global::" + Tenancy + ".EntityFramework.TenancyAnswersEntityFrameworkExtensions.Over";
+    private const string TenancyEntityFramework = "global::" + Tenancy + ".EntityFramework";
     private const string Queryable = "global::System.Linq.Queryable";
     private const string Asynchronous = EntityFramework + ".EntityFrameworkQueryableExtensions";
 
@@ -291,8 +305,10 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         constraints.AddRange(open.Select(static parameter =>
             "where " + parameter + " : struct, global::DDDToolkit.Abstractions.Interfaces.IEntityId, global::System.IEquatable<" + parameter + ">"));
 
-        var answers = TenancyAccessNamespace + ".ITenancyAnswers<" + tenant + ", " + join.Seat + ", " + unit + ", " + role + ">";
-        var questions = TenancyAccessNamespace + ".ITenancyQuestions<" + tenant + ", " + join.Seat + ", " + unit + ", " + role + ">";
+        var ids = tenant + ", " + join.Seat + ", " + unit + ", " + role;
+        var tenancy = TenancyAccessNamespace + ".TenancyAccessManager<" + ids + ">";
+        var queries = TenancyAccessNamespace + ".ITenancyQueries<" + ids + ">";
+        var currentUser = TenancyAccessNamespace + ".TenancyUsers.Current<" + tenant + ", " + join.Seat + ">()";
         var catalogue = "global::" + Tenancy + ".Catalogue.TenancyCatalogue";
         var joined = join.ClassName + parameters;
 
@@ -305,7 +321,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         {
             writer.Line("/// <summary>");
             writer.Line("/// Registers " + join.ResourceName + " with its members, as " + join.Plain + " does, for members that are seats of a tenant:");
-            writer.Line("/// together with " + join.ClassName + ", which answers what the rules ask of the organization from Tenancy's own answers.");
+            writer.Line("/// together with " + join.ClassName + ", which answers what the rules ask of the organization from Tenancy's own queries.");
             writer.Line("/// </summary>");
             writer.Line("/// <typeparam name=\"TContext\">The context that maps " + join.ResourceName + " with its members, and Tenancy's read model beside them.</typeparam>");
             foreach (var parameter in open)
@@ -331,7 +347,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 // The one thing the resource's own registration cannot tell: a seat's id is over the same value as a
                 // user's, so rules that take the member from the token would be accepted, and read a user for a seat.
                 // Who a member is follows from the member id where the rules say nothing: here, the caller's seat.
-                using (writer.Block("if (rules.Members.Kind is " + Membership + ".Access.MemberSourceKind.CallerId or " + Membership + ".Access.MemberSourceKind.Claim)"))
+                using (writer.Block("if (rules.Members.Kind is " + Membership + ".Access.MemberSourceKind.CurrentUserId or " + Membership + ".Access.MemberSourceKind.Claim)"))
                 {
                     writer.Line("throw new global::System.ArgumentException(");
                     writer.Line("    \"The rules '\" + rules.Name + \"' take a member from the caller's token (MemberSource.\" + rules.Members.Kind + \"), and "
@@ -361,14 +377,16 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         writer.Line("/// </summary>");
         var answered = new List<string>
         {
-            Membership + ".Access.ICallerMember<" + join.IdOfResource + ", " + join.Seat + ">",
-            Membership + ".UseCases.IMemberDirectory<" + join.IdOfResource + ", " + join.Seat + ">",
+            Membership + ".Access.ICurrentMember<" + join.IdOfResource + ", " + join.Seat + ">",
+            Membership + ".Managers.IMemberDirectory<" + join.IdOfResource + ", " + join.Seat + ">",
             Membership + ".EntityFramework.IPlacesReached<" + join.IdOfResource + ", " + unit + ">",
+            Membership + ".Managers.IOwnPlaceWork<" + join.IdOfResource + ", " + join.Seat + ">",
+            Membership + ".Managers.ICustomRoleAccess<" + join.Resource + ">",
         };
         if (join.TenantsRoles)
         {
             answered.Add(Membership + ".EntityFramework.IRolesWithPermission<" + join.IdOfResource + ", " + join.Role + ">");
-            answered.Add(Membership + ".UseCases.IMemberRoles<" + join.IdOfResource + ", " + join.Role + ">");
+            answered.Add(Membership + ".Access.IMemberRoles<" + join.IdOfResource + ", " + join.Role + ">");
         }
 
         using (Declared(
@@ -380,7 +398,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                    ]))
         {
             writer.Line("private readonly global::System.IServiceProvider _services;");
-            writer.Line("private readonly " + answers + " _tenancy;");
+            writer.Line("private readonly " + tenancy + " _access;");
             writer.Line("private readonly " + catalogue + " _catalogue;");
             writer.Line();
             writer.Line("/// <param name=\"services\">The services of the scope the questions are asked in.</param>");
@@ -388,21 +406,21 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             using (writer.Block("public " + join.ClassName + "(global::System.IServiceProvider services, " + Membership + ".Access.MembershipRules rules)"))
             {
                 writer.Line("_services = services;");
-                writer.Line("_tenancy = " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + answers + ">(services);");
+                writer.Line("_access = " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + tenancy + ">(services);");
                 writer.Line("_catalogue = " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + catalogue + ">(services);");
             }
 
             writer.Line();
             writer.Line("/// <summary>The caller's seat, while it is one: the application's own work in a tenant acts for a seat at most, and is nobody's member.</summary>");
-            using (writer.Block("public " + join.Seat + "? Find(" + Caller + " caller)"))
+            using (writer.Block("public " + join.Seat + "? Find(" + CurrentUserSnapshot + " user)"))
             {
-                writer.Line("var current = _tenancy.Caller;");
-                writer.Line("return current.Kind == " + TenancyAccessNamespace + ".TenancyCallerKind.Seat ? current.Seat : null;");
+                writer.Line("var current = " + currentUser + ";");
+                writer.Line("return current.Kind == " + TenancyAccessNamespace + ".TenancyUserKind.Seat ? current.Seat : null;");
             }
 
             writer.Line();
             writer.Line("/// <summary>Refuses somebody who has no seat that counts in the tenant, as Tenancy refuses them, before anything is read.</summary>");
-            writer.Line("public void Require(" + Caller + " caller) => _tenancy.RequireTenant();");
+            writer.Line("public void Require(" + CurrentUserSnapshot + " user) => _access.CurrentTenant.Require();");
 
             writer.Line();
             writer.Line("/// <summary>");
@@ -412,11 +430,38 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("/// </summary>");
             writer.Line("public async global::System.Threading.Tasks.ValueTask<bool> IsActiveAsync(" + join.Seat + " member, " + CancellationTokenType + " cancellationToken)");
             writer.Line("    => await AskAsync(");
-            writer.Line("        tenancy => " + Asynchronous + ".AnyAsync(");
-            writer.Line("            tenancy.Seats(),");
+            writer.Line("        queries => " + Asynchronous + ".AnyAsync(");
+            writer.Line("            queries.Seats(),");
             writer.Line("            seat => seat.Id.Equals(member) && seat.Status == global::" + Tenancy + ".SeatStatus.Active,");
             writer.Line("            cancellationToken),");
             writer.Line("        cancellationToken).ConfigureAwait(false);");
+
+            writer.Line();
+            writer.Line("/// <summary>");
+            writer.Line("/// Begins the resource's own work in the caller's tenant, for the caller's seat, for the save of a change to the caller's own");
+            writer.Line("/// place: Tenancy's system work in the tenant, in the scope the resource's rules name or Tenancy's own where they name none,");
+            writer.Line("/// recorded as done for that seat.");
+            writer.Line("/// </summary>");
+            writer.Line("public global::System.IDisposable Begin(" + join.Seat + " member, string? scope)");
+            writer.Line("    => scope is null");
+            writer.Line("        ? _access.BeginSystemIn(_access.CurrentTenant.Require().Id, member)");
+            writer.Line("        : _access.BeginSystemIn(_access.CurrentTenant.Require().Id, member, scope);");
+
+            writer.Line();
+            writer.Line("/// <summary>");
+            writer.Line("/// Requires the caller to hold <paramref name=\"permission\"/>, the one the rules name for changing the roles a customer makes,");
+            writer.Line("/// for the whole tenant, as Tenancy refuses it: somebody with no seat that counts in the tenant first, as nobody; system");
+            writer.Line("/// work in the tenant holds every permission there. A permission the catalogue does not know is held by nobody.");
+            writer.Line("/// </summary>");
+            using (writer.Block("public async global::System.Threading.Tasks.ValueTask RequireAsync(string permission, " + CancellationTokenType + " cancellationToken)"))
+            {
+                writer.Line("_access.CurrentTenant.Require();");
+                writer.Line("if (!_catalogue.Knows(permission)");
+                using (writer.Block("    || !await AskAsync(queries => queries.HoldsAtTenantAsync(permission, cancellationToken), cancellationToken).ConfigureAwait(false))"))
+                {
+                    writer.Line("throw global::" + Tenancy + ".TenancyRefusals.Refuse(global::" + Tenancy + ".TenancyRefusals.NotPermitted, (\"Permission\", permission));");
+                }
+            }
 
             writer.Line();
             writer.Line("/// <summary>");
@@ -424,32 +469,32 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("/// catalogue does not know is one no role of the organization can hold, so it is held nowhere: Tenancy itself would");
             writer.Line("/// take the question for a typo.");
             writer.Line("/// </summary>");
-            using (writer.Block("public global::System.Linq.IQueryable<" + unit + "> PlacesReached(" + EntityFramework + ".DbContext context, " + Caller + " caller, string permission)"))
+            using (writer.Block("public global::System.Linq.IQueryable<" + unit + "> PlacesReached(" + EntityFramework + ".DbContext context, " + CurrentUserSnapshot + " user, string permission)"))
             {
-                writer.Line("var tenancy = " + Over + "(_tenancy, context);");
+                writer.Line("var queries = QueriesOver(context);");
                 writer.Line("return _catalogue.Knows(permission)");
-                writer.Line("    ? tenancy.UnitsWhereIHold(permission)");
-                writer.Line("    : " + Queryable + ".Select(" + Queryable + ".Where(tenancy.Units(), unit => false), unit => unit.Id);");
+                writer.Line("    ? queries.UnitsWhereIHold(permission)");
+                writer.Line("    : " + Queryable + ".Select(" + Queryable + ".Where(queries.Units(), unit => false), unit => unit.Id);");
             }
 
             if (join.TenantsRoles)
             {
                 writer.Line();
                 writer.Line("/// <summary>The tenant's roles in use that give <paramref name=\"permission\"/>; none for a permission the catalogue does not know.</summary>");
-                using (writer.Block("public global::System.Linq.IQueryable<" + join.Role + "> RolesWith(" + EntityFramework + ".DbContext context, " + Caller + " caller, string permission)"))
+                using (writer.Block("public global::System.Linq.IQueryable<" + join.Role + "> RolesWith(" + EntityFramework + ".DbContext context, " + CurrentUserSnapshot + " user, string permission)"))
                 {
-                    writer.Line("var tenancy = " + Over + "(_tenancy, context);");
+                    writer.Line("var queries = QueriesOver(context);");
                     writer.Line("return _catalogue.Knows(permission)");
-                    writer.Line("    ? tenancy.RolesWithPermission(permission)");
-                    writer.Line("    : " + Queryable + ".Select(" + Queryable + ".Where(tenancy.Roles(), role => false), role => role.Id);");
+                    writer.Line("    ? queries.RolesWithPermission(permission)");
+                    writer.Line("    : " + Queryable + ".Select(" + Queryable + ".Where(queries.Roles(), role => false), role => role.Id);");
                 }
 
                 writer.Line();
                 writer.Line("/// <summary>Whether <paramref name=\"role\"/> is a role of the tenant's in use.</summary>");
                 writer.Line("public async global::System.Threading.Tasks.ValueTask<bool> ExistsAsync(" + join.Role + " role, " + CancellationTokenType + " cancellationToken)");
                 writer.Line("    => await AskAsync(");
-                writer.Line("        tenancy => " + Asynchronous + ".AnyAsync(");
-                writer.Line("            tenancy.Roles(),");
+                writer.Line("        queries => " + Asynchronous + ".AnyAsync(");
+                writer.Line("            queries.Roles(),");
                 writer.Line("            row => row.Id.Equals(role) && row.Status == global::" + Tenancy + ".RoleStatus.Active,");
                 writer.Line("            cancellationToken),");
                 writer.Line("        cancellationToken).ConfigureAwait(false);");
@@ -464,13 +509,13 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                        writer,
                        [
                            "private async global::System.Threading.Tasks.Task<TAnswer> AskAsync<TAnswer>(",
-                           "    global::System.Func<" + questions + ", global::System.Threading.Tasks.Task<TAnswer>> ask,",
+                           "    global::System.Func<" + queries + ", global::System.Threading.Tasks.Task<TAnswer>> ask,",
                            "    " + CancellationTokenType + " cancellationToken)",
                        ]))
             {
                 using (writer.Block("if (" + Services + ".ServiceProviderServiceExtensions.GetService<TContext>(_services) is { } own)"))
                 {
-                    writer.Line("return await ask(" + Over + "(_tenancy, own)).ConfigureAwait(false);");
+                    writer.Line("return await ask(QueriesOver(own)).ConfigureAwait(false);");
                 }
 
                 writer.Line();
@@ -479,9 +524,14 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 // Called by its full name: what is written here depends on no using of the application's.
                 using (writer.Block("await using (global::System.Threading.Tasks.TaskAsyncEnumerableExtensions.ConfigureAwait(context, false))"))
                 {
-                    writer.Line("return await ask(" + Over + "(_tenancy, context)).ConfigureAwait(false);");
+                    writer.Line("return await ask(QueriesOver(context)).ConfigureAwait(false);");
                 }
             }
+
+            writer.Line();
+            writer.Line("/// <summary>Tenancy's queries for the current caller over <paramref name=\"context\"/>, at this moment.</summary>");
+            writer.Line("private " + queries + " QueriesOver(" + EntityFramework + ".DbContext context)");
+            writer.Line("    => _access.In(new " + TenancyEntityFramework + ".EfTenancyReadSource<" + ids + ">(context), " + TenancyEntityFramework + ".EfQueryExecutor.Instance);");
         }
 
         return writer.ToString();

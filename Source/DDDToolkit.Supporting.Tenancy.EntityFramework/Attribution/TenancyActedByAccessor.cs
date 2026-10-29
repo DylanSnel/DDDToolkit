@@ -8,11 +8,11 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <summary>
 /// Tells a record that keeps who acted, an event log for one, what Tenancy knows of the caller: a seat as the seat,
 /// an operator by its verified identity, the application's own work as the system with its scope, and a link's
-/// token as the seat it stands for (<see cref="TenancyCaller{TTenantId, TSeatId}.Actor"/>). Where there is no
-/// Tenancy caller, or the caller is nobody, the accessor it wraps answers: the toolkit's own caller.
+/// token as the seat it stands for (<see cref="TenancyUser{TTenantId, TSeatId}.Actor"/>). Where there is no
+/// Tenancy user, or the caller is nobody, the accessor it wraps answers from the toolkit's current user.
 /// <para>
 /// <c>AddTenancy</c> puts it around the accessor that was registered before it, or around the toolkit's default.
-/// It is a singleton that reads the ambient Tenancy caller each time it is asked, keeps nothing between two
+/// It is a singleton that reads the ambient Tenancy user each time it is asked, keeps nothing between two
 /// answers and takes no scoped service, so it serves a context taken from a pool as it serves any other.
 /// </para>
 /// </summary>
@@ -22,7 +22,7 @@ public sealed class TenancyActedByAccessor(IActedByAccessor inner) : IActedByAcc
     private readonly IActedByAccessor _inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
     /// <inheritdoc />
-    public ActedBy Current => TenancyCallers.Ambient?.Actor is { } actor ? actor.ToActedBy() : _inner.Current;
+    public ActedBy Current => TenancyUsers.Ambient?.Actor is { } actor ? actor.ToActedBy() : _inner.Current;
 
     /// <summary>
     /// Puts this accessor around the one <paramref name="services"/> hold, the last one registered, or around the
@@ -45,7 +45,7 @@ public sealed class TenancyActedByAccessor(IActedByAccessor inner) : IActedByAcc
             throw new InvalidOperationException(
                 $"{nameof(IActedByAccessor)} is registered as a scoped service, and AddTenancy puts {nameof(TenancyActedByAccessor)} around it as a singleton, " +
                 "which would make it once, outside any scope. Register it as a singleton that reads who is acting each time it is asked, " +
-                "from what follows the flow of work: the ambient caller, or the current request.");
+                "from what follows the flow of work: the begun user, or the current request.");
         }
 
         services.AddSingleton<Decorated>();
@@ -62,7 +62,7 @@ public sealed class TenancyActedByAccessor(IActedByAccessor inner) : IActedByAcc
     private static IActedByAccessor InnerOf(IServiceProvider provider, ServiceDescriptor? registered)
         => registered switch
         {
-            null => new CallerActedByAccessor(provider.GetService<ICallerAccessor>()),
+            null => new CurrentUserActedByAccessor(provider.GetService<ICurrentUser>()),
             { ImplementationInstance: IActedByAccessor instance } => instance,
             { ImplementationFactory: { } factory } => (IActedByAccessor)factory(provider),
             _ => (IActedByAccessor)ActivatorUtilities.CreateInstance(provider, registered.ImplementationType!),

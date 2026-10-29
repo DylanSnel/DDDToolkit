@@ -70,8 +70,8 @@ public sealed class SupabaseAuthOptions
 /// </summary>
 /// <remarks>
 /// <para>
-/// What comes out is the <see cref="Caller"/> row level security runs the application's queries
-/// as. A token that does not validate is no user at all, <see cref="Caller.Anonymous"/>, the way a
+/// What comes out is the <see cref="CurrentUserSnapshot"/> that row level security runs the application's queries
+/// as. A token that does not validate is no user at all, <see cref="CurrentUserSnapshot.Anonymous"/>, the way a
 /// request with a bad token is anonymous to an ASP.NET Core endpoint that allows anonymous callers.
 /// </para>
 /// <para>
@@ -125,30 +125,30 @@ public sealed class SupabaseTokenValidator
         var result = await _handler.ValidateTokenAsync(token, _parameters).ConfigureAwait(false);
         if (!result.IsValid)
         {
-            return new(Caller.Anonymous, Identity: null, result.Exception ?? new SecurityTokenValidationException("The token did not validate."));
+            return new(CurrentUserSnapshot.Anonymous, Identity: null, result.Exception ?? new SecurityTokenValidationException("The token did not validate."));
         }
 
         var claims = SupabaseTokens.ClaimsOf(result.SecurityToken)
             ?? throw new InvalidOperationException($"A validated token of type {result.SecurityToken.GetType().Name} has no payload to read the claims from.");
 
-        return new(Callers.FromClaims(claims), result.ClaimsIdentity, Error: null);
+        return new(CurrentUserSnapshot.FromClaims(claims), result.ClaimsIdentity, Error: null);
     }
 
     /// <summary>
-    /// The caller an <c>Authorization</c> header makes: the user of a valid <c>Bearer</c> token, or
-    /// <see cref="Caller.Anonymous"/> without one, or with one that does not validate.
+    /// The user an <c>Authorization</c> header names: the user of a valid <c>Bearer</c> token, or
+    /// <see cref="CurrentUserSnapshot.Anonymous"/> without one, or with one that does not validate.
     /// </summary>
-    public async Task<Caller> CallerOfAsync(string? authorization)
+    public async Task<CurrentUserSnapshot> UserOfAsync(string? authorization)
         => SupabaseTokens.BearerOf(authorization) is { } token
-            ? (await ValidateAsync(token).ConfigureAwait(false)).Caller
-            : Caller.Anonymous;
+            ? (await ValidateAsync(token).ConfigureAwait(false)).User
+            : CurrentUserSnapshot.Anonymous;
 }
 
 /// <summary>What <see cref="SupabaseTokenValidator.ValidateAsync"/> found.</summary>
-/// <param name="Caller">The token's user, or <see cref="Caller.Anonymous"/> when it did not validate.</param>
+/// <param name="User">The token's user, or <see cref="CurrentUserSnapshot.Anonymous"/> when it did not validate.</param>
 /// <param name="Identity">The token's claims as .NET sees them, for a valid token.</param>
 /// <param name="Error">Why the token did not validate, or <see langword="null"/> when it did.</param>
-public sealed record SupabaseTokenValidation(Caller Caller, ClaimsIdentity? Identity, Exception? Error)
+public sealed record SupabaseTokenValidation(CurrentUserSnapshot User, ClaimsIdentity? Identity, Exception? Error)
 {
     /// <summary>Whether the token validated.</summary>
     public bool IsValid => Error is null;

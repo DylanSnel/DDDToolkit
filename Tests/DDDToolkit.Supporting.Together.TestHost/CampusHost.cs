@@ -37,7 +37,7 @@ public static class CampusHost
         services.AddLabMembershipWithTenancy<CampusContext>(LabMembership.Rules);
 
         // The campus' requests, held to Tenancy's cases and to the courses' both: a requirement may combine the two.
-        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, ICampusRequest, TenancyContext>();
+        services.AddTenancyAccess<ICampusRequest, TenancyContext>();
         services.AddCourseMemberAccess<ICampusRequest>();
 
         return services;

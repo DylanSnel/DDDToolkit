@@ -21,11 +21,11 @@ public sealed class PostgresRowAccessEntityTests(PostgresRowAccessDatabase datab
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static readonly Caller Alice = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
+    private static readonly CurrentUserSnapshot Alice = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
 
-    private static readonly Caller Bob = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
+    private static readonly CurrentUserSnapshot Bob = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
 
-    private static readonly Caller Carol = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Carol, team: "south"));
+    private static readonly CurrentUserSnapshot Carol = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Carol, team: "south"));
 
     private const string AddComment = """INSERT INTO desk."TicketComment" ("Id", "TicketId", "Text") VALUES ({0}, {1}, {2})""";
 
@@ -108,11 +108,11 @@ public sealed class PostgresRowAccessEntityTests(PostgresRowAccessDatabase datab
         database.Require();
         var ticket = await TicketAsync("Everyone's");
 
-        var add = () => database.RunAsAsync(Caller.Anonymous, AddComment, Cancellation, Guid.NewGuid(), ticket, "anonymous was here");
+        var add = () => database.RunAsAsync(CurrentUserSnapshot.Anonymous, AddComment, Cancellation, Guid.NewGuid(), ticket, "anonymous was here");
 
         await RefusedAsync(add);
-        (await database.RunAsAsync(Caller.Anonymous, ChangeComments, Cancellation, ticket)).Should().Be(0, "anonymous reads the comment, and may change nothing of the ticket's");
-        (await database.RunAsAsync(Caller.Anonymous, RemoveComments, Cancellation, ticket)).Should().Be(0);
+        (await database.RunAsAsync(CurrentUserSnapshot.Anonymous, ChangeComments, Cancellation, ticket)).Should().Be(0, "anonymous reads the comment, and may change nothing of the ticket's");
+        (await database.RunAsAsync(CurrentUserSnapshot.Anonymous, RemoveComments, Cancellation, ticket)).Should().Be(0);
         (await CommentsOfAsync(ticket)).Should().Equal(["On everyone's"]);
     }
 
@@ -257,7 +257,7 @@ public sealed class PostgresRowAccessEntityTests(PostgresRowAccessDatabase datab
         (await bob.Database.ExecuteSqlRawAsync(AddComment, [Guid.NewGuid(), own.Id.Value, "On Bob's own, still new"], Cancellation)).Should().Be(1);
 
         // Filed, and committed, by a transaction that began after Bob's.
-        await using (var meanwhile = database.CreateContext(Caller.System))
+        await using (var meanwhile = database.CreateContext(CurrentUserSnapshot.System))
         {
             meanwhile.Tickets.Add(someoneElses);
             await meanwhile.SaveChangesAsync(Cancellation);
@@ -330,7 +330,7 @@ public sealed class PostgresRowAccessEntityTests(PostgresRowAccessDatabase datab
     private async Task<Guid> FileForTheNorthAsync(string title)
     {
         var ticket = new Ticket(TicketId.CreateSequential(), title, owner: null, "north", TicketStatus.Open, isPublic: false);
-        await using var context = database.CreateContext(Caller.System);
+        await using var context = database.CreateContext(CurrentUserSnapshot.System);
         context.Tickets.Add(ticket);
         await context.SaveChangesAsync(Cancellation);
         return ticket.Id.Value;
@@ -339,7 +339,7 @@ public sealed class PostgresRowAccessEntityTests(PostgresRowAccessDatabase datab
     /// <summary>The id of the transaction that wrote the ticket's current version.</summary>
     private async Task<string> VersionOfAsync(Guid ticket)
     {
-        await using var context = database.CreateContext(Caller.System);
+        await using var context = database.CreateContext(CurrentUserSnapshot.System);
         return await context.Database.SqlQueryRaw<string>("""SELECT "xmin"::text AS "Value" FROM desk."Tickets" WHERE "Id" = {0}""", ticket).SingleAsync(Cancellation);
     }
 
@@ -356,27 +356,27 @@ public sealed class PostgresRowAccessEntityTests(PostgresRowAccessDatabase datab
 
     private async Task<Guid> TicketAsync(string title)
     {
-        await using var context = database.CreateContext(Caller.System);
+        await using var context = database.CreateContext(CurrentUserSnapshot.System);
         return await context.Tickets.Where(ticket => ticket.Title == title).Select(ticket => ticket.Id.Value).SingleAsync(Cancellation);
     }
 
     private async Task<Guid> CommentOfAsync(Guid ticket)
     {
-        await using var context = database.CreateContext(Caller.System);
+        await using var context = database.CreateContext(CurrentUserSnapshot.System);
         return await context.Database.SqlQueryRaw<Guid>("""SELECT "Id" AS "Value" FROM desk."TicketComment" WHERE "TicketId" = {0}""", ticket).SingleAsync(Cancellation);
     }
 
     /// <summary>The texts of a ticket's comments, as the application itself reads them.</summary>
     private async Task<List<string>> CommentsOfAsync(Guid ticket)
     {
-        await using var context = database.CreateContext(Caller.System);
+        await using var context = database.CreateContext(CurrentUserSnapshot.System);
         return await context.Database.SqlQueryRaw<string>("""SELECT "Text" AS "Value" FROM desk."TicketComment" WHERE "TicketId" = {0} ORDER BY "Text" """, ticket).ToListAsync(Cancellation);
     }
 
     /// <summary>How many reactions to a ticket's comments there are, as the application itself counts them.</summary>
-    private Task<int> ReactionsOfAsync(Guid ticket) => ReactionsAsync(Caller.System, ticket);
+    private Task<int> ReactionsOfAsync(Guid ticket) => ReactionsAsync(CurrentUserSnapshot.System, ticket);
 
-    private async Task<int> ReactionsAsync(Caller caller, Guid ticket)
+    private async Task<int> ReactionsAsync(CurrentUserSnapshot caller, Guid ticket)
     {
         await using var context = database.CreateContext(caller);
         return await context.Database.SqlQueryRaw<int>("""SELECT count(*)::int AS "Value" FROM desk."CommentReaction" WHERE "TicketCommentTicketId" = {0}""", ticket).SingleAsync(Cancellation);

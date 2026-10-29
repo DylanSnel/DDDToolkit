@@ -107,10 +107,10 @@ public static class TenancySeed
 
         await services.BySystemIn(Orchard, async scoped =>
         {
-            await scoped.Seats().AddSeatAsync(Oli.Identity, cancellationToken, OliInOrchard, seat => seat.Rename(Oli.Name));
+            await scoped.Seats().AddAsync(Oli.Identity, cancellationToken, OliInOrchard, seat => seat.Rename(Oli.Name));
         });
         await services.BySystemIn(Orchard, scoped => scoped.Seats().PlaceAsync(OliInOrchard, OrchardRoot, primary: true, cancellationToken));
-        await services.BySystemIn(Orchard, scoped => scoped.Seats().GrantAsync(OliInOrchard, OrchardRoot, OrchardRoles.Watcher, until: null, reason: null, cancellationToken));
+        await services.BySystemIn(Orchard, scoped => scoped.Seats().GrantAsync(OliInOrchard, OrchardRoles.Watcher, OrchardRoot, until: null, reason: null, cancellationToken));
 
         await services.BySystemIn(Quay, scoped => scoped.Tenants().SuspendAsync("Paused for the tests", cancellationToken));
 
@@ -148,17 +148,17 @@ public static class TenancySeed
         await using var services = new TenancyServices(database);
         var role = permissions is null
             ? HarborRoles.Administrator
-            : await services.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Desk for " + string.Join(" and ", permissions), "Holds what a test needs", permissions, cancellationToken));
+            : (await services.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Desk for " + string.Join(" and ", permissions), "Holds what a test needs", permissions, cancellationToken))).Id;
 
         await services.BySystemIn(Harbor, async scoped =>
         {
-            var seat = (await scoped.GetRequiredService<HostTenancy.IStore>().FindSeatAsync(person.Seat, cancellationToken))!;
+            var seat = (await scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().FindSeatAsync(person.Seat, cancellationToken))!;
             if (seat.Placements.All(placement => placement.UnitId != unit))
             {
                 await scoped.Seats().PlaceAsync(person.Seat, unit, primary: false, cancellationToken);
             }
         });
-        await services.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(person.Seat, unit, role, until: null, reason: null, cancellationToken));
+        await services.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(person.Seat, role, unit, until: null, reason: null, cancellationToken));
     }
 
     /// <summary>What the database's clock says now: what the policies call <c>now()</c>.</summary>
@@ -175,7 +175,7 @@ public static class TenancySeed
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision(
+                new TenantToProvision(
                     slug,
                     char.ToUpperInvariant(slug[0]) + slug[1..] + " Works",
                     TenantShape.Hierarchical,
@@ -184,7 +184,7 @@ public static class TenancySeed
                     TenantId: tenant,
                     RootId: root,
                     AdminSeatId: administrator.Seat,
-                    RoleIds: roles.ByPack,
+                    RoleIds: roles.ByStarterRole,
                     ConfigureFirstSeat: seat => seat.Rename(administrator.Name)),
                 cancellationToken));
         }
@@ -198,11 +198,11 @@ public static class TenancySeed
         IReadOnlyList<(OrganizationUnitId Unit, RoleId Role, DateTimeOffset? From, DateTimeOffset? Until)> grants,
         CancellationToken cancellationToken)
     {
-        await services.BySystemIn(tenant, scoped => scoped.Seats().AddSeatAsync(person.Identity, cancellationToken, person.Seat, seat => seat.Rename(person.Name)));
+        await services.BySystemIn(tenant, scoped => scoped.Seats().AddAsync(person.Identity, cancellationToken, person.Seat, seat => seat.Rename(person.Name)));
         await services.BySystemIn(tenant, scoped => scoped.Seats().PlaceAsync(person.Seat, primary, primary: true, cancellationToken));
         foreach (var (unit, role, from, until) in grants)
         {
-            await services.BySystemIn(tenant, scoped => scoped.Seats().GrantAsync(person.Seat, unit, role, until, reason: null, cancellationToken, from));
+            await services.BySystemIn(tenant, scoped => scoped.Seats().GrantAsync(person.Seat, role, unit, until, reason: null, cancellationToken, from));
         }
     }
 
@@ -225,7 +225,7 @@ public static class TenancySeed
         public SeatId Seat { get; } = TenancySeed.Seat(100 + Number);
     }
 
-    /// <summary>The roles a tenant is provisioned with, one per pack of the TestHost, with fixed ids.</summary>
+    /// <summary>The roles a tenant is provisioned with, one per starter role of the TestHost, with fixed ids.</summary>
     public sealed record Roles(int Tenant)
     {
         public RoleId Administrator { get; } = Role(Tenant, 1);
@@ -236,12 +236,12 @@ public static class TenancySeed
 
         public RoleId Watcher { get; } = Role(Tenant, 4);
 
-        public IReadOnlyDictionary<string, RoleId> ByPack => new Dictionary<string, RoleId>(StringComparer.Ordinal)
+        public IReadOnlyDictionary<string, RoleId> ByStarterRole => new Dictionary<string, RoleId>(StringComparer.Ordinal)
         {
-            [HostCatalogue.AdministratorPack] = Administrator,
-            [HostCatalogue.SupervisorPack] = Supervisor,
-            [HostCatalogue.OperatorPack] = Operator,
-            [HostCatalogue.WatcherPack] = Watcher,
+            [HostCatalogue.AdministratorStarterRole] = Administrator,
+            [HostCatalogue.SupervisorStarterRole] = Supervisor,
+            [HostCatalogue.OperatorStarterRole] = Operator,
+            [HostCatalogue.WatcherStarterRole] = Watcher,
         };
     }
 }

@@ -9,10 +9,10 @@ using DDDToolkit.Supporting.Tenancy.Access;
 namespace DDDToolkit.Supporting.Tenancy.Postgres;
 
 /// <summary>
-/// Puts the tenant of the current Tenancy caller on every connection, as <see cref="TenancyRowLevelSecurity.TenantSetting"/>:
+/// Puts the tenant of the current Tenancy user on every connection, as <see cref="TenancyRowLevelSecurity.TenantSetting"/>:
 /// a seat's tenant or the tenant system work acts in, and <c>''</c> for anyone else. The tenant is read from
-/// Tenancy's caller, never from the toolkit's: which role may reach what with the value is for the SQL to
-/// decide. A connection set for an anonymous caller names no tenant, whoever Tenancy's caller is: a signed-in
+/// Tenancy's user, never from the toolkit's current user: which role may reach what with the value is for the SQL to
+/// decide. A connection set for an anonymous caller names no tenant, whoever Tenancy's user is: a signed-in
 /// user the host has run as an anonymous one is shown to the database as nobody, and in no tenant either.
 /// </summary>
 internal sealed class TenancyTenantSetting : IRowLevelSecuritySettings
@@ -26,11 +26,11 @@ internal sealed class TenancyTenantSetting : IRowLevelSecuritySettings
     public IReadOnlyCollection<string> Names { get; } = [TenancyRowLevelSecurity.TenantSetting];
 
     /// <inheritdoc />
-    public IEnumerable<KeyValuePair<string, string>> For(Caller caller)
+    public IEnumerable<KeyValuePair<string, string>> For(CurrentUserSnapshot user)
     {
-        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(user);
 
-        return caller.Kind != CallerKind.Anonymous && TenancyCallers.CurrentTenantOrNull() is { } tenant
+        return user.Kind != CurrentUserKind.Anonymous && TenancyUsers.CurrentTenantOrNull() is { } tenant
             ? [new KeyValuePair<string, string>(TenancyRowLevelSecurity.TenantSetting, ValueOf(tenant))]
             : [];
     }

@@ -90,35 +90,35 @@ public partial class HiveBox
 [AccessFunction<Hive>("apiary.has_honey")]
 public static partial class HivesWithHoney
 {
-    public static bool Allows(Hive hive, Caller caller) => hive.Boxes.Any(box => box.Kind == "honey");
+    public static bool Allows(Hive hive, ICurrentUser user) => hive.Boxes.Any(box => box.Kind == "honey");
 }
 
 /// <summary>A visitor reads the hives that carry honey, open to visitors or not.</summary>
 [RowAccess<Hive>(RowOperations.Read, To = [RowAccessRoles.Anonymous])]
 public static partial class VisitorsReadHivesWithHoney
 {
-    public static bool Allows(Hive hive, Caller caller) => HivesWithHoney.Allows(hive, caller);
+    public static bool Allows(Hive hive, ICurrentUser user) => HivesWithHoney.Allows(hive, user);
 }
 
 /// <summary>A keeper does anything with their own hives, and with nobody else's.</summary>
 [RowAccess<Hive>(RowOperations.All, To = [RowAccessRoles.User])]
 public static partial class KeepersHaveTheirHives
 {
-    public static bool Allows(Hive hive, Caller caller) => caller.IsSignedIn && hive.Keeper == caller.UserId;
+    public static bool Allows(Hive hive, ICurrentUser user) => user.IsAuthenticated && hive.Keeper == user.Id;
 }
 
 /// <summary>Whoever signed in reads every hive.</summary>
 [RowAccess<Hive>(RowOperations.Read, To = [RowAccessRoles.User])]
-public static partial class SignedInCallersReadEveryHive
+public static partial class SignedInUsersReadEveryHive
 {
-    public static bool Allows(Hive hive, Caller caller) => caller.IsSignedIn;
+    public static bool Allows(Hive hive, ICurrentUser user) => user.IsAuthenticated;
 }
 
 /// <summary>A visitor, who did not sign in, reads the hives that are open to visitors, and nothing else.</summary>
 [RowAccess<Hive>(RowOperations.Read, To = [RowAccessRoles.Anonymous])]
 public static partial class VisitorsReadOpenHives
 {
-    public static bool Allows(Hive hive, Caller caller) => hive.IsOpen;
+    public static bool Allows(Hive hive, ICurrentUser user) => hive.IsOpen;
 }
 
 /// <summary>The apiary's rules, each as a script takes it.</summary>
@@ -132,7 +132,7 @@ public static class ApiaryRules
 
     public static readonly RowAccessRule Keepers = RowAccessRule.For<Hive>("Keepers have their hives", RowOperations.All, KeepersHaveTheirHives.RowAccessSql, RowAccessRoles.User);
 
-    public static readonly RowAccessRule SignedIn = RowAccessRule.For<Hive>("Signed in callers read every hive", RowOperations.Read, SignedInCallersReadEveryHive.RowAccessSql, RowAccessRoles.User);
+    public static readonly RowAccessRule SignedIn = RowAccessRule.For<Hive>("Signed in callers read every hive", RowOperations.Read, SignedInUsersReadEveryHive.RowAccessSql, RowAccessRoles.User);
 
     public static readonly RowAccessRule Visitors = RowAccessRule.For<Hive>("Visitors read open hives", RowOperations.Read, VisitorsReadOpenHives.RowAccessSql, RowAccessRoles.Anonymous);
 

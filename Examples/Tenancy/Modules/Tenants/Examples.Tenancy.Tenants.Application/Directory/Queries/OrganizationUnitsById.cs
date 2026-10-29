@@ -7,30 +7,25 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// caller is placed under. What a screen asks once another module answered it unit ids.
 /// </summary>
 /// <remarks>
-/// It requires a caller who works in the tenant, and the package's directory answers such a caller about any unit
-/// of that tenant, with its name and path and nothing more. That is wider than <see cref="Organization.Queries.OrganizationUnits"/>,
-/// which lists the units a seat is placed under, whole: a crew member works on a project at a unit it is not placed
-/// under, and still reads what that unit is called. An id of another tenant, or of no unit, is left out of the
-/// answer without a word; more ids than one question takes are refused.
+/// It requires a caller who works in the tenant, and the organization manager answers such a caller about any unit of
+/// that tenant, with its name and path and nothing more: its <see cref="NamedUnit{TUnitId}"/>. That is wider than
+/// <see cref="Organization.Queries.OrganizationUnits"/>, which lists the units a seat is placed under, whole: a crew
+/// member works on a project at a unit it is not placed under, and still reads what that unit is called. An id of
+/// another tenant, or of no unit, is left out of the answer without a word; more ids than one question takes are
+/// refused.
 /// </remarks>
 /// <param name="Ids">The units asked about.</param>
 [InTenant]
-public sealed record OrganizationUnitsById(IReadOnlyList<OrganizationUnitId> Ids) : IQuery<IReadOnlyList<UnitName>>, ITenantsRequest;
+public sealed record OrganizationUnitsById(IReadOnlyList<OrganizationUnitId> Ids) : IQuery<IReadOnlyList<NamedUnit<OrganizationUnitId>>>, ITenantsRequest;
 
-/// <summary>
-/// Answers <see cref="OrganizationUnitsById"/> from the Tenancy package's directory, which names the units asked
-/// about.
-/// </summary>
-/// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
-public sealed class OrganizationUnitsByIdHandler(ITenancyReads reads) : IQueryHandler<OrganizationUnitsById, IReadOnlyList<UnitName>>
+/// <summary>Answers <see cref="OrganizationUnitsById"/> from the Tenancy package's organization manager.</summary>
+/// <param name="reads">Where Tenancy is read: the organization manager, in a scope of this query's own.</param>
+public sealed class OrganizationUnitsByIdHandler(ITenancyReads reads) : IQueryHandler<OrganizationUnitsById, IReadOnlyList<NamedUnit<OrganizationUnitId>>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
     /// The caller's own refusal when it is nobody, or <c>tenancy.too-many-ids</c>.
     /// </exception>
-    public async ValueTask<IReadOnlyList<UnitName>> Handle(OrganizationUnitsById query, CancellationToken cancellationToken)
-    {
-        var units = await reads.AskDirectoryAsync(directory => directory.UnitsByIdAsync(query.Ids, cancellationToken));
-        return [.. units.Select(unit => new UnitName(unit.Id, unit.Name, unit.Path, unit.Depth))];
-    }
+    public async ValueTask<IReadOnlyList<NamedUnit<OrganizationUnitId>>> Handle(OrganizationUnitsById query, CancellationToken cancellationToken)
+        => await reads.AskAsync((OrganizationManager manager) => manager.UnitsByIdAsync(query.Ids, cancellationToken));
 }

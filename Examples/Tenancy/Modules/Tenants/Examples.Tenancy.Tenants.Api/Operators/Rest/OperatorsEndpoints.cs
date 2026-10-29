@@ -1,4 +1,5 @@
 using Examples.Tenancy.Tenants.Api.Rest;
+using Examples.Tenancy.Tenants.Api.Tenant.Rest;
 using Examples.Tenancy.Tenants.Application.Operators.Queries;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -13,8 +14,8 @@ namespace Examples.Tenancy.Tenants.Api.Operators.Rest;
 /// </summary>
 /// <remarks>
 /// An operator holds no seat, so these routes name no tenant in a header: one that reads inside a tenant has the
-/// tenant's id in its path. Every one of them reads. There is no route here that changes anything, because an
-/// operator changes nothing itself.
+/// tenant's id in its path. Every one of them reads. A change an operator makes is a command marked <c>[Operator]</c>,
+/// which runs as operator work, such as the projects' rename for support.
 /// <para>
 /// Like every route of this project, these decide nothing and take only the sender;
 /// <see cref="TenantsModule"/> says what all of them keep to. Internal: the module's entry maps them into the
@@ -31,13 +32,14 @@ internal static class OperatorsEndpoints
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        // Every tenant by slug, each with its status and its active seats. "next" is the marker to send as "after".
+        // Every tenant by slug, each beside its name and its active seats, as the tenant manager's page holds them.
+        // "next" is the marker to send as "after".
         group.MapGet("/operations/tenants", async (string? after, int? size, ISender sender, CancellationToken cancellationToken) =>
         {
             var page = await sender.Send(new AllTenants(after, size ?? AllTenants.DefaultPage), cancellationToken);
             return Results.Ok(new
             {
-                items = page.Items.Select(tenant => new { tenant.Id, tenant.Slug, tenant.Name, tenant.Status, tenant.ActiveSeats }),
+                items = page.Items.Select(listed => new { tenant = TenantEndpoints.Describe(listed.Tenant), listed.Name, listed.ActiveSeats }),
                 page.Next,
             });
         });

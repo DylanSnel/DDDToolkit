@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// A restrictive rule of the application's on Tenancy's organization: <c>Restrictive = true</c>, so its policy is
 /// AND-ed with every policy that allows, Tenancy's defaults included, and only narrows what they allow. Here only an
 /// employee's seat reads the organization, its units and the closure of its tree, which the application says by a
-/// field of its own seat class, read through <c>TenancyRowAccess.CallerSeat&lt;HostSeat&gt;()</c>. Tenancy's own
+/// field of its own seat class, read through <c>TenancyRowAccess.CurrentSeat&lt;HostSeat&gt;()</c>. Tenancy's own
 /// work, and what its functions answer as their owner, keep working under it: every use case runs, and a seat the rule
 /// keeps out of the organization still learns what the unit it works at is called.
 /// </summary>
@@ -37,7 +37,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         var tenancy = TenancyPostgres.AccessScripts(rules: [.. WidgetRules.All, OnlyEmployees])[0];
 
         // The kind is stored as its number, as the TestHost's model maps an enum: an employee's is 0.
-        const string Condition = "(SELECT q1.\"Kind\" FROM \"tenancy\".caller_seat_row() q1) = 0";
+        const string Condition = "(SELECT q1.\"Kind\" FROM \"tenancy\".current_seat_row() q1) = 0";
         foreach (var table in new[] { "Organizations", "OrganizationUnits", "OrganizationUnitPaths" })
         {
             tenancy.Should().Contain(
@@ -80,7 +80,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // Odette is an employee of Orchard: she reads Orchard's units, and none of Harbor's, which Tenancy's policy
         // never allowed her. A restrictive rule grants nothing.
         (await UnitsReadByAsync(database, Odette, Orchard)).Should().BeEquivalentTo([OrchardRoot.Value]);
-        await using (var odette = await AsCaller.PersonAsync(database, Odette.Identity, Orchard, Cancellation))
+        await using (var odette = await AsUser.PersonAsync(database, Odette.Identity, Orchard, Cancellation))
         {
             (await odette.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"OrganizationUnits\" WHERE \"TenantId\" = 1", Cancellation)).Should().BeEmpty();
         }
@@ -103,26 +103,26 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
     {
         var database = await ForcedAsync();
         await using var services = new TenancyServices(database);
-        var lark = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().AddSeatAsync(Lark, Cancellation, configure: seat =>
+        var lark = (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().AddAsync(Lark, Cancellation, configure: seat =>
         {
             seat.Rename("Lark");
             seat.MarkExternal();
-        }));
+        }))).Id;
 
         // Asked by id, the unit her work is at is named, through Tenancy's function that runs as its owner, and for
         // the ids asked alone; another tenant's is left out as before.
-        var named = await services.BySeat(Lark, Harbor, lark, scoped => scoped.Directory().UnitsByIdAsync([NorthPier, OrchardRoot], Cancellation));
+        var named = await services.BySeat(Lark, Harbor, lark, scoped => scoped.Organization().UnitsByIdAsync([NorthPier, OrchardRoot], Cancellation));
         named.Select(unit => (unit.Id, unit.Name, unit.Path, unit.Depth)).Should().Equal((NorthPier, "North Pier", "Harbor / North / North Pier", 3));
 
         // While what she reads of the tables themselves is nothing.
-        await using (var caller = await AsCaller.PersonAsync(database, Lark, Harbor, Cancellation))
+        await using (var caller = await AsUser.PersonAsync(database, Lark, Harbor, Cancellation))
         {
             (await caller.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"OrganizationUnits\"", Cancellation)).Should().BeEmpty();
             (await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"OrganizationUnitPaths\"", Cancellation)).Should().Be(0);
         }
 
         // And the list of the units she reads is empty: the rule keeps her out of the organization.
-        (await services.BySeat(Lark, Harbor, lark, scoped => scoped.Directory().ListUnitsAsync(Cancellation))).Should().BeEmpty();
+        (await services.BySeat(Lark, Harbor, lark, scoped => scoped.Organization().ListUnitsAsync(Cancellation))).Should().BeEmpty();
     }
 
     [Fact]
@@ -135,23 +135,23 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // Oli is placed at North Pier, an Operator there: his overview names the unit through Tenancy's function, as
         // the directory names a unit by its id, and the tenant by its name through the function the picker reads,
         // while the organization itself is what the rule keeps from him.
-        var overview = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
+        var overview = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation));
 
-        overview.Tenant.Name.Should().Be("Harbor Works", "as the tenant picker names it");
-        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        overview.TenantName.Should().Be("Harbor Works", "as the tenant picker names it");
+        await using (var oli = await AsUser.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\"", Cancellation)).Should().Be(0, "the organizations stay closed to him");
         }
 
-        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().SeatOverviewAsync(Oli.Seat, Cancellation))).Tenant.Name
+        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Seats().OverviewAsync(Oli.Seat, Cancellation))).TenantName
             .Should().Be("Harbor Works", "his overview asked by id is the same");
         overview.Units.Select(unit => unit.Path).Should().Equal("Harbor / North / North Pier");
         overview.Permissions.Should().NotBeEmpty().And.OnlyContain(reach => !reach.AtTenant && reach.Reaches.Select(unit => unit.Id).SequenceEqual(new[] { NorthPier }));
-        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().ListUnitsAsync(Cancellation))).Should().BeEmpty();
+        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Organization().ListUnitsAsync(Cancellation))).Should().BeEmpty();
 
         // Ada is an employee, and her overview reads the organization as before.
-        var ada = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
-        ada.Tenant.Name.Should().Be("Harbor Works");
+        var ada = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation));
+        ada.TenantName.Should().Be("Harbor Works");
         ada.Permissions.Should().Contain(reach => reach.AtTenant && reach.Reaches.Count == 4);
     }
 
@@ -165,9 +165,9 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // The seat a request acts as is found before a tenant is chosen, past the organization, which only names it.
         foreach (var (person, slug, seat) in new[] { (Oli, "harbor", Oli.Seat), (Ada, "harbor", Ada.Seat), (Oli, "orchard", OliInOrchard) })
         {
-            using (Callers.Begin(Caller.User(person.Identity)))
+            using (TestAccess.BeginAs(person.Identity))
             {
-                (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(person.Identity), slug, Cancellation)))
+                (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(person.Identity), slug, Cancellation)))
                     .Seat.Should().Be(seat, "{0} has a seat in {1}", person.Name, slug);
             }
         }
@@ -177,9 +177,9 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // organization through, to the employee as to the external seat.
         foreach (var (person, expected) in new[] { (Oli, new[] { ("harbor", "Harbor Works"), ("orchard", "Orchard Works") }), (Ada, new[] { ("harbor", "Harbor Works") }) })
         {
-            using (Callers.Begin(Caller.User(person.Identity)))
+            using (TestAccess.BeginAs(person.Identity))
             {
-                var mine = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync<HostSeat>(Caller.User(person.Identity), Cancellation));
+                var mine = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync<HostSeat>(CurrentUserSnapshot.User(person.Identity), Cancellation));
                 mine.Select(found => (found.Slug, found.OrganizationName)).Should().BeEquivalentTo(expected, "{0} sees the tenants by name", person.Name);
             }
         }
@@ -187,7 +187,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // While the organizations themselves stay closed to the external seat, before a tenant is chosen and in it.
         foreach (var tenant in new TenantId?[] { null, Harbor })
         {
-            await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, tenant, Cancellation);
+            await using var oli = await AsUser.PersonAsync(database, Oli.Identity, tenant, Cancellation);
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\" WHERE \"Id\" = 1", Cancellation)).Should().Be(0);
         }
     }
@@ -206,21 +206,21 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
     /// <summary>The ids of the units <paramref name="person"/> reads, with the connection naming <paramref name="tenant"/>.</summary>
     private static async Task<List<Guid>> UnitsReadByAsync(TestDatabase database, Person person, TenantId tenant)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant, Cancellation);
         return await caller.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"OrganizationUnits\"", Cancellation);
     }
 
     /// <summary>How many rows of the closure of the tree <paramref name="person"/> reads.</summary>
     private static async Task<long> PathsReadByAsync(TestDatabase database, Person person, TenantId tenant)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant, Cancellation);
         return await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"OrganizationUnitPaths\"", Cancellation);
     }
 
     /// <summary>How many organizations <paramref name="person"/> reads.</summary>
     private static async Task<long> OrganizationsReadByAsync(TestDatabase database, Person person, TenantId tenant)
     {
-        await using var caller = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, person.Identity, tenant, Cancellation);
         return await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\"", Cancellation);
     }
 }
@@ -232,6 +232,6 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
 [RowAccess<HostOrganization>(RowOperations.Read, Restrictive = true)]
 public static partial class OnlyEmployeesReadTheOrganization
 {
-    public static bool Allows(HostOrganization organization, Caller caller)
-        => TenancyRowAccess.CallerSeat<HostSeat>().Kind == HostSeatKind.Employee;
+    public static bool Allows(HostOrganization organization, ICurrentUser user)
+        => TenancyRowAccess.CurrentSeat<HostSeat>().Kind == HostSeatKind.Employee;
 }

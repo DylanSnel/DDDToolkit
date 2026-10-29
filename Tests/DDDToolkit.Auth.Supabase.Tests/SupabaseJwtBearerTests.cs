@@ -150,11 +150,11 @@ public sealed class SupabaseJwtBearerTests
         foreach (var (why, token) in tokens)
         {
             (await host.AskAsync(token)).Status.Should().Be(HttpStatusCode.Unauthorized, why);
-            (await host.CallerOfAsync(token)).Should().Be("anon", why);
+            (await host.UserOfAsync(token)).Should().Be("anon", why);
         }
 
-        (await host.CallerOfAsync(AccessTokens.SignedWith(_published))).Should().Be($"authenticated {Ada}", "the real ones still pass");
-        (await host.CallerOfAsync(AccessTokens.SignedWithTheSecret())).Should().Be($"authenticated {Ada}");
+        (await host.UserOfAsync(AccessTokens.SignedWith(_published))).Should().Be($"authenticated {Ada}", "the real ones still pass");
+        (await host.UserOfAsync(AccessTokens.SignedWithTheSecret())).Should().Be($"authenticated {Ada}");
     }
 
     [Fact]

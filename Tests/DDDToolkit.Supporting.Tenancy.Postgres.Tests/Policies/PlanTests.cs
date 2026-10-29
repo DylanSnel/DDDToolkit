@@ -15,13 +15,13 @@ public sealed class PlanTests(TenancyPostgres postgres)
     public async Task A_consumer_rule_over_units_where_i_hold_is_an_init_plan()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
-        await using var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
+        await using var seth = await AsUser.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
 
         // The policy alone: every widget Seth may read, with nothing in the query that narrows it.
         var plan = await seth.PlanAsync("SELECT \"Id\" FROM widgets.\"Widgets\"", Cancellation);
 
         QueryPlans.InitPlansCalling(plan, "tenancy.units_where_i_hold_permission(").Should().NotBeEmpty("the question is asked once, before the scan");
-        QueryPlans.InitPlansCalling(plan, "tenancy.caller_tenant(").Should().NotBeEmpty("and so is the tenant the restrictive policy compares with");
+        QueryPlans.InitPlansCalling(plan, "tenancy.current_tenant(").Should().NotBeEmpty("and so is the tenant the restrictive policy compares with");
 
         var scans = QueryPlans.Scans(plan, "Widgets");
         scans.Should().NotBeEmpty();

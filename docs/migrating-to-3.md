@@ -1,16 +1,16 @@
 # Migrating to 3.0
 
-This page is for somebody on 2.0.22 who wants to upgrade. Every break is listed with the code you
-have now and the code you need. The [changelog](../CHANGELOG.md) has the full list of changes; this
-page only covers the ones that make your solution stop compiling or stop behaving the same.
+This page is for an upgrade from 2.0.22 to 3.0. It lists every breaking change, with the code you have now and the
+code you need. The [changelog](../CHANGELOG.md) has the full list of changes. This page covers only the changes
+that stop your solution from compiling, or that change how it behaves.
 
-Budget an afternoon for a medium sized solution. Most of the work is mechanical: the compiler finds
-the event changes for you. The one thing it cannot find for you is the change to when handlers run,
-in [section 6](#6-events-are-dispatched-before-the-save-on-both-paths).
+Plan an afternoon for a medium-sized solution. Most of the work is mechanical, and the compiler finds the event
+changes. The compiler cannot find the change to when handlers run, in
+[section 6](#6-events-are-dispatched-before-the-save-on-both-paths).
 
-## What actually breaks
+## Breaking changes
 
-| Break | Section |
+| Change | Section |
 |---|---|
 | `net8.0` is no longer supported | [1](#1-retarget-to-net-10) |
 | Child entities no longer have domain events | [2](#2-domain-events-moved-to-the-aggregate-root) |
@@ -28,14 +28,15 @@ in [section 6](#6-events-are-dispatched-before-the-save-on-both-paths).
 | HotChocolate 16, Entity Framework 10, FluentValidation 12 | [12](#12-package-versions) |
 | MediatR is no longer referenced | [13](#13-mediatr-is-replaced-by-mediator-in-the-examples) |
 
-Then there are three changes you do not have to make, but should: [struct
-identifiers](#14-optional-make-your-identifiers-structs), [generated
-collections](#15-optional-let-the-generator-write-your-collections) and
+Three more changes are optional, and recommended:
+[struct identifiers](#14-optional-make-your-identifiers-structs),
+[generated collections](#15-optional-let-the-generator-write-your-collections) and
 [module boundaries](#16-optional-declare-your-modules).
 
 ## 1. Retarget to .NET 10
 
-The runtime libraries target `net10.0`. There is no `net8.0` build, so the whole solution moves.
+The runtime libraries target `net10.0`. There is no `net8.0` build, so every project of the solution moves to
+`net10.0`.
 
 ```xml
 <TargetFramework>net8.0</TargetFramework>
@@ -45,7 +46,7 @@ The runtime libraries target `net10.0`. There is no `net8.0` build, so the whole
 <TargetFramework>net10.0</TargetFramework>
 ```
 
-Pin the SDK so everyone builds with the same one:
+Pin the SDK in `global.json`, so everyone builds with the same SDK:
 
 ```json
 {
@@ -53,17 +54,17 @@ Pin the SDK so everyone builds with the same one:
 }
 ```
 
-The generators still target `netstandard2.0` and reference nothing at run time, so they load in any
-recent SDK. In 2.x they referenced other assemblies, which stopped resolving under newer SDKs and
-surfaced as `CS8784`. If that is the error that brought you here, this release is the fix.
+The generators still target `netstandard2.0` and reference no other assembly at run time, so they load in any
+recent SDK. In 2.x they referenced other assemblies. Newer SDKs could not resolve those, and the build failed with
+`CS8784`. This release fixes that error.
 
 ## 2. Domain events moved to the aggregate root
 
-In 2.x every `Entity<TId>` had a domain event list. In 3.0 only `AggregateRoot<TId>` has one, because
-only the root is a consistency boundary.
+In 2.x every `Entity<TId>` had a list of domain events. In 3.0 only `AggregateRoot<TId>` has one, because only the
+root is a consistency boundary.
 
-If a child entity raised events, the root has to raise them instead. Give the child a method that
-reports what happened and let the root turn that into an event:
+If a child entity raised events, the root must raise them instead. Give the child an `internal` method that makes
+the change, and let the root call it and raise the event:
 
 ```csharp
 [Entity<OrderLineId>]
@@ -96,11 +97,11 @@ public partial class Order
 }
 ```
 
-This is worth doing even where the compiler does not force it. In 2.x the Entity Framework
-interceptor collected events from every tracked entity, so a child could publish something the root
-did not know about, and the root is the thing that decides whether the change was legal.
+Do this even where the compiler does not force it. In 2.x the Entity Framework interceptor collected events from
+every tracked entity. So a child could publish an event that the root did not know about, while the root decides
+whether a change is allowed.
 
-Reading events off a child also stops compiling:
+Code that reads the events of a child also stops compiling:
 
 ```csharp
 var events = orderLine.DomainEvents;      // 2.x
@@ -109,7 +110,7 @@ var events = order.DomainEvents;          // 3.0, the root owns them
 
 ## 3. `AddDomainEvent` becomes `RaiseDomainEvent`
 
-`AddDomainEvent` was public, so anything holding a reference to an order could put an event into it.
+`AddDomainEvent` was public, so any code with a reference to an order could add an event to it.
 `RaiseDomainEvent` is `protected`.
 
 ```csharp
@@ -128,26 +129,25 @@ public void Cancel(CancellationReason reason)
 }
 ```
 
-Inside the aggregate this is a rename. Outside it, it is a redesign. Code like this:
+Inside the aggregate, this is a rename. Outside the aggregate, the code needs a new design. Code like this:
 
 ```csharp
 order.AddDomainEvent(new OrderExported(order.Id));       // 2.x, from an application service
 ```
 
-has no direct replacement, and that is deliberate. Either the aggregate owns the fact, in which case
-give it a method:
+has no direct replacement, on purpose. When the fact belongs to the aggregate, give the aggregate a method:
 
 ```csharp
 order.MarkExported();                                    // which raises the event itself
 ```
 
-or the fact is not about the order at all, in which case it is an application concern and belongs in
-whatever you use to publish application messages, not on the aggregate.
+When the fact is not about the order, it belongs to the application. Publish it with whatever you use for
+application messages.
 
 ## 4. Draining goes through `IHasDomainEvents`
 
-`ClearDomainEvents()` was a public method on every entity. It is now an explicit interface
-implementation, along with a new `DequeueDomainEvents()`:
+`ClearDomainEvents()` was a public method on every entity. It is now an explicit interface implementation of
+`IHasDomainEvents`, next to a new `DequeueDomainEvents()`:
 
 ```csharp
 public interface IHasDomainEvents
@@ -164,11 +164,11 @@ order.ClearDomainEvents();                                       // 2.x
 var events = ((IHasDomainEvents)order).DequeueDomainEvents();    // 3.0, read and empty in one step
 ```
 
-The cast is the point. Application code that can call `ClearDomainEvents()` by accident can write a
-row whose event never happened. You will rarely write either line: the Entity Framework integration
-drains the aggregates during save.
+The cast is on purpose. Application code that calls `ClearDomainEvents()` by accident can save a row and lose its
+event. You rarely write either line, because the Entity Framework integration drains the aggregates during the
+save.
 
-If you wrote your own dispatcher in 2.x, it looked something like this:
+A dispatcher of your own from 2.x looks like this:
 
 ```csharp
 var entities = context.ChangeTracker.Entries<IHasDomainEvents>()
@@ -177,19 +177,20 @@ var events = entities.SelectMany(e => e.DomainEvents).ToList();
 entities.ForEach(e => e.ClearDomainEvents());
 ```
 
+In 3.0 it becomes:
+
 ```csharp
 var events = context.ChangeTracker.Entries<IHasDomainEvents>()
     .SelectMany(entry => entry.Entity.DequeueDomainEvents())
     .ToList();
 ```
 
-Better still, delete it and use `PublishDomainEventsInterceptor`. See
-[Entity Framework](event-delivery.md).
+Better, delete the dispatcher and use `PublishDomainEventsInterceptor` ([Event delivery](event-delivery.md)).
 
 ## 5. `IDomainEvent` carries an id and a timestamp
 
-In 2.x `IDomainEvent` was empty, so every consumer had to reconstruct identity and timing from
-context. It now has two members:
+In 2.x `IDomainEvent` was empty, so every consumer had to work out the identity and the time of an event from
+elsewhere. It now has two members:
 
 ```csharp
 public interface IDomainEvent
@@ -199,8 +200,8 @@ public interface IDomainEvent
 }
 ```
 
-Every event type you have stops compiling until it supplies them. The one line fix is to derive from
-the `DomainEvent` record base, which supplies both:
+Every event type stops compiling until it supplies them. The one-line fix is to derive from the record
+`DomainEvent`, which supplies both:
 
 ```csharp
 public record OrderPlaced(OrderId OrderId) : IDomainEvent;                 // 2.x
@@ -213,10 +214,10 @@ using DDDToolkit.BaseTypes;
 public sealed record OrderPlaced(OrderId OrderId) : DomainEvent;           // 3.0
 ```
 
-`EventId` is a version 7 `Guid`, so it is unique and sorts by time. `OccurredAt` is the current UTC
-time. Both are `init`, so a replay can supply recorded values.
+`EventId` is a version 7 `Guid`, so it is unique and sorts by time. `OccurredAt` is the UTC time when the event was
+made. Both are `init` properties, so a replay can set recorded values.
 
-If you have a marker interface of your own, put `DomainEvent` in front of it:
+If you have your own marker interface, list `DomainEvent` before it:
 
 ```csharp
 public interface IBaseDomainEvent : IDomainEvent, INotification;
@@ -226,16 +227,17 @@ public sealed record OrderPlaced(OrderId OrderId) : DomainEvent, IBaseDomainEven
 
 You can still implement `IDomainEvent` directly. You then write the two properties yourself.
 
-`[DomainEventName]` is new and optional. Without it, an event is named by convention: its module and its
-class name in kebab case, `ordering.order-placed`. Add the attribute when you rename a class whose name
-is already stored or published, to keep the old name; see [Stable names](domain-events.md#stable-names).
-The outbox uses the name as the message name, and `DomainEventName.For` resolves it (`DomainEventName.Of` up to
-3.1). Early 3.0 builds used the bare class name instead; rows they wrote are still read.
+- `[DomainEventName]` is new and optional. Without it, an event gets a name by convention: its module and its class
+  name in kebab case, such as `ordering.order-placed`.
+- Add the attribute when you rename a class whose name is already stored or published, to keep the old name
+  ([Stable names](domain-events.md#stable-names)).
+- The outbox uses the name as the message name. `DomainEventName.For` returns it. Up to 3.1 the method was
+  `DomainEventName.Of`.
+- Early 3.0 builds used the class name alone. The outbox still reads the rows they wrote.
 
 ### Making the timestamp deterministic in tests
 
-Because the aggregate constructs its own events, your test cannot pass an initialiser. Use
-`DomainEventClock` instead:
+The aggregate makes its own events, so a test cannot set these properties. Use `DomainEventClock` instead:
 
 ```csharp
 using var scope = DomainEventClock.Use(fakeClock);
@@ -249,25 +251,24 @@ See [Deterministic time in tests](testing.md#deterministic-time-in-tests).
 
 ## 6. Events are dispatched before the save, on both paths
 
-This is the change the compiler cannot find for you, so read it even if everything builds.
+The compiler cannot find this change. Read this section even if everything builds.
 
-In 2.x the two save paths behaved differently. `SaveChanges` dispatched from `SavingChanges`, before
-the database write. `SaveChangesAsync` dispatched from `SavedChangesAsync`, after it. So a handler
-saw uncommitted data or committed data depending only on which overload the caller happened to use.
+In 2.x the two save paths behaved differently. `SaveChanges` dispatched from `SavingChanges`, before the database
+write. `SaveChangesAsync` dispatched from `SavedChangesAsync`, after the write. So a handler saw uncommitted or
+committed data, depending on which overload the code called.
 
-In 3.0 both paths dispatch before the write. Handlers always see the same thing.
+In 3.0 both paths dispatch before the write, so handlers always see uncommitted data.
 
-What that means for your handlers:
+The effect on your handlers:
 
-- A handler that changes tracked entities on the same `DbContext` now has those changes saved by the
-  same `SaveChanges` call, inside the same transaction. In 2.x, on the async path, they needed a
-  second save.
+- A handler that changes tracked entities on the same `DbContext` now has those changes saved by the same
+  `SaveChanges` call, inside the same transaction. In 2.x, on the async path, they needed a second save.
 - A handler that throws now aborts the save. In 2.x, on the async path, the row was already written.
-- A handler that assumed the row was committed, for example one that reads it back through a second
-  context or hands the id to a background job, is now wrong. The row is not there yet.
+- A handler that expects the row to be committed is now wrong. Examples are a handler that reads the row through a
+  second context, and a handler that passes the id to a background job. The row is not in the database yet.
 
-That last case is the one to go looking for. The fix is the outbox: the event is written in the same
-transaction as the aggregate and delivered after the commit, at least once.
+Search your code for that last case. The fix is the outbox. The outbox writes the event in the same transaction as
+the aggregate, and delivers it after the commit, at least once.
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options =>
@@ -282,11 +283,11 @@ builder.Services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSecond
 protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventOutbox(Database);
 ```
 
-Outbox handlers must be idempotent, keyed on `EventId`. See
-[the outbox](event-delivery.md#the-outbox-in-detail).
+Outbox handlers must be idempotent, keyed on `EventId`
+([The outbox in detail](event-delivery.md#the-outbox-in-detail)).
 
-One more thing that is new rather than changed: if an aggregate has pending events and no delivery
-mode is configured, `SaveChanges` throws instead of silently dropping them.
+In 3.0, `SaveChanges` throws when an aggregate has pending events and no delivery mode is configured. In 2.x the
+events were dropped without an error.
 
 ## 7. The Entity Framework registration changed
 
@@ -317,23 +318,25 @@ builder.Services.AddDbContext<OrderingContext>((sp, options) => options
     .UseDDDToolkit(sp));
 ```
 
-Three differences. The delegate takes a `CancellationToken` and an `IReadOnlyList<IDomainEvent>`
-instead of a `List<IDomainEvent>`. `UseDDDToolkit` adds the concurrency interceptor as well as the
-event one. And the options object is where the outbox, `MaxDispatchRounds` and `TimeProvider` live.
+The differences:
 
-The old overload still works and still compiles:
+- The delegate takes a `CancellationToken`, and an `IReadOnlyList<IDomainEvent>` instead of a
+  `List<IDomainEvent>`.
+- `UseDDDToolkit` adds the concurrency interceptor as well as the event interceptor.
+- The options object holds the outbox settings, `MaxDispatchRounds` and `TimeProvider`.
+
+The old overload still compiles and still works:
 
 ```csharp
 [Obsolete] UseDomainEvents(Func<IServiceProvider, List<IDomainEvent>, Task> interceptorAction)
 ```
 
-It forwards to `DispatchInProcess`, so it dispatches before the save now, like everything else. Treat
-the warning as a reminder, not an emergency. `AddDomainEventInterceptor` is kept too, as an alias of
-`UseDDDToolkit`.
+It forwards to `DispatchInProcess`, so it also dispatches before the save now. The obsolete warning is a reminder
+to move, and nothing breaks before you do. `AddDomainEventInterceptor` stays too, as an alias of `UseDDDToolkit`.
 
-### One new call: `AddDDDToolkitConventions`
+### The new call `AddDDDToolkitConventions`
 
-There is a third call that has no 2.x equivalent:
+A third call has no 2.x equivalent:
 
 ```csharp
 protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -343,25 +346,24 @@ protected override void ConfigureConventions(ModelConfigurationBuilder configura
 }
 ```
 
-It maps `Version` as a concurrency token, maps generated read-only collections of primitives, and
-ignores `[Internal]` members. Without it, a generated collection property is silently skipped,
-because Entity Framework only discovers primitive properties that have a setter.
+`AddDDDToolkitConventions()` maps `Version` as a concurrency token, maps generated read-only collections of
+primitives, and ignores `[Internal]` members. Without it, Entity Framework skips a generated collection property
+without an error, because it only discovers primitive properties that have a setter.
 
 ## 8. Aggregate roots gain a `Version` column
 
-`AggregateRoot<TId>` now has `public long Version { get; private set; }`, and
-`AddDDDToolkitConventions` maps it as a concurrency token. Every aggregate root table needs a new
-column, so scaffold a migration before you deploy:
+`AggregateRoot<TId>` now has `public long Version { get; private set; }`, and `AddDDDToolkitConventions` maps it as
+a concurrency token. Every table of an aggregate root needs a new column, so scaffold a migration before you
+deploy:
 
 ```bash
 dotnet ef migrations add AggregateVersion
 ```
 
-Existing rows get `0`, which is correct: the version only has to agree with itself from the next save
-onwards.
+Existing rows get `0`. That is correct, because the version only has to match from the next save on.
 
-From then on, a save against a stale aggregate throws `ConcurrencyConflictException` instead of
-succeeding silently:
+From then on, a save of a stale aggregate throws `ConcurrencyConflictException`. In 2.x the save succeeded without
+an error:
 
 ```csharp
 try
@@ -374,54 +376,52 @@ catch (ConcurrencyConflictException conflict)
 }
 ```
 
-If some aggregate genuinely must not be version checked, configure the property yourself in
-`OnModelCreating`; explicit configuration wins over the convention.
+If an aggregate must not have a version check, configure the property yourself in `OnModelCreating`. Explicit
+configuration wins over the convention.
 
 ## 9. Hand-written identifiers need `IEquatable`
 
-`Entity<TId>` used to be constrained to `IEntityId`. It is now constrained to
-`IEntityId, IEquatable<TId>`, which is what lets equality avoid boxing.
+`Entity<TId>` used to be constrained to `IEntityId`. It is now constrained to `IEntityId, IEquatable<TId>`. That
+lets equality compare ids without boxing.
 
-Identifiers generated by `[EntityId<T>]` satisfy this already, because records and record structs
-implement `IEquatable<T>` for free. Only a hand-written identifier is affected:
+Identifiers from `[EntityId<T>]` already meet this constraint, because the compiler implements `IEquatable<T>` for
+every record and record struct. Only a hand-written identifier is affected:
 
 ```csharp
 public sealed class LegacyId : IEntityId { }                    // 2.x
 public sealed class LegacyId : IEntityId, IEquatable<LegacyId> { }   // 3.0
 ```
 
-Equality on `Entity<TId>` is also null-safe now. `GetHashCode` on an entity whose id is null returns
-0 instead of throwing, and `==` handles null on both sides.
+Equality on `Entity<TId>` is also null-safe now. `GetHashCode` on an entity whose id is null returns 0 and does not
+throw, and `==` handles null on both sides.
 
 ## 10. Misapplied attributes now fail the build
 
-2.x reported five diagnostics: DDD00001, DDD00002, DDD00010, DDD00011 and DDD00013. Everything else
-it got wrong generated nothing and said nothing, or was rejected by the compiler with `CS0592`, which
-named no cause. The attributes now accept both classes and structs, so the generator reports its own
-diagnostic instead of the compiler refusing the attribute.
+2.x reported five diagnostics: DDD00001, DDD00002, DDD00010, DDD00011 and DDD00013. For every other mistake, the
+generator wrote nothing and reported nothing, or the compiler refused the attribute with `CS0592`, which named no
+cause. The attributes now accept both classes and structs, so the generator reports its own diagnostic instead.
 
-Nine diagnostics are new to a first build, and these are the ones you can expect:
+Nine diagnostics can appear in your first build:
 
-| You wrote | 3.0 says |
+| You wrote | 3.0 reports |
 |---|---|
 | `[EntityId<T>]` on a plain class or struct | [DDD00003](diagnostics.md#ddd00003) |
-| `[EntityId<T>]` on a non readonly record struct | [DDD00004](diagnostics.md#ddd00004), a warning |
-| Any of them on a non partial type | [DDD00005](diagnostics.md#ddd00005) |
+| `[EntityId<T>]` on a record struct that is not `readonly` | [DDD00004](diagnostics.md#ddd00004), a warning |
+| Any of them on a type that is not `partial` | [DDD00005](diagnostics.md#ddd00005) |
 | Any of them on a generic type | [DDD00006](diagnostics.md#ddd00006) |
 | The generated identifier's name is already taken | [DDD00007](diagnostics.md#ddd00007) |
-| A type argument that is neither an identifier nor something one can wrap | [DDD00008](diagnostics.md#ddd00008) |
+| A type argument that is neither an identifier nor something an identifier can wrap | [DDD00008](diagnostics.md#ddd00008) |
 | `[Entity<T>]` and `[AggregateRoot<T>]` on the same class | [DDD00009](diagnostics.md#ddd00009) |
 | A setter on a generated collection property | [DDD00020](diagnostics.md#ddd00020) |
 | A field or property typed as another aggregate root | [DDD00021](diagnostics.md#ddd00021), a warning |
 
-DDD00001, DDD00002, DDD00010, DDD00011 and DDD00013 also fire in more cases than they used to, now
-that a struct or a record struct can carry the attribute at all.
+DDD00001, DDD00002, DDD00010, DDD00011 and DDD00013 also fire in more cases than before, because a struct or a
+record struct can now carry the attribute.
 
-DDD00021 is the one most likely to be noisy on a 2.x model, because 2.x said nothing about an
-`Order.Customer` navigation and this release says it widens the aggregate boundary. It is a warning,
-everything is still generated, and [Reference other aggregates by
-id](entities-and-aggregates.md#reference-other-aggregates-by-id) has the argument. If you are not
-ready to have it now, turn it off for the project and come back to it:
+DDD00021 is likely to fire often on a 2.x model. 2.x reported nothing for a navigation such as `Order.Customer`.
+3.0 reports that such a navigation widens the aggregate boundary. DDD00021 is a warning, and the generator still
+writes everything. [Reference other aggregates by id](entities-and-aggregates.md#reference-other-aggregates-by-id)
+explains why. To deal with it later, turn it off for the project:
 
 ```xml
 <PropertyGroup>
@@ -429,21 +429,20 @@ ready to have it now, turn it off for the project and come back to it:
 </PropertyGroup>
 ```
 
-Two more exist and neither can fire on an upgraded 2.x solution: [DDD00022](diagnostics.md#ddd00022)
-and [DDD00023](diagnostics.md#ddd00023) are silent until two assemblies declare themselves
-[modules](modules.md). See [section 16](#16-optional-declare-your-modules).
+Two more diagnostics cannot fire on an upgraded 2.x solution. [DDD00022](diagnostics.md#ddd00022) and
+[DDD00023](diagnostics.md#ddd00023) stay silent until two assemblies declare themselves [modules](modules.md)
+([section 16](#16-optional-declare-your-modules)).
 
-They are all real: in 2.x those types were producing nothing, and you were living with whatever the
-missing code did not do. DDD00006 in particular used to produce a second, unrelated, non-generic type
-that compiled on its own, which is why the errors you saw talked about members that "do not exist".
+Each diagnostic points at a real problem. In 2.x those types got no generated code, and the solution ran without
+it. For a generic type (DDD00006), 2.x generated a second, unrelated, non-generic type that compiled on its own.
+That is why the compiler errors named members that "do not exist".
 
-`[DontCompare]` and `[Internal]` are unchanged, and neither has ever reported anything.
-`[DomainEventName]` is new in 3.0 and optional. The full list with a fix for each is in
-[Diagnostics](diagnostics.md).
+`[DontCompare]` and `[Internal]` are unchanged, and report no diagnostics. `[DomainEventName]` is new in 3.0 and
+optional. [Diagnostics](diagnostics.md) lists every diagnostic, with a fix for each.
 
 ## 11. Entities gain an invariant seam
 
-Every `[Entity<T>]` and `[AggregateRoot<T>]` now gets five generated members:
+The generator now writes five members into every `[Entity<T>]` and `[AggregateRoot<T>]`:
 
 ```csharp
 partial void CheckInvariants();
@@ -453,25 +452,24 @@ public override void EnsureOwnInvariants();
 public override IReadOnlyList<InvariantViolation> GetOwnInvariantViolations();
 ```
 
-The first pair of the four answers for the whole aggregate, this object's child entities included; the
-`Own` pair answers for this object alone and exists for a caller that is already walking the graph,
-which in practice means the save. See [Invariants](invariants.md#what-one-question-covers).
+Of the four public methods, `EnsureInvariants` and `GetInvariantViolations` check the whole aggregate, including
+the child entities of this object. The `Own` pair checks this object alone. The `Own` pair is for code that already
+walks the graph, which in practice is the save ([Checking the whole aggregate](invariants.md#checking-the-whole-aggregate)).
 
-Two things follow, one mechanical and one behavioural.
+This has two effects.
 
-**The names are taken.** A 2.x class that already declares a member called `CheckInvariants`,
-`EnsureInvariants`, `GetInvariantViolations`, `EnsureOwnInvariants` or `GetOwnInvariantViolations`
-collides with the generated one. Rename yours; the compiler points at the line. This is rare, but it
-is the only way this feature can stop a build.
+**The names are taken.** A 2.x class that already declares a member named `CheckInvariants`, `EnsureInvariants`,
+`GetInvariantViolations`, `EnsureOwnInvariants` or `GetOwnInvariantViolations` clashes with the generated member.
+Rename your member. The compiler points at the line. This case is rare, and it is the only way this feature can
+break a build.
 
-**A save now runs them.** `UseDDDToolkit` registers an `InvariantInterceptor` that checks every entity
-a `SaveChanges` adds or modifies, child entities included, and the aggregate root of every changed
-child. Until you state a rule those calls do nothing at all:
-the compiler erases an unimplemented `partial void` and every call to it, so an unchanged 2.x
-aggregate behaves exactly as before and costs nothing. You only notice the interceptor once you write
-a rule.
+**A save now runs them.** `UseDDDToolkit` registers an `InvariantInterceptor`. Before every `SaveChanges`, it
+checks every entity that the save adds or modifies, child entities included, and the aggregate root of every
+changed child. Until you write a rule, those calls do nothing. The compiler removes a `partial void` without an
+implementation, and every call to it. So an unchanged 2.x aggregate behaves as before, and the check costs
+nothing. You notice the interceptor only once you write a rule.
 
-There is nothing to switch on and nothing to migrate. When you are ready to use it:
+There is nothing to turn on and nothing to migrate. A rule looks like this:
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -487,19 +485,17 @@ public partial class Order
 }
 ```
 
-A rule that the data in your database already breaks will start failing saves of those rows. The
-interceptor only checks aggregates the save touches, so nothing breaks on load, but it is worth
-running the rule over production data as a query before you deploy it. See
-[Invariants](invariants.md).
+A rule that existing data already breaks makes the saves of those rows fail. The interceptor checks only the
+aggregates that a save touches, so loading still works. Run the rule as a query over production data before you
+deploy it ([Invariants](invariants.md)).
 
 ## 12. Package versions
 
 ### The package ids
 
-3.x is published as `Temp.DDDToolkit`, `Temp.DDDToolkit.EntityFramework` and so on, for now.
-The nuget.org account that owns the `DDDToolkit.*` ids cannot publish at the moment, so updating
-`DDDToolkit` to the latest version still gets you 2.0.22. Swap each reference for the prefixed id
-instead:
+For now, 3.x is published as `Temp.DDDToolkit`, `Temp.DDDToolkit.EntityFramework` and so on. The nuget.org account
+that owns the `DDDToolkit.*` ids cannot publish at the moment. So updating `DDDToolkit` to the latest version still
+gives you 2.0.22. Replace each reference with the prefixed id instead:
 
 ```xml
 <!-- 2.0.22 -->
@@ -511,10 +507,12 @@ instead:
 <PackageReference Include="Temp.DDDToolkit.EntityFramework" Version="3.0.0" />
 ```
 
-Only the ids changed. The assemblies and namespaces are still `DDDToolkit.*`, so no `using` has to
-move, and the analyzer packages still arrive on their own as dependencies. Keep no 2.0.22 reference
-beside a 3.0.0 one: they are different packages to NuGet, so it will not pick one of the two for you,
-and both would put an assembly named `DDDToolkit` in the build.
+Only the ids changed.
+
+- The assemblies and namespaces are still `DDDToolkit.*`, so no `using` changes.
+- The analyzer packages still arrive as dependencies.
+- Remove every 2.0.22 reference. NuGet sees `DDDToolkit` and `Temp.DDDToolkit` as different packages, so it does
+  not pick one of the two. Both would put an assembly named `DDDToolkit` in the build.
 
 ### The dependencies
 
@@ -525,22 +523,20 @@ and both would put an assembly named `DDDToolkit` in the build.
 | HotChocolate.AspNetCore | 14.0.0-rc.1 | 16.6.6 |
 | HotChocolate.Execution | 14.0.0-rc.1 | replaced by `HotChocolate` 16.6.6 |
 
-Two things to know about the HotChocolate jump.
+Two points about the move to HotChocolate 16:
 
-`HotChocolate.Execution` has no stable 16 release. The execution engine ships in the `HotChocolate`
-package now, so change the reference rather than looking for a newer version of the old one.
+- `HotChocolate.Execution` has no stable 16 release. The execution engine is now in the `HotChocolate` package, so
+  replace the reference.
+- `GraphQLTypeAttribute<TSchemaType>` is constrained on `ITypeDefinition`, which replaced `INamedType`. For a custom
+  scalar type in that attribute, only the constraint changed.
 
-`GraphQLTypeAttribute<TSchemaType>` is constrained on `ITypeDefinition`, which replaced `INamedType`.
-If you named a custom scalar type in that attribute, the constraint is the only thing that changed.
+Your own HotChocolate code meets one more rename on 16.6.6: the type-system configuration classes.
+`DefinitionBase` and `ObjectTypeDefinition` do not exist in the 16.6.6 assemblies. The replacements are
+`TypeSystemConfiguration`, `ObjectTypeConfiguration`, `InterfaceTypeConfiguration`,
+`InputObjectTypeConfiguration` and `FieldConfiguration`, all in `HotChocolate.Types.Descriptors.Configurations`.
+So a `TypeInterceptor` override now takes a `TypeSystemConfiguration`.
 
-If you move your own HotChocolate code onto 16.6.6 alongside the toolkit, one more rename is likely to
-catch you: the type-system configuration classes. `DefinitionBase` and `ObjectTypeDefinition` do not
-exist in the 16.6.6 assemblies. The equivalents are `TypeSystemConfiguration`,
-`ObjectTypeConfiguration`, `InterfaceTypeConfiguration`, `InputObjectTypeConfiguration` and
-`FieldConfiguration`, all in `HotChocolate.Types.Descriptors.Configurations`, so a `TypeInterceptor`
-override now takes a `TypeSystemConfiguration`.
-
-What did not change is the part the toolkit relies on most:
+The parts that the toolkit relies on most did not change:
 
 | Still the same in 16.6.6 | Where |
 |---|---|
@@ -549,27 +545,24 @@ What did not change is the part the toolkit relies on most:
 | `IChangeTypeProvider` and the `ChangeType` delegate | `HotChocolate.Utilities` |
 | `[InterfaceType<T>]` with a `static partial void Configure` | `HotChocolate.Types.Analyzers` |
 
-There is a schema change too. `[Internal]` members are now removed during type discovery rather than
-flagged at completion, so the types they referenced stop appearing in the schema. If your 2.x schema
-contained FluentValidation's `ValidationFailure` or the always-valid twins, they are gone. That is
-the bug being fixed, but check your persisted queries before you deploy. See
-[GraphQL](graphql.md).
+The schema changes too. `[Internal]` members are now removed during type discovery. In 2.x they were only flagged
+at completion. So the types that they referenced no longer appear in the schema. If your 2.x schema had
+FluentValidation's `ValidationFailure` or the always-valid twins, those types are gone. That fixes a bug, but check
+your persisted queries before you deploy ([GraphQL](graphql.md)).
 
 ## 13. MediatR is replaced by Mediator in the examples
 
-MediatR is commercially licensed from version 13, which is why the repository stayed on a 12.x version. The
-examples now publish through [Mediator](https://github.com/martinothamar/Mediator), which is MIT and
-source generated, and there is a `DDDToolkit.Mediator` package that writes the dispatch delegate for
-you:
+MediatR has a commercial license from version 13, so the repository stayed on 12.x. The examples now publish
+through [Mediator](https://github.com/martinothamar/Mediator), which is MIT licensed and source generated. The
+`DDDToolkit.Mediator` package writes the dispatch delegate for you:
 
 ```csharp
 builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 ```
 
-**You do not have to move.** The toolkit core has never had a mediator dependency and still does not:
-in-process delivery is a delegate, and both packages fit it. If you are staying on MediatR, keep your
-delegate and change only its signature:
+**Moving is optional.** The core package has no mediator dependency. In-process delivery is a delegate, and both
+libraries fit it. To stay on MediatR, keep your delegate and change only its signature:
 
 ```csharp
 options.DispatchInProcess(async (sp, events, cancellationToken) =>
@@ -579,19 +572,21 @@ options.DispatchInProcess(async (sp, events, cancellationToken) =>
 });
 ```
 
-If you do move, the differences that bite are that Mediator is source generated, so `AddMediator` has
-to be called in the assembly that carries `Mediator.SourceGenerator`, and that its default service
-lifetime is singleton. A handler that injects your `DbContext` needs `ServiceLifetime.Scoped`, and
-the generator reads that from the `AddMediator` call at compile time, so it has to be written there.
+If you move, two differences matter:
 
-An event that does not implement Mediator's `INotification` makes `DispatchWithMediator()` throw
-naming the event type. It is not skipped: the interceptor has already dequeued the event by then, so
-skipping would destroy it with no row, no log and nothing to retry.
+- Mediator is source generated, so call `AddMediator` in the assembly that references `Mediator.SourceGenerator`.
+- Its default service lifetime is singleton. A handler that injects your `DbContext` needs
+  `ServiceLifetime.Scoped`. The generator reads the lifetime from the `AddMediator` call at compile time, so set it
+  there.
+
+`DispatchWithMediator()` throws for an event that does not implement Mediator's `INotification`, and names the
+event type. It does not skip the event, because the interceptor has already dequeued it. A skipped event would be
+lost, with no row, no log and nothing to retry.
 
 ## 14. Optional: make your identifiers structs
 
-`[EntityId<T>]` now accepts a `readonly partial record struct`, and that is the recommended shape.
-The identifier costs no allocation and gets a fuller surface than the record form:
+`[EntityId<T>]` now accepts a `readonly partial record struct`, and that is the recommended shape. A struct
+identifier allocates nothing, and the generator writes more members for it than for the record form:
 
 ```csharp
 [EntityId<Guid>("ORD")]
@@ -603,32 +598,33 @@ public partial record OrderId;                          // 2.x, still works
 public readonly partial record struct OrderId;          // 3.0, recommended
 ```
 
-A struct identifier gets `Value`, `Empty`/`IsEmpty`, `CreateUnique`/`CreateSequential`, `ToString()`
-with the prefix, `Parse`/`TryParse`, `IParsable<T>`, `IComparable<T>`, explicit conversions and a
-JSON converter.
+For a struct identifier, the generator writes `Value`, `Empty`/`IsEmpty`, `CreateUnique`/`CreateSequential`,
+`ToString()` with the prefix, `Parse`/`TryParse`, `IParsable<T>`, `IComparable<T>`, explicit conversions and a JSON
+converter.
 
-The column does not change. Both forms store the wrapped value, so a `Guid` id is a `Guid` column
-either way and no migration is needed.
+The column does not change. Both forms store the wrapped value, so a `Guid` id is a `Guid` column either way, and
+no migration is needed.
 
-Two things do change. A struct has no `null`, so a property that used `null` to mean "not set" uses
-`OrderId?` or `IsEmpty` instead. And a struct identifier has no always-valid twin, because there is
-no invalid state to exclude.
+Two things change:
 
-While you are there, you can often delete the declaration entirely. An identifier used only by its
-own aggregate can be generated from the aggregate:
+- A struct has no `null`. A property that used `null` for "not set" uses `OrderId?` or `IsEmpty` instead.
+- A struct identifier has no always-valid twin, because it has no invalid state.
+
+You can often delete the declaration. For an identifier that only its own aggregate uses, the generator writes
+the identifier from the aggregate:
 
 ```csharp
 [AggregateRoot<Guid>("ORD")]
 public partial class Order { }       // also generates OrderId
 ```
 
-Keep the explicit declaration for an identifier that other aggregates, DTOs or API contracts refer
-to. See [Identifiers](identifiers.md).
+Keep the explicit declaration for an identifier that other aggregates, DTOs or API contracts use. See
+[Identifiers](identifiers.md).
 
 ## 15. Optional: let the generator write your collections
 
-A get-only `partial` collection property gets a backing field, a read-only view and Entity Framework's
-`[BackingField]`:
+For a get-only `partial` collection property, the generator writes a backing field, a read-only view and Entity
+Framework's `[BackingField]`:
 
 ```csharp
 private readonly List<OrderLine> _lines = new();                   // 2.x
@@ -639,25 +635,24 @@ public IReadOnlyList<OrderLine> Lines => _lines.AsReadOnly();
 public partial IReadOnlyList<OrderLine> Lines { get; }             // 3.0
 ```
 
-`_lines` still exists, written by the generator, so the rest of the aggregate does not change. This
-is worth doing mostly where 2.x code exposed the list itself:
+The generator writes `_lines`, so the rest of the aggregate does not change. This helps most where 2.x code
+exposed the list itself:
 
 ```csharp
 public List<Order> Orders { get; private set; } = new();           // any caller can Add
 public partial IReadOnlyList<Order> Orders { get; }                // only the aggregate can
 ```
 
-`IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `IEnumerable<T>` and `IReadOnlySet<T>` are supported.
-A setter is an error ([DDD00020](diagnostics.md#ddd00020)). See
+`IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `IEnumerable<T>` and `IReadOnlySet<T>` are supported. A setter is an
+error ([DDD00020](diagnostics.md#ddd00020)). See
 [Entities and aggregates](entities-and-aggregates.md#read-only-collections).
 
 ## 16. Optional: declare your modules
 
-This one has no 2.x equivalent at all, so there is nothing to migrate and nothing that breaks until
-you ask for it. If your solution is a modular monolith, it is the most valuable thing in this release
-that the compiler will not hand you.
+Modules have no 2.x equivalent, so there is nothing to migrate, and nothing breaks until you declare a module. For
+a modular monolith, this is the most useful part of this release that you turn on yourself.
 
-Mark an assembly as a module and say what it publishes:
+Mark an assembly as a module, and mark what it publishes:
 
 ```csharp
 [assembly: Module("Ordering")]
@@ -669,143 +664,139 @@ Mark an assembly as a module and say what it publishes:
 public readonly partial record struct CustomerId;
 ```
 
-An analyzer then reports where one module names another module's unpublished type
-([DDD00022](diagnostics.md#ddd00022)) or holds another module's entity as stored state
-([DDD00023](diagnostics.md#ddd00023)). Both are warnings and both are silent unless *both* assemblies
-carry `[assembly: Module]`, so adding the attribute to one project changes nothing, and adding it to
-a second gives you a list rather than a build break.
+An analyzer then reports where one module names a type that another module does not publish
+([DDD00022](diagnostics.md#ddd00022)), or stores an entity of another module ([DDD00023](diagnostics.md#ddd00023)).
+Both are warnings. Both stay silent unless *both* assemblies carry `[assembly: Module]`. So the attribute on one
+project changes nothing, and the attribute on a second project gives you a list of warnings and no broken build.
 
-`DDD_Module`, the MSBuild property that names the generated `Add{Module}Converters` method, declares the
-module as well from 3.2 on: the build writes the attribute from it, so a project that sets it to name its
-methods is a module ([A module named by its folder](modules.md#a-module-named-by-its-folder)). A project
-that declares the attribute itself has its generated code named after it, whatever the property says. Adopt one
-project at a time; [Modules](modules.md#adopting-this-on-an-existing-codebase) has the order to do it in.
+From 3.2 on, `DDD_Module` also declares the module. `DDD_Module` is the MSBuild property that names the generated
+`Add{Module}Converters` method. The build writes the attribute from it, so a project that sets `DDD_Module` is a
+module ([A module named by its folder](modules.md#a-module-named-by-its-folder)). In a project that declares the
+attribute itself, the attribute names the generated code, whatever the property says. Adopt modules one project at
+a time. [Modules](modules.md#adopting-modules-in-an-existing-codebase) gives the order.
 
 ## From an earlier 3.0 build
 
-Skip this if you are coming from 2.0.22. Three things changed while 3.0 was being built, after some
-databases had already been created with it. A fourth came in 3.1.0 and renames generated methods.
+Skip this section for an upgrade from 2.0.22. Three things changed during the 3.0 builds, after some databases had
+already been created with them. A fourth change came in 3.1.0 and renames generated methods.
 
 ### Outbox and inbox timestamps
 
-**On PostgreSQL, nothing happens.** Npgsql maps both a UTC `DateTime` and a `DateTimeOffset` to
-`timestamptz`. The column is the same column and the bytes in it are the same bytes. There is no
-migration to write.
+**On PostgreSQL, nothing changes.** Npgsql maps both a UTC `DateTime` and a `DateTimeOffset` to `timestamptz`. The
+column and its bytes stay the same, so there is no migration to write.
 
-**On SQL Server the column type changes**, from `datetime2` to `datetimeoffset`. Scaffolding a
-migration after upgrading produces an `ALTER COLUMN` for each timestamp column of the outbox and the
-inbox. The stored instant is preserved: SQL Server reads an existing `datetime2` as the same time at
-`+00:00`, which is correct because every value the outbox ever wrote was already UTC. So the meaning
-of a row does not change, but the table does, and you have to run the migration.
+**On SQL Server, the column type changes** from `datetime2` to `datetimeoffset`. A migration scaffolded after the
+upgrade has an `ALTER COLUMN` for each timestamp column of the outbox and the inbox. The stored instant stays the
+same. SQL Server reads an existing `datetime2` as the same time at `+00:00`, which is correct, because the outbox
+always wrote UTC values. So the meaning of a row does not change, but the table does, and you must run the
+migration.
 
-If you would rather not, keep the old shape explicitly:
+To keep the old shape instead, say so explicitly:
 
 ```csharp
 modelBuilder.AddDomainEventOutbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
 modelBuilder.AddDomainEventInbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
 ```
 
-That produces exactly the columns you have, on every provider, and no migration at all.
+That keeps the columns you have, on every provider, and needs no migration.
 
-If you upgrade the code on SQL Server and do neither of those things, **reading the outbox throws**.
-The insert still works, because SQL Server converts the parameter into the column it has, and the
-instant it stores is correct. The read does not: `datetime2` comes back from the driver as a
-`DateTime`, the model wants a `DateTimeOffset`, and you get an `InvalidCastException` on the first
-row.
+If you upgrade the code on SQL Server and do neither, **reading the outbox throws**. The insert still works,
+because SQL Server converts the parameter to the type of the column, and stores the correct instant. The read
+fails. The driver returns a `datetime2` as a `DateTime`, the model expects a `DateTimeOffset`, and the first row
+throws `InvalidCastException`.
 
-That is the good outcome, and it is why this is safe to ship. An unmigrated database says so the first
-time the processor polls, rather than quietly disagreeing with the model. Both halves are asserted
-against a real SQL Server in `Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`.
+That failure is intended. A database without the migration fails the first time the processor polls, so it cannot
+differ from the model unnoticed. `Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`
+tests both halves against a real SQL Server.
 
-Rows written before you notice are fine. The value that reached the column was already the right
-instant, so running the migration afterwards needs no data repair.
+Rows written before you notice are correct. The column already holds the right instant, so the migration needs no
+data repair afterwards.
 
-**On SQLite, nothing happens**, because SQLite never had a choice.
+**On SQLite, nothing changes.** The toolkit always stores a UTC `DateTime` on SQLite, because SQLite cannot order
+by a `DateTimeOffset`.
 
-See [Timestamps](event-delivery.md#timestamps) for what each provider gets now.
+[Timestamps](event-delivery.md#timestamps) lists the column type of each provider.
 
 ### The outbox `Version` column
 
-An outbox table that predates the `Version` column needs it added as a non-nullable `int` with a
-default of 1, which is what every existing row was written as. A column added without a default reads
-as 0, and the processor treats that as 1 for the same reason, so an upgrade that forgets the default
-still works. See [Versioning and upcasting](integration-events.md#versioning-and-upcasting).
+An outbox table from before the `Version` column needs that column, as a non-nullable `int` with a default of 1.
+Every existing row was written as version 1. A column added without a default reads as 0, and the processor treats
+0 as 1. So an upgrade that forgets the default still works
+([Versioning and upcasting](integration-events.md#versioning-and-upcasting)).
 
 ### The outbox `NextAttemptAt` column
 
-An outbox table that predates `NextAttemptAt` needs it added as a nullable column of the same type as
-`ProcessedAt`, without an index. A scaffolded migration writes exactly that. Existing rows read `null`,
-which means due now, so no row has to change. See
-[Failures, retries and poison messages](event-delivery.md#failures-retries-and-poison-messages).
+An outbox table from before `NextAttemptAt` needs that column: nullable, of the same type as `ProcessedAt`, and
+without an index. A scaffolded migration writes this. Existing rows read `null`, which means due now, so no row
+changes ([Failures, retries and poison messages](event-delivery.md#failures-retries-and-poison-messages)).
 
 ### The names of generated registrations
 
-Up to 3.0.1, `Add{Module}Converters`, `Add{Module}IntegrationEvents` and
-`Add{Module}GraphQlRuntimeBindings` took their name from `DDD_Module` and never looked at
-`[assembly: Module]`. Now the attribute wins, as it always did for `{Module}EventNames`, and
-`DDD_Module` is the default beneath it. A project without the attribute sees no change. A project
-with it has three cases:
+Up to 3.0.1, `Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` took
+their name from `DDD_Module` and ignored `[assembly: Module]`. Now the attribute wins, as it always did for
+`{Module}EventNames`. `DDD_Module` is the default when there is no attribute. A project without the attribute sees
+no change. A project with the attribute has three cases:
 
-| The project has | Before | Now | What to do |
-|---|---|---|---|
-| `[assembly: Module("Ordering")]` and `<DDD_Module>Ordering</DDD_Module>` | `AddOrderingConverters` | `AddOrderingConverters` | Nothing. The property can go. |
-| The attribute and no `DDD_Module` | `AddAcmeOrderingConverters`, after the assembly | `AddOrderingConverters` | Rename the calls. |
-| The attribute and another `DDD_Module`, such as `OrderingContracts` in a contracts project | `AddOrderingContractsConverters` | `AddOrderingConverters` | Rename the calls in other modules, and remove the call in the module itself. |
+- **The attribute and the same `DDD_Module`**, such as `[assembly: Module("Ordering")]` and
+  `<DDD_Module>Ordering</DDD_Module>`. The method is `AddOrderingConverters` before and after. Nothing changes,
+  and the property can go.
+- **The attribute and no `DDD_Module`.** The method was `AddAcmeOrderingConverters`, named after the assembly, and
+  is now `AddOrderingConverters`. Rename the calls.
+- **The attribute and another `DDD_Module`**, such as `OrderingContracts` in a contracts project. The method was
+  `AddOrderingContractsConverters`, and is now `AddOrderingConverters`. Rename the calls in other modules, and
+  remove the call in the module itself.
 
-The last row is the contracts project of a module. Its methods now have the same name as the
-module's, and the module's call the contracts' ones, so the module's context and schema make one call
-where they made two. Remove the `using` for the contracts' generated namespace along with the call, or
-the one that is left is ambiguous. The build points at every place: a call to a name that no longer
-exists is CS1061, and two imported classes that declare one method is CS0121.
+The last case is the contracts project of a module. Its methods now have the same names as the methods of the
+module, and the module's methods call those of the contracts. So the module's context and schema make one call
+instead of two. Remove the `using` for the generated namespace of the contracts together with the call. Otherwise
+the remaining call is ambiguous. The build points at every place. A call to a name that no longer exists is
+`CS1061`, and two imported classes that declare the same method give `CS0121`.
 
 ## What did not change
 
 - `[ValueObject]` and `[SingleValueObject<T>]` keep their shape, their `Valid` twin, `ToValid()` and
   `InvalidValueObjectException`.
-- `[DontCompare]` and `[Internal]` mean what they always meant.
+- `[DontCompare]` and `[Internal]` work as before.
 - The `ColumnLength` argument of `[EntityId<T>]` still becomes `HaveMaxLength`.
-- The generated `Add{Module}Converters` keeps its name and its place, and `DDD_Module` still names it
-  in every project that does not declare `[assembly: Module]`.
-- `Entity<TId>.Id` still has a `protected set`, so a 2.x constructor that wrote `Id = id` after
-  `base()` still compiles. `base(id)` is the better form.
-- Validation still runs through `protected bool Validate()`, or a generated body when
-  `DDDToolkit.FluentValidation` is referenced. There is a second overload now,
-  `protected override void Validate(ValidationErrorBuilder errors)`, and a non-throwing `TryToValid`
-  beside `ToValid()`, but nothing you already wrote has to move. See
-  [Failure handling](value-objects.md#failure-handling).
-- Everything about integration events, sinks, the inbox, versioning and modules is new surface. None
-  of it is on unless you call for it, and none of it replaces anything 2.x had.
+- The generated `Add{Module}Converters` keeps its name and its place, and `DDD_Module` still names it in every
+  project that does not declare `[assembly: Module]`.
+- `Entity<TId>.Id` still has a `protected set`, so a 2.x constructor that wrote `Id = id` after `base()` still
+  compiles. `base(id)` is the better form.
+- Validation still runs through `protected bool Validate()`, or through a generated body when
+  `DDDToolkit.FluentValidation` is referenced. The second overload
+  `protected override void Validate(ValidationErrorBuilder errors)` is new, and so is `TryToValid`, which does not
+  throw, next to `ToValid()`. Nothing you already wrote has to change
+  ([Failure handling](value-objects.md#failure-handling)).
+- Integration events, sinks, the inbox, versioning and modules are new. Each is off until you turn it on, and none
+  replaces a 2.x feature.
 
-One behaviour inside value objects did change, quietly and for the better. In 2.x, `record with` on a
-value object copied the cached validity verdict, so a copy reported its source's verdict even when
-the property that changed was the one that had been validated. A copy now revalidates on demand. If
-you had a workaround for that, remove it.
+One behavior of value objects did change. In 2.x, `record with` on a value object copied the cached validation
+result. So a copy reported the result of its source, even when the changed property was the one that had been
+validated. A copy now validates again when asked. Remove any workaround for this.
 
-## A checklist
+## Checklist
 
 1. Retarget every project to `net10.0` and pin the SDK.
 2. Update the package references: `DDDToolkit.*` to `Temp.DDDToolkit.*` 3.0.0, and
    `HotChocolate.Execution` to `HotChocolate`.
 3. Build. Fix the `IDomainEvent` errors by deriving your events from `DomainEvent`.
-4. Fix the `AddDomainEvent` errors by renaming to `RaiseDomainEvent` inside aggregates, and by giving
-   the aggregate a method where the call was outside one.
+4. Fix the `AddDomainEvent` errors. Rename the call to `RaiseDomainEvent` inside aggregates, and give the
+   aggregate a method where the call was outside one.
 5. Move any events raised by child entities up to their root.
-6. Fix the `ClearDomainEvents` errors with a cast to `IHasDomainEvents`, or delete the code and use
-   the interceptor.
-7. Fix whatever diagnostics the generators report. Read the message; each one names the type.
-   DDD00021 is a warning about aggregate references and can wait behind a `NoWarn` if the list is
-   long.
-8. Rename any member of your own called `CheckInvariants`, `EnsureInvariants`,
-   `GetInvariantViolations`, `EnsureOwnInvariants` or `GetOwnInvariantViolations`; all five names are
-   now generated onto every entity.
-9. Replace `UseDomainEvents(...)` and `AddDomainEventInterceptor(...)` with
-   `AddDDDToolkitEntityFramework(...)` and `UseDDDToolkit(...)`.
+6. Fix the `ClearDomainEvents` errors with a cast to `IHasDomainEvents`, or delete the code and use the
+   interceptor.
+7. Fix the diagnostics that the generators report. Each message names the type. DDD00021 is a warning about
+   references to other aggregates, and can wait behind a `NoWarn` if the list is long.
+8. Rename any member of your own named `CheckInvariants`, `EnsureInvariants`, `GetInvariantViolations`,
+   `EnsureOwnInvariants` or `GetOwnInvariantViolations`. The generator now writes all five names into every
+   entity.
+9. Replace `UseDomainEvents(...)` and `AddDomainEventInterceptor(...)` with `AddDDDToolkitEntityFramework(...)` and
+   `UseDDDToolkit(...)`.
 10. Add `AddDDDToolkitConventions()` to `ConfigureConventions`.
 11. Scaffold a migration for the `Version` column.
-12. Read section 6 and decide, per handler, whether it can run before the commit. Move the ones that
-    cannot to the outbox.
-13. Run your tests. Then, before you deploy, look at your GraphQL schema and your persisted queries.
+12. Read section 6, and decide for each handler whether it can run before the commit. Move the handlers that cannot
+    to the outbox.
+13. Run your tests. Then, before you deploy, check your GraphQL schema and your persisted queries.
 
-Nothing on that list is the new surface. Invariants, integration events, sinks, the inbox and modules
-are all opt-in, and none of them is worth turning on in the same change as the upgrade. Get green
-first.
+The list turns on no new feature. Invariants, integration events, sinks, the inbox and modules are all opt-in.
+Turn them on in a later change, after the upgrade builds and its tests pass.

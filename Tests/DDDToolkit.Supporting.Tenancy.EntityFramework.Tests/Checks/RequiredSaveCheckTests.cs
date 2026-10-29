@@ -38,7 +38,7 @@ public sealed class RequiredSaveCheckTests
             widgets.GetService<IRelationalDatabaseCreator>().CreateTables();
 
             // A seat of one tenant saves a widget of another: refused at the first save, without any start-up check run.
-            using (TenancyCallers.Begin(HostCaller.InSeat(new TenantId(71), SeatId.CreateSequential())))
+            using (TenancyUsers.Begin(HostUser.InSeat(new TenantId(71), SeatId.CreateSequential())))
             {
                 widgets.Widgets.Add(new Widget { Id = Guid.NewGuid(), TenantId = new TenantId(72), UnitId = OrganizationUnitId.CreateSequential(), Name = "not ours" });
                 await FluentActions.Awaiting(() => widgets.SaveChangesAsync(Cancellation)).Should().ThrowAsync<InvalidOperationException>().WithMessage(Refusal);
@@ -62,7 +62,7 @@ public sealed class RequiredSaveCheckTests
 
         await using var scope = services.Scope();
         var widgets = scope.ServiceProvider.GetRequiredService<TestWidgetContext>();
-        using (TenancyCallers.Begin(HostCaller.InSeat(new TenantId(71), SeatId.CreateSequential())))
+        using (TenancyUsers.Begin(HostUser.InSeat(new TenantId(71), SeatId.CreateSequential())))
         {
             widgets.Widgets.Add(new Widget { Id = Guid.NewGuid(), TenantId = new TenantId(71), UnitId = OrganizationUnitId.CreateSequential(), Name = "ours" });
             await FluentActions.Awaiting(() => widgets.SaveChangesAsync(Cancellation)).Should().ThrowAsync<InvalidOperationException>().WithMessage(
@@ -96,7 +96,7 @@ public sealed class RequiredSaveCheckTests
 
             // Harbor saves a widget of its own; the part adds one of orchard's to the same save.
             addsARow.Tenant = orchard.Tenant;
-            using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
+            using (TenancyUsers.Begin(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat)))
             {
                 widgets.Widgets.Add(new Widget { Id = Guid.NewGuid(), TenantId = harbor.Tenant, UnitId = harbor.RootUnit, Name = "ours" });
                 await Refused.WithCodeAsync(TenancyRefusals.OtherTenant, () => widgets.SaveChangesAsync(Cancellation));

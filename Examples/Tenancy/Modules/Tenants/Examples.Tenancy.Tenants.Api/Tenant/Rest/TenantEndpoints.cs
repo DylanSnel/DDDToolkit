@@ -24,15 +24,26 @@ internal static class TenantEndpoints
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        // Flat to hierarchical, never back. The tenant gains the roles of the packs seeded for the new shape it lacks.
-        group.MapPost("/tenancy/shape", async (NewShape body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new ChangeTenantShape(body.Shape), cancellationToken);
-            return Results.NoContent();
-        });
+        // Flat to hierarchical, never back. The tenant gains the roles of the starter roles seeded for the new shape it lacks.
+        // The answer is the tenant as the command answers it, in its new shape.
+        group.MapPost("/tenancy/shape", async (NewShape body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new ChangeTenantShape(body.Shape), cancellationToken))));
 
         return group;
     }
+
+    /// <summary>
+    /// A tenant as every answer of this project writes it: its id, its slug, its shape and its status, the fields of
+    /// its GraphQL type. Inside this project <c>Tenant</c> is a feature's namespace, so the class is named from the
+    /// domain project's.
+    /// </summary>
+    internal static object Describe(Domain.Aggregates.Tenants.Tenant tenant) => new
+    {
+        tenant.Id,
+        slug = tenant.Slug.Value,
+        tenant.Shape,
+        tenant.Status,
+    };
 
     /// <summary>The new shape, by name (<c>"hierarchical"</c>), as the host spells every enum value.</summary>
     public sealed record NewShape([property: JsonRequired] TenantShape Shape);

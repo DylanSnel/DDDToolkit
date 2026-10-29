@@ -6,7 +6,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 
 /// <summary>
 /// Makes new instances of the application's own Tenancy classes, which the package cannot name, and puts
-/// them in their first state with their creation event raised. The use cases create through these, and so
+/// them in their first state with their creation event raised. The managers create through these, and so
 /// can tests, seeding and imports.
 /// <para>
 /// There are no factories to write. Each class is made through the parameterless constructor the generator
@@ -15,7 +15,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// handler of the creation event.
 /// </para>
 /// <para>
-/// Each takes who makes the instance, <c>by</c>, for its creation event: the use cases pass the actor of their
+/// Each takes who makes the instance, <c>by</c>, for its creation event: the managers pass the actor of their
 /// caller, and seeding or an import that names nobody leaves it out.
 /// </para>
 /// <code>
@@ -99,8 +99,8 @@ public static class TenancyInstances
 
     /// <summary>
     /// A new active role, its permissions expanded from the catalogue, with <see cref="RoleCreated{TTenantId, TRoleId, TSeatId}"/>
-    /// raised. A role made from a pack remembers the pack's permissions as the catalogue builds it, whatever permissions the draft
-    /// gives the role: an import's own permissions are the tenant's, and a later sync of the packs leaves them as they are.
+    /// raised. A role made from a starter role remembers the starter role's permissions as the catalogue builds it, whatever permissions the draft
+    /// gives the role: an import's own permissions are the tenant's, and a later sync of the starter roles leaves them as they are.
     /// </summary>
     /// <typeparam name="TRole">The application's role class.</typeparam>
     /// <typeparam name="TRoleId">The application's role id.</typeparam>
@@ -108,7 +108,7 @@ public static class TenancyInstances
     /// <typeparam name="TSeatId">The application's seat id, which the actor on the creation event is closed over.</typeparam>
     /// <param name="id">Its id.</param>
     /// <param name="tenantId">The tenant it belongs to.</param>
-    /// <param name="draft">Its name, description, permissions and the pack it comes from.</param>
+    /// <param name="draft">Its name, description, permissions and the starter role it comes from.</param>
     /// <param name="catalogue">The catalogue its permissions come from.</param>
     /// <param name="by">Who makes it, for its creation event; <see langword="null"/> when nobody is named.</param>
     /// <exception cref="Exceptions.RefusalException"><c>tenancy.name-invalid</c> or <c>tenancy.unknown-permission</c>.</exception>
@@ -127,7 +127,7 @@ public static class TenancyInstances
     /// <summary>
     /// A new open invitation, with
     /// <see cref="InvitationIssued{TTenantId, TInvitationId, TUnitId, TRoleId, TSeatId}"/> raised. It has no token:
-    /// the use case that issues an invitation makes one and hands its digest to the store with the invitation, so
+    /// the manager that issues an invitation makes one and hands its digest to the store with the invitation, so
     /// an invitation made here and saved by hand is one nobody can accept.
     /// </summary>
     /// <typeparam name="TInvitation">The application's invitation class.</typeparam>

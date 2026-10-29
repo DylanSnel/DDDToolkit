@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Tenancy.Access;
@@ -160,12 +161,79 @@ public class RequirementAttributeGenerationTests
     }
 
     [Fact]
-    public void A_query_for_operators_answers_RequiresOperator()
+    public void A_request_for_operators_answers_Operator()
     {
-        var result = Module("[RequiresOperator] public sealed record AllLedgers : IBillingRequest;").RunCore();
+        var result = Module("[Operator] public sealed record AllLedgers : IBillingRequest;").RunCore();
 
         result.ShouldCompile();
-        Asked(result, "AllLedgers").Should().Be(TenancyAccess.RequiresOperator());
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain(Hint, "global::Shop.Billing.AllLedgers => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.Operator(),");
+        Asked(result, "AllLedgers").Should().Be(TenancyAccess.Operator());
+    }
+
+    [Theory]
+    [InlineData("public sealed record SuspendLedgers([ForTenant] TenantId Tenant, string Reason) : IBillingRequest;", "a positional parameter of a record")]
+    [InlineData("public sealed record SuspendLedgers([property: ForTenant] TenantId Tenant, string Reason) : IBillingRequest;", "the property a positional parameter declares")]
+    [InlineData("public sealed class SuspendLedgers(TenantId tenant, string reason) : IBillingRequest { [ForTenant] public TenantId Tenant { get; } = tenant; public string Reason { get; } = reason; }", "an ordinary property")]
+    public void An_operators_request_reads_the_tenant_its_ForTenant_member_names(string request, string marked)
+    {
+        var result = Module("[Operator]\n" + request).RunCore();
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain(Hint, "global::Shop.Billing.SuspendLedgers request => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.Operator(request.Tenant),", marked);
+
+        var tenant = Guid.NewGuid();
+        var emitted = result.Emit();
+        var asked = ((IRequireAccess)emitted.New("Shop.Billing.SuspendLedgers", IdOf(emitted, "TenantId", tenant), "unpaid")).RequiredAccess;
+        asked.GetType().Name.Should().Be("OperatorIn`1");
+        asked.ToString().Should().Contain(tenant.ToString()).And.Contain("tenancy", "the work runs in Tenancy's own scope unless the request names another");
+    }
+
+    [Fact]
+    public void What_Operator_says_of_its_work_is_handed_to_the_call_by_name()
+    {
+        var result = Module(
+            """
+            [Operator(Tenant = OperatorTenant.FromRequest, Scope = "billing")] public sealed record CloseLedgers : IBillingRequest;
+            [Operator(Scope = "billing")] public sealed record ReopenLedgers([ForTenant] TenantId Tenant) : IBillingRequest;
+            """).RunCore();
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain(
+            Hint,
+            "global::Shop.Billing.CloseLedgers => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.Operator(tenant: (global::DDDToolkit.Supporting.Tenancy.Access.OperatorTenant)(1), scope: \"billing\"),",
+            "a property set on the attribute goes to the parameter of its name");
+        result.ShouldContain(Hint, "global::Shop.Billing.ReopenLedgers request => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.Operator(request.Tenant, scope: \"billing\"),", "after the members it reads");
+        Asked(result, "CloseLedgers").Should().Be(TenancyAccess.Operator(OperatorTenant.FromRequest, "billing"));
+    }
+
+    [Fact]
+    public void ForTenant_without_Operator_is_DDD00102()
+    {
+        var result = Module("[InTenant] public sealed record SuspendLedgers([ForTenant] TenantId Tenant) : IBillingRequest;").RunCore();
+
+        result.ShouldHaveExactlyDiagnostics("DDD00102");
+        result.ShouldHaveDiagnostic("DDD00102", "ForTenant").GetMessage(System.Globalization.CultureInfo.InvariantCulture).Should()
+            .Contain("'SuspendLedgers' marks 'Tenant' [ForTenant], which goes with [Operator], and carries no [Operator]");
+        result.ShouldNotContain(Hint, "SuspendLedgers", "no line is written for a request whose marker is read by nothing");
+    }
+
+    [Fact]
+    public void ForTenant_twice_is_DDD00102_and_on_another_id_DDD00081()
+    {
+        var twice = Module("[Operator] public sealed record MoveLedgers([ForTenant] TenantId From, [ForTenant] TenantId To) : IBillingRequest;").RunCore();
+        twice.ShouldHaveExactlyDiagnostics("DDD00102");
+        twice.ShouldHaveDiagnostic("DDD00102", "ForTenant").GetMessage(System.Globalization.CultureInfo.InvariantCulture).Should().Contain("marks 'From' and 'To' [ForTenant]: the call takes it once");
+
+        var nullable = Module("[Operator] public sealed record SuspendLedgers([ForTenant] TenantId? Tenant) : IBillingRequest;").RunCore();
+        nullable.ShouldHaveExactlyDiagnostics("DDD00081");
+
+        var seat = OverTheDomain("[Operator] public sealed record SuspendLedgers([ForTenant] SeatId Tenant) : IBillingRequest;").RunCore();
+        seat.ShouldHaveExactlyDiagnostics("DDD00081");
+        seat.ShouldHaveDiagnostic("DDD00081", "ForTenant").GetMessage(System.Globalization.CultureInfo.InvariantCulture).Should()
+            .Contain("'SuspendLedgers' marks 'Tenant' [ForTenant], which is a 'SeatId': it marks 'TenantId', the id of the [TenantAggregate<TTenantId>] class this project sees");
     }
 
     [Fact]
@@ -536,9 +604,9 @@ public class RequirementAttributeGenerationTests
 
             public static class Probe
             {
-                public static async System.Threading.Tasks.Task<string> SendAsync(ICallerAccessor callers)
+                public static async System.Threading.Tasks.Task<string> SendAsync(DDDToolkit.Abstractions.Access.ICurrentUser user)
                 {
-                    var behavior = new BillingAccessBehavior<MyInvoices, Mediator.Unit>(new AccessChecks<IBillingRequest>(new IAccessCheck[] { new CallerAccessCheck(callers) }));
+                    var behavior = new BillingAccessBehavior<MyInvoices, Mediator.Unit>(new AccessChecks<IBillingRequest>(new IAccessCheck[] { new CurrentUserAccessCheck(user) }));
                     try
                     {
                         await behavior.Handle(new MyInvoices(), (message, cancellationToken) => new System.Threading.Tasks.ValueTask<Mediator.Unit>(Mediator.Unit.Value), System.Threading.CancellationToken.None);
@@ -555,19 +623,23 @@ public class RequirementAttributeGenerationTests
 
         result.ShouldCompile();
         var emitted = result.Emit();
-        var signedIn = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", new Answering(DDDToolkit.Abstractions.Access.Caller.User(Guid.NewGuid())))!;
-        var anonymous = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", new Answering(DDDToolkit.Abstractions.Access.Caller.Anonymous))!;
-        var system = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", new Answering(DDDToolkit.Abstractions.Access.Caller.System))!;
+        var signedIn = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot.User(Guid.NewGuid())))!;
+        var anonymous = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot.Anonymous))!;
+        var system = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot.System))!;
 
         (await signedIn).Should().Be("handled");
         (await anonymous).Should().Be("access.not-signed-in");
         (await system).Should().Be("access.not-signed-in", "the application's own work is nobody's sign-in");
     }
 
-    /// <summary>An accessor that answers the caller a test gives it.</summary>
-    public sealed class Answering(DDDToolkit.Abstractions.Access.Caller caller) : ICallerAccessor
+    /// <summary>A current user whose host answers the user a test gives it, where nothing was begun.</summary>
+    public static DDDToolkit.Abstractions.Access.ICurrentUser Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot user)
+        => new DDDToolkit.Access.CurrentUser(source: new Fixed(user));
+
+    /// <summary>A host that answers one user.</summary>
+    private sealed class Fixed(DDDToolkit.Abstractions.Access.CurrentUserSnapshot user) : DDDToolkit.Access.ICurrentUserSource
     {
         /// <inheritdoc />
-        public DDDToolkit.Abstractions.Access.Caller Current => caller;
+        public DDDToolkit.Abstractions.Access.CurrentUserSnapshot? Current => user;
     }
 }

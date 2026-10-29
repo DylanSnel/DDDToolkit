@@ -140,18 +140,18 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
     public async Task Pgmq_consumes_with_explicit_callers_required()
     {
         var shelves = new ShelfCounter();
-        await using (var host = await HostAsync("strict_q", shelves, requireExplicitCallers: true, around: IntegrationEventScopes.System))
+        await using (var host = await HostAsync("strict_q", shelves, requireExplicitCurrentUser: true, around: IntegrationEventScopes.SystemBypassingRowAccess))
         {
             await host.SendAsync(Message());
             (await host.Consumer.ConsumeOnceAsync(Cancellation)).Should().Be(1);
 
             shelves.Seen.Should().Equal("Fiction");
-            shelves.Callers.Should().Equal([Caller.System], "the module said its handler runs as the system");
+            shelves.Callers.Should().Equal([CurrentUserSnapshot.System], "the module said its handler runs as the system");
             (await host.PendingAsync()).Should().Be(0, "an applied message is archived");
         }
 
         var unscoped = new ShelfCounter();
-        await using (var host = await HostAsync("unscoped_q", unscoped, options => options.VisibilityTimeout = TimeSpan.FromSeconds(1), requireExplicitCallers: true))
+        await using (var host = await HostAsync("unscoped_q", unscoped, options => options.VisibilityTimeout = TimeSpan.FromSeconds(1), requireExplicitCurrentUser: true))
         {
             await host.SendAsync(Message());
             await host.Consumer.ConsumeOnceAsync(Cancellation);
@@ -232,7 +232,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         string queue,
         ShelfCounter shelves,
         Action<PgmqConsumerOptions>? configure = null,
-        bool requireExplicitCallers = false,
+        bool requireExplicitCurrentUser = false,
         IntegrationEventScope? around = null)
     {
         var database = Database;
@@ -240,12 +240,12 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(contracts => contracts.Register<ShelfOpenedV3>()));
-        if (requireExplicitCallers)
+        if (requireExplicitCurrentUser)
         {
             // The module's context runs under row level security, which asks who is calling on every connection:
             // UseDDDToolkit below puts it on the context once it is registered.
             services.AddPostgresRowLevelSecurity();
-            services.RequireExplicitCallers();
+            services.RequireExplicitCurrentUser();
         }
 
         services.AddDbContext<PgmqContext>((provider, options) => options.UseNpgsql(database.ConnectionString).UseDDDToolkit(provider));
@@ -261,7 +261,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
 
         var provider = services.BuildServiceProvider();
         await using (var scope = provider.CreateAsyncScope())
-        using (Callers.Begin(Caller.System))
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             await scope.ServiceProvider.GetRequiredService<PgmqContext>().Database.EnsureCreatedAsync(Cancellation);
         }
@@ -318,7 +318,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         public List<string> Seen { get; } = [];
 
         /// <summary>Who each run of the handler ran as.</summary>
-        public List<Caller?> Callers { get; } = [];
+        public List<CurrentUserSnapshot?> Callers { get; } = [];
 
         public int FailuresLeft { get; set; }
 
@@ -330,7 +330,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
             }
 
             Seen.Add(contract.DisplayName);
-            Callers.Add(DDDToolkit.Access.Callers.Ambient);
+            Callers.Add(BegunUser);
             return Task.CompletedTask;
         }
     }

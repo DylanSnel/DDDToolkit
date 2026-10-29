@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Analyzers.Tests.Harness;
 using FluentAssertions;
 
@@ -288,7 +289,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Read | DDDToolkit.Abstractions.Attributes.RowOperations.Change, To = new[] { "authenticated" })]
             public static partial class ACustomerSeesTheirOrders
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy == user.Id;
             }
             """;
 
@@ -297,7 +298,7 @@ public sealed class SupabaseMigrationsGeneratorTests
         result.ShouldCompile();
         result.ShouldContain(
             "SupabaseMigrationSources",
-            "global::DDDToolkit.EntityFramework.Postgres.RowAccessRule.For(\"Shop.Ordering.Order\", \"A customer sees their orders\", (global::DDDToolkit.Abstractions.Attributes.RowOperations)5, \"({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})\", \"authenticated\"),");
+            "global::DDDToolkit.EntityFramework.Postgres.RowAccessRule.For(\"Shop.Ordering.Order\", \"A customer sees their orders\", (global::DDDToolkit.Abstractions.Attributes.RowOperations)5, \"({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})\", \"authenticated\"),");
     }
 
     [Fact]
@@ -320,7 +321,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Read, To = [DDDToolkit.Abstractions.Attributes.RowAccessRoles.User, DDDToolkit.Abstractions.Attributes.RowAccessRoles.SystemIn])]
             public static partial class SignedInCustomersSeeTheirOrders
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy == user.Id;
             }
             """;
 
@@ -329,7 +330,7 @@ public sealed class SupabaseMigrationsGeneratorTests
         result.ShouldCompile();
         result.ShouldContain(
             "SupabaseMigrationSources",
-            "global::DDDToolkit.EntityFramework.Postgres.RowAccessRule.For(\"Shop.Ordering.Order\", \"Signed in customers see their orders\", (global::DDDToolkit.Abstractions.Attributes.RowOperations)1, \"({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})\", \"@user\", \"@system-in\"),");
+            "global::DDDToolkit.EntityFramework.Postgres.RowAccessRule.For(\"Shop.Ordering.Order\", \"Signed in customers see their orders\", (global::DDDToolkit.Abstractions.Attributes.RowOperations)1, \"({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})\", \"@user\", \"@system-in\"),");
     }
 
     [Fact]
@@ -356,7 +357,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Change, To = [DDDToolkit.Abstractions.Attributes.RowAccessRoles.User], Columns = [nameof(Order.Status), nameof(Order.Due)])]
             public static partial class TheCustomerCancels
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy == user.Id;
             }
             """;
 
@@ -365,7 +366,7 @@ public sealed class SupabaseMigrationsGeneratorTests
         result.ShouldCompile();
         result.ShouldContain(
             "SupabaseMigrationSources",
-            "global::DDDToolkit.EntityFramework.Postgres.RowAccessRule.ForColumns(\"Shop.Ordering.Order\", \"The customer cancels\", new string[] { \"Status\", \"Due\" }, \"{columns}({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})\", \"@user\"),");
+            "global::DDDToolkit.EntityFramework.Postgres.RowAccessRule.ForColumns(\"Shop.Ordering.Order\", \"The customer cancels\", new string[] { \"Status\", \"Due\" }, \"{columns}({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})\", \"@user\"),");
     }
 
     [Fact]
@@ -395,7 +396,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Read, To = [ShopRoles.Analyst, DDDToolkit.Abstractions.Attributes.RowAccessRoles.TokenPrefix + "examiner"])]
             public static partial class AnalystsSeeEveryPlacedOrder
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy != null;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy != null;
             }
             """;
 
@@ -424,10 +425,10 @@ public sealed class SupabaseMigrationsGeneratorTests
                 public System.Guid? PlacedBy { get; private set; }
             }
 
-            [DDDToolkit.Abstractions.Attributes.AccessFunction<Order>("ordering.placed_by_caller")]
-            public static partial class PlacedByTheCaller
+            [DDDToolkit.Abstractions.Attributes.AccessFunction<Order>("ordering.placed_by_current_user")]
+            public static partial class PlacedByTheCurrentUser
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy == user.Id;
             }
             """;
 
@@ -436,7 +437,7 @@ public sealed class SupabaseMigrationsGeneratorTests
         result.ShouldCompile();
         result.ShouldContain(
             "SupabaseMigrationSources",
-            "global::DDDToolkit.EntityFramework.Postgres.RowAccessFunction.For(\"Shop.Ordering.Order\", \"ordering.placed_by_caller\", \"({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})\"),");
+            "global::DDDToolkit.EntityFramework.Postgres.RowAccessFunction.For(\"Shop.Ordering.Order\", \"ordering.placed_by_current_user\", \"({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})\"),");
     }
 
     [Fact]
@@ -459,7 +460,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.AccessFunction<Order>("orders_of_team", Shape = DDDToolkit.Abstractions.Attributes.AccessFunctionShape.Set)]
             public static partial class OrdersOfTeam
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller, string team) => order.Team == team;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user, string team) => order.Team == team;
             }
             """;
 

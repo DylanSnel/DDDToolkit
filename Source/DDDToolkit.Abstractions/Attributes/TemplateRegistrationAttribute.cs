@@ -36,7 +36,20 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// A module split into projects by layer declares the classes in its domain project, which needs no Entity
 /// Framework, and calls the registration where the context is. That project declares none of the classes and
 /// gets the wrapper too, when it declares the same <see cref="ModuleAttribute"/>: it is closed over the classes
-/// the module's other projects declare, and only those. A project of another module, or of none, gets nothing.
+/// the module's other projects declare, and only those. A project of another module, or of none, gets nothing,
+/// unless it says which of its ids are the package's with a line marked <see cref="TemplateIdsAttribute"/>: then a
+/// method whose type parameters take only ids is closed over the line's ids, in the project of its module that holds
+/// what the method is for.
+/// </para>
+/// <para>
+/// A type parameter marked <see cref="TemplateFacadeAttribute"/>, <c>[TemplateFacade(typeof(TenancyAccessManager&lt;,,,&gt;))]</c>,
+/// is filled with the class the application gets for that class of the package's, closed over the same types as the
+/// method: the project's own, or the one a project of its module below it has; the package's class itself where there
+/// is none. So a registration registers the class the application's code takes.
+/// </para>
+/// <para>
+/// A method over a template an application may leave out says so with <see cref="OnlyWith"/>: it is written only where
+/// that template has a class, and a project without one hears nothing of it.
 /// </para>
 /// </summary>
 /// <remarks>
@@ -73,4 +86,14 @@ public sealed class TemplateRegistrationAttribute : Attribute
     /// </para>
     /// </summary>
     public string? Name { get; set; }
+
+    /// <summary>
+    /// The template of a class an application may leave out, such as Tenancy's invitation,
+    /// <c>typeof(InvitationAggregateAttribute&lt;&gt;)</c>. The wrapper is written only where a class is declared with that
+    /// template: in the project, in the projects it references, or, for a project of a module that declares none of the
+    /// classes, in a project of its module it references. A project without one gets no wrapper and hears nothing, where
+    /// a missing template is DDD00049 otherwise. One of the method's <see cref="TemplateTypeAttribute"/>s names the same
+    /// template.
+    /// </summary>
+    public Type? OnlyWith { get; set; }
 }

@@ -23,7 +23,7 @@ public sealed record SmokeHive([Own] HiveId Hive) : IHivesRequest;
 /// connection that runs as the caller, so the apiary's policies decide whether the row is there for the caller at all.
 /// A hive the caller may not see is not found, one it sees and keeps not is somebody else's.
 /// </summary>
-public sealed class AggregateOwnerPostgresTests(ExplicitCallersPostgres postgres)
+public sealed class AggregateOwnerPostgresTests(ExplicitCurrentUserPostgres postgres)
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -56,11 +56,11 @@ public sealed class AggregateOwnerPostgresTests(ExplicitCallersPostgres postgres
         await AskAsync(host, ApiaryDatabase.Alice, new SmokeHive(alices));
 
         // A visitor keeps no hive, and is refused before anything is sent: the hive is closed to visitors besides.
-        (await RefusedAsync(host, Caller.Anonymous, new SmokeHive(alices))).Code.Should().Be(ToolkitRefusals.NotOwn);
+        (await RefusedAsync(host, CurrentUserSnapshot.Anonymous, new SmokeHive(alices))).Code.Should().Be(ToolkitRefusals.NotOwn);
     }
 
     /// <summary>Settles a hive kept by <paramref name="keeper"/>, as <paramref name="caller"/>, and answers its id.</summary>
-    private static async Task<HiveId> SettleAsync(IServiceProvider host, Caller caller, Guid keeper)
+    private static async Task<HiveId> SettleAsync(IServiceProvider host, CurrentUserSnapshot caller, Guid keeper)
     {
         var id = HiveId.CreateSequential();
         await ApiaryDatabase.AsAsync(host, caller, async context =>
@@ -72,13 +72,13 @@ public sealed class AggregateOwnerPostgresTests(ExplicitCallersPostgres postgres
         return id;
     }
 
-    private static async Task AskAsync(IServiceProvider host, Caller caller, IHivesRequest request)
+    private static async Task AskAsync(IServiceProvider host, CurrentUserSnapshot caller, IHivesRequest request)
     {
         await using var scope = host.CreateAsyncScope();
-        using var running = Callers.Begin(caller);
+        using var running = TestAccess.BeginAs(caller);
         await scope.ServiceProvider.GetRequiredService<AccessChecks<IHivesRequest>>().RequireAsync(request, Cancellation);
     }
 
-    private static async Task<RefusalException> RefusedAsync(IServiceProvider host, Caller caller, IHivesRequest request)
+    private static async Task<RefusalException> RefusedAsync(IServiceProvider host, CurrentUserSnapshot caller, IHivesRequest request)
         => (await FluentActions.Awaiting(() => AskAsync(host, caller, request)).Should().ThrowAsync<RefusalException>()).Which;
 }

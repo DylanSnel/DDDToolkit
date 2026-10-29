@@ -15,23 +15,24 @@ namespace DDDToolkit.Supporting.Together.Tests;
 public sealed class PackagesStayApartTests
 {
     private static readonly Assembly[] MembershipPackages =
-        [typeof(MembershipRules).Assembly, typeof(MembershipModel).Assembly, typeof(MembershipPostgresChecks).Assembly];
+        [typeof(AtAttribute).Assembly, typeof(MembershipRules).Assembly, typeof(MembershipModel).Assembly, typeof(MembershipPostgresChecks).Assembly];
 
     private static readonly Assembly[] TenancyPackages =
-        [typeof(TenancyRefusals).Assembly, typeof(TenancyAnswersEntityFrameworkExtensions).Assembly, typeof(TenancyPostgresChecks).Assembly];
+        [typeof(OfTenantAttribute).Assembly, typeof(TenancyRefusals).Assembly, typeof(TenancyEntityFrameworkExtensions).Assembly, typeof(TenancyPostgresChecks).Assembly];
 
     [Fact]
     public void The_membership_packages_reference_no_mediator_and_no_tenancy_package()
     {
         MembershipPackages.Select(package => package.GetName().Name).Should().BeEquivalentTo(
-            "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.EntityFramework", "DDDToolkit.Supporting.Membership.Postgres");
+            "DDDToolkit.Supporting.Membership.Abstractions", "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.EntityFramework",
+            "DDDToolkit.Supporting.Membership.Postgres");
 
         // What the projects say they reference, the generators the packages ship included: the one that writes the
         // member list, which the core package ships, and the one that joins a resource to an organization.
         var projects = PackageProjects("DDDToolkit.Supporting.Membership*");
         projects.Select(Path.GetFileNameWithoutExtension).Should().BeEquivalentTo(
-            "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.EntityFramework", "DDDToolkit.Supporting.Membership.Postgres",
-            "DDDToolkit.Supporting.Membership.Analyzers", "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers");
+            "DDDToolkit.Supporting.Membership.Abstractions", "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.EntityFramework",
+            "DDDToolkit.Supporting.Membership.Postgres", "DDDToolkit.Supporting.Membership.Analyzers", "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers");
         ReferencesOf(projects).Should().NotContain(reference => IsTenancy(reference) || IsADispatcher(reference));
 
         // And what the assemblies need to load, to the bottom.
@@ -47,14 +48,15 @@ public sealed class PackagesStayApartTests
     public void The_tenancy_packages_reference_no_membership_package_and_no_mediator()
     {
         TenancyPackages.Select(package => package.GetName().Name).Should().BeEquivalentTo(
-            "DDDToolkit.Supporting.Tenancy", "DDDToolkit.Supporting.Tenancy.EntityFramework", "DDDToolkit.Supporting.Tenancy.Postgres");
+            "DDDToolkit.Supporting.Tenancy.Abstractions", "DDDToolkit.Supporting.Tenancy", "DDDToolkit.Supporting.Tenancy.EntityFramework",
+            "DDDToolkit.Supporting.Tenancy.Postgres");
 
         // What the projects say they reference, the generator the core package ships included: the one that collects
         // the permissions the modules mark, which references nothing but the compiler.
         var projects = PackageProjects("DDDToolkit.Supporting.Tenancy*");
         projects.Select(Path.GetFileNameWithoutExtension).Should().BeEquivalentTo(
-            "DDDToolkit.Supporting.Tenancy", "DDDToolkit.Supporting.Tenancy.EntityFramework", "DDDToolkit.Supporting.Tenancy.Postgres",
-            "DDDToolkit.Supporting.Tenancy.Analyzers");
+            "DDDToolkit.Supporting.Tenancy.Abstractions", "DDDToolkit.Supporting.Tenancy", "DDDToolkit.Supporting.Tenancy.EntityFramework",
+            "DDDToolkit.Supporting.Tenancy.Postgres", "DDDToolkit.Supporting.Tenancy.Analyzers");
         ReferencesOf(projects).Should().NotContain(reference => IsMembership(reference) || IsADispatcher(reference));
         ReferencesOf(projects.Where(project => Path.GetFileNameWithoutExtension(project).EndsWith(".Analyzers", StringComparison.Ordinal)))
             .Should().OnlyContain(reference => reference.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal));
@@ -82,10 +84,13 @@ public sealed class PackagesStayApartTests
         source.Should().Contain("\"DDDToolkit.Supporting.Tenancy\"");
         ReferencesOf(Directory.GetFiles(generator, "*.csproj")).Should().OnlyContain(reference => reference.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal));
 
-        // The three packages an application references do not say the word at all.
+        // The packages an application references do not say the word at all, but for the one file of the mapping that names
+        // the other package's marker of a row's tenant, as text, for the two indexes of a role class of a tenant.
+        var indexes = Path.Combine(RepositoryRoot(), "Source", "DDDToolkit.Supporting.Membership.EntityFramework", "Mapping", "OrganizationRoleIndexes.cs");
+        File.ReadAllText(indexes).Should().Contain("\"DDDToolkit.Supporting.Tenancy.OfTenantAttribute\"");
         foreach (var package in PackageProjects("DDDToolkit.Supporting.Membership*").Where(project => Path.GetDirectoryName(project) != generator))
         {
-            SourcesIn(Path.GetDirectoryName(package)!).Where(file => File.ReadAllText(file).Contains("tenan", StringComparison.OrdinalIgnoreCase))
+            SourcesIn(Path.GetDirectoryName(package)!).Where(file => file != indexes && File.ReadAllText(file).Contains("tenan", StringComparison.OrdinalIgnoreCase))
                 .Select(Path.GetFileName)
                 .Should().BeEmpty("{0} is named for members, roles and places, whoever keeps them", Path.GetFileNameWithoutExtension(package));
         }

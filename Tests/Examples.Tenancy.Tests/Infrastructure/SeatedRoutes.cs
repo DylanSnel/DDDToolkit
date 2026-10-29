@@ -128,6 +128,7 @@ public static class SeatedRoutes
         Get("GET /operations/tenants/{tenant}/history", $"/operations/tenants/{Harbor.Id.Value}/history"),
         Get("GET /operations/tenants/{tenant}/projects", $"/operations/tenants/{Harbor.Id.Value}/projects"),
         Get("GET /operations/tenants/{tenant}/projects/{project}/inspections", $"/operations/tenants/{Harbor.Id.Value}/projects/{PierSeven}/inspections"),
+        Send("PUT /operations/tenants/{tenant}/projects/{project}/name", HttpMethod.Put, $"/operations/tenants/{Harbor.Id.Value}/projects/{PierSeven}/name", new { name = "Pier 7, as support renamed it" }),
     ];
 
     /// <summary>Every route that needs a token.</summary>

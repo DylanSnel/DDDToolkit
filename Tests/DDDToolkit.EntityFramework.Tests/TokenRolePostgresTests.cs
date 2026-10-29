@@ -73,12 +73,12 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
     {
         database.Require();
 
-        var caller = new CallerOfTheTest { Current = Signed(Carol, Analyst) };
+        var caller = new UserOfTheTest { Current = Signed(Carol, Analyst) };
         await using var context = database.CreateContext(caller, Mapped());
 
         (await ScalarAsync(context, "SELECT current_user")).Should().Be(AnalystRole, "the token role picked the role the host mapped it to");
-        (await ScalarAsync(context, "SELECT ddd.caller_role()")).Should().Be(Analyst, "the claims are the token's own, so a policy may ask the role the token carries");
-        (await ScalarAsync(context, "SELECT ddd.caller_id()::text")).Should().Be(Carol.ToString(), "and whose token it is");
+        (await ScalarAsync(context, "SELECT ddd.current_user_role()")).Should().Be(Analyst, "the claims are the token's own, so a policy may ask the role the token carries");
+        (await ScalarAsync(context, "SELECT ddd.current_user_id()::text")).Should().Be(Carol.ToString(), "and whose token it is");
         (await context.Pallets.CountAsync(Cancellation)).Should().Be(2, "the analysts' rule lets them read every pallet");
 
         // The role is held to its policies, and to the privileges the host gave it.
@@ -92,7 +92,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
         (await ScalarAsync(alice, "SELECT current_user")).Should().Be("authenticated");
         (await alice.Pallets.CountAsync(Cancellation)).Should().Be(2);
 
-        caller.Current = Caller.Anonymous;
+        caller.Current = CurrentUserSnapshot.Anonymous;
         await using var nobody = database.CreateContext(caller, Mapped());
         (await ScalarAsync(nobody, "SELECT current_user")).Should().Be("anon");
         (await nobody.Pallets.CountAsync(Cancellation)).Should().Be(0);
@@ -109,13 +109,13 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
         database.Require();
 
         // Alice owns a pallet and, signed in, reads both. This token names her, with a role nobody listed.
-        var caller = new CallerOfTheTest { Current = Signed(PalletDepotDatabase.AliceId, "intern") };
+        var caller = new UserOfTheTest { Current = Signed(PalletDepotDatabase.AliceId, "intern") };
         await using var context = database.CreateContext(caller, Mapped(UnknownTokenRole.Anonymous));
 
         (await ScalarAsync(context, "SELECT current_user")).Should().Be("anon");
         (await ScalarAsync(context, "SELECT current_setting('request.jwt.claims', true)")).Should().Be("""{"role":"anon"}""", "the token's claims stayed behind");
-        (await ScalarAsync(context, "SELECT ddd.caller_role()")).Should().Be("anon");
-        (await ScalarAsync(context, "SELECT coalesce(ddd.caller_id()::text, 'nobody')")).Should().Be("nobody", "the database sees no user, so a rule about a user matches nobody");
+        (await ScalarAsync(context, "SELECT ddd.current_user_role()")).Should().Be("anon");
+        (await ScalarAsync(context, "SELECT coalesce(ddd.current_user_id()::text, 'nobody')")).Should().Be("nobody", "the database sees no user, so a rule about a user matches nobody");
         (await context.Pallets.CountAsync(Cancellation)).Should().Be(0, "an anonymous caller reads no pallet, whoever the token names");
 
         // Without the host's say-so the same token is refused, and nothing runs for it.
@@ -142,7 +142,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
         // own. A token that names it gets nothing, and where the host has unknown roles run as anonymous, that.
         (await database.ScalarAsOwnerAsync($"SELECT (pg_catalog.to_regrole('{forged}') IS NOT NULL OR '{forged}' = 'none')::text", Cancellation)).Should().Be("true");
 
-        var caller = new CallerOfTheTest { Current = Signed(PalletDepotDatabase.AliceId, forged) };
+        var caller = new UserOfTheTest { Current = Signed(PalletDepotDatabase.AliceId, forged) };
         await using var refusing = database.CreateContext(caller, Mapped());
 
         var refused = (await FluentActions.Awaiting(() => refusing.Pallets.CountAsync(Cancellation)).Should().ThrowAsync<RefusalException>()).Which;
@@ -152,7 +152,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
 
         await using var lenient = database.CreateContext(caller, Mapped(UnknownTokenRole.Anonymous));
         (await ScalarAsync(lenient, "SELECT current_user")).Should().Be("anon", "the least any caller gets, never the role the token names");
-        (await ScalarAsync(lenient, "SELECT ddd.caller_role()")).Should().Be("anon", "and no policy that asks the role hears the forged one");
+        (await ScalarAsync(lenient, "SELECT ddd.current_user_role()")).Should().Be("anon", "and no policy that asks the role hears the forged one");
         (await lenient.Pallets.CountAsync(Cancellation)).Should().Be(0);
     }
 
@@ -161,7 +161,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
     {
         database.Require();
 
-        var caller = new CallerOfTheTest { Current = PalletDepotDatabase.Alice };
+        var caller = new UserOfTheTest { Current = PalletDepotDatabase.Alice };
         await using var context = database.CreateContext(caller, Mapped());
         await context.Database.OpenConnectionAsync(Cancellation);
         (await context.Pallets.CountAsync(Cancellation)).Should().Be(2);
@@ -175,7 +175,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
 
         // Nothing was set for the refused caller: the connection is still the caller's it was opened for.
         caller.Current = PalletDepotDatabase.Alice;
-        (await ScalarAsync(context, "SELECT current_user || ' ' || ddd.caller_id()::text")).Should().Be($"authenticated {PalletDepotDatabase.AliceId}");
+        (await ScalarAsync(context, "SELECT current_user || ' ' || ddd.current_user_id()::text")).Should().Be($"authenticated {PalletDepotDatabase.AliceId}");
 
         // A mapped role begun on the open connection is set before the next command, like any other caller.
         caller.Current = Signed(Carol, Analyst);
@@ -187,7 +187,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
     {
         database.Require();
 
-        var caller = new CallerOfTheTest { Current = PalletDepotDatabase.Alice };
+        var caller = new UserOfTheTest { Current = PalletDepotDatabase.Alice };
         await using var context = database.CreateContext(caller, Mapped());
         await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
         (await context.Pallets.CountAsync(Cancellation)).Should().Be(2);
@@ -201,7 +201,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
 
         // Nothing was sent for it, so the transaction is whole and still the caller's who began it.
         caller.Current = PalletDepotDatabase.Alice;
-        (await ScalarAsync(context, "SELECT current_user || ' ' || ddd.caller_id()::text")).Should().Be($"authenticated {PalletDepotDatabase.AliceId}");
+        (await ScalarAsync(context, "SELECT current_user || ' ' || ddd.current_user_id()::text")).Should().Be($"authenticated {PalletDepotDatabase.AliceId}");
         await transaction.CommitAsync(Cancellation);
     }
 
@@ -226,7 +226,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
         // Inside a transaction begun for Alice, the caller changes to that token and saves. The refusal then comes
         // from the save's own command, which Entity Framework may hand on inside its own exception: either way
         // the save fails for the role, and nothing is sent that could be written.
-        var caller = new CallerOfTheTest { Current = PalletDepotDatabase.Alice };
+        var caller = new UserOfTheTest { Current = PalletDepotDatabase.Alice };
         await using (var open = database.CreateContext(caller, Mapped()))
         {
             await using var transaction = await open.Database.BeginTransactionAsync(Cancellation);
@@ -482,8 +482,8 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
             CancellationToken.None);
 
     /// <summary>The caller a validated token makes, signed for <paramref name="user"/> with <paramref name="role"/> as its role claim.</summary>
-    private static Caller Signed(Guid user, string role)
-        => Callers.FromClaims($$"""{"sub":"{{user}}","role":"{{role}}"}""");
+    private static CurrentUserSnapshot Signed(Guid user, string role)
+        => CurrentUserSnapshot.FromClaims($$"""{"sub":"{{user}}","role":"{{role}}"}""");
 
     /// <summary>One value, from SQL the tests themselves write; nothing here comes from outside.</summary>
     private static async Task<string?> ScalarAsync(DbContext context, string sql)

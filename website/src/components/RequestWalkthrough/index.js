@@ -169,12 +169,12 @@ function walk(scenario, caller, form, chosen) {
   }
 
   const verdict = !door.pass
-    ? { state: 'refuse', big: `${door.status} · ${door.code}`, small: 'Refused at the door, before the handler.' }
+    ? { state: 'refuse', big: `${door.status} · ${door.code}`, small: 'Refused by the access check, before the handler.' }
     : shown.code
-      ? { state: 'refuse', big: `${shown.status} · ${shown.code}`, small: 'Let through the door, then refused by the work behind it.' }
+      ? { state: 'refuse', big: `${shown.status} · ${shown.code}`, small: 'Let through by the access check, then refused by the work in the handler.' }
       : shown.warn
-        ? { state: 'warn', big: shown.result, small: 'Let through the door, then stopped by the database: an error of the set-up, not a refusal.' }
-        : { state: 'pass', big: shown.result, small: 'Let through the door, and the rows written or read.' };
+        ? { state: 'warn', big: shown.result, small: 'Let through by the access check, then stopped by the database. This is a set-up error, not a refusal.' }
+        : { state: 'pass', big: shown.result, small: 'Let through by the access check. The rows are written or read.' };
 
   return { views: [write, generated, checks, check, statement, doorLayer, rows], verdict };
 }
@@ -355,7 +355,7 @@ export default function RequestWalkthrough() {
             </p>
             {view.round ? (
               <p className={styles.note}>
-                Round the door, as <code>{caller.runsAs}</code>, Postgres answers: <strong>{view.round}</strong>.
+                Without the access check, as <code>{caller.runsAs}</code>, Postgres answers: <strong>{view.round}</strong>.
               </p>
             ) : null}
             {view.content}

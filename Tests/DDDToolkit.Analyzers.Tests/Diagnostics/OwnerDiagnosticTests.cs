@@ -162,7 +162,7 @@ public class OwnerDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00088");
         Message(result, "DDD00088", at: "Own").Should().Contain("marks 'Board' [Own], the id of 'Board', whose [Owner] 'Owner' is a 'UserId': nothing says what the caller's own UserId is")
-            .And.Contain("services.AddCallersOwn<UserId, ...>()");
+            .And.Contain("services.AddOwnedByCurrentUser<UserId, ...>()");
         result.ShouldNotContain("BillingAccessBehavior.", "ArchiveBoard", "a request stopped every time it is sent gets no line");
     }
 
@@ -181,7 +181,7 @@ public class OwnerDiagnosticTests
     [Fact]
     public void A_member_that_may_be_null_stays_DDD00086_whatever_its_aggregate_marks()
     {
-        var result = OwnerRequirementGenerationTests.OverTheDomain(OwnerRequirementGenerationTests.CallersUser + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId? Board) : IBillingRequest;").RunCore();
+        var result = OwnerRequirementGenerationTests.OverTheDomain(OwnerRequirementGenerationTests.CurrentUserId + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId? Board) : IBillingRequest;").RunCore();
 
         result.ShouldHaveExactlyDiagnostics("DDD00086");
         Message(result, "DDD00086", at: "Own").Should().Contain("which is 'BoardId?' and may be null");
@@ -191,7 +191,7 @@ public class OwnerDiagnosticTests
     public void An_id_of_two_aggregates_that_each_mark_an_owner_is_DDD00087_at_the_request()
     {
         var result = OwnerRequirementGenerationTests.OverTheDomain(
-            OwnerRequirementGenerationTests.CallersUser + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;",
+            OwnerRequirementGenerationTests.CurrentUserId + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;",
             OwnerRequirementGenerationTests.Owned + "\n[AggregateRoot<BoardId>]\npublic sealed partial class Whiteboard\n{\n    [Owner] public UserId Owner { get; private set; }\n}\n").RunCore();
 
         result.ShouldHaveExactlyDiagnostics("DDD00087");

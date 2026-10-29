@@ -89,9 +89,9 @@ public class CombinedRequirementTests
     }
 
     /// <summary>An accessor that answers the caller a test gives it.</summary>
-    private sealed class Answering(Caller caller) : ICallerAccessor
+    private sealed class Answering(CurrentUserSnapshot caller) : ICurrentUserSource
     {
-        public Caller Current => caller;
+        public CurrentUserSnapshot? Current => caller;
     }
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
@@ -168,7 +168,7 @@ public class CombinedRequirementTests
     [Fact]
     public async Task A_combination_holds_another_and_each_case_goes_to_its_own_check()
     {
-        var (checks, asked) = Checks(Caller.User(Guid.NewGuid()));
+        var (checks, asked) = Checks(CurrentUserSnapshot.User(Guid.NewGuid()));
 
         // Either both of a board and a plan, or the other board: the first holds.
         await checks.RequireAsync(new ExportBoard(AccessRequirement.Any(AccessRequirement.All(Met("a"), new OnPlan("pro", Met: true)), Refuses("b"))), Cancellation);
@@ -210,7 +210,7 @@ public class CombinedRequirementTests
     [Fact]
     public async Task A_refused_all_leaves_nothing_kept_of_a_case_that_passed_before_the_one_that_refused()
     {
-        await using var provider = Provider(Caller.User(Guid.NewGuid()));
+        await using var provider = Provider(CurrentUserSnapshot.User(Guid.NewGuid()));
         await using var scope = provider.CreateAsyncScope();
         var request = new ExportBoard(AccessRequirement.All(Met("north"), new OnPlan("pro", Met: false)));
 
@@ -225,7 +225,7 @@ public class CombinedRequirementTests
     [Fact]
     public async Task Any_keeps_what_the_case_that_let_the_caller_through_kept_and_nothing_of_a_branch_that_refused()
     {
-        await using var provider = Provider(Caller.User(Guid.NewGuid()));
+        await using var provider = Provider(CurrentUserSnapshot.User(Guid.NewGuid()));
         await using var scope = provider.CreateAsyncScope();
 
         // The first branch passes its board and is refused its plan: what its board kept goes with it.
@@ -239,7 +239,7 @@ public class CombinedRequirementTests
     [Fact]
     public async Task A_passing_all_keeps_what_each_case_kept_and_hands_them_out_together_not_one_of_several()
     {
-        await using var provider = Provider(Caller.User(Guid.NewGuid()));
+        await using var provider = Provider(CurrentUserSnapshot.User(Guid.NewGuid()));
         await using var scope = provider.CreateAsyncScope();
         var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IBoardRequest>>();
         var kept = scope.ServiceProvider.GetRequiredService<Checked<string>>();
@@ -267,7 +267,7 @@ public class CombinedRequirementTests
     public async Task In_a_host_that_requires_explicit_callers_the_door_asks_who_is_calling_before_any_case_of_a_module_s_own()
     {
         var services = new ServiceCollection();
-        services.RequireExplicitCallers();
+        services.RequireExplicitCurrentUser();
         services.AddSingleton(new Asked());
         services.AddAccessCheck<IBoardRequest, BoardCheck>();
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
@@ -276,12 +276,12 @@ public class CombinedRequirementTests
 
         // The boards' check never asks who is calling: the door does, once, before it, and for a request anyone may send.
         await FluentActions.Awaiting(() => checks.RequireAsync(new ExportBoard(Met("north")), Cancellation).AsTask())
-            .Should().ThrowAsync<NoCallerException>("work nobody began a caller for is a mistake to fix, whatever its request requires");
+            .Should().ThrowAsync<NoCurrentUserException>("work nobody began a caller for is a mistake to fix, whatever its request requires");
         await FluentActions.Awaiting(() => checks.RequireAsync(new ExportBoard(AccessRequirement.AllowAnonymous()), Cancellation).AsTask())
-            .Should().ThrowAsync<NoCallerException>();
+            .Should().ThrowAsync<NoCurrentUserException>();
         scope.ServiceProvider.GetRequiredService<Asked>().Entries.Should().BeEmpty("no case is asked of such work");
 
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             await checks.RequireAsync(new ExportBoard(Met("north")), Cancellation);
         }
@@ -290,7 +290,7 @@ public class CombinedRequirementTests
     [Fact]
     public async Task A_case_s_check_keeps_for_the_handler_what_it_read_as_it_would_alone()
     {
-        await using var provider = Provider(Caller.User(Guid.NewGuid()));
+        await using var provider = Provider(CurrentUserSnapshot.User(Guid.NewGuid()));
         await using var scope = provider.CreateAsyncScope();
         var request = new ExportBoard(AccessRequirement.All(AccessRequirement.SignedIn(), Met("north")));
 
@@ -347,7 +347,7 @@ public class CombinedRequirementTests
     [Fact]
     public async Task The_request_in_hand_asks_its_whole_combination_again_and_names_it_by_its_types()
     {
-        var (checks, asked) = Checks(Caller.User(Guid.NewGuid()));
+        var (checks, asked) = Checks(CurrentUserSnapshot.User(Guid.NewGuid()));
         var request = new ExportBoard(AccessRequirement.Any(Refuses("a"), AccessRequirement.All(AccessRequirement.SignedIn(), Met("b"))));
 
         await checks.RequireAsync(request, Cancellation);
@@ -385,22 +385,22 @@ public class CombinedRequirementTests
         => refusal.Arguments[ToolkitRefusals.ReasonsArgument].Should().BeAssignableTo<IReadOnlyList<RefusalReason>>().Subject;
 
     /// <summary>A set of the core's check, the boards' and billing's, made by hand, as a test of a module makes one.</summary>
-    private static (AccessChecks<IBoardRequest> Checks, Asked Asked) Checks(Caller? caller = null)
+    private static (AccessChecks<IBoardRequest> Checks, Asked Asked) Checks(CurrentUserSnapshot? caller = null)
     {
         var asked = new Asked();
         var checks = new AccessChecks<IBoardRequest>(
         [
-            new CallerAccessCheck(new Answering(caller ?? Caller.Anonymous)),
+            new CurrentUserAccessCheck(new CurrentUser(source: new Answering(caller ?? CurrentUserSnapshot.Anonymous))),
             new BoardCheck(asked, new Checked<string>()),
             new PlanCheck(asked),
         ]);
         return (checks, asked);
     }
 
-    private static ServiceProvider Provider(Caller caller)
+    private static ServiceProvider Provider(CurrentUserSnapshot caller)
     {
         var services = new ServiceCollection();
-        services.AddSingleton<ICallerAccessor>(new Answering(caller));
+        services.AddSingleton<ICurrentUser>(new CurrentUser(source: new Answering(caller)));
         services.AddSingleton(new Asked());
         services.AddAccessCheck<IBoardRequest, BoardCheck>();
         services.AddAccessCheck<IBoardRequest, PlanCheck>();

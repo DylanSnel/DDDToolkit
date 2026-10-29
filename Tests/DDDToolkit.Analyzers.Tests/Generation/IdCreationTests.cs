@@ -164,7 +164,7 @@ public class IdCreationTests
 
         // The classes are generated; what Tenancy closes over the id stands back rather than fail in code nobody wrote.
         result.CompilationErrors.Should().BeEmpty();
-        result.HintNames.Should().NotContain("TenancyUseCases.TemplateFacade").And.NotContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration");
+        result.HintNames.Should().NotContain("SeatManager.TemplateFacade").And.NotContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration");
         result.HintNames.Should().Contain("Tenant.", "the tenant itself is generated: only what makes its new ids needs the Create()");
     }
 
@@ -175,7 +175,7 @@ public class IdCreationTests
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty();
-        result.ShouldContain("TenancyUseCases.TemplateFacade", "global::Shop.TenantId");
+        result.ShouldContain("SeatManager.TemplateFacade", "global::Shop.TenantId");
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class IdCreationTests
             + "interfaces it implements.");
         diagnostic.Properties.Should().Contain("IdFix", "CreateAndInterface");
         result.CompilationErrors.Should().BeEmpty("nothing closed over the id is written, so there is no CS0315 in code nobody wrote");
-        result.HintNames.Should().NotContain("TenancyUseCases.TemplateFacade");
+        result.HintNames.Should().NotContain("SeatManager.TemplateFacade");
     }
 
     [Fact]

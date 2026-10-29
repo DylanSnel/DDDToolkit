@@ -84,7 +84,7 @@ public static partial class PostgresRowAccess
     /// <see cref="RowAccessExport.WriteGrants"/>, tables of the toolkit's own, an outbox, an inbox or an event
     /// log, to write the privileges of, or a bookkeeping role, <see cref="RowAccessRoleNames.System"/>, to make and
     /// to give the context's migration history. The Supabase export asks it, so a module with neither a rule nor a
-    /// contribution still gets its access file: every migrated context has a history, and the system caller that
+    /// contribution still gets its access file: every migrated context has a history, and system work that
     /// checks at start-up that every migration ran reads it as the bookkeeping role, which only a file lets in.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="export"/> is null.</exception>
@@ -233,9 +233,9 @@ public static partial class PostgresRowAccess
             }
         }
 
-        // Everybody a privilege could have been given to before: the callers' roles, the bookkeeping role, and PUBLIC.
-        List<string> callers = [.. new[] { names.Anonymous, names.User, names.SystemIn }.Concat(names.TokenDatabaseRoles).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
-        var revoked = "PUBLIC, " + string.Join(", ", (system is null ? callers : [.. callers.Append(system).Order(StringComparer.Ordinal)]).Select(role => sql.DelimitIdentifier(role)));
+        // Everybody a privilege could have been given to before: the userRoles' roles, the bookkeeping role, and PUBLIC.
+        List<string> userRoles = [.. new[] { names.Anonymous, names.User, names.SystemIn }.Concat(names.TokenDatabaseRoles).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+        var revoked = "PUBLIC, " + string.Join(", ", (system is null ? userRoles : [.. userRoles.Append(system).Order(StringComparer.Ordinal)]).Select(role => sql.DelimitIdentifier(role)));
 
         var usage = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         void Uses(StoreObjectIdentifier table, string role)

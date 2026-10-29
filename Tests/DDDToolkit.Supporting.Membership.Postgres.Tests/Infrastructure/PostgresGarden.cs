@@ -21,7 +21,7 @@ public sealed class GardenOwnFunctions : IRowAccessContribution
         => context.Model.FindEntityType(typeof(PlotRole)) is null
             ? null
             : new RowAccessContributionResult(
-                [new ContributedFunction("caller_garden", "", "uuid", $"SELECT ({{caller:claim:{TestCallers.GardenClaim}}})::pg_catalog.uuid", GrantTo: [RowAccessRoles.User])],
+                [new ContributedFunction("current_garden", "", "uuid", $"SELECT ({{user:claim:{TestUsers.GardenClaim}}})::pg_catalog.uuid", GrantTo: [RowAccessRoles.User])],
                 [],
                 []);
 }
@@ -37,7 +37,7 @@ public sealed class PostgresGarden : IDisposable
     private const string PlainTemplate = "gardens_plain";
     private const string SecuredTemplate = "gardens_secured";
 
-    private PostgresGarden(FilingDatabase database, bool asCaller, Action<IServiceCollection>? configure, MembershipRules? sheds)
+    private PostgresGarden(FilingDatabase database, bool asUser, Action<IServiceCollection>? configure, MembershipRules? sheds)
     {
         Database = database;
         Services = new GardenServices(
@@ -48,7 +48,7 @@ public sealed class PostgresGarden : IDisposable
                 services.AddPostgresRowLevelSecurity();
                 configure?.Invoke(services);
             },
-            wiring: asCaller ? null : (options, provider) => options.UseDDDToolkitCore(provider),
+            wiring: asUser ? null : (options, provider) => options.UseDDDToolkitCore(provider),
             sheds: sheds);
         Scenario = new GardenScenario(DateTimeOffset.UtcNow);
     }
@@ -108,14 +108,14 @@ public sealed class PostgresGarden : IDisposable
     /// </summary>
     /// <param name="server">The run's Postgres.</param>
     /// <param name="secured">Whether the access file is applied.</param>
-    /// <param name="asCaller">Whether the context runs every command as the caller, under the policies.</param>
+    /// <param name="asUser">Whether the context runs every command as the caller, under the policies.</param>
     /// <param name="seed">Whether the scenario is saved.</param>
     /// <param name="configure">Registers what a test needs before the resources are registered.</param>
     /// <param name="sheds">Other rules for the sheds than the host's own, for a test that registers them otherwise.</param>
     public static async Task<PostgresGarden> CreateAsync(
         FilingPostgres server,
         bool secured = true,
-        bool asCaller = false,
+        bool asUser = false,
         bool seed = true,
         Action<IServiceCollection>? configure = null,
         MembershipRules? sheds = null)
@@ -125,7 +125,7 @@ public sealed class PostgresGarden : IDisposable
             (template, cancellationToken) => PrepareAsync(template, secured, cancellationToken),
             TestContext.Current.CancellationToken);
 
-        var garden = new PostgresGarden(database, asCaller, configure, sheds);
+        var garden = new PostgresGarden(database, asUser, configure, sheds);
         if (seed)
         {
             await garden.Scenario.SaveAsync(garden.Services);
@@ -137,7 +137,7 @@ public sealed class PostgresGarden : IDisposable
     }
 
     /// <summary>A session on the database as <paramref name="person"/>, past the application: what its own SQL would be answered.</summary>
-    public Task<CallerSession> SessionAsync(GardenPerson person) => CallerSession.BeginAsync(Database, person.Caller);
+    public Task<UserSession> SessionAsync(GardenPerson person) => UserSession.BeginAsync(Database, person.Caller);
 
     /// <summary>Runs <paramref name="sql"/> as the login role, which owns everything of the gardens'.</summary>
     public Task ExecuteAsync(string sql) => FilingPostgres.ExecuteAsync(Database.ConnectionString, sql, TestContext.Current.CancellationToken);

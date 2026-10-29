@@ -29,13 +29,13 @@ public sealed class SupabaseTokenValidatorKindsTests
         var withTheSecret = await validator.ValidateAsync(AccessTokens.SignedWithTheSecret());
 
         withTheSecret.IsValid.Should().BeTrue(withTheSecret.Error?.Message);
-        withTheSecret.Caller.Should().BeEquivalentTo(new { Kind = CallerKind.User, UserId = (Guid?)AccessTokens.Ada });
+        withTheSecret.User.Should().BeEquivalentTo(new { Kind = CurrentUserKind.User, Id = (Guid?)AccessTokens.Ada });
         _auth.Fetches.Should().Be(0, "a token signed with the secret is checked with the secret alone");
 
         var withAPublishedKey = await validator.ValidateAsync(AccessTokens.SignedWith(_published));
 
         withAPublishedKey.IsValid.Should().BeTrue(withAPublishedKey.Error?.Message);
-        withAPublishedKey.Caller.Should().BeEquivalentTo(new { Kind = CallerKind.User, UserId = (Guid?)AccessTokens.Ada });
+        withAPublishedKey.User.Should().BeEquivalentTo(new { Kind = CurrentUserKind.User, Id = (Guid?)AccessTokens.Ada });
         _auth.Asked.Should().Equal(new Uri(AccessTokens.KeysAddress));
     }
 
@@ -45,8 +45,8 @@ public sealed class SupabaseTokenValidatorKindsTests
         using var client = _auth.Client();
         var validator = new SupabaseTokenValidator(new SupabaseAuthOptions { ProjectUrl = AccessTokens.ProjectUrl }, client);
 
-        (await validator.ValidateAsync(AccessTokens.SignedWithTheSecret())).Caller.Should().BeSameAs(Caller.Anonymous);
-        (await validator.ValidateAsync(AccessTokens.SignedWith(_published))).Caller.Kind.Should().Be(CallerKind.User);
+        (await validator.ValidateAsync(AccessTokens.SignedWithTheSecret())).User.Should().BeSameAs(CurrentUserSnapshot.Anonymous);
+        (await validator.ValidateAsync(AccessTokens.SignedWith(_published))).User.Kind.Should().Be(CurrentUserKind.User);
     }
 
     [Fact]
@@ -72,10 +72,10 @@ public sealed class SupabaseTokenValidatorKindsTests
         var validation = await validator.ValidateAsync(AccessTokens.SignedWith(_published));
 
         validation.IsValid.Should().BeFalse();
-        validation.Caller.Should().BeSameAs(Caller.Anonymous, "a function answers such a request as it answers one with no token, and does not fail");
+        validation.User.Should().BeSameAs(CurrentUserSnapshot.Anonymous, "a function answers such a request as it answers one with no token, and does not fail");
         validation.Error.Should().BeOfType<SecurityTokenSignatureKeyNotFoundException>().Which.Message.Should().Contain(AccessTokens.KeysAddress);
 
-        (await validator.CallerOfAsync("Bearer " + AccessTokens.SignedWithTheSecret())).Kind.Should().Be(CallerKind.User, "the secret needs no Auth server");
+        (await validator.UserOfAsync("Bearer " + AccessTokens.SignedWithTheSecret())).Kind.Should().Be(CurrentUserKind.User, "the secret needs no Auth server");
     }
 
     [Fact]

@@ -166,7 +166,7 @@
                             <td class="small">@(entry.Preset is null ? T[entry.What] : entry.What)</td>
                             <td class="small">
                                 <code>@entry.Answer.Method @entry.Answer.Path</code>
-                                <span class="text-body-secondary">@T["common.as", entry.Answer.Caller], @(entry.Answer.Tenant is null ? T["common.no-header"] : T["common.in", entry.Answer.Tenant])</span>
+                                <span class="text-body-secondary">@T["common.as", entry.Answer.CalledAs], @(entry.Answer.Tenant is null ? T["common.no-header"] : T["common.in", entry.Answer.Tenant])</span>
                             </td>
                             <td class="text-nowrap"><StatusBadge Status="entry.Answer.Status" /> <code>@entry.Answer.Problem?.Code</code></td>
                             <td>

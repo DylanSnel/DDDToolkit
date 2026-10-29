@@ -102,19 +102,19 @@ public sealed class LoginThatOwnsNothingTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database, roles: options => options.SystemRole = Bookkeeping);
         await TenancySeed.SeedAsync(services, await TenancySeed.DatabaseNowAsync(superuser, Cancellation), Cancellation);
         await EveryUseCase.RunAsync(services, Cancellation);
-        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation))).Seat.Id.Should().Be(Ada.Seat);
+        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation))).Seat.Id.Should().Be(Ada.Seat);
 
         // And the checks a host runs at start-up, the core's and Tenancy's, all pass on it.
         await services.InScopeAsync(async scoped =>
         {
-            foreach (var context in new DbContext[] { scoped.Tenancy(), scoped.Widgets() })
+            foreach (var context in new DbContext[] { scoped.TenancyContext(), scoped.Widgets() })
             {
                 PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
                 await PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, Cancellation);
                 await PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(context, Cancellation);
             }
         });
-        TenancyPostgresChecks.EnsureExplicitCallers(services.Provider);
+        TenancyPostgresChecks.EnsureExplicitCurrentUser(services.Provider);
         await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(services.Provider, Cancellation);
         await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(services.Provider, Cancellation);
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);

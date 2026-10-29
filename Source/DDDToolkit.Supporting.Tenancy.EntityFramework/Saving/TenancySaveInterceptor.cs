@@ -16,9 +16,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <summary>
 /// Tenancy's part of every save, in Tenancy's own context and in every context with an entity kept to a tenant:
 /// the save check. Every row the save adds, changes or deletes that belongs to a tenant must belong to the
-/// current Tenancy caller's, so a use case that loaded or made the wrong row cannot write it.
+/// current Tenancy user's, so a handler that loaded or made the wrong row cannot write it.
 /// <list type="table">
-/// <listheader><term>Caller</term><description>What the check does</description></listheader>
+/// <listheader><term>Tenancy user</term><description>What the check does</description></listheader>
 /// <item><term>A seat, or system work in a tenant</term><description>Refuses a row of another tenant with <c>tenancy.other-tenant</c>.</description></item>
 /// <item><term>Nobody</term><description>Refuses every such row with <c>tenancy.not-seated</c>.</description></item>
 /// <item><term>System work outside any tenant</term><description>Refuses every such row with <c>tenancy.other-tenant</c>: it acts in no tenant, and provisioning saves as system work in the tenant it makes.</description></item>
@@ -29,13 +29,13 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// tenant filter.
 /// <para>
 /// Once the check has let the save through, it fills in who changed each row of an entity type that keeps it
-/// (<see cref="TenancyAttribution.RecordsWhoChanged"/>): the actor of the Tenancy caller the save runs as, on a
+/// (<see cref="TenancyAttribution.RecordsWhoChanged"/>): the actor of the Tenancy user the save runs as, on a
 /// new row as who wrote it first and who changed it last, on a changed row as who changed it last.
 /// </para>
 /// <para>
 /// In Tenancy's own context it then writes, in the same save, what the access questions read: the closure of
 /// every organization whose tree changed and the rights of every seat the save reaches, a role's holders
-/// included. The rights the use cases check are therefore never behind the aggregates they were saved with.
+/// included. The rights the managers check are therefore never behind the aggregates they were saved with.
 /// Where the database keeps the rights itself (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>), it writes
 /// them, in the same transaction, and the save writes the closure alone.
 /// </para>
@@ -78,6 +78,12 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
     /// </summary>
     internal abstract string? ProblemWithWhoActed { get; }
 
+    /// <summary>
+    /// The application's services the interceptor was made from: where <c>db.Tenancy()</c> finds Tenancy's catalogue and
+    /// clock for a context <c>UseDDDToolkit</c> wired, whoever made the context.
+    /// </summary>
+    internal abstract IServiceProvider Services { get; }
+
     /// <inheritdoc />
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -101,13 +107,17 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
     }
 
     /// <summary>
-    /// Checks every row of <paramref name="context"/> the save would write against the current Tenancy caller.
+    /// Checks every row of <paramref name="context"/> the save would write against the current Tenancy user.
     /// </summary>
     /// <exception cref="Exceptions.RefusalException"><c>tenancy.other-tenant</c> or <c>tenancy.not-seated</c>.</exception>
-    /// <exception cref="InvalidOperationException">An entity type kept to a tenant has lost the tenant filter.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// An entity type kept to a tenant has lost the tenant filter, or one marks its tenant with <c>[OfTenant]</c> and is
+    /// not kept to it.
+    /// </exception>
     private static void CheckTenants(DbContext context)
     {
         var facts = TenancyModelFacts.Of(context.Model);
+        facts.RequireMarkedTypesAreScoped();
         facts.RequireAttributedTypesAreScoped();
         if (!facts.HasScopedTypes)
         {
@@ -161,7 +171,7 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
     private static void RecordWhoChanged(DbContext context)
     {
         // The check let the save through, so the caller acts in a tenant, and has an actor.
-        if (TenancyCallers.Ambient?.Actor is not { } actor)
+        if (TenancyUsers.Ambient?.Actor is not { } actor)
         {
             return;
         }
@@ -330,6 +340,9 @@ internal sealed class TenancySaveInterceptor<TTenant, TTenantId, TOrganization, 
 
     /// <inheritdoc />
     internal override string? ProblemWithWhoActed => _actedByProblem.Value;
+
+    /// <inheritdoc />
+    internal override IServiceProvider Services => services;
 
     /// <summary>
     /// The accessor is the last one registered, so one the application registers after <c>AddTenancy</c> takes

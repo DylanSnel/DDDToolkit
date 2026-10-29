@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Interfaces;
 
@@ -86,9 +87,9 @@ public sealed class GardenServices : IDisposable
     public ServiceProvider Provider { get; }
 
     /// <summary>Asks something as <paramref name="caller"/>, in a scope of its own, and in no garden.</summary>
-    public async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+    public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
     {
-        using (Callers.Begin(caller))
+        using (TestAccess.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             return await ask(scope.ServiceProvider);
@@ -96,9 +97,9 @@ public sealed class GardenServices : IDisposable
     }
 
     /// <summary>Does something as <paramref name="caller"/>, in a scope of its own, and in no garden.</summary>
-    public async Task AsAsync(Caller caller, Func<IServiceProvider, Task> work)
+    public async Task AsAsync(CurrentUserSnapshot caller, Func<IServiceProvider, Task> work)
     {
-        using (Callers.Begin(caller))
+        using (TestAccess.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             await work(scope.ServiceProvider);
@@ -115,15 +116,15 @@ public sealed class GardenServices : IDisposable
     }
 
     /// <summary>The access questions about plots, asked as <paramref name="person"/>, in its garden.</summary>
-    public Task<T> PlotsAsync<T>(GardenPerson person, Func<IMemberQuestions<PlotId>, Task<T>> ask)
-        => AsAsync(person, provider => ask(provider.GetRequiredService<IMemberQuestions<PlotId>>()));
+    public Task<T> PlotsAsync<T>(GardenPerson person, Func<MembershipAccessManager<Plot>, Task<T>> ask)
+        => AsAsync(person, provider => ask(provider.GetRequiredService<MembershipAccessManager<Plot>>()));
 
     /// <summary>Does the application's own work in <paramref name="garden"/>, in a scope of its own, and answers what it found.</summary>
     public async Task<T> InAsync<T>(GardenId garden, Func<IServiceProvider, Task<T>> work)
     {
         using (GardenOfTheRequest.Begin(garden))
         {
-            return await AsAsync(Caller.System, work);
+            return await AsAsync(CurrentUserSnapshot.System, work);
         }
     }
 
@@ -132,7 +133,7 @@ public sealed class GardenServices : IDisposable
     {
         using (garden is { } within ? GardenOfTheRequest.Begin(within) : null)
         {
-            await AsAsync(Caller.System, async provider =>
+            await AsAsync(CurrentUserSnapshot.System, async provider =>
             {
                 var context = provider.GetRequiredService<GardenContext>();
                 await change(context);
@@ -147,11 +148,11 @@ public sealed class GardenServices : IDisposable
 
     /// <summary>Reads one plot with its gardeners and their roles, on a context of its own, so nothing comes from a change tracker.</summary>
     public Task<Plot> ReadAsync(PlotId id)
-        => AsAsync(Caller.System, provider => provider.GetRequiredService<GardenContext>().Plots.AsNoTracking().SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken));
+        => AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<GardenContext>().Plots.AsNoTracking().SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken));
 
     /// <summary>Reads one role of plots on a context of its own, whichever garden it is of.</summary>
     public Task<PlotRole> ReadAsync(PlotRoleId id)
-        => AsAsync(Caller.System, provider => provider.GetRequiredService<GardenContext>().PlotRoles.AsNoTracking().SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken));
+        => AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<GardenContext>().PlotRoles.AsNoTracking().SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken));
 
     /// <inheritdoc />
     public void Dispose() => Provider.Dispose();

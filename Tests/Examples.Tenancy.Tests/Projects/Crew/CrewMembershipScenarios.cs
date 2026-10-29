@@ -135,12 +135,12 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
         // A membership and a role each start now, so an end that is not after now is no period at all.
         using (var added = await leo.PostAsJsonAsync($"/projects/{PierSeven.Id.Value}/crew", new { seatId = Harbor.SeatOf(DemoPeople.Tove).Value, until = yesterday }, Cancellation))
         {
-            await added.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, TenancyRefusals.InvalidPeriod);
+            await added.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, ProjectRefusals.InvalidPeriod);
         }
 
         using (var given = await leo.GiveCrewRoleAsync(PierSeven, Harbor.SeatOf(DemoPeople.Vic), Surveyor, until: yesterday))
         {
-            await given.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, TenancyRefusals.InvalidPeriod);
+            await given.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, ProjectRefusals.InvalidPeriod);
         }
 
         var crew = (await leo.WithNamesAsync(await leo.ProjectDetailAsync(PierSeven))).Crew;
@@ -263,13 +263,13 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
     [InlineData(SampleCatalogue.CrewLead)]
     [InlineData(SampleCatalogue.Surveyor)]
     [InlineData(SampleCatalogue.Observer)]
-    public async Task A_role_of_the_organization_cannot_go_on_a_crew(string pack)
+    public async Task A_role_of_the_organization_cannot_go_on_a_crew(string starterRole)
     {
         await using var host = await sample.StartAsync();
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
-        var role = Harbor.Roles[pack];
+        var role = Harbor.Roles[starterRole];
 
-        // Not to somebody on the crew: a crew holds project roles, whatever pack a role of the organization was
+        // Not to somebody on the crew: a crew holds project roles, whatever starter role a role of the organization was
         // copied from, its name included.
         using (var given = await leo.GiveCrewRoleAsync(PierSeven, Harbor.SeatOf(DemoPeople.Vic), role.Value))
         {

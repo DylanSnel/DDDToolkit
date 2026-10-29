@@ -20,8 +20,8 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// a tenant's last administrator, at commit; and the trigger that holds callers to themselves in the columns
 /// that say who changed a row.
 /// <para>
-/// Functions are asked by <c>{fn:tenancy/name}</c> and the caller by <c>{caller:...}</c>, which the script fills
-/// in: the schema of the context that defines a function, and the host's caller functions. Every other name is
+/// Functions are asked by <c>{fn:tenancy/name}</c> and the caller by <c>{user:...}</c>, which the script fills
+/// in: the schema of the context that defines a function, and the host's current user functions. Every other name is
 /// read from the model.
 /// </para>
 /// </summary>
@@ -41,12 +41,12 @@ internal static class TenancySql
     private const string HistoryPermission = TenancyPermissions.HistoryView;
 
     /// <summary>The functions, by the names rules ask them by, relative to <see cref="TenancyRowAccess.Owner"/>.</summary>
-    internal const string CallerSeat = "caller_seat";
+    internal const string CurrentSeat = "current_seat";
 
-    /// <summary>The calling seat's own row, which <c>TenancyRowAccess.CallerSeat&lt;TSeat&gt;()</c> asks.</summary>
-    internal const string CallerSeatRow = "caller_seat_row";
+    /// <summary>The calling seat's own row, which <c>TenancyRowAccess.CurrentSeat&lt;TSeat&gt;()</c> asks.</summary>
+    internal const string CurrentSeatRow = "current_seat_row";
 
-    internal const string CallerTenant = "caller_tenant";
+    internal const string CurrentTenant = "current_tenant";
 
     internal const string SystemTenant = "system_tenant";
 
@@ -68,7 +68,7 @@ internal static class TenancySql
 
     internal const string PermissionIsContained = "permission_is_contained";
 
-    internal const string PackPermissions = "pack_permissions";
+    internal const string StarterRolePermissions = "starter_role_permissions";
 
     internal const string UnitParent = "unit_parent";
 
@@ -109,9 +109,9 @@ internal static class TenancySql
 
     internal const string InvitationTermsAreFixed = "invitation_terms_are_fixed";
 
-    internal const string RolePackIsFixed = "role_pack_is_fixed";
+    internal const string RoleStarterRoleIsFixed = "role_starter_role_is_fixed";
 
-    internal const string RoleFollowsItsPack = "role_follows_its_pack";
+    internal const string RoleFollowsItsStarterRole = "role_follows_its_starter_role";
 
     /// <summary>The constraint names the triggers raise with, which a translation of failures reads.</summary>
     internal const string AdministratorRemainsConstraint = "tenancy_administrator_remains";
@@ -130,9 +130,9 @@ internal static class TenancySql
 
     internal const string InvitationTermsAreFixedConstraint = "tenancy_invitation_terms_are_fixed";
 
-    internal const string RolePackIsFixedConstraint = "tenancy_role_pack_is_fixed";
+    internal const string RoleStarterRoleIsFixedConstraint = "tenancy_role_starter_role_is_fixed";
 
-    internal const string RoleFollowsItsPackConstraint = "tenancy_role_follows_its_pack";
+    internal const string RoleFollowsItsStarterRoleConstraint = "tenancy_role_follows_its_starter_role";
 
     /// <summary>The trigger that writes the rights as a grant, a seat or a role is written.</summary>
     internal const string RightsFollowGrantsTrigger = "tenancy_rights_follow_grants";
@@ -141,9 +141,9 @@ internal static class TenancySql
     /// The trigger function that holds a caller to itself in the columns of <c>RecordsWhoChanged</c>, made in the
     /// schema of every context that has such a table, and the trigger that runs it.
     /// </summary>
-    internal const string AttributionMatchesCaller = "attribution_matches_caller";
+    internal const string AttributionMatchesCurrentUser = "attribution_matches_current_user";
 
-    internal const string AttributionMatchesCallerTrigger = "tenancy_attribution_matches_caller";
+    internal const string AttributionMatchesCurrentUserTrigger = "tenancy_attribution_matches_current_user";
 
     /// <summary>What the attribution trigger tells a statement it refuses, by what was wrong with it.</summary>
     internal const string AttributionOfASeat = "A seat records a row as written and changed by itself.";
@@ -152,11 +152,11 @@ internal static class TenancySql
 
     internal const string AttributionIsKept = "Who wrote a row first does not change.";
 
-    /// <summary>What the trigger on what a role's pack gave it tells a statement it refuses.</summary>
-    internal const string RoleFollowsItsPackRefusal = "What its pack gave a role is written as the role is made from the pack, and as Tenancy's own system work makes it follow the pack: by no seat.";
+    /// <summary>What the trigger on what a role's starter role gave it tells a statement it refuses.</summary>
+    internal const string RoleFollowsItsStarterRoleRefusal = "What its starter role gave a role is written as the role is made from the starter role, and as Tenancy's own system work makes it follow the starter role: by no seat.";
 
-    /// <summary>The property of a role that holds what its pack gave it, which a sync of the packs compares the pack with.</summary>
-    private const string PermissionsFromPackProperty = "PermissionsFromPack";
+    /// <summary>The property of a role that holds what its starter role gave it, which a sync of the starter roles compares the starter role with.</summary>
+    private const string PermissionsFromStarterRoleProperty = "PermissionsFromStarterRole";
 
     /// <summary>What the trigger on what a seat is tells a statement it refuses.</summary>
     internal const string SeatIdentityRefusal = "A seat keeps the id, the identity and the tenant it was made with: only Tenancy's system work in its tenant changes them.";
@@ -165,7 +165,7 @@ internal static class TenancySql
     internal const string SeatStatusRefusal = "A seat's status is changed by a seat that manages seats for the whole tenant and, while permissions that manage access are contained, holds at each of its grants those the grant gives.";
 
     /// <summary>The caller's verified identity, as the script fills it in: <c>(SELECT auth.uid())</c> on Supabase.</summary>
-    private const string Uid = "{caller:uid}";
+    private const string Uid = "{user:uid}";
 
     private const string User = RowAccessRoles.User;
 
@@ -284,7 +284,7 @@ internal static class TenancySql
     private static string Fn(string name) => "{fn:" + TenancyRowAccess.Owner + "/" + name + "}";
 
     /// <summary><paramref name="column"/> is the calling seat's tenant.</summary>
-    private static string T(string column) => $"{column} = (SELECT {Fn(CallerTenant)}())";
+    private static string T(string column) => $"{column} = (SELECT {Fn(CurrentTenant)}())";
 
     /// <summary><paramref name="column"/> is the tenant system work acts in.</summary>
     private static string S(string column) => $"{column} = (SELECT {Fn(SystemTenant)}())";
@@ -299,7 +299,7 @@ internal static class TenancySql
     private static string U(string permission, string column) => $"{column} = ANY (ARRAY(SELECT {Fn(UnitsWhereIHold)}({RowAccessModel.Literal(permission)})))";
 
     /// <summary>The system work is Tenancy's own: it began <c>TenancyWork.BeginSystemIn</c> in Tenancy's scope.</summary>
-    private static string Scope => "{caller:claim:scope} = " + RowAccessModel.Literal(TenancyWork.SystemScope);
+    private static string Scope => "{user:claim:scope} = " + RowAccessModel.Literal(TenancyWork.SystemScope);
 
     /// <summary>
     /// The calling seat may read the grant of the seat in <paramref name="seat"/> at the unit in
@@ -316,7 +316,7 @@ internal static class TenancySql
     /// <param name="seat">The grant's or the right's seat, as SQL.</param>
     /// <param name="unit">The grant's or the right's unit, as SQL.</param>
     private static string ReadsGrantOf(string seat, string unit)
-        => $"({seat} = (SELECT {Fn(CallerSeat)}()) OR {U(GrantsPermission, unit)} OR {U(SeatsPermission, unit)} OR {U(UnitsPermission, unit)} OR {W(RolesPermission)})";
+        => $"({seat} = (SELECT {Fn(CurrentSeat)}()) OR {U(GrantsPermission, unit)} OR {U(SeatsPermission, unit)} OR {U(UnitsPermission, unit)} OR {W(RolesPermission)})";
 
     /// <summary>A period of <paramref name="alias"/>'s row that applies now.</summary>
     private static string Live(IEntityType table, string alias)
@@ -328,7 +328,7 @@ internal static class TenancySql
 
     /// <summary>
     /// Tenancy's functions: the questions about the caller, the sets rules ask, what the catalogue says of a permission or
-    /// a pack, the rows a module reads Tenancy through, the three that answer about other seats' rights, the
+    /// a starter role, the rows a module reads Tenancy through, the three that answer about other seats' rights, the
     /// one that writes a tenant's rights again, the three that read across tenants for system work, with the one
     /// that finds an invitation by its token's digest where the context maps invitations, and the five that take
     /// the tenant as an argument.
@@ -347,12 +347,12 @@ internal static class TenancySql
         var seatType = TenancyTables.ColumnType(seats, "Id");
         var unitType = TenancyTables.ColumnType(units, "Id");
         var roleType = TenancyTables.ColumnType(roles, "Id");
-        string[] callers = [User, SystemIn];
+        string[] usersAndSystemIn = [User, SystemIn];
 
         var activeTenant = TenancyTables.Stored(tenants, "Status", TenantStatus.Active);
         var activeSeat = TenancyTables.Stored(seats, "Status", SeatStatus.Active);
         var activeRole = TenancyTables.Stored(roles, "Status", RoleStatus.Active);
-        var callerSeat = $"(SELECT {Fn(CallerSeat)}())";
+        var currentSeat = $"(SELECT {Fn(CurrentSeat)}())";
 
         // The questions about a seat, written once each: asked of the calling seat, which the tenant the
         // connection names finds, and of the seat the same person has in a tenant given as an argument. The two
@@ -402,43 +402,43 @@ internal static class TenancySql
             tenantType,
             $"SELECT nullif(pg_catalog.current_setting({RowAccessModel.Literal(TenancyRowLevelSecurity.TenantSetting)}, true), '')::{TenancyTables.Cast(tenantType)}",
             SecurityDefiner: false,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         yield return new ContributedFunction(
-            CallerSeat,
+            CurrentSeat,
             "",
             seatType,
             SeatOfTheIdentityIn($"(SELECT {Fn(SystemTenant)}())"),
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         yield return new ContributedFunction(
-            CallerTenant,
+            CurrentTenant,
             "",
             tenantType,
-            $"SELECT s.{C(seats, "TenantId")} FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {callerSeat}",
+            $"SELECT s.{C(seats, "TenantId")} FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {currentSeat}",
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         // The calling seat's own row, every column the application's seat class maps, for a rule that reads a field of
-        // it: TenancyRowAccess.CallerSeat<TSeat>().Kind. It runs as its owner, so a rule on the seats that reads it does
+        // it: TenancyRowAccess.CurrentSeat<TSeat>().Kind. It runs as its owner, so a rule on the seats that reads it does
         // not ask the seats' policies again, and a seat reads its own fields whatever the application's read rule on
         // the seats says. No row for a caller without a seat, so every field it answers is null then.
         yield return new ContributedFunction(
-            CallerSeatRow,
+            CurrentSeatRow,
             "",
             "SETOF " + Q(seats),
-            $"SELECT s.* FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {callerSeat}",
+            $"SELECT s.* FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {currentSeat}",
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         yield return new ContributedFunction(
             UnitsWhereIHold,
             "permission text",
             "SETOF " + unitType,
-            UnitsHeldBy(callerSeat, "$1"),
+            UnitsHeldBy(currentSeat, "$1"),
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         // Kept to the seat's tenant, as the C# question is, whatever tenant a placement row says it is of.
         yield return new ContributedFunction(
@@ -448,10 +448,10 @@ internal static class TenancySql
             $"""
             SELECT DISTINCT p.{C(paths, "DescendantId")} FROM {Q(placements)} pl
             JOIN {Q(paths)} p ON p.{C(paths, "AncestorId")} = pl.{C(placements, "UnitId")} AND p.{C(paths, "TenantId")} = pl.{C(placements, "TenantId")}
-            WHERE pl.{C(placements, "SeatId")} = {callerSeat} AND p.{C(paths, "TenantId")} = (SELECT {Fn(CallerTenant)}())
+            WHERE pl.{C(placements, "SeatId")} = {currentSeat} AND p.{C(paths, "TenantId")} = (SELECT {Fn(CurrentTenant)}())
             """,
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         // The seats placed at a unit the calling seat belongs to, as readable_units answers those: a unit it is placed
         // at, or one below it. For a read rule of the application's on its seat class, which can say who reads which
@@ -463,27 +463,27 @@ internal static class TenancySql
             "SETOF " + seatType,
             $"""
             SELECT DISTINCT pl.{C(placements, "SeatId")} FROM {Q(placements)} pl
-            WHERE pl.{C(placements, "TenantId")} = (SELECT {Fn(CallerTenant)}())
+            WHERE pl.{C(placements, "TenantId")} = (SELECT {Fn(CurrentTenant)}())
               AND pl.{C(placements, "UnitId")} = ANY (ARRAY(SELECT {Fn(ReadableUnits)}()))
             """,
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         yield return new ContributedFunction(
             RolesWithPermission,
             "permission text",
             "SETOF " + roleType,
-            RolesHolding($"(SELECT {Fn(CallerTenant)}())", "$1"),
+            RolesHolding($"(SELECT {Fn(CurrentTenant)}())", "$1"),
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         yield return new ContributedFunction(
             HoldsPermission,
             "permission text",
             "boolean",
-            HeldBy(callerSeat, "$1"),
+            HeldBy(currentSeat, "$1"),
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         yield return new ContributedFunction(
             HoldsAtTenant,
@@ -492,11 +492,11 @@ internal static class TenancySql
             $"""
             SELECT EXISTS (SELECT 1 FROM {Q(rights)} r
                            JOIN {Q(units)} u ON u.{C(units, "Id")} = r.{C(rights, "UnitId")} AND u.{C(units, "TenantId")} = r.{C(rights, "TenantId")}
-                           WHERE r.{C(rights, "SeatId")} = {callerSeat} AND r.{C(rights, "Permission")} = $1 AND {Fn(PermissionIsLive)}($1) AND {Live(rights, "r")}
+                           WHERE r.{C(rights, "SeatId")} = {currentSeat} AND r.{C(rights, "Permission")} = $1 AND {Fn(PermissionIsLive)}($1) AND {Live(rights, "r")}
                              AND u.{C(units, "ParentId")} IS NULL)
             """,
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         // The parent a unit has before the statement that asks, which a policy on the units cannot read from the units
         // itself: Postgres takes a policy that reads its own table for one that never ends.
@@ -504,9 +504,9 @@ internal static class TenancySql
             UnitParent,
             "unit " + unitType,
             unitType,
-            $"SELECT u.{C(units, "ParentId")} FROM {Q(units)} u WHERE u.{C(units, "Id")} = $1 AND u.{C(units, "TenantId")} = (SELECT {Fn(CallerTenant)}())",
+            $"SELECT u.{C(units, "ParentId")} FROM {Q(units)} u WHERE u.{C(units, "Id")} = $1 AND u.{C(units, "TenantId")} = (SELECT {Fn(CurrentTenant)}())",
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         // Every tenant the identity has a seat in, whatever the status of the seat or of the tenant. It is for the
         // directory, where a person finds their tenants to choose one, and for the access revision, which a seat
@@ -518,7 +518,7 @@ internal static class TenancySql
             "SETOF " + tenantType,
             $"SELECT DISTINCT s.{C(seats, "TenantId")} FROM {Q(seats)} s WHERE s.{C(seats, "Identity")} = {Uid}",
             SecurityDefiner: true,
-            GrantTo: callers);
+            GrantTo: usersAndSystemIn);
 
         // What those tenants are called: each one's slug and its organization's name, and nothing more of either. The
         // tenant picker reads the names through it, before a tenant is chosen, so it names each tenant whatever a
@@ -545,7 +545,7 @@ internal static class TenancySql
             "boolean",
             ManagesAccessBody(catalogue),
             SecurityDefiner: false,
-            GrantTo: callers,
+            GrantTo: usersAndSystemIn,
             Volatility: "IMMUTABLE");
 
         // Which permissions a seat hands on only where it holds them, from the same catalogue: those that manage access while
@@ -558,18 +558,18 @@ internal static class TenancySql
             "boolean",
             PermissionIsContainedBody(catalogue),
             SecurityDefiner: false,
-            GrantTo: callers,
+            GrantTo: usersAndSystemIn,
             Volatility: "IMMUTABLE");
 
-        // The permissions a copy of each pack holds, from the same catalogue: what a settings manager's copy of a pack may
+        // The permissions a copy of each starter role holds, from the same catalogue: what a settings manager's copy of a starter role may
         // hold, and nothing more.
         yield return new ContributedFunction(
-            PackPermissions,
-            "pack text",
+            StarterRolePermissions,
+            "starter_role text",
             "text[]",
-            PackPermissionsBody(catalogue),
+            StarterRolePermissionsBody(catalogue),
             SecurityDefiner: false,
-            GrantTo: callers,
+            GrantTo: usersAndSystemIn,
             Volatility: "IMMUTABLE");
 
         // Which permissions are live, from the same catalogue: a permission that is not gets no rights, and answers nothing. No
@@ -591,8 +591,8 @@ internal static class TenancySql
 
         // What a seat may learn of other seats' rights, which the policies keep from its own reads: a right where
         // the seat may read the grant that gives it, as ids, permissions and dates and nothing else of anyone.
-        var seatTenant = $"(SELECT {Fn(CallerTenant)}())";
-        string[] seatCallers = [User];
+        var seatTenant = $"(SELECT {Fn(CurrentTenant)}())";
+        string[] seatUsers = [User];
         var readable = ReadsGrantOf($"r.{C(rights, "SeatId")}", $"r.{C(rights, "UnitId")}");
 
         // Held at the root, these are read with a permission held there: by every command that could take an
@@ -610,7 +610,7 @@ internal static class TenancySql
               AND {readable}
             """,
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
 
         // Every right that has not ended, the calling seat's or of a permission that manages access, held at a parent or
         // above it, once for each of the two parents it reaches: answered to a seat that manages units at both.
@@ -622,22 +622,22 @@ internal static class TenancySql
         var otherParent = $"CASE WHEN p.{C(paths, "DescendantId")} = $1 THEN $2 ELSE $1 END";
         var changesWithTheMove = $"NOT EXISTS (SELECT 1 FROM {Q(paths)} o WHERE o.{C(paths, "AncestorId")} = r.{C(rights, "UnitId")} AND o.{C(paths, "TenantId")} = r.{C(rights, "TenantId")} AND o.{C(paths, "DescendantId")} = {otherParent})";
         yield return new ContributedFunction(
-            TenancyFunctionNames.PermissionsAMoveChanges,
+            TenancyFunctionNames.PermissionsAUnitMoveChanges,
             $"parent {unitType}, new_parent {unitType}",
-            $"TABLE (\"UnitId\" {unitType}, \"Permission\" text, \"EndsAt\" {TenancyTables.ColumnType(rights, "EndsAt")}, \"Parent\" {unitType}, \"OfCaller\" boolean)",
+            $"TABLE (\"UnitId\" {unitType}, \"Permission\" text, \"EndsAt\" {TenancyTables.ColumnType(rights, "EndsAt")}, \"Parent\" {unitType}, \"OfCurrentSeat\" boolean)",
             $"""
             SELECT r.{C(rights, "UnitId")}, r.{C(rights, "Permission")}::pg_catalog.text, r.{C(rights, "EndsAt")}, p.{C(paths, "DescendantId")},
-                   coalesce(r.{C(rights, "SeatId")} = {callerSeat}, false)
+                   coalesce(r.{C(rights, "SeatId")} = {currentSeat}, false)
             FROM {Q(rights)} r
             JOIN {Q(paths)} p ON p.{C(paths, "AncestorId")} = r.{C(rights, "UnitId")} AND p.{C(paths, "TenantId")} = r.{C(rights, "TenantId")}
             WHERE r.{C(rights, "TenantId")} = {seatTenant}
               AND (r.{C(rights, "EndsAt")} IS NULL OR r.{C(rights, "EndsAt")} > pg_catalog.now())
-              AND (r.{C(rights, "SeatId")} = {callerSeat} OR ({Fn(ManagesAccess)}(r.{C(rights, "Permission")}) AND {changesWithTheMove}))
+              AND (r.{C(rights, "SeatId")} = {currentSeat} OR ({Fn(ManagesAccess)}(r.{C(rights, "Permission")}) AND {changesWithTheMove}))
               AND p.{C(paths, "DescendantId")} IN ($1, $2)
               AND $1 = {managesUnits} AND $2 = {managesUnits}
             """,
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
 
         // The active seats with a right for the permission that applies now, at the unit or above it: each one whose grant
         // there the calling seat may read, which is itself, any other seat at a unit where it manages grants, seats
@@ -656,7 +656,7 @@ internal static class TenancySql
               AND {readable}
             """,
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
 
         // What the units asked about are called, those of the seat's tenant: each one's name, the names of the units
         // above it, the root first, and how deep it is, and nothing more of any unit. It runs as its owner, so a seat
@@ -679,7 +679,7 @@ internal static class TenancySql
             WHERE u.{C(units, "TenantId")} = {seatTenant} AND u.{C(units, "Id")} = ANY ($1)
             """,
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
 
         // Every right of the tenant written again from its grants, for Tenancy's own system work in that tenant:
         // what repairs the rights after rows were written past the triggers, an import say. It answers how many
@@ -775,7 +775,7 @@ internal static class TenancySql
             seatType,
             SeatOfTheIdentityIn("$1"),
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
 
         yield return new ContributedFunction(
             SeatedInTenant,
@@ -783,7 +783,7 @@ internal static class TenancySql
             "boolean",
             $"SELECT {Fn(SeatInTenant)}($1) IS NOT NULL",
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
 
         yield return new ContributedFunction(
             HoldsPermissionInTenant,
@@ -791,7 +791,7 @@ internal static class TenancySql
             "boolean",
             HeldBy(seatThere, "$2"),
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
 
         yield return new ContributedFunction(
             UnitsWhereIHoldInTenant,
@@ -799,7 +799,7 @@ internal static class TenancySql
             "SETOF " + unitType,
             UnitsHeldBy(seatThere, "$2"),
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
 
         yield return new ContributedFunction(
             RolesWithPermissionInTenant,
@@ -807,7 +807,7 @@ internal static class TenancySql
             "SETOF " + roleType,
             RolesHolding("$1", "$2") + $"\n  AND {seatThere} IS NOT NULL",
             SecurityDefiner: true,
-            GrantTo: seatCallers);
+            GrantTo: seatUsers);
     }
 
     /// <summary>
@@ -825,9 +825,9 @@ internal static class TenancySql
     /// that person read, are kept out by the tenant filter the rows carry in the module's model.
     /// </para>
     /// <para>
-    /// They answer access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's pack and permissions.
+    /// They answer access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions.
     /// None answers what a seat, a unit or a role is called, so a module that reads Tenancy through them has no
-    /// name to show, and asks the directory for one, by id.
+    /// name to show, and asks the managers' reads for one, by id.
     /// </para>
     /// </summary>
     private static IEnumerable<ContributedFunction> ReadFunctions(TenancyTables tenancy)
@@ -859,7 +859,7 @@ internal static class TenancySql
         var seats = tenancy.Seats;
 
         yield return (
-            TenancyFunctionNames.CallerPermissions,
+            TenancyFunctionNames.CurrentPermissions,
             rights,
             [
                 Answered.AsStored(rights, "TenantId"),
@@ -892,14 +892,14 @@ internal static class TenancySql
                 Answered.NameOf<UnitStatus>(units, "Status"),
             ]);
 
-        // Not the name. The pack and the permissions are what rules read of a role.
+        // Not the name. The starter role and the permissions are what rules read of a role.
         yield return (
             TenancyFunctionNames.TenantRoles,
             roles,
             [
                 Answered.AsStored(roles, "Id"),
                 Answered.AsStored(roles, "TenantId"),
-                Answered.Text(roles, "FromPack"),
+                Answered.Text(roles, "FromStarterRole"),
                 Answered.NameOf<RoleStatus>(roles, "Status"),
                 new Answered("Permissions", "text[]", PermissionsAsArray(roles)),
             ]);
@@ -1095,24 +1095,24 @@ internal static class TenancySql
         => contained ? ManagesAccessBody(catalogue) : "SELECT false";
 
     /// <summary>
-    /// The body of <c>pack_permissions(pack)</c>: the permissions, implied ones included, a role made from the pack of that permission
-    /// holds, as <paramref name="catalogue"/> expands them; null for a pack it does not have. A start-up check
+    /// The body of <c>starter_role_permissions(starter_role)</c>: the permissions, implied ones included, a role made from the starter role of that permission
+    /// holds, as <paramref name="catalogue"/> expands them; null for a starter role it does not have. A start-up check
     /// compares it with the function the database has.
     /// </summary>
-    internal static string PackPermissionsBody(TenancyCatalogue catalogue)
+    internal static string StarterRolePermissionsBody(TenancyCatalogue catalogue)
     {
-        if (catalogue.Packs.Count == 0)
+        if (catalogue.StarterRoles.Count == 0)
         {
             return "SELECT NULL::pg_catalog.text[]";
         }
 
         var body = new StringBuilder("SELECT CASE $1");
-        foreach (var pack in catalogue.Packs.OrderBy(pack => pack.Key, StringComparer.Ordinal))
+        foreach (var starterRole in catalogue.StarterRoles.OrderBy(starterRole => starterRole.Key, StringComparer.Ordinal))
         {
-            // A pack with no permissions is an empty array, written without braces: a brace in contributed SQL asks the
+            // A starter role with no permissions is an empty array, written without braces: a brace in contributed SQL asks the
             // script to fill something in.
-            var permissions = pack.Permissions.Order(StringComparer.Ordinal).Select(RowAccessModel.Literal);
-            body.Append(" WHEN ").Append(RowAccessModel.Literal(pack.Key)).Append(" THEN ")
+            var permissions = starterRole.Permissions.Order(StringComparer.Ordinal).Select(RowAccessModel.Literal);
+            body.Append(" WHEN ").Append(RowAccessModel.Literal(starterRole.Key)).Append(" THEN ")
                 .Append("ARRAY[").AppendJoin(", ", permissions).Append("]::pg_catalog.text[]");
         }
 
@@ -1129,7 +1129,7 @@ internal static class TenancySql
 
     /// <summary>
     /// The permissions of <paramref name="alias"/>'s role as a set of rows with one column, <c>k</c>, named <paramref name="name"/>:
-    /// the permissions it grants, or with <paramref name="property"/> another list of permissions of the role, such as what its pack gave it.
+    /// the permissions it grants, or with <paramref name="property"/> another list of permissions of the role, such as what its starter role gave it.
     /// </summary>
     private static string PermissionsOf(IEntityType roles, string alias, string name, string property = "Permissions")
         => PermissionsColumn(roles, property) switch
@@ -1172,25 +1172,25 @@ internal static class TenancySql
         => $"NOT EXISTS ({Managed(roles, table)} AND NOT ({TenancyTables.Own(table, "UnitId")} = ANY (ARRAY(SELECT {Fn(UnitsWhereIHold)}(managed.k)))))";
 
     /// <summary>
-    /// The role written is a copy of a pack of the catalogue: it names the pack, holds exactly its permissions, and
-    /// remembers exactly those as what the pack gave it, which the next sync of the packs compares the pack with.
+    /// The role written is a copy of a starter role of the catalogue: it names the starter role, holds exactly its permissions, and
+    /// remembers exactly those as what the starter role gave it, which the next sync of the starter roles compares the starter role with.
     /// </summary>
-    private static string CopyOfItsPack(IEntityType roles)
+    private static string CopyOfItsStarterRole(IEntityType roles)
     {
-        var pack = $"{Fn(PackPermissions)}({TenancyTables.Own(roles, "FromPack")})";
-        var packed = $"SELECT pg_catalog.unnest({pack})";
+        var starterRole = $"{Fn(StarterRolePermissions)}({TenancyTables.Own(roles, "FromStarterRole")})";
+        var listed = $"SELECT pg_catalog.unnest({starterRole})";
         string Exactly(string property)
         {
             var held = $"SELECT held.k FROM {PermissionsOf(roles, Q(roles), "held", property)}";
-            return $"NOT EXISTS ({held} EXCEPT {packed}) AND NOT EXISTS ({packed} EXCEPT {held})";
+            return $"NOT EXISTS ({held} EXCEPT {listed}) AND NOT EXISTS ({listed} EXCEPT {held})";
         }
 
-        return $"({pack} IS NOT NULL AND {Exactly("Permissions")} AND {TenancyTables.Own(roles, PermissionsFromPackProperty)} IS NOT NULL AND {Exactly(PermissionsFromPackProperty)})";
+        return $"({starterRole} IS NOT NULL AND {Exactly("Permissions")} AND {TenancyTables.Own(roles, PermissionsFromStarterRoleProperty)} IS NOT NULL AND {Exactly(PermissionsFromStarterRoleProperty)})";
     }
 
-    /// <summary>The role written is made by hand: it names no pack, and remembers nothing a pack gave it.</summary>
+    /// <summary>The role written is made by hand: it names no starter role, and remembers nothing a starter role gave it.</summary>
     private static string MadeByHand(IEntityType roles)
-        => $"({TenancyTables.Own(roles, "FromPack")} IS NULL AND {TenancyTables.Own(roles, PermissionsFromPackProperty)} IS NULL)";
+        => $"({TenancyTables.Own(roles, "FromStarterRole")} IS NULL AND {TenancyTables.Own(roles, PermissionsFromStarterRoleProperty)} IS NULL)";
 
     /// <summary>
     /// A column of the roles that holds permissions, their permissions by default, and how it is stored: an array, <c>text[]</c> on
@@ -1220,9 +1220,9 @@ internal static class TenancySql
     /// <summary>
     /// The policies on Tenancy's own tables. Signed-in users read their tenant's rows, except the rights, of which
     /// a seat reads its own, and the grants, which their own seat reads, a seat that manages grants, seats or units
-    /// where they are, and a seat that manages roles for the whole tenant; and they write where the use case asks the
+    /// where they are, and a seat that manages roles for the whole tenant; and they write where the manager asks the
     /// permission: at the unit for units, placements and grants, and held somewhere or for the whole tenant elsewhere; a seat
-    /// also takes away its own grants and placements, as the use cases let it. System work reads its tenant, and
+    /// also takes away its own grants and placements, as the managers let it. System work reads its tenant, and
     /// writes it in Tenancy's own scope. Nobody writes the rights: the database keeps them itself. Every table is kept
     /// to its tenant for system work and closed to anonymous callers, and kept to this contribution.
     /// <para>
@@ -1243,7 +1243,7 @@ internal static class TenancySql
         var rights = tenancy.Rights;
         var roles = tenancy.Roles;
         var revisions = tenancy.AccessRevisions;
-        var callerSeat = $"(SELECT {Fn(CallerSeat)}())";
+        var currentSeat = $"(SELECT {Fn(CurrentSeat)}())";
 
         void Add(IEntityType table, string name, string command, string? existing, string? left)
             => policies.Add(new ContributedPolicy(table, name, command, User, existing, left));
@@ -1298,7 +1298,7 @@ internal static class TenancySql
         // triggers hold column by column: the id, the identity and the tenant change for no seat, and the status only
         // as the use cases change it. The application's own columns are its own to hold: Tenancy decides nothing of them.
         var seatTenant = T(C(seats, "TenantId"));
-        var seat = Both(seatTenant, $"({K(SeatsPermission)} OR {K(GrantsPermission)} OR {C(seats, "Id")} = {callerSeat})");
+        var seat = Both(seatTenant, $"({K(SeatsPermission)} OR {K(GrantsPermission)} OR {C(seats, "Id")} = {currentSeat})");
 
         // Who reads the seats is the application's to say, so this is a default: a read rule of the application's on
         // its seat class takes its place, held to the calling seat's tenant. What Tenancy's own work reads
@@ -1322,7 +1322,7 @@ internal static class TenancySql
         // those at a unit where it manages seats. A seat takes away what is its own, as the use cases let it: the
         // policy for its own row asks no permission, since its permissions may be the first rows the same save removes.
         var placementTenant = T(C(placements, "TenantId"));
-        var ownSeat = (IEntityType table) => $"{TenancyTables.Own(table, "SeatId")} = {callerSeat}";
+        var ownSeat = (IEntityType table) => $"{TenancyTables.Own(table, "SeatId")} = {currentSeat}";
         var seatOfTheTenant = $"EXISTS (SELECT 1 FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {TenancyTables.Own(placements, "SeatId")} AND {T("s." + C(seats, "TenantId"))})";
         var noGrantsLeft = $"NOT EXISTS (SELECT 1 FROM {Q(grants)} g WHERE g.{C(grants, "SeatId")} = {TenancyTables.Own(placements, "SeatId")} AND g.{C(grants, "UnitId")} = {TenancyTables.Own(placements, "UnitId")})";
         Add(placements, "Members read placements", "SELECT", placementTenant, null);
@@ -1349,7 +1349,7 @@ internal static class TenancySql
         var grantUnit = U(GrantsPermission, C(grants, "UnitId"));
         var activeRole = $"EXISTS (SELECT 1 FROM {Q(roles)} r WHERE r.{C(roles, "Id")} = {TenancyTables.Own(grants, "RoleId")} AND {T("r." + C(roles, "TenantId"))} AND r.{C(roles, "Status")} = {TenancyTables.Stored(roles, "Status", RoleStatus.Active)})";
         var contained = Contained(roles, grants);
-        var notToItself = $"(NOT EXISTS ({Managed(roles, grants)}) OR {TenancyTables.Own(grants, "SeatId")} <> {callerSeat})";
+        var notToItself = $"(NOT EXISTS ({Managed(roles, grants)}) OR {TenancyTables.Own(grants, "SeatId")} <> {currentSeat})";
 
         // A grant is read by its own seat, and by a seat that manages grants, seats or units at its unit, or roles
         // for the whole tenant: a permission reads only where it applies. A use case loads a seat with the grants its caller
@@ -1359,7 +1359,7 @@ internal static class TenancySql
         // reads them to ask the grants permission, and the policy on the placements reads them to keep a placement that
         // has any.
         Add(grants, "Seats and managers read grants", "SELECT", Both(grantTenant, ReadsGrantOf(TenancyTables.Own(grants, "SeatId"), TenancyTables.Own(grants, "UnitId"))), null);
-        Add(grants, "Grants managers give at the unit", "INSERT", null, Both(grantTenant, grantUnit, activeRole, $"{C(grants, "GrantedBy")} = {callerSeat}", contained, notToItself));
+        Add(grants, "Grants managers give at the unit", "INSERT", null, Both(grantTenant, grantUnit, activeRole, $"{C(grants, "GrantedBy")} = {currentSeat}", contained, notToItself));
         Add(grants, "Grants managers change at the unit", "UPDATE", Both(grantTenant, grantUnit, activeRole, contained), Both(grantTenant, grantUnit, activeRole, contained, notToItself));
         Add(grants, "Grants managers revoke at the unit", "DELETE", Both(grantTenant, $"({Both(grantUnit, contained)} OR {ownSeat(grants)})"), null);
 
@@ -1369,10 +1369,10 @@ internal static class TenancySql
         Add(rights, "A seat reads its own rights", "SELECT", Both(T(C(rights, "TenantId")), ownSeat(rights)), null);
 
         // A role's permissions that manage access change only with the role permission held for the whole tenant, which every
-        // change of a role asks here. A role manager adds a role made by hand, which names no pack, as the use case
-        // that makes a role does; a role that names a pack is added only as a copy of it, remembering exactly what
-        // the pack gave it, by a role or a settings manager, as the use case that changes a tenant's shape adds it.
-        // So no seat makes a role that a sync of the packs would give what its pack never gave it.
+        // change of a role asks here. A role manager adds a role made by hand, which names no starter role, as the use case
+        // that makes a role does; a role that names a starter role is added only as a copy of it, remembering exactly what
+        // the starter role gave it, by a role or a settings manager, as the use case that changes a tenant's shape adds it.
+        // So no seat makes a role that a sync of the starter roles would give what its starter role never gave it.
         var roleTenant = T(C(roles, "TenantId"));
         Add(roles, "Members read roles", "SELECT", roleTenant, null);
         Add(
@@ -1380,7 +1380,7 @@ internal static class TenancySql
             "Role and settings managers add roles",
             "INSERT",
             null,
-            Both(roleTenant, $"({Both(W(RolesPermission), MadeByHand(roles))} OR {Both($"({W(RolesPermission)} OR {W(SettingsPermission)})", CopyOfItsPack(roles))})"));
+            Both(roleTenant, $"({Both(W(RolesPermission), MadeByHand(roles))} OR {Both($"({W(RolesPermission)} OR {W(SettingsPermission)})", CopyOfItsStarterRole(roles))})"));
         Add(roles, "Role managers change roles", "UPDATE", Both(roleTenant, W(RolesPermission)), Both(roleTenant, W(RolesPermission)));
 
         // The revision is a counter every change of access takes, a seat's change of its own included: taking away
@@ -1403,8 +1403,8 @@ internal static class TenancySql
 
     /// <summary>
     /// The policies on the invitations and on the digests of their tokens, where the model maps them
-    /// (<c>AddTenancyInvitations</c>). An invitation is read by the seats that manage seats at its unit, as the use
-    /// case lists it, and by whoever else a read rule of the application's on its invitation class lets read it, in
+    /// (<c>AddTenancyInvitations</c>). An invitation is read by the seats that manage seats at its unit, as the
+    /// manager lists it, and by whoever else a read rule of the application's on its invitation class lets read it, in
     /// the tenant: that read is a default. It is added by a seat that could add the seat and make the grant itself: one that manages
     /// seats for the whole tenant and grants at the unit, and for a role that manages access holds each of its permissions
     /// that do there while containment is on, as the policy on the grants asks; open, as its own, and never as system work's, which the
@@ -1426,7 +1426,7 @@ internal static class TenancySql
         }
 
         var roles = tenancy.Roles;
-        var callerSeat = $"(SELECT {Fn(CallerSeat)}())";
+        var currentSeat = $"(SELECT {Fn(CurrentSeat)}())";
         string State(InvitationState state) => TenancyTables.Stored(invitations, "State", state);
 
         var tenant = T(C(invitations, "TenantId"));
@@ -1456,7 +1456,7 @@ internal static class TenancySql
                 activeRole,
                 Contained(roles, invitations),
                 $"NOT {C(invitations, "IssuedAsSystem")}",
-                $"{C(invitations, "IssuedBy")} = {callerSeat}",
+                $"{C(invitations, "IssuedBy")} = {currentSeat}",
                 open,
                 notAccepted)));
         policies.Add(new ContributedPolicy(
@@ -1482,7 +1482,7 @@ internal static class TenancySql
             "INSERT",
             User,
             null,
-            Both(T(digestTenant), WrittenNow($" AND i.{C(invitations, "IssuedBy")} = {callerSeat} AND i.{C(invitations, "State")} = {State(InvitationState.Open)}"))));
+            Both(T(digestTenant), WrittenNow($" AND i.{C(invitations, "IssuedBy")} = {currentSeat} AND i.{C(invitations, "State")} = {State(InvitationState.Open)}"))));
         policies.Add(new ContributedPolicy(
             digests,
             "Tenancy work keeps a token's digest",
@@ -1588,12 +1588,12 @@ internal static class TenancySql
         var stoppedInThisSave =
             $"EXISTS (SELECT 1 FROM {Q(seats)} s WHERE s.{C(seats, "Identity")} = {Uid} AND s.{C(seats, "TenantId")} = {TenancyTables.Own(log, TenancyEventLogTable.TenantId)} " +
             $"AND s.{C(seats, "Id")}::pg_catalog.text = {actor} AND \"ddd\".written_in_this_transaction(s.xmin))";
-        var byTheCaller = $"(CASE WHEN {actor} = (SELECT {Fn(CallerSeat)}())::pg_catalog.text THEN true ELSE {stoppedInThisSave} END)";
+        var byTheCurrentSeat = $"(CASE WHEN {actor} = (SELECT {Fn(CurrentSeat)}())::pg_catalog.text THEN true ELSE {stoppedInThisSave} END)";
 
         // The kinds system work is recorded as, named one by one: a kind nobody thought of yet is refused, not let in.
         var notBySeat = $"{C(log, nameof(EventLogEntry.ActedByKind))} IN ({string.Join(", ", new[] { TenancyActorKinds.System, TenancyActorKinds.Operator, TenancyActorKinds.Token }.Select(RowAccessModel.Literal))})";
 
-        policies.Add(new ContributedPolicy(log, "Seats record what they do", "INSERT", User, null, Both(S(tenant), bySeat, byTheCaller)));
+        policies.Add(new ContributedPolicy(log, "Seats record what they do", "INSERT", User, null, Both(S(tenant), bySeat, byTheCurrentSeat)));
         policies.Add(new ContributedPolicy(log, "History readers read their tenant", "SELECT", User, Both(T(tenant), W(HistoryPermission)), null));
         policies.Add(new ContributedPolicy(log, "System work reads its tenant", "SELECT", SystemIn, S(tenant), null));
         policies.Add(new ContributedPolicy(log, "Tenancy work records its tenant", "INSERT", SystemIn, null, Both(S(tenant), Scope, notBySeat)));
@@ -1616,12 +1616,12 @@ internal static class TenancySql
     /// </summary>
     private static void HostEntities(TenancyTables tenancy, List<ContributedPolicy> policies, List<IEntityType> exclusive)
     {
-        var callerSeat = $"(SELECT {Fn(CallerSeat)}())";
+        var currentSeat = $"(SELECT {Fn(CurrentSeat)}())";
         (IEntityType Root, string Tenant, Func<string, string> Changes)[] roots =
         [
             (tenancy.Tenants, "Id", _ => W(SettingsPermission)),
             (tenancy.Organizations, "Id", _ => $"({K(UnitsPermission)} OR {W(SettingsPermission)})"),
-            (tenancy.Seats, "TenantId", alias => $"({K(SeatsPermission)} OR {K(GrantsPermission)} OR {alias}.{C(tenancy.Seats, "Id")} = {callerSeat})"),
+            (tenancy.Seats, "TenantId", alias => $"({K(SeatsPermission)} OR {K(GrantsPermission)} OR {alias}.{C(tenancy.Seats, "Id")} = {currentSeat})"),
             (tenancy.Roles, "TenantId", _ => W(RolesPermission)),
             .. tenancy.Invitations is { } invitations
                 ? new (IEntityType Root, string Tenant, Func<string, string> Changes)[]
@@ -1824,7 +1824,7 @@ internal static class TenancySql
             yield return statement;
         }
 
-        foreach (var statement in PackTriggers(tenancy, schema))
+        foreach (var statement in StarterRoleTriggers(tenancy, schema))
         {
             yield return statement;
         }
@@ -1841,9 +1841,9 @@ internal static class TenancySql
     /// transaction either. A grant reaches the rights of its seat, unit and role; a seat's status every right of
     /// the seat; a role's status, permissions or tenant every right the role gives. Whichever of the three a save writes
     /// last completes the rows, whatever order it writes them in. Only what differs is written. It runs as its
-    /// owner, since no caller may write a right, and for every writer, a statement past the use cases included.
+    /// owner, since no caller may write a right, and for every writer, a statement past the managers included.
     /// <para>
-    /// It takes no lock of its own. The use cases write a tenant's access one command after the other, so each
+    /// It takes no lock of its own. The managers write a tenant's access one command after the other, so each
     /// reads what the one before stored. Two transactions past them that write at once do not see each other: a
     /// right written from a role's permissions while another transaction takes the permission away is refused when the second
     /// of the two commits, by the check that every right comes from a grant; a right left unwritten because the
@@ -2150,8 +2150,8 @@ internal static class TenancySql
 
     /// <summary>
     /// The rows that keep what they are about as they change, whoever writes: a placement its seat, unit and tenant,
-    /// a grant its seat, unit, role and the seat that gave it, and a role the pack it was made from, which a sync of
-    /// the packs makes it follow. Entity Framework never changes these; a query that did would move a row past the
+    /// a grant its seat, unit, role and the seat that gave it, and a role the starter role it was made from, which a sync of
+    /// the starter roles makes it follow. Entity Framework never changes these; a query that did would move a row past the
     /// checks its policy makes of a new one. What a seat is, its id, identity and tenant, Tenancy's system work in a
     /// tenant may change, so its trigger is an access guard of its own (<see cref="SeatIdentityTriggers"/>).
     /// </summary>
@@ -2161,7 +2161,7 @@ internal static class TenancySql
         [
             (tenancy.Placements, PlacementIsFixed, PlacementIsFixedConstraint, ["SeatId", "UnitId", "TenantId"], "A placement keeps its seat, its unit and its tenant."),
             (tenancy.Grants, GrantIsFixed, GrantIsFixedConstraint, ["SeatId", "UnitId", "RoleId", "GrantedBy"], "A grant keeps its seat, its unit, its role and the seat that gave it."),
-            (tenancy.Roles, RolePackIsFixed, RolePackIsFixedConstraint, ["FromPack"], "A role keeps the pack it was made from."),
+            (tenancy.Roles, RoleStarterRoleIsFixed, RoleStarterRoleIsFixedConstraint, ["FromStarterRole"], "A role keeps the starter role it was made from."),
         ];
 
         foreach (var (table, name, constraint, properties, message) in fixedRows)
@@ -2231,14 +2231,14 @@ internal static class TenancySql
 
     /// <summary>
     /// The trigger on what a seat is: its id, the verified identity it belongs to, and its tenant, which none of
-    /// Tenancy's use cases changes once the seat is made. The identity links the seat to a person's account: a seat
+    /// Tenancy's managers changes once the seat is made. The identity links the seat to a person's account: a seat
     /// that wrote another one into it would hand the seat, and every permission it holds, to that account. A seat moved to
     /// another tenant would leave its placements, grants and rights in the one it came from, and a seat given another
     /// id would leave every row that names it, Tenancy's and the modules', naming none. The policy on the seats lets a
     /// seat change its own row, and a seats or a grants manager anywhere in the tenant change any seat's row, since
     /// every save of a seat writes its version; a policy cannot say which columns.
     /// <para>
-    /// No use case of Tenancy changes them once the seat is made: provisioning, adding a seat, accepting an invitation
+    /// No manager of Tenancy changes them once the seat is made: provisioning, adding a seat, accepting an invitation
     /// and an import write all three as they make it, which is an insert and none of this trigger's business. So every
     /// role but the scoped system role is refused: every seat, whatever it manages, background work as the
     /// application itself, and the tables' owner, so a migration or the SQL editor too. Tenancy's system work in a
@@ -2283,7 +2283,7 @@ internal static class TenancySql
     /// suspended or deactivated loses them. The policy on the seats lets a seats or a grants manager anywhere, and
     /// the seat itself, change the row, since every save of a seat writes its version. So a change of status by a
     /// seat is held here to what giving and taking away those grants one by one is held to: the calling seat holds
-    /// <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant, as the use cases ask, and for every grant of
+    /// <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant, as the managers ask, and for every grant of
     /// the seat that has not ended, of an active role, each permission of that role that manages access at the grant's
     /// unit. Its own grants that apply now are its own hold, so a seat that manages seats suspends itself. The
     /// second part is containment, which asks <c>permission_is_contained</c>: once the application turns containment off,
@@ -2291,11 +2291,11 @@ internal static class TenancySql
     /// <para>
     /// Only a seat is held to it. System work, which the policies keep to Tenancy's own scope, and the tables'
     /// owner are no seat: the function that finds the calling seat answers them nothing. How long the caller
-    /// holds each permission against the end of each grant stays the use case's to check.
+    /// holds each permission against the end of each grant stays the manager's to check.
     /// </para>
     /// <para>
     /// It refuses as a policy does, with <c>42501</c> and the toolkit's hint (<see cref="RowAccessModel.Refusal"/>),
-    /// since it is an access guard, holding who may and not what may be: a use case whose seat lost a permission between
+    /// since it is an access guard, holding who may and not what may be: a manager whose seat lost a permission between
     /// its check and its save is refused with <c>access.refused</c>. The triggers that hold what may never be, a
     /// tenant's last administrator, the rights, the paths and the rows that stay fixed, are no access guards and
     /// refuse with <c>check_violation</c>, whoever writes.
@@ -2325,7 +2325,7 @@ internal static class TenancySql
             "    LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $body$\n" +
             "BEGIN\n" +
             "    -- System work and the tables' owner are no seat, and are not held to this.\n" +
-            $"    IF (SELECT {Fn(CallerSeat)}()) IS NULL THEN\n" +
+            $"    IF (SELECT {Fn(CurrentSeat)}()) IS NULL THEN\n" +
             "        RETURN NEW;\n" +
             "    END IF;\n" +
             $"    IF NOT (SELECT {Fn(HoldsAtTenant)}({RowAccessModel.Literal(SeatsPermission)}))\n" +
@@ -2344,23 +2344,23 @@ internal static class TenancySql
     }
 
     /// <summary>
-    /// The trigger on what a role's pack gave it, which a sync of the packs compares the pack with to tell a permission the
-    /// pack gained or lost from one the tenant added or took out. The policy on the roles lets a seat that manages
-    /// roles for the whole tenant change the row, and its permissions with it; what the pack gave the role it does not
-    /// change: a seat that wrote it could have the next sync add to the role what the pack never gave it, or take out
-    /// what the tenant added. It is written when the role is made, as a copy of its pack (the policy on new roles), and
-    /// as Tenancy's own system work makes the role follow its pack, which the policies keep to Tenancy's scope.
+    /// The trigger on what a role's starter role gave it, which a sync of the starter roles compares the starter role with to tell a permission the
+    /// starter role gained or lost from one the tenant added or took out. The policy on the roles lets a seat that manages
+    /// roles for the whole tenant change the row, and its permissions with it; what the starter role gave the role it does not
+    /// change: a seat that wrote it could have the next sync add to the role what the starter role never gave it, or take out
+    /// what the tenant added. It is written when the role is made, as a copy of its starter role (the policy on new roles), and
+    /// as Tenancy's own system work makes the role follow its starter role, which the policies keep to Tenancy's scope.
     /// <para>
     /// Only a seat is held to it. System work and the tables' owner are no seat: the function that finds the calling
     /// seat answers them nothing, so a migration that fills the column for rows written before it was there passes.
     /// It refuses as a policy does, with <c>42501</c> and the toolkit's hint, since it holds who may.
     /// </para>
     /// </summary>
-    private static IEnumerable<string> PackTriggers(TenancyTables tenancy, string schema)
+    private static IEnumerable<string> StarterRoleTriggers(TenancyTables tenancy, string schema)
     {
         var roles = tenancy.Roles;
-        var function = $"{schema}.{RoleFollowsItsPack}";
-        var (column, store) = PermissionsColumn(roles, PermissionsFromPackProperty);
+        var function = $"{schema}.{RoleFollowsItsStarterRole}";
+        var (column, store) = PermissionsColumn(roles, PermissionsFromStarterRoleProperty);
         var changed = store == PermissionsStore.Json
             ? $"OLD.{column}::pg_catalog.jsonb IS DISTINCT FROM NEW.{column}::pg_catalog.jsonb"
             : $"OLD.{column} IS DISTINCT FROM NEW.{column}";
@@ -2370,16 +2370,16 @@ internal static class TenancySql
             "    LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $body$\n" +
             "BEGIN\n" +
             "    -- System work and the tables' owner are no seat, and are not held to this.\n" +
-            $"    IF (SELECT {Fn(CallerSeat)}()) IS NOT NULL THEN\n" +
-            $"        {RowAccessModel.Refusal(RoleFollowsItsPackConstraint, RoleFollowsItsPackRefusal)}\n" +
+            $"    IF (SELECT {Fn(CurrentSeat)}()) IS NOT NULL THEN\n" +
+            $"        {RowAccessModel.Refusal(RoleFollowsItsStarterRoleConstraint, RoleFollowsItsStarterRoleRefusal)}\n" +
             "    END IF;\n" +
             "    RETURN NEW;\n" +
             "END\n" +
             "$body$";
         yield return $"REVOKE ALL ON FUNCTION {function}() FROM PUBLIC";
-        yield return $"DROP TRIGGER IF EXISTS {RoleFollowsItsPackConstraint} ON {Q(roles)}";
+        yield return $"DROP TRIGGER IF EXISTS {RoleFollowsItsStarterRoleConstraint} ON {Q(roles)}";
         yield return
-            $"CREATE TRIGGER {RoleFollowsItsPackConstraint} BEFORE UPDATE OF {column} ON {Q(roles)}\n" +
+            $"CREATE TRIGGER {RoleFollowsItsStarterRoleConstraint} BEFORE UPDATE OF {column} ON {Q(roles)}\n" +
             $"    FOR EACH ROW WHEN ({changed})\n" +
             $"    EXECUTE FUNCTION {function}()";
     }
@@ -2413,17 +2413,17 @@ internal static class TenancySql
             yield break;
         }
 
-        var function = $"{RowAccessModel.Schema(model)}.{AttributionMatchesCaller}";
+        var function = $"{RowAccessModel.Schema(model)}.{AttributionMatchesCurrentUser}";
         var seatKind = RowAccessModel.Literal(TenancyActorKinds.Seat);
 
         // The columns, as the trigger's arguments name them: who wrote the row first, then who changed it last,
         // each as seat, kind and identity.
         string New(int column) => $"(written ->> TG_ARGV[{column}])";
         string Old(int column) => $"(as_it_was ->> TG_ARGV[{column}])";
-        string NotTheCaller(int seat, int kind, int identity)
-            => $"{New(kind)} IS DISTINCT FROM {seatKind} OR {New(seat)} IS DISTINCT FROM caller_seat OR {New(identity)} IS NOT NULL";
+        string NotTheCurrentSeat(int seat, int kind, int identity)
+            => $"{New(kind)} IS DISTINCT FROM {seatKind} OR {New(seat)} IS DISTINCT FROM current_seat OR {New(identity)} IS NOT NULL";
         // A caller recorded as somebody else is refused as a policy refuses it, with the toolkit's hint.
-        string Refusal(string message) => RowAccessModel.Refusal(AttributionMatchesCallerTrigger, message);
+        string Refusal(string message) => RowAccessModel.Refusal(AttributionMatchesCurrentUserTrigger, message);
 
         yield return
             $"CREATE OR REPLACE FUNCTION {function}() RETURNS trigger\n" +
@@ -2431,12 +2431,12 @@ internal static class TenancySql
             "DECLARE\n" +
             "    written pg_catalog.jsonb := pg_catalog.to_jsonb(NEW);\n" +
             "    as_it_was pg_catalog.jsonb;\n" +
-            "    caller_seat pg_catalog.text;\n" +
+            "    current_seat pg_catalog.text;\n" +
             "BEGIN\n" +
             $"    IF CURRENT_USER = {RowAccessModel.Literal(written.UserRole)} THEN\n" +
-            $"        caller_seat := (SELECT {Fn(CallerSeat)}())::pg_catalog.text;\n" +
-            $"        IF caller_seat IS NULL OR {NotTheCaller(3, 4, 5)}\n" +
-            $"           OR (TG_OP = 'INSERT' AND ({NotTheCaller(0, 1, 2)})) THEN\n" +
+            $"        current_seat := (SELECT {Fn(CurrentSeat)}())::pg_catalog.text;\n" +
+            $"        IF current_seat IS NULL OR {NotTheCurrentSeat(3, 4, 5)}\n" +
+            $"           OR (TG_OP = 'INSERT' AND ({NotTheCurrentSeat(0, 1, 2)})) THEN\n" +
             $"            {Refusal(AttributionOfASeat)}\n" +
             "        END IF;\n" +
             $"    ELSIF CURRENT_USER = {RowAccessModel.Literal(written.SystemInRole)} THEN\n" +
@@ -2460,9 +2460,9 @@ internal static class TenancySql
         foreach (var table in tables)
         {
             var columns = string.Join(", ", TenancyAttribution.Columns.Select(column => RowAccessModel.Literal(TenancyTables.ColumnName(table, column))));
-            yield return $"DROP TRIGGER IF EXISTS {AttributionMatchesCallerTrigger} ON {Q(table)}";
+            yield return $"DROP TRIGGER IF EXISTS {AttributionMatchesCurrentUserTrigger} ON {Q(table)}";
             yield return
-                $"CREATE TRIGGER {AttributionMatchesCallerTrigger} BEFORE INSERT OR UPDATE ON {Q(table)}\n" +
+                $"CREATE TRIGGER {AttributionMatchesCurrentUserTrigger} BEFORE INSERT OR UPDATE ON {Q(table)}\n" +
                 $"    FOR EACH ROW EXECUTE FUNCTION {function}({columns})";
         }
     }

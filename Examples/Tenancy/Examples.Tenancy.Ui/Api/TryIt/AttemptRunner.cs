@@ -20,7 +20,7 @@ public sealed class AttemptRunner(SampleApi api, ILoginClient login)
     {
         ArgumentNullException.ThrowIfNull(attempt);
 
-        var caller = CallAs.Anonymous;
+        var callAs = CallAs.Anonymous;
         if (attempt.SendToken)
         {
             var signedIn = await login.SignInAsync(attempt.Person, cancellationToken);
@@ -30,11 +30,11 @@ public sealed class AttemptRunner(SampleApi api, ILoginClient login)
                 return new AttemptRun(attempt, signedIn);
             }
 
-            caller = CallAs.Person(attempt.Person, token.AccessToken);
+            callAs = CallAs.Person(attempt.Person, token.AccessToken);
         }
 
         var tenant = attempt.SendTenant ? TenantChoice.From(attempt.Tenant) : TenantChoice.None;
-        var outcome = await api.SendAsync<JsonElement?>(new HttpMethod(attempt.Method), attempt.Path, attempt.Body, caller, tenant, cancellationToken);
+        var outcome = await api.SendAsync<JsonElement?>(new HttpMethod(attempt.Method), attempt.Path, attempt.Body, callAs, tenant, cancellationToken);
         return new AttemptRun(attempt, outcome);
     }
 }

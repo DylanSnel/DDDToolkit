@@ -134,17 +134,18 @@ public static class ReferenceSets
     public static ImmutableArray<PortableExecutableReference> Tenancy =>
     [
         FromType(typeof(global::DDDToolkit.Supporting.Tenancy.TenantAggregateAttribute<>)),
+        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.OfTenantAttribute)),
     ];
 
     /// <summary>
-    /// DDDToolkit.Supporting.Tenancy with its Entity Framework package: the questions and answers, the catalogue,
-    /// and the way the questions are asked over a context.
+    /// DDDToolkit.Supporting.Tenancy with its Entity Framework package: the access manager and its queries, the
+    /// catalogue, and the way the queries are asked in a context.
     /// </summary>
     public static ImmutableArray<PortableExecutableReference> TenancyOnEntityFramework =>
     [
         .. EntityFrameworkRuntime,
         .. Tenancy,
-        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.EntityFramework.TenancyAnswersEntityFrameworkExtensions)),
+        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.EntityFramework.TenancyEntityFrameworkExtensions)),
     ];
 
     /// <summary>
@@ -154,7 +155,7 @@ public static class ReferenceSets
     public static ImmutableArray<PortableExecutableReference> Membership =>
     [
         .. EntityFrameworkRuntime,
-        FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>)),
+        .. MembershipAlone,
         FromType(typeof(global::DDDToolkit.Supporting.Membership.EntityFramework.MembershipRegistration)),
     ];
 
@@ -166,14 +167,21 @@ public static class ReferenceSets
     [
         .. Supabase,
         .. TenancyOnEntityFramework,
-        FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>)),
+        .. MembershipAlone,
         FromType(typeof(global::DDDToolkit.Supporting.Membership.EntityFramework.MembershipRegistration)),
         FromType(typeof(global::DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution)),
         FromType(typeof(global::DDDToolkit.Supporting.Membership.Postgres.MembershipRowAccessContribution<>)),
     ];
 
-    /// <summary>DDDToolkit.Supporting.Membership alone: the member template and the rules, and nothing that stores them.</summary>
-    public static PortableExecutableReference MembershipAlone => FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>));
+    /// <summary>
+    /// DDDToolkit.Supporting.Membership alone, with the markers it references: the member template, the rules and
+    /// <c>[At]</c>, and nothing that stores them.
+    /// </summary>
+    public static ImmutableArray<PortableExecutableReference> MembershipAlone =>
+    [
+        FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>)),
+        FromType(typeof(global::DDDToolkit.Supporting.Membership.AtAttribute)),
+    ];
 
     /// <summary>The Mediator library's abstractions alone: its messages, handlers and pipeline behavior.</summary>
     public static PortableExecutableReference MediatorAlone => FromType(typeof(global::Mediator.IPipelineBehavior<,>));

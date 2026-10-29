@@ -35,9 +35,10 @@ namespace DDDToolkit.Supporting.Membership.Analyzers;
 /// </para>
 /// <para>
 /// <b>What it reports.</b> A level on a class that is no resource with members, and a second permission of one
-/// resource that every member holds or that locks the members or the owner (DDD00093); and rules made of a resource
-/// no permission is declared on (DDD00094). A permission without a level, and a class that is not static, are the
-/// core's to report (DDD00092).
+/// resource that every member holds, that manages the members or that names the owner (DDD00093); rules made of a resource
+/// no permission is declared on (DDD00094); a property marked <c>[At]</c> that is not the one place an aggregate root
+/// hangs at (DDD00097); and rules that reach from above a resource that marks no place (DDD00098). A permission without
+/// a level, and a class that is not static, are the core's to report (DDD00092).
 /// </para>
 /// <para>
 /// The package's types are named here by their metadata names, as text: this assembly references nothing of the
@@ -55,6 +56,9 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
     private const string Rules = Package + ".Access.MembershipRules";
     private const string Registry = Package + ".Access.MembershipPermissions";
     private const string ResourceInterface = Package + ".IMembershipResource";
+
+    /// <summary>Where a resource hangs: <c>[At]</c>, in the package's markers.</summary>
+    private const string AtAttribute = Package + ".AtAttribute";
 
     /// <summary>The class written into a project that declares or reads permissions.</summary>
     public const string ClassName = "GeneratedMembershipPermissions";
@@ -95,12 +99,15 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(
             own.Combine(resources).Combine(calls).Combine(referenced),
             static (production, all) => Execute(production, all.Left.Left.Left, all.Left.Left.Right, all.Left.Right, all.Right));
+
+        // Where a resource hangs is Membership's marker, so a misplaced [At] is reported here, where the marker ships.
+        context.RegisterSourceOutput(context.MisplacedPlaces(AtAttribute), static (production, diagnostic) => diagnostic.Report(production));
     }
 
     // ------------------------------------------------------------------ what is declared
 
     /// <summary>One permission on a resource, as the attribute says it.</summary>
-    private sealed record Declared(string Name, bool Owner, bool EveryMember, bool InRoles, bool LocksMembers, bool LocksOwner, bool FromAbove, string Field, LocationInfo? At);
+    private sealed record Declared(string Name, bool Owner, bool EveryMember, bool InRoles, bool ManagesMembers, bool NamesOwner, bool FromAbove, string Field, LocationInfo? At);
 
     /// <summary>What one class declares on one resource.</summary>
     /// <param name="Resource">The resource, written out in full.</param>
@@ -172,8 +179,8 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
                     Named(attribute, "Owner", true),
                     Named(attribute, "EveryMember", false),
                     Named(attribute, "InRoles", true),
-                    Named(attribute, "LocksMembers", false),
-                    Named(attribute, "LocksOwner", false),
+                    Named(attribute, "ManagesMembers", false),
+                    Named(attribute, "NamesOwner", false),
                     Named(attribute, "FromAbove", true),
                     type.Name + "." + field.Name,
                     own && attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is { } syntax ? LocationInfo.From(syntax) : null));
@@ -279,7 +286,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
     {
         for (var current = resource; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
         {
-            if (current.GetMembers().OfType<IPropertySymbol>().Any(static property => property.GetAttributes().Any(static each => each.AttributeClass?.ToDisplayString() == KnownTypes.AtAttribute)))
+            if (current.GetMembers().OfType<IPropertySymbol>().Any(static property => property.GetAttributes().Any(static each => each.AttributeClass?.ToDisplayString() == AtAttribute)))
             {
                 return true;
             }
@@ -364,8 +371,8 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
             var permissions = resource.SelectMany(static on => on.Permissions).ToList();
             var name = resource.First().ResourceName;
             Once(production, permissions.Where(static each => each.EveryMember).ToList(), name, "EveryMember", "every member holds");
-            Once(production, permissions.Where(static each => each.LocksMembers).ToList(), name, "LocksMembers", "locks the members");
-            Once(production, permissions.Where(static each => each.LocksOwner).ToList(), name, "LocksOwner", "locks the owner");
+            Once(production, permissions.Where(static each => each.ManagesMembers).ToList(), name, "ManagesMembers", "manages the members");
+            Once(production, permissions.Where(static each => each.NamesOwner).ToList(), name, "NamesOwner", "names the owner");
             foreach (var twice in permissions.GroupBy(static each => each.Name, StringComparer.Ordinal).Where(static each => each.Count() > 1))
             {
                 var second = twice.Skip(1).First();
@@ -465,7 +472,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
                     foreach (var permission in on.Permissions)
                     {
                         writer.Line("        new(" + Literal(permission.Name) + ", Owner: " + Bool(permission.Owner) + ", EveryMember: " + Bool(permission.EveryMember)
-                                    + ", InRoles: " + Bool(permission.InRoles) + ", LocksMembers: " + Bool(permission.LocksMembers) + ", LocksOwner: " + Bool(permission.LocksOwner)
+                                    + ", InRoles: " + Bool(permission.InRoles) + ", ManagesMembers: " + Bool(permission.ManagesMembers) + ", NamesOwner: " + Bool(permission.NamesOwner)
                                     + ", FromAbove: " + Bool(permission.FromAbove) + "),");
                     }
 

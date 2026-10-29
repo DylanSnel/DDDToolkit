@@ -12,11 +12,6 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-// The UI's records of a row of GET /me/seats and its tenant, not the module's answers of the same names, which every
-// file of this project imports.
-using SeatOfMine = Examples.Tenancy.Ui.Api.Wire.SeatOfMine;
-using TenantOfSeat = Examples.Tenancy.Ui.Api.Wire.TenantOfSeat;
-
 namespace Examples.Tenancy.Tests.Ui;
 
 /// <summary>
@@ -49,7 +44,7 @@ public sealed class SampleApiTests
         outcome.RawBody.Should().Be(body);
         outcome.Method.Should().Be("POST");
         outcome.Path.Should().Be($"/projects/{ProjectId}/close");
-        outcome.Caller.Should().Be("rhea");
+        outcome.CalledAs.Should().Be("rhea");
         outcome.Tenant.Should().Be("harbor");
 
         outcome.Problem.Should().NotBeNull();
@@ -166,9 +161,9 @@ public sealed class SampleApiTests
     {
         using var stub = new StubApi(request => request.PathAndQuery == "/tenancy/roles"
             ? StubApi.Response(HttpStatusCode.OK, """
-                [{"id":"e0000000-0000-4000-8000-000000000106","name":"People office","fromPack":"people-office","status":"active","permissions":["tenancy.grants.manage"],"managesAccess":true},
-                 {"id":"e0000000-0000-4000-8000-000000000105","name":"Observer","fromPack":"observer","status":"active","permissions":["projects.view"]},
-                 {"id":"e0000000-0000-4000-8000-000000000103","name":"Crew lead","fromPack":"crew-lead","status":"archived","permissions":[]}]
+                [{"id":"e0000000-0000-4000-8000-000000000106","name":"People office","fromStarterRole":"people-office","status":"active","permissions":["tenancy.grants.manage"],"managesAccess":true},
+                 {"id":"e0000000-0000-4000-8000-000000000105","name":"Observer","fromStarterRole":"observer","status":"active","permissions":["projects.view"]},
+                 {"id":"e0000000-0000-4000-8000-000000000103","name":"Crew lead","fromStarterRole":"crew-lead","status":"archived","permissions":[]}]
                 """)
             : StubApi.Response(HttpStatusCode.OK, """{"permissions":[{"permission":"projects.owner.change","module":"Projects","description":"Name a project's owner","retired":false,"managesAccess":true}]}"""));
         var api = new SampleApi(stub.Client(), SignedIn());
@@ -489,7 +484,7 @@ public sealed class SampleApiTests
     [Fact]
     public void A_fresh_sign_in_starts_in_the_first_tenant_by_slug_where_the_seat_is_active()
     {
-        static SeatOfMine In(string slug, string status) => new(new TenantOfSeat(Guid.NewGuid(), slug, slug, "active"), new SeatInfo(Guid.NewGuid(), "Someone", status));
+        static SeatOfMine In(string slug, string status) => new(new SeatInfo(Guid.NewGuid(), "Someone", status), slug, slug, "active");
 
         UiSession.TenantToStartIn([In("meadow", "active"), In("harbor", "active")]).Should().Be("harbor");
         UiSession.TenantToStartIn([In("harbor", "suspended"), In("meadow", "active")]).Should().Be("meadow");

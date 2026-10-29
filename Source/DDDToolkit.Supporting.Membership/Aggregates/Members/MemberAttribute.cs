@@ -37,7 +37,13 @@ namespace DDDToolkit.Supporting.Membership;
 /// roles it keeps elsewhere.
 /// </typeparam>
 /// <typeparam name="TResource">The resource the members are of: the application's aggregate that holds them.</typeparam>
+/// <remarks>
+/// Membership's Entity Framework package maps the resource's collection of this class, through
+/// <c>AddDDDToolkitConventions()</c>, as <c>HasMembers</c> does: the template names that convention. A model that maps
+/// the class without that package in the application is refused while it is built.
+/// </remarks>
 [EntityTemplate(typeof(MemberEntity<,,>), AllowSeveral = true)]
+[ModelConvention("DDDToolkit.Supporting.Membership.EntityFramework.MembershipModelConvention, DDDToolkit.Supporting.Membership.EntityFramework")]
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class MemberAttribute<TId, TMemberId, TRoleId, TResource> : Attribute
     where TResource : class;

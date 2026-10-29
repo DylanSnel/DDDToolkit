@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Writes the API reference of each supporting domain, docs/tenancy/reference/ and docs/membership/reference/, from
+    its packages' assemblies and their XML documentation, so the reference says what the code says and cannot drift
+    from it. Not in DDDToolkit.slnx: it is a docs tool, run by hand when the packages' public surface or their comments
+    change, with build/generate-api-reference.sh, and the pages it writes are committed with the change.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DDDToolkit.Build.ApiReference</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Workspaces for XmlDocumentationProvider, which reads a package's XML file the way the IDE does. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+  </ItemGroup>
+
+  <!--
+    Builds the packages first, in the tool's own configuration, so the assemblies it reads are never older than the
+    source. Nothing of theirs is referenced or copied: the tool reads them from their own bin folders, beside the XML
+    files the build writes there, the way a consumer's editor reads them from the package.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Postgres\DDDToolkit.Supporting.Membership.Postgres.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- The configuration the packages were just built in, which names the bin folder the tool reads. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="PackagesConfiguration" Value="$(Configuration)" />
+  </ItemGroup>
+
+</Project>

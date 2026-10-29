@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using Microsoft.Data.Sqlite;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -111,9 +112,9 @@ public sealed class UsersReachedFromAboveTests
     /// <summary>Where a caller holds a permission over documents: at the owners that made it a deputy for that permission.</summary>
     private sealed class DeputiesOfOwners : IPlacesReached<DocumentId, UserId>
     {
-        public IQueryable<UserId> PlacesReached(DbContext context, Caller caller, string permission)
+        public IQueryable<UserId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission)
         {
-            var user = caller.UserId;
+            var user = caller.Id;
             return context.Set<Deputy>().Where(deputy => deputy.User == user && deputy.Key == permission).Select(deputy => deputy.Of);
         }
     }
@@ -218,20 +219,20 @@ public sealed class UsersReachedFromAboveTests
 
         /// <summary>What <paramref name="user"/> holds of <paramref name="permission"/> on a document, as the access questions answer it.</summary>
         public Task<MemberHold<DocumentId>?> HoldAsync(UserId user, DocumentId document, string permission)
-            => AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(document, permission, Cancellation));
+            => AsAsync(TestUsers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(document, permission, Cancellation));
 
         /// <summary>The documents within the reach of <paramref name="permission"/>, in a statement of the host's own.</summary>
         public Task<List<DocumentId>> WithinAsync(UserId user, string permission)
-            => AsAsync(TestCallers.User(user), provider =>
+            => AsAsync(TestUsers.User(user), provider =>
             {
-                var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(permission);
+                var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(permission);
                 return provider.GetRequiredService<DeskContext>().Documents.Within(reach).Select(document => document.Id).ToListAsync(Cancellation);
             });
 
         /// <summary>The permissions <paramref name="user"/> holds on each of the three documents it sees, in the order of their text.</summary>
         public async Task<List<(DocumentId Document, string Keys)>> PermissionsOnAsync(UserId user)
         {
-            var held = await AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>()
+            var held = await AsAsync(TestUsers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>()
                 .PermissionsOnAsync([Minutes, Agenda, Notes], [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation));
 
             return [.. held.Select(pair => (pair.Key, string.Join(' ', pair.Value.Order(StringComparer.Ordinal))))];
@@ -239,7 +240,7 @@ public sealed class UsersReachedFromAboveTests
 
         /// <summary>Changes the rows as the application's own work, and saves.</summary>
         public Task ChangeAsync(Func<DeskContext, Task> change)
-            => AsAsync(Caller.System, async provider =>
+            => AsAsync(CurrentUserSnapshot.System, async provider =>
             {
                 var context = provider.GetRequiredService<DeskContext>();
                 await change(context);
@@ -253,9 +254,9 @@ public sealed class UsersReachedFromAboveTests
             await _connection.DisposeAsync();
         }
 
-        private async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+        private async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
         {
-            using (Callers.Begin(caller))
+            using (TestAccess.BeginAs(caller))
             {
                 await using var scope = _provider.CreateAsyncScope();
                 return await ask(scope.ServiceProvider);

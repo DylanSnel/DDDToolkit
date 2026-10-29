@@ -7,10 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Examples.Tenancy.Tests.Infrastructure;
 
-/// <summary>A message a sink was offered, and whether a Tenancy caller was current when it was.</summary>
+/// <summary>A message a sink was offered, and whether a Tenancy user was current when it was.</summary>
 /// <param name="Name">The published name.</param>
-/// <param name="TenancyCaller">The kind of Tenancy caller current during delivery, or <see langword="null"/> for none.</param>
-public sealed record Offered(string Name, TenancyCallerKind? TenancyCaller);
+/// <param name="TenancyUser">The kind of Tenancy user current during delivery, or <see langword="null"/> for none.</param>
+public sealed record Offered(string Name, TenancyUserKind? TenancyUser);
 
 /// <summary>
 /// A sink added next to the module sink on every module's outbox: it is offered exactly what the module sink is
@@ -28,7 +28,7 @@ public sealed class RecordingSink : IIntegrationEventSink
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        _offered.Enqueue(new Offered(message.Name, TenancyCallers.Ambient?.Kind));
+        _offered.Enqueue(new Offered(message.Name, TenancyUsers.Ambient?.Kind));
         return Task.CompletedTask;
     }
 

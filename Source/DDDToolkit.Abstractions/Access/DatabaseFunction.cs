@@ -17,7 +17,7 @@ public sealed record DatabaseFunction
     /// Its owner: the package or the module that defines it, in lower case letters, digits and dashes, such as
     /// <c>tenancy</c>; what a module's name is written as in a migration's file name.
     /// </param>
-    /// <param name="name">Its name, in letters, digits and underscores, not starting with a digit: <c>caller_seat</c>.</param>
+    /// <param name="name">Its name, in letters, digits and underscores, not starting with a digit: <c>current_seat</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="owner"/> or <paramref name="name"/> is not one of those.</exception>
     public DatabaseFunction(string owner, string name)
     {
@@ -31,7 +31,7 @@ public sealed record DatabaseFunction
         if (!IsName(name))
         {
             throw new ArgumentException(
-                "'" + name + "' is no name of a function. A name is letters, digits and underscores, not starting with a digit, such as 'caller_seat'.",
+                "'" + name + "' is no name of a function. A name is letters, digits and underscores, not starting with a digit, such as 'current_seat'.",
                 nameof(name));
         }
 

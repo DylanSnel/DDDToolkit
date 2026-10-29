@@ -58,8 +58,9 @@ GET {{api}}/me/seats
 Authorization: Bearer {{rhea.response.body.access_token}}
 
 ### Who she is in harbor. The Tenant header names the tenant by its slug; the seat comes from her own seats.
-### Her Area manager role is granted at North, so every permission she holds reaches North, North Coast and North
-### Inland, and nothing else.
+### The answer is the seat manager's overview: the tenant, her seat, its placements with their grants by id, the
+### units and roles those ids name, and every permission she holds at "asOf". Her Area manager role is granted at
+### North, so every permission she holds reaches North, North Coast and North Inland, and nothing else.
 GET {{api}}/me
 Authorization: Bearer {{rhea.response.body.access_token}}
 Tenant: harbor
@@ -192,8 +193,9 @@ Authorization: Bearer {{rhea.response.body.access_token}}
 GET {{api}}/projects
 Tenant: harbor
 
-### She grants leo Observer at North Coast: 204. Observer manages no access, so managing grants there is all
-### she needs; she need not hold its permission. Sent a second time, it is 409 tenancy.duplicate-grant.
+### She grants leo Observer at North Coast: 200 with leo's seat, as the command answers it. Observer manages no
+### access, so managing grants there is all she needs; she need not hold its permission. Sent a second time, it is
+### 409 tenancy.duplicate-grant.
 POST {{api}}/tenancy/seats/{{leosSeat}}/grants
 Authorization: Bearer {{rhea.response.body.access_token}}
 Tenant: harbor
@@ -201,8 +203,8 @@ Content-Type: application/json
 
 { "unitId": "{{northCoast}}", "roleId": "{{observer}}", "reason": "Follows the projects on the coast" }
 
-### Crew lead at the same place: 204. Crew lead manages access, because the host marks projects.crew.manage,
-### and she holds that permission at North for good, so she gives it.
+### Crew lead at the same place: 200 with the seat. Crew lead manages access, because the host marks
+### projects.crew.manage, and she holds that permission at North for good, so she gives it.
 POST {{api}}/tenancy/seats/{{leosSeat}}/grants
 Authorization: Bearer {{rhea.response.body.access_token}}
 Tenant: harbor
@@ -340,7 +342,7 @@ Content-Type: application/json
 
 { "person": "vic" }
 
-### The grant is still there, and applies no longer: appliesNow is false, and it gives him no permission.
+### The grant is still there, and applies no longer: its endsAt is before asOf, and it gives him no permission.
 GET {{api}}/me
 Authorization: Bearer {{vic.response.body.access_token}}
 Tenant: harbor
@@ -423,8 +425,8 @@ GET {{api}}/tenancy/history
 Authorization: Bearer {{rhea.response.body.access_token}}
 Tenant: harbor
 
-### What she is there for: she gives a role that manages access, here Crew lead to juno at North Coast: 204.
-### She holds projects.crew.manage, as every permission that manages access, at the root for good.
+### What she is there for: she gives a role that manages access, here Crew lead to juno at North Coast: 200 with
+### juno's seat. She holds projects.crew.manage, as every permission that manages access, at the root for good.
 POST {{api}}/tenancy/seats/{{junoSeat}}/grants
 Authorization: Bearer {{maud.response.body.access_token}}
 Tenant: harbor
@@ -432,7 +434,7 @@ Content-Type: application/json
 
 { "unitId": "{{northCoast}}", "roleId": "{{crewLead}}" }
 
-### And takes it away again: 204.
+### And takes it away again: 200 with the seat.
 DELETE {{api}}/tenancy/seats/{{junoSeat}}/grants/{{northCoast}}/{{crewLead}}
 Authorization: Bearer {{maud.response.body.access_token}}
 Tenant: harbor
@@ -656,8 +658,8 @@ Authorization: Bearer {{tove.response.body.access_token}}
 Tenant: meadow
 
 ### She invites juno, who has no seat in meadow, by her address: a seat at meadow's root as a surveyor, for
-### whoever accepts. 200 with the invitation's id, when it ends (a week from now), and its token. This is the
-### one answer that carries the token; the API keeps only its digest. Nothing is made yet but the invitation.
+### whoever accepts. 200 with the invitation, which ends a week from now, and its token. This is the one answer
+### that carries the token; the API keeps only its digest. Nothing is made yet but the invitation.
 ### Inviting takes what adding a seat and giving the role take: tenancy.seats.manage for the whole tenant and
 ### tenancy.grants.manage at the unit; without them it is 403 tenancy.not-permitted. The identity provider is
 ### asked for an account at the address, and the answer says nothing of whether there was one. With the dev
@@ -685,11 +687,11 @@ Content-Type: application/json
 
 { "token": "{{invited.response.body.token}}" }
 
-### juno accepts, with the name she is shown by in meadow: 200 with the id of her new seat. The seat, its
-### placement and its role were made in one save, and GET /me/seats lists it with its tenant from now on. The
-### name is the application's own field on its seat, which Tenancy keeps none of and the invitation suggests
-### none of; without one it is 400 tenants.seat.display-name, and the invitation stays open. Sent again by her it
-### answers the same seat; by anyone else, 409 tenancy.invitation-used.
+### juno accepts, with the name she is shown by in meadow: 200 with the tenant, whose slug the next request names,
+### and her new seat. The seat, its placement and its role were made in one save, and GET /me/seats lists it with
+### its tenant from now on. The name is the application's own field on its seat, which Tenancy keeps none of and the
+### invitation suggests none of; without one it is 400 tenants.seat.display-name, and the invitation stays open.
+### Sent again by her it answers the same tenant and seat; by anyone else, 409 tenancy.invitation-used.
 # @name junoAccepted
 POST {{api}}/invitations/accept
 Authorization: Bearer {{juno.response.body.access_token}}
@@ -703,10 +705,10 @@ Authorization: Bearer {{juno.response.body.access_token}}
 Tenant: meadow
 
 ### Renaming is the application's own command, under its own rule: a seat renames itself, here juno her seat in
-### meadow: 204. Another seat takes tenancy.seats.manage for the whole tenant, which tove holds there and juno, a
-### surveyor, does not: juno renaming tove's seat there is 403 tenancy.not-permitted. A name the seat refuses,
-### blank or over 200 characters, is 400 tenants.seat.display-name.
-PUT {{api}}/tenancy/seats/{{junoAccepted.response.body.seatId}}/name
+### meadow: 200 with the seat under its new name. Another seat takes tenancy.seats.manage for the whole tenant,
+### which tove holds there and juno, a surveyor, does not: juno renaming tove's seat there is 403
+### tenancy.not-permitted. A name the seat refuses, blank or over 200 characters, is 400 tenants.seat.display-name.
+PUT {{api}}/tenancy/seats/{{junoAccepted.response.body.seat.id}}/name
 Authorization: Bearer {{juno.response.body.access_token}}
 Tenant: meadow
 Content-Type: application/json
@@ -725,10 +727,11 @@ Content-Type: application/json
 
 { "address": "wren@example.test", "unitId": "{{meadowRoot}}", "roleId": "{{meadowSurveyor}}" }
 
-### Revoked: 204. Its token is then 409 tenancy.invitation-cancelled; one whose week ran out is 409
+### Revoked: 200 with the invitation, cancelled. Its token is then 409 tenancy.invitation-cancelled; one whose
+### week ran out is 409
 ### tenancy.invitation-lapsed, and a text that is no token 404 tenancy.invitation-not-found. The account that
 ### was made for it goes too, since nobody ever signed in with it and no other open invitation keeps it.
-DELETE {{api}}/tenancy/invitations/{{second.response.body.invitationId}}
+DELETE {{api}}/tenancy/invitations/{{second.response.body.invitation.id}}
 Authorization: Bearer {{tove.response.body.access_token}}
 Tenant: meadow
 
@@ -755,8 +758,8 @@ Content-Type: application/json
 
 { "person": "hana" }
 
-### She gives leo Surveyor at North Coast: 204. Surveyor manages no access, so she gives it without holding
-### any of its permissions.
+### She gives leo Surveyor at North Coast: 200 with leo's seat. Surveyor manages no access, so she gives it
+### without holding any of its permissions.
 POST {{api}}/tenancy/seats/{{leosSeat}}/grants
 Authorization: Bearer {{hana.response.body.access_token}}
 Tenant: harbor
@@ -782,8 +785,8 @@ Content-Type: application/json
 
 { "unitId": "{{northCoast}}", "roleId": "{{areaManager}}" }
 
-### Surveyor for herself at Harbor Works: 204, for no longer than she holds tenancy.grants.manage there, which
-### is for good. Every project of harbor is hers to see now.
+### Surveyor for herself at Harbor Works: 200 with her seat, for no longer than she holds tenancy.grants.manage
+### there, which is for good. Every project of harbor is hers to see now.
 POST {{api}}/tenancy/seats/{{hanasSeat}}/grants
 Authorization: Bearer {{hana.response.body.access_token}}
 Tenant: harbor
@@ -810,7 +813,7 @@ Content-Type: application/json
 
 { "person": "orla" }
 
-### Every tenant, by slug, each with its status and how many of its seats are in use. No Tenant header: an
+### Every tenant, by slug, each beside its name and how many of its seats are in use. No Tenant header: an
 ### operator works in no tenant. A page at a time, with "next" as the marker to send as "after".
 GET {{api}}/operations/tenants
 Authorization: Bearer {{orla.response.body.access_token}}
@@ -950,7 +953,7 @@ Content-Type: application/json
 { "query": "{ roles { name permissions } }" }
 
 ### Inviting through the schema: tove invites leo into meadow, as POST /tenancy/invitations does. The payload
-### answers the invitation's id, when it ends and its token, this once. Without the permissions, errors holds one
+### answers the invitation and its token, this once. Without the permissions, errors holds one
 ### RefusalError with the code tenancy.not-permitted.
 # @name invitedViaGraphQL
 POST {{api}}/graphql
@@ -959,7 +962,7 @@ Tenant: meadow
 Content-Type: application/json
 
 {
-  "query": "mutation($unit: UUID!, $role: UUID!) { personInvite(input: { address: \"leo@example.test\", unitId: $unit, roleId: $role }) { issuedInvitation { id token expiresAt } errors { __typename ... on CodedError { code message } } } }",
+  "query": "mutation($unit: UUID!, $role: UUID!) { personInvite(input: { address: \"leo@example.test\", unitId: $unit, roleId: $role }) { issuedInvitation { invitation { id expiresAt } token } errors { __typename ... on CodedError { code message } } } }",
   "variables": { "unit": "{{meadowRoot}}", "role": "{{meadowSurveyor}}" }
 }
 
@@ -970,30 +973,31 @@ Authorization: Bearer {{tove.response.body.access_token}}
 Tenant: meadow
 Content-Type: application/json
 
-{ "query": "{ openInvitations { id address until expiresAt unit { name } role { name } issuedBy { displayName } } }" }
+{ "query": "{ openInvitations { id address grantUntil expiresAt unit { name } role { name } issuedBy { displayName } } }" }
 
 ### leo accepts, naming no tenant: the mutation needs a token and no seat, as POST /invitations/accept. The
-### token travels as a variable, not in the document. The answer is the id of his new seat; seatsOfMine lists
-### it with its tenant. Sent by anyone else, errors holds tenancy.address-mismatch.
+### token travels as a variable, not in the document. The answer is the tenant, whose slug the next request
+### names, and his new seat. Sent by anyone else, errors holds tenancy.address-mismatch.
 POST {{api}}/graphql
 Authorization: Bearer {{leo.response.body.access_token}}
 Content-Type: application/json
 
 {
-  "query": "mutation($token: String!) { invitationAccept(input: { token: $token, displayName: \"Leo\" }) { seatId errors { __typename ... on CodedError { code message } } } }",
+  "query": "mutation($token: String!) { invitationAccept(input: { token: $token, displayName: \"Leo\" }) { acceptedInvitation { tenant { slug } seat { id displayName } } errors { __typename ... on CodedError { code message } } } }",
   "variables": { "token": "{{invitedViaGraphQL.response.body.data.personInvite.issuedInvitation.token}}" }
 }
 
-### Cancelling one, as DELETE /tenancy/invitations/{id}: the payload answers the id. The invitation above was
-### accepted, so this is errors with tenancy.invitation-state; an open one answers its id and errors null.
+### Cancelling one, as DELETE /tenancy/invitations/{id}: the payload answers the invitation, cancelled. The
+### invitation above was accepted, so this is errors with tenancy.invitation-state; an open one answers the
+### invitation and errors null.
 POST {{api}}/graphql
 Authorization: Bearer {{tove.response.body.access_token}}
 Tenant: meadow
 Content-Type: application/json
 
 {
-  "query": "mutation($id: UUID!) { invitationCancel(input: { id: $id }) { invitationId errors { __typename ... on CodedError { code message } } } }",
-  "variables": { "id": "{{invitedViaGraphQL.response.body.data.personInvite.issuedInvitation.id}}" }
+  "query": "mutation($id: UUID!) { invitationCancel(input: { id: $id }) { invitation { id } errors { __typename ... on CodedError { code message } } } }",
+  "variables": { "id": "{{invitedViaGraphQL.response.body.data.personInvite.issuedInvitation.invitation.id}}" }
 }
 
 ### The access history as a connection over the query GET /tenancy/history sends: newest first, each row with
@@ -1014,7 +1018,7 @@ POST {{api}}/graphql
 Authorization: Bearer {{orla.response.body.access_token}}
 Content-Type: application/json
 
-{ "query": "{ tenants { items { slug name status activeSeats } next } }" }
+{ "query": "{ tenants { items { tenant { slug status } name activeSeats } next } }" }
 
 ### One tenant's projects, as GET /operations/tenants/{tenant}/projects answers them. The unit and the owner
 ### are ids: an operator has no seat for Tenancy to say their names to. A project's id is a node id, for the

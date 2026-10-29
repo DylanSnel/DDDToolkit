@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 
 /// <summary>
@@ -121,7 +123,7 @@ public sealed class FilingScenario
 
     /// <summary>Saves the scenario as the application's own work.</summary>
     public async Task SaveAsync(FilingServices services)
-        => await services.AsAsync(Caller.System, async provider =>
+        => await services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             context.Documents.AddRange(Documents);

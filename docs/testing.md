@@ -1,32 +1,31 @@
 # Testing aggregates
 
-An aggregate is pure domain logic. No database, no clock, no network. It should be the easiest thing
-in your system to test, and the test should read like the rule it encodes.
+`DDDToolkit.Testing` is a package for testing what an aggregate does: which domain events a method raises, and
+whether the method refuses. Such a test needs no database, clock or network, because an aggregate is plain
+domain code.
 
-`DDDToolkit.Testing` is a small package that makes that true for domain events. Without it every
-assertion about a raised event starts with a cast:
+Without the package, every assertion about a raised event starts with a cast to `IHasDomainEvents`:
 
 ```csharp
 var events = ((IHasDomainEvents)order).DequeueDomainEvents();
 events.Should().ContainSingle(e => e is OrderCancelled);
 ```
 
-That cast is deliberate, because [draining events is the persistence layer's job](domain-events.md#reading-and-draining).
-A test is the one place it gets in the way. This package writes it for you, and gives you failures
-that say what went wrong.
+The toolkit puts `DequeueDomainEvents()` behind that cast on purpose, because
+[draining events is the job of the persistence layer](domain-events.md#reading-and-draining). The package makes
+the cast for you, and its failure messages list the events that were raised.
 
 ```bash
 dotnet add package Temp.DDDToolkit.Testing --prerelease
 ```
 
-The package references `DDDToolkit` and nothing else. It brings no test framework and no assertion
-library, so it works the same under xunit, NUnit, MSTest, FluentAssertions, Shouldly or plain
-`if`-and-throw. A failed assertion throws `AggregateAssertionException`, which every runner reports
-as a failed test.
+The package references `DDDToolkit` and nothing else. It brings no test framework and no assertion library, so it
+works with xunit, NUnit, MSTest, FluentAssertions, Shouldly, or a plain `if` and `throw`. A failed assertion
+throws `AggregateAssertionException`, and every test runner reports that as a failed test.
 
 ## A complete test
 
-Here is the aggregate. It is an ordinary declaration, nothing testing-specific about it:
+The aggregate is an ordinary declaration. Nothing in it is specific to tests:
 
 ```csharp
 [AggregateRoot<Guid>("ORD")]
@@ -78,7 +77,7 @@ public partial class Order
 }
 ```
 
-And here is the test:
+The tests:
 
 ```csharp
 using DDDToolkit.Testing;
@@ -125,38 +124,36 @@ public class OrderTests
 }
 ```
 
-Three things are worth pointing out.
-
-`Given` takes the aggregate your test built. It does not replay an event stream, because a DDDToolkit
-aggregate is not event sourced. The arrange step is the constructor and whatever methods put the
-aggregate into the state the rule is about. Anything else would be pretending.
-
-`When` reports only the events that call raised. The `OrderPlaced` from the constructor is still on
-the aggregate, but it is not in the batch you assert on, so you never have to filter it out.
-
-`WhenThrows` asserts two things: that the expected exception came out, and that nothing was raised on
-the way out. That second half is the one people forget. An aggregate that raises `OrderCancelled` and
-then decides the order cannot be cancelled has published something that never happened.
+- **`Given` takes the aggregate that your test built.** It replays no event stream, because a DDDToolkit
+  aggregate is not event sourced. The arrange step is the constructor, plus the method calls that put the
+  aggregate into the state that the rule is about.
+- **`When` returns only the events of that call.** The `OrderPlaced` event from the constructor is still on the
+  aggregate, but it is not in the batch that you assert on. So you never filter it out.
+- **`WhenThrows` checks two things.** The call threw the expected exception, or a subtype of it, and the call
+  raised no event before it threw. The second check catches an aggregate that raises `OrderCancelled` and then
+  refuses to cancel. Such an aggregate has published an event about something that did not happen.
+  `WhenThrows` returns the exception, so you can assert on its message.
 
 ## The assertions
 
-Every method below is on the batch that `When` returns. They all return the batch, so they chain.
+The methods below are on the batch that `When` returns, a `RaisedEvents`. The assertions return the batch, so
+they chain. `RaisedNothing()` returns nothing. `SingleEvent<T>()` and `EventsOf<T>()` return events.
 
 | Assertion | Passes when |
 |---|---|
 | `Raised<T>()` | At least one `T` was raised. A subtype of `T` counts. |
 | `Raised<T>(e => ...)` | At least one `T` satisfies the predicate. |
-| `Raised(expected)` | An event carries that payload. `EventId` and `OccurredAt` are ignored. |
+| `Raised(expected)` | An event of the same type carries that payload. `EventId` and `OccurredAt` are not compared. |
 | `RaisedNo<T>()` | No `T` was raised. |
-| `RaisedNothing()` | Nothing at all was raised. |
-| `RaisedExactly<T1, T2>()` | Exactly these types, in this order, and nothing else. |
-| `RaisedExactly(params Type[])` | The same, for more than three types. |
-| `RaisedExactlyThese(params IDomainEvent[])` | Exactly these events, in this order, compared by payload. |
+| `RaisedNothing()` | No event was raised. |
+| `RaisedExactly<T1>()`, `<T1, T2>()`, `<T1, T2, T3>()` | Exactly these types were raised, in this order, and no other event. A subtype does not count. |
+| `RaisedExactly(params Type[])` | The same, for any number of types. |
+| `RaisedExactlyThese(params IDomainEvent[])` | Exactly these events were raised, in this order, compared by payload. |
 | `SingleEvent<T>()` | Exactly one `T` was raised. Returns it. |
 | `EventsOf<T>()` | Never fails. Returns every `T` that was raised. |
 
-The batch is also an `IReadOnlyList<IDomainEvent>`, so anything the table does not cover you can
-still do with LINQ and your own assertion library:
+The batch is also an `IReadOnlyList<IDomainEvent>`. For a check that the table does not cover, use LINQ and your
+own assertion library:
 
 ```csharp
 var raised = AggregateScenario.Given(order).When(o => o.AddLine(sku, 3));
@@ -167,25 +164,23 @@ raised.Select(e => e.OccurredAt).Should().BeInAscendingOrder();
 
 ### Comparing payloads
 
-`Raised(expected)` compares the payload and nothing else:
+`Raised(expected)` compares the payload of an event, without `EventId` and `OccurredAt`:
 
 ```csharp
 .Raised(new LineAdded(order.Id, Sku.From("SKU-1"), 3));
 ```
 
-That comparison exists because record equality cannot do the job. Two events with identical payloads
-are never equal: `EventId` is a fresh `Guid` on every instance and `OccurredAt` is the moment of
-construction. So `Assert.Equal(expected, raised)` fails every time, and teams work around it by
-asserting member by member. The kit compares every public member of the event except the two the
-`IDomainEvent` contract supplies, and reports the first one that differs.
+Record equality cannot compare two events. Each instance gets a new `EventId`, and `OccurredAt` is the moment the
+instance was made. So `Assert.Equal(expected, raised)` always fails, even when the payloads are the same.
+`Raised(expected)` compares every public property of the event except the two that `IDomainEvent` declares. A
+failure names the first property that differs.
 
-Collections inside a payload compare element by element, so a `IReadOnlyList<Sku>` built with a
-different concrete list type still matches.
+A collection in the payload is compared element by element. So an `IReadOnlyList<Sku>` built with another list
+type still matches.
 
 ## Failure messages
 
-A testing package with unhelpful failures is worse than no package. Every message names the
-expectation and lists what was actually raised, with payloads:
+Every failure message names the expectation, and lists the events that were raised, with their payloads:
 
 ```text
 Expected Order to raise exactly OrderShipped.
@@ -215,8 +210,8 @@ An aggregate that raises an event and then refuses the command leaves an event d
 
 ## Scenarios with more than one step
 
-Keep the scenario in a variable and assert step by step. Each `When` sees only its own events, so
-nothing needs draining in between:
+Keep the scenario in a variable, and assert after each step. Each `When` returns only the events of its own call,
+so you drain nothing between the steps:
 
 ```csharp
 var scenario = AggregateScenario.Given(Draft());
@@ -232,18 +227,18 @@ scenario.Subject.TrackingCode.Should().Be("TRACK-1");
 
 | Member | What it does |
 |---|---|
-| `Subject` | The aggregate, for asserting on its state. |
-| `PendingEvents` | Everything the aggregate is holding, without taking it off. |
-| `Drain()` | Takes the events off, the way a save does, and returns them. |
-| `IgnorePendingEvents()` | Throws away what the arrange step raised. |
+| `Subject` | Returns the aggregate, for assertions on its state. |
+| `PendingEvents` | Returns every event on the aggregate, and leaves the events there. |
+| `Drain()` | Takes the events off the aggregate, as a save does, and returns them. |
+| `IgnorePendingEvents()` | Clears the events that the arrange step raised. |
 
-`Drain()` is worth using when the scenario spans something that would have been a save. It models
-what `SaveChanges` does to the aggregate, so the second half of the test starts from the state the
-second request would really see.
+- Use `Drain()` where the real flow saves. It does to the aggregate what `SaveChanges` does. So the rest of the
+  test starts from the state that the next request sees.
+- `When` fails with `AggregateAssertionException` when the call removes events from the aggregate. It then
+  cannot tell which events the call raised. Assert on `PendingEvents` in that case.
+- Asynchronous methods have `WhenAsync` and `WhenThrowsAsync`, which take a `Func<TAggregate, Task>`.
 
-Asynchronous methods have `WhenAsync` and `WhenThrowsAsync`, which take a `Func<TAggregate, Task>`.
-
-## Without a scenario
+## Assertions without a scenario
 
 For a test that calls one method, two extension methods on `IHasDomainEvents` are enough:
 
@@ -253,15 +248,17 @@ order.Cancel("out of stock");
 order.PendingEvents().RaisedExactly<OrderPlaced, OrderCancelled>();
 ```
 
-`PendingEvents()` leaves the events on the aggregate. `DrainEvents()` takes them off and returns the
-same kind of batch. `AsScenario()` is the same thing as `AggregateScenario.Given`.
+- `PendingEvents()` leaves the events on the aggregate.
+- `DrainEvents()` takes the events off and returns the same kind of batch.
+- `AsScenario()` does the same as `AggregateScenario.Given`.
 
 ## Testing invariants
 
-An invariant needs no scenario and no database either. Both stages are public on every entity, so a
-test asks the aggregate directly and your own assertion library does the rest. Say the order has a
-named rule, `Order.MustHaveLines`, that a confirmed order must have at least one line
-([Invariants](invariants.md#a-named-invariant) shows how to write one):
+An invariant test needs no scenario and no database. Every entity has two public methods for its invariants.
+`EnsureInvariants()` throws, and `GetInvariantViolations()` returns a list. A test calls one of them, and your
+own assertion library checks the result. For example, the order has a named rule, `Order.MustHaveLines`, which
+requires at least one line on a confirmed order ([Invariants](invariants.md#a-named-invariant) shows how to write
+one):
 
 ```csharp
 var order = Draft();
@@ -273,11 +270,12 @@ Assert.Throws<InvariantViolationException>(() => order.EnsureInvariants());
 order.GetInvariantViolations().Should().ContainSingle(v => v.Code == Order.MustHaveLines.ViolationCode);
 ```
 
-Prefer the second form. The code is the rule's name and stays put; the message is written for people,
-and may be reworded or translated.
+Prefer the second form. The code is the name of the rule and does not change. The message is written for people,
+and can be reworded or translated.
 
-Asking the root asks the whole aggregate, so a test for a child's rule needs no loop and no second
-subject. The violation names the child that reported it, which is what the assertion should be about:
+`GetInvariantViolations()` on the root also checks every child entity. So a test of a child's rule needs no loop
+and no second subject. The violation names the child that reported it in `EntityId`, and the assertion checks
+that:
 
 ```csharp
 var order = Draft();
@@ -287,19 +285,18 @@ order.GetInvariantViolations().Should().ContainSingle(v =>
     v.Code == OrderLine.MustNameASku.ViolationCode && v.EntityId!.Equals(order.Lines[0].Id));
 ```
 
-A rule written as a nested `IInvariant<T>` is also an ordinary type, so it can be tested on its own
-with no aggregate mutation and nothing to catch: `new Order.MustHaveLines().Check(order)` returns
-`null` when the rule holds. See [Invariants](invariants.md#by-hand).
+A rule written as a nested `IInvariant<T>` is an ordinary type. A test can call the rule on its own, without
+changing the aggregate and without catching an exception. `new Order.MustHaveLines().Check(order)` returns `null`
+when the rule holds ([Running the checks by hand](invariants.md#running-the-checks-by-hand)).
 
 ## Deterministic time in tests
 
-`OccurredAt` and `EventId` are `init`, but the aggregate is what calls `new OrderCancelled(...)`. A
-test that calls `order.Cancel(reason)` never reaches that constructor, so it cannot pass an
-initialiser and the event is stamped with the wall clock.
+`OccurredAt` and `EventId` are `init` properties. The aggregate makes the event with `new OrderCancelled(...)`, so
+a test that calls `order.Cancel(reason)` cannot set them. The event gets the time of the system clock.
 
-`DomainEventClock` replaces the clock both initialisers read, for the current asynchronous flow only.
-It belongs to the core package rather than to this one, because nothing here compares `EventId` or
-`OccurredAt`; it is there for a test that asserts on the time itself:
+`DomainEventClock.Use(clock)` replaces the clock that both properties read, for the current asynchronous flow.
+`DomainEventClock` is in the core package (namespace `DDDToolkit.BaseTypes`), because the assertions of this
+package never compare `EventId` or `OccurredAt`. Use it in a test that asserts on the time itself:
 
 ```csharp
 using DDDToolkit.BaseTypes;
@@ -313,75 +310,64 @@ AggregateScenario.Given(Draft())
     .Raised<OrderCancelled>(e => e.OccurredAt == clock.GetUtcNow());
 ```
 
-Any `TimeProvider` will do. The toolkit does not ship a fake one: `FakeTimeProvider` from
-`Microsoft.Extensions.TimeProvider.Testing` already exists, and a five-line subclass of
-`TimeProvider` works just as well.
+Any `TimeProvider` works. The toolkit ships no fake clock. Use `FakeTimeProvider` from
+`Microsoft.Extensions.TimeProvider.Testing`, or a five-line subclass of `TimeProvider`.
 
-The clock is held in an `AsyncLocal`, not in a static property, so it applies to the flow that opened
-the scope and to whatever that flow calls, including awaited work. Two test classes running in
-parallel do not see each other's clock, and a test that forgets to dispose the scope cannot poison
-the tests that run after it. Disposing restores the previous clock, so scopes nest.
+- `DomainEventClock` keeps the clock in an `AsyncLocal`. The clock applies to the flow that opened the scope, and
+  to everything that flow calls, awaited work included.
+- Test classes that run in parallel each see their own clock. A test that forgets to dispose its scope does not
+  change the clock of the tests after it.
+- Disposing the scope restores the previous clock, so scopes nest.
+- The clock does not reach work that was already running when the scope opened, such as a hosted service that
+  started earlier. Events raised there get the system clock.
 
-It does not reach work that was already running when you opened the scope, such as a hosted service
-started earlier; events raised there keep the system clock.
-
-`EventId` follows the same clock. A version 7 `Guid` is a timestamp plus random bits, so a fixed
-clock fixes the ordering and leaves the id unique. When you need the whole id to be predictable,
-supply the factory as well:
+`EventId` follows the same clock. A version 7 `Guid` is a timestamp plus random bits. So a fixed clock fixes the
+order of the ids, and the ids stay unique. To make the whole id predictable, pass a factory as well:
 
 ```csharp
 var next = 0;
 using var scope = DomainEventClock.Use(clock, _ => new Guid(++next, 0, 0, new byte[8]));
 ```
 
-The values still have to be distinct. `EventId` is the primary key of the outbox table and the key
-handlers deduplicate on, so a repeated one makes the save fail.
+The factory must return a new value on every call. `EventId` is the primary key of the outbox table, and handlers
+deduplicate on it. A repeated value makes the save fail.
 
-One sharp edge: a clock set before 1970 throws, because a version 7 `Guid` encodes Unix
-milliseconds and cannot represent an earlier instant. Start fake clocks at a realistic date.
+Without a factory, a clock set before 1970 makes every new event throw `ArgumentOutOfRangeException`. A version 7
+`Guid` holds Unix milliseconds and cannot hold an earlier time. Start a fake clock at a realistic date.
 
-Reach for it when the time is what you are asserting on. When the time is something the domain
-reasons about, it belongs in the payload instead, where a rule can read it:
+Use the clock when the test asserts on `OccurredAt`. When the domain itself uses the time, put the time in the
+payload, where a rule can read it:
 
 ```csharp
 public sealed record OrderCancelled(OrderId OrderId, string Reason, DateTimeOffset CancelledAt) : DomainEvent;
 ```
 
-Then pass the time in from your own clock abstraction and assert on `CancelledAt` like any other
-member. `EventId` and `OccurredAt` stay what they are: the identity and the wall-clock stamp of the
-occurrence, useful for idempotency and ordering, not for describing the domain.
+Pass the time in from your own clock, and assert on `CancelledAt` like any other property. `EventId` and
+`OccurredAt` then keep their own purpose: the identity of the event and the system time it happened at, for
+idempotency and ordering.
 
-Outside tests, leave the clock alone. An event that reports a time other than the time it happened
-is a lie told to every consumer downstream.
+Call `DomainEventClock.Use` in tests, and when you replay recorded events. In production code, an event with a
+time other than the time it happened gives every consumer a wrong time.
 
-## What this kit does not do
+## What the package does not do
 
-**It does not control the clock, and it does not need to.** The assertions here never compare
-`EventId` or `OccurredAt`, so nothing in this package cares what they say. The hook for fixing them
-belongs to the core package; see [Deterministic time in tests](#deterministic-time-in-tests).
-
-**It is not an event sourcing kit.** There is no `Given(events)` that rebuilds an aggregate from a
-stream, because these aggregates are not built that way. Arrange with the constructor and with real
-method calls.
-
-**It does not test persistence.** Nothing here touches a `DbContext`. Whether your events reach a
-handler, survive a rollback or arrive twice is a question about dispatch, not about the aggregate;
-see [Entity Framework](entity-framework.md) for the interceptor, the outbox and the concurrency
-token, and test those against a real database.
-
-**It does not assert on your aggregate's state.** `Subject` hands you the aggregate and your own
-assertion library takes it from there. Two libraries fighting over one assertion style is worse than
-none.
-
-**It does not assert on invariants.** There is no `.Violates<T>()`, because there does not need to
-be: both stages are public on every entity, so your own assertion library already covers them, as
-[Testing invariants](#testing-invariants) shows.
+- **No clock.** The assertions of this package never compare `EventId` or `OccurredAt`. The core package sets the
+  clock ([Deterministic time in tests](#deterministic-time-in-tests)).
+- **No event sourcing.** There is no `Given(events)` that rebuilds an aggregate from a stream, because DDDToolkit
+  aggregates are not built from events. Arrange with the constructor and with real method calls.
+- **No persistence.** Nothing in the package touches a `DbContext`. Whether an event reaches a handler, survives
+  a rollback or arrives twice depends on dispatch. Test that against a real database.
+  [Entity Framework](entity-framework.md) covers the interceptor, the outbox and the concurrency token.
+- **No assertions on state.** `Subject` returns the aggregate, and your own assertion library checks its state.
+  The package adds no second assertion style next to yours.
+- **No assertions on invariants.** There is no `.Violates<T>()`. Both invariant methods are public on every
+  entity, so your own assertion library covers them ([Testing invariants](#testing-invariants)).
 
 ## See also
 
 - [Domain events](domain-events.md) for raising, draining and stable names.
 - [Invariants](invariants.md) for the two stages, the two shapes of rule, and checking both without a
   database.
-- [Entities and aggregates](entities-and-aggregates.md) for what an aggregate root is and why only
-  the root raises events.
+- [Entities and aggregates](entities-and-aggregates.md) for what an aggregate root is, and why only the root
+  raises events.
 - [Entity Framework](entity-framework.md) for delivering the events you asserted on here.

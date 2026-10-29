@@ -43,8 +43,8 @@ public sealed record HeldUnits(IReadOnlyList<OrganizationUnitId> Units, bool AtT
 /// </remarks>
 /// <param name="reads">Where Tenancy is read: a context of this query's own.</param>
 /// <param name="catalogue">The permissions the application knows, for a permission that comes from outside.</param>
-/// <param name="answers">Tenancy's answers about the current caller.</param>
-public sealed class UnitsWhereIHoldHandler(ITenancyReads reads, TenancyCatalogue catalogue, SampleAnswers answers) : IQueryHandler<UnitsWhereIHold, HeldUnits>
+/// <param name="tenancy">Tenancy, asked about the current caller.</param>
+public sealed class UnitsWhereIHoldHandler(ITenancyReads reads, TenancyCatalogue catalogue, TenancyAccessManager tenancy) : IQueryHandler<UnitsWhereIHold, HeldUnits>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException"><c>tenancy.unknown-permission</c> for a permission the catalogue does not know.</exception>
@@ -57,12 +57,12 @@ public sealed class UnitsWhereIHoldHandler(ITenancyReads reads, TenancyCatalogue
         }
 
         await using var reading = reads.Open();
-        var questions = answers.Over(reading.Rows, reading.Queries);
+        var queries = tenancy.In(reading.Rows, reading.Queries);
 
         // A local, so the storage sees the set itself and translates it into the statement below.
-        var held = questions.UnitsWhereIHold(query.Permission);
+        var held = queries.UnitsWhereIHold(query.Permission);
         var units = await reading.Queries.ListAsync(
-            questions.Units().Select(unit => new UnitRead(unit.Id, unit.ParentId, held.Contains(unit.Id))),
+            queries.Units().Select(unit => new UnitRead(unit.Id, unit.ParentId, held.Contains(unit.Id))),
             cancellationToken);
 
         return new HeldUnits(

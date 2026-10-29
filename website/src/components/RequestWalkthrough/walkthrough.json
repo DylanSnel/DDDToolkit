@@ -7,42 +7,42 @@
       "name": "Ada",
       "who": "Harbor's first administrator: Access admin and Area manager at the root, so she holds every permission in harbor.",
       "runsAs": "authenticated",
-      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Ada>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
+      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Ada>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);"
     },
     {
       "id": "juno",
       "name": "Juno",
       "who": "A seat at North Coast with no role of the organization; a surveyor on Pier 7's crew, which gives no permission to manage it.",
       "runsAs": "authenticated",
-      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Juno>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
+      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Juno>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);"
     },
     {
       "id": "newcomer",
       "name": "A new sign-in",
       "who": "Signed in, with no seat in harbor.",
       "runsAs": "authenticated",
-      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<the new sign-in>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.caller_tenant', '', false);"
+      "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<the new sign-in>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.current_tenant', '', false);"
     },
     {
       "id": "orla",
       "name": "Orla",
       "who": "One of the application's operators: her token carries the operators' role, and she has no seat anywhere.",
       "runsAs": "tenancy_operator",
-      "connection": "SELECT set_config('role', 'tenancy_operator', false), set_config('request.jwt.claims', '{\"sub\":\"<Orla>\",\"role\":\"tenancy_operator\",…}', false), …, set_config('tenancy.caller_tenant', '', false);"
+      "connection": "SELECT set_config('role', 'tenancy_operator', false), set_config('request.jwt.claims', '{\"sub\":\"<Orla>\",\"role\":\"tenancy_operator\",…}', false), …, set_config('tenancy.current_tenant', '', false);"
     },
     {
       "id": "anonymous",
       "name": "Anonymous",
       "who": "A request with no token.",
       "runsAs": "anon",
-      "connection": "SELECT set_config('role', 'anon', false), set_config('request.jwt.claims', '{\"role\":\"anon\"}', false), …, set_config('tenancy.caller_tenant', '', false);"
+      "connection": "SELECT set_config('role', 'anon', false), set_config('request.jwt.claims', '{\"role\":\"anon\"}', false), …, set_config('tenancy.current_tenant', '', false);"
     },
     {
       "id": "system",
       "name": "System work",
-      "who": "The application's own work in harbor, begun by trusted code with `TenancyUseCases.BeginSystemIn(harbor)`.",
+      "who": "System work in harbor, started by trusted code with `access.BeginSystemIn(harbor)`.",
       "runsAs": "ddd_system_in",
-      "connection": "SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{\"role\":\"ddd_system_in\",\"scope\":\"tenancy\"}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
+      "connection": "SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{\"role\":\"ddd_system_in\",\"scope\":\"tenancy\"}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);"
     }
   ],
   "layers": [
@@ -72,14 +72,14 @@
     },
     {
       "id": "statement",
-      "title": "The statement at the door",
+      "title": "The statement the check sends",
       "short": "Statement",
       "where": "Postgres, as the caller"
     },
     {
       "id": "door",
-      "title": "What the door says",
-      "short": "The door",
+      "title": "Let through or refused",
+      "short": "The answer",
       "where": "before the handler runs"
     },
     {
@@ -94,14 +94,19 @@
       "interface": "ITenantsRequest",
       "checks": [
         {
-          "name": "CallerAccessCheck",
+          "name": "CurrentUserAccessCheck",
           "addedBy": "the core's, first in every set",
           "decides": "SignedIn(), Own(value)"
         },
         {
-          "name": "TenancyAccessCheck over TenantsContext",
+          "name": "Tenancy's check of operators",
           "addedBy": "services.AddTenancyAccess<ITenantsRequest, TenantsContext>()",
-          "decides": "TenancyRequirement"
+          "decides": "Operator(), Operator(tenant)"
+        },
+        {
+          "name": "TenancyAccessCheck over TenantsContext",
+          "addedBy": "the same call",
+          "decides": "every other TenancyRequirement"
         }
       ]
     },
@@ -109,14 +114,19 @@
       "interface": "IProjectsRequest",
       "checks": [
         {
-          "name": "CallerAccessCheck",
+          "name": "CurrentUserAccessCheck",
           "addedBy": "the core's, first in every set",
           "decides": "SignedIn(), Own(value)"
         },
         {
+          "name": "Tenancy's check of operators",
+          "addedBy": "services.AddTenancyAccess<IProjectsRequest, ProjectsContext>()",
+          "decides": "Operator(), Operator(tenant)"
+        },
+        {
           "name": "TenancyAccessCheck over ProjectsContext",
-          "addedBy": "services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>()",
-          "decides": "TenancyRequirement"
+          "addedBy": "the same call",
+          "decides": "every other TenancyRequirement"
         },
         {
           "name": "MemberAccessCheck<Project, ProjectId>",
@@ -134,14 +144,19 @@
       "interface": "IAuditRequest",
       "checks": [
         {
-          "name": "CallerAccessCheck",
+          "name": "CurrentUserAccessCheck",
           "addedBy": "the core's, first in every set",
           "decides": "SignedIn(), Own(value)"
         },
         {
+          "name": "Tenancy's check of operators",
+          "addedBy": "services.AddTenancyAccess<IAuditRequest, AuditContext>()",
+          "decides": "Operator(), Operator(tenant)"
+        },
+        {
           "name": "TenancyAccessCheck over the audit module's context",
-          "addedBy": "services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IAuditRequest, AuditContext>()",
-          "decides": "TenancyRequirement"
+          "addedBy": "the same call",
+          "decides": "every other TenancyRequirement"
         }
       ]
     }
@@ -162,7 +177,7 @@
         "attribute": "generated.organization-units"
       },
       "decides": [
-        1
+        2
       ],
       "setSay": "Each check says what it decides with a type test. `TenancyAccessCheck` says yes: `InTenant()` is a `TenancyRequirement`.",
       "check": {
@@ -180,11 +195,11 @@
           },
           "door": {
             "pass": true,
-            "say": "Ada has a seat in harbor, so `RequireTenant()` answers her tenant and seat."
+            "say": "Ada has a seat in harbor, so `CurrentTenant.Require()` answers her tenant and seat."
           },
           "statement": {
             "snippet": null,
-            "say": "`InTenant` reads nothing at the door: the caller's seat in harbor was found by the host when the request came in."
+            "say": "`InTenant` reads nothing in the access check. The host found the caller's seat in harbor when the request came in."
           },
           "rows": {
             "result": "200 · every unit of harbor",
@@ -205,7 +220,7 @@
           },
           "statement": {
             "snippet": null,
-            "say": "`InTenant` reads nothing at the door: the caller's seat in harbor was found by the host when the request came in."
+            "say": "`InTenant` reads nothing in the access check. The host found the caller's seat in harbor when the request came in."
           },
           "rows": {
             "result": "200 · North Coast",
@@ -224,7 +239,7 @@
             "pass": false,
             "status": 403,
             "code": "tenancy.not-seated",
-            "say": "No seat in harbor: the host found none for this identity, so the caller is nobody there, and `RequireTenant()` refuses with that reason."
+            "say": "No seat in harbor: the host found none for this identity, so the caller is nobody there, and `CurrentTenant.Require()` refuses with that reason."
           },
           "statement": {
             "snippet": null,
@@ -233,7 +248,7 @@
           "rows": {
             "round": true,
             "result": "no row",
-            "say": "The handler does not run. A statement of theirs that goes round the door reads no unit: `caller_tenant()` finds no seat, so no row is of their tenant.",
+            "say": "A statement they send directly reads no unit, because `current_tenant()` finds no seat, so no row is in their tenant.",
             "snippet": "rows.units-read"
           }
         },
@@ -257,7 +272,7 @@
           "rows": {
             "round": true,
             "result": "every unit of every tenant",
-            "say": "Round the door she reads every unit of every tenant: operators read every tenant, and this policy says so. The request requires a seat; the table lets operators read. The door and the rows answer different questions.",
+            "say": "Sent directly, she reads every unit of every tenant, because this policy lets operators read every tenant. The request requires a seat, while the table lets operators read. The access check and the policies answer different questions.",
             "snippet": "rows.units-read-operators"
           }
         },
@@ -281,7 +296,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door nothing: `anon` may not use Tenancy's schema at all, and a restrictive policy closes every table of it as well.",
+            "say": "Sent directly, nothing is read. `anon` may not use Tenancy's schema at all, and a restrictive policy also closes every table in it.",
             "snippet": "rows.closed-to-anon"
           }
         },
@@ -294,11 +309,11 @@
           },
           "door": {
             "pass": true,
-            "say": "System work in harbor works in the tenant: `RequireTenant()` answers harbor, by system work."
+            "say": "System work in harbor works in the tenant: `CurrentTenant.Require()` answers harbor, by system work."
           },
           "statement": {
             "snippet": null,
-            "say": "`InTenant` reads nothing at the door."
+            "say": "`InTenant` reads nothing in the access check."
           },
           "rows": {
             "result": "200 · every unit of harbor",
@@ -323,9 +338,9 @@
         "attribute": "generated.add-unit"
       },
       "decides": [
-        1
+        2
       ],
-      "setSay": "`TenancyAccessCheck` says yes: `AtUnit(permission, unit)` is a `TenancyRequirement`. The core's check says no, and is passed by.",
+      "setSay": "`TenancyAccessCheck` says yes: `AtUnit(permission, unit)` is a `TenancyRequirement`. The core's check and Tenancy's check of operators say no, and are passed by.",
       "check": {
         "snippet": "check.tenancy",
         "highlight": "{14,16-17}"
@@ -361,7 +376,7 @@
           },
           "statement": {
             "snippet": "statement.at-unit",
-            "say": "One statement, as Ada: her rights joined to the closure table of the tree, so \"at North Coast or above it\" is one join."
+            "say": "One statement, as Ada. It joins her `SeatRights` rows to the closure table of the tree, so \"at North Coast or above it\" is one join."
           },
           "rows": {
             "result": "200 · a new unit below North Coast",
@@ -381,16 +396,16 @@
             "pass": false,
             "status": 403,
             "code": "tenancy.not-permitted",
-            "say": "Meadow Gardens' root is not a unit of harbor, and Ada's rights are harbor's: the statement finds the permission at no unit above it. The refusal names the permission and the unit."
+            "say": "Meadow Gardens' root is not a unit of harbor, and Ada's permissions are harbor's only. The statement finds the permission at no unit above it. The refusal names the permission and the unit."
           },
           "statement": {
             "snippet": "statement.at-unit",
-            "say": "One statement, as Ada: no right of hers reaches that unit."
+            "say": "One statement, as Ada. None of her permissions reaches that unit."
           },
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the insert policy refuses the row: it is not of her tenant, and its parent is none of the units where she holds the permission.",
+            "say": "Sent directly, the insert policy refuses the row. The row is not in her tenant, and its parent is not one of the units where she holds the permission.",
             "snippet": "rows.units-insert"
           }
         },
@@ -409,12 +424,12 @@
           },
           "statement": {
             "snippet": "statement.at-unit",
-            "say": "One statement, as Juno: it finds no right."
+            "say": "One statement, as Juno. It finds no permission."
           },
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the insert policy refuses the row: the parent is not among `units_where_i_hold_permission('tenancy.units.manage')` for her.",
+            "say": "Sent directly, the insert policy refuses the row. The parent is not in `units_where_i_hold_permission('tenancy.units.manage')` for her.",
             "snippet": "rows.units-insert"
           }
         },
@@ -438,7 +453,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the insert policy finds no tenant of theirs, and refuses the row.",
+            "say": "Sent directly, the insert policy finds no tenant of theirs, and refuses the row.",
             "snippet": "rows.units-insert"
           }
         },
@@ -462,7 +477,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door: no permissive policy lets the operators' role write Tenancy's units, so it holds only `SELECT` there, the one command its policy here allows, and Postgres refuses the insert before it asks a policy.",
+            "say": "Sent directly, the insert fails before any policy is checked. No permissive policy lets the operators' role write Tenancy's units, so the role has only `SELECT` there, the one command its policy here allows.",
             "snippet": "rows.units-read-operators"
           }
         },
@@ -486,7 +501,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door: `anon` may not use Tenancy's schema, and a restrictive policy closes every table of it.",
+            "say": "Sent directly, nothing is written. `anon` may not use Tenancy's schema, and a restrictive policy closes every table in it.",
             "snippet": "rows.closed-to-anon"
           }
         },
@@ -533,7 +548,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the policy of Tenancy's work refuses a row of another tenant: `system_tenant()` is harbor.",
+            "say": "Sent directly, the policy for Tenancy's work refuses a row of another tenant, because `system_tenant()` is harbor.",
             "snippet": "rows.units-insert-system"
           }
         }
@@ -554,9 +569,9 @@
         "attribute": "generated.add-crew-member"
       },
       "decides": [
-        2
+        3
       ],
-      "setSay": "`MemberAccessCheck<Project, ProjectId>` says yes: `On(permission, project, version)` is a `MemberAccess<ProjectId>`. Tenancy's check says no to it, though it is earlier in the set.",
+      "setSay": "`MemberAccessCheck<Project, ProjectId>` says yes: `On(permission, project, version)` is a `MemberAccess<ProjectId>`. Tenancy's two checks say no to it, though they are earlier in the set.",
       "check": {
         "snippet": "check.member",
         "highlight": "{4-5,10-11}"
@@ -658,7 +673,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door Membership's lock refuses her row: Pier 7 is not among `projects_where_i_hold('projects.crew.manage')` for her.",
+            "say": "Sent directly, Membership's lock refuses her row. Pier 7 is not in `projects_where_i_hold('projects.crew.manage')` for her.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -683,7 +698,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door Membership's lock refuses her row as well.",
+            "say": "Sent directly, Membership's lock refuses her row as well.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -707,7 +722,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the crew's policies find no seat of theirs, and refuse the row.",
+            "say": "Sent directly, the crew's policies find no seat of theirs, and refuse the row.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -731,7 +746,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door: her role holds only `SELECT` on the crew's table, so Postgres refuses the insert before it asks a policy, and Tenancy's restrictive `Operators only read` would refuse the row as well.",
+            "say": "Sent directly, the insert fails before any policy is checked, because her role has only `SELECT` on the crew's table. Tenancy's restrictive `Operators only read` would refuse the row as well.",
             "snippet": null
           }
         },
@@ -755,7 +770,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door: no permissive policy is for `anon`, so it may not use the schema of a module kept to a tenant, and a restrictive policy closes every table of it as well.",
+            "say": "Sent directly, nothing is written. No permissive policy is for `anon`, so it may not use the schema of a module that belongs to a tenant, and a restrictive policy also closes every table in it.",
             "snippet": null
           }
         },
@@ -771,7 +786,7 @@
             "pass": false,
             "status": 409,
             "code": "concurrency-conflict",
-            "say": "The application's own work holds every permission, so only the project and its version are read, and the version is not the one it read."
+            "say": "System work holds every permission, so only the project and its version are read. The version is not the one it read."
           },
           "statement": {
             "snippet": "statement.member-hold-system",
@@ -822,7 +837,7 @@
       },
       "decides": [
         0,
-        1
+        2
       ],
       "setSay": "An `Any` is decided by the set, case by case: `Own(seat)` by the core's check, `AtTenant(permission)` by Tenancy's. Both must have a check before either is asked.",
       "check": {
@@ -860,7 +875,7 @@
           },
           "statement": {
             "snippet": null,
-            "say": "Nothing is sent: the caller's own is compared at the door with the seat found when the request came in."
+            "say": "Nothing is sent. The access check compares the caller's own seat with the seat found when the request came in."
           },
           "rows": {
             "result": "200 · renamed",
@@ -928,12 +943,12 @@
           },
           "statement": {
             "snippet": "statement.tenant-wide",
-            "say": "One statement, for the second way in. It finds no right."
+            "say": "One statement, for the second alternative. It finds no permission."
           },
           "rows": {
             "round": true,
             "result": "UPDATE 0",
-            "say": "Round the door the update policy hides Leo's row from her: the statement changes nothing.",
+            "say": "Sent directly, the update policy hides Leo's row from her, so the statement changes nothing.",
             "snippet": "rows.seat-update"
           }
         },
@@ -957,7 +972,7 @@
           "rows": {
             "round": true,
             "result": "UPDATE 0",
-            "say": "Round the door the update policy finds no seat of theirs in harbor, so it lets them change no row: the statement changes nothing.",
+            "say": "Sent directly, the update policy finds no seat of theirs in harbor, so it lets them change no row. The statement changes nothing.",
             "snippet": "rows.seat-update"
           }
         },
@@ -982,7 +997,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door neither may change a seat. No permissive policy lets the operators' role write Tenancy's seats, so the export grants it only `SELECT` there, and Postgres refuses the update before it asks a policy; `anon` may not use Tenancy's schema at all. The column rule on the name would refuse both roles as well.",
+            "say": "Sent directly, neither may change a seat. No permissive policy lets the operators' role write Tenancy's seats, so the export grants it only `SELECT` there, and Postgres refuses the update before it checks a policy. `anon` may not use Tenancy's schema at all. The column rule on the name would refuse both roles as well.",
             "snippet": "rows.seat-update"
           }
         },
@@ -1003,7 +1018,7 @@
           },
           "rows": {
             "result": "200 · renamed",
-            "say": "Written as `ddd_system_in`, under the policy of Tenancy's own work. The column rule holds the roles of callers, not the application's own work.",
+            "say": "Written as `ddd_system_in`, allowed by the policy for Tenancy's own work. The column rule checks only the roles of callers, so system work passes it.",
             "snippet": "rows.seat-update-system"
           }
         }
@@ -1025,9 +1040,10 @@
         "attribute": null
       },
       "decides": [
-        1
+        1,
+        2
       ],
-      "setSay": "An `Any` of two of Tenancy's cases: the set gives `RequiresOperator()` and `AtTenant(permission)` each to Tenancy's check, in that order.",
+      "setSay": "An `Any` of two of Tenancy's cases: the set gives `Operator()` to Tenancy's check of operators and `AtTenant(permission)` to `TenancyAccessCheck`, in that order.",
       "check": {
         "snippet": "check.combined",
         "highlight": "{2,6-7,9}"
@@ -1068,7 +1084,7 @@
           "rows": {
             "result": "500 · 42501, permission denied",
             "warn": true,
-            "say": "The trap. The door let her through, but with the operators' rule gone no permissive policy is for her role, and the Supabase export writes a table's privileges from its permissive policies: `tenancy_operator` may not read the audit table at all. The read fails with 42501, permission denied, an error the toolkit does not make a refusal of, so the host answers 500. Where the host grants the privileges itself, she reads an empty page instead, and nothing says why. Each way through an `Any` to a table of your own needs a row rule of its own.",
+            "say": "The trap. The access check let her through, but with the operators' rule gone no permissive policy is for her role. The Supabase export writes a table's privileges from its permissive policies, so `tenancy_operator` may not read the audit table at all. The read fails with 42501, permission denied. The toolkit does not turn this error into a refusal, so the host answers 500. When the host grants the privileges itself, she reads an empty page instead, with no reason given. Each alternative of an `Any` that reaches a table of your own needs its own row rule.",
             "snippet": "rows.audit-forgotten"
           }
         },
@@ -1129,12 +1145,12 @@
           },
           "statement": {
             "snippet": "statement.tenant-wide",
-            "say": "One statement, for the second way in. It finds no right."
+            "say": "One statement, for the second alternative. It finds no permission."
           },
           "rows": {
             "round": true,
             "result": "no row",
-            "say": "Round the door the seat managers' rule lets her read no row: she does not hold the permission.",
+            "say": "Sent directly, the seat managers' rule lets her read no row, because she does not hold the permission.",
             "snippet": "rows.audit"
           }
         },
@@ -1158,7 +1174,7 @@
           "rows": {
             "round": true,
             "result": "no row",
-            "say": "Round the door the seat managers' rule lets them read no row: no seat of theirs manages seats, and Tenancy's restrictive policy finds no tenant of theirs.",
+            "say": "Sent directly, the seat managers' rule lets them read no row. No seat of theirs manages seats, and Tenancy's restrictive policy finds no tenant of theirs.",
             "snippet": "rows.audit"
           }
         },
@@ -1182,7 +1198,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door no permissive policy is for `anon`, so the export grants it nothing: it may not read the table, nor use its schema.",
+            "say": "Sent directly, nothing is read. No permissive policy is for `anon`, so the export grants it nothing. It may not read the table, nor use its schema.",
             "snippet": "rows.audit"
           }
         },
@@ -1203,7 +1219,7 @@
           },
           "rows": {
             "result": "200 · harbor's entries",
-            "say": "Read as `ddd_system_in`, under the policy Tenancy writes for system work on every table kept to a tenant, which keeps it to harbor.",
+            "say": "Read as `ddd_system_in`, allowed by the policy that Tenancy writes for system work on every table that belongs to a tenant. That policy keeps it to harbor.",
             "snippet": null
           }
         }
@@ -1226,7 +1242,7 @@
       "decides": [
         0
       ],
-      "setSay": "The core's `CallerAccessCheck`, first in every set, says yes: `SignedIn()` is about who is calling, and means the same in every module.",
+      "setSay": "The core's `CurrentUserAccessCheck`, first in every set, says yes: `SignedIn()` is about who is calling, and means the same in every module.",
       "check": {
         "snippet": "check.caller",
         "highlight": "{7-9}"
@@ -1268,7 +1284,7 @@
           "rows": {
             "status": 403,
             "code": "access.system-only",
-            "say": "The door let them through, but the handler began no system work: Tenancy's provisioning refuses a seat with `access.system-only`. Who may send a request and what the work runs with are two decisions.",
+            "say": "The access check let them through, but the handler started no system work. Tenancy's provisioning refuses a seat with `access.system-only`. Who may send a request and which caller the work runs as are two separate decisions.",
             "snippet": "rows.register-forgotten"
           }
         },
@@ -1343,7 +1359,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door no policy lets a caller write a tenant: only Tenancy's own work, in the tenant whose id the connection names.",
+            "say": "Sent directly, no policy lets a caller write a tenant. Only Tenancy's own work may, in the tenant whose id the connection names.",
             "snippet": "rows.tenant-insert"
           }
         },
@@ -1379,21 +1395,21 @@
       "language": "csharp",
       "lines": [
         "[InTenant]",
-        "public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest;"
+        "public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest;"
       ]
     },
     "write.add-unit": {
       "language": "csharp",
       "lines": [
         "[RequiresPermission(TenancyPermissions.UnitsManage)]",
-        "public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest;"
+        "public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;"
       ]
     },
     "write.rename-seat": {
       "language": "csharp",
       "lines": [
         "[RequiresPermission(RequiredPermission)]",
-        "public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest",
+        "public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest",
         "{",
         "    public const string RequiredPermission = TenancyPermissions.SeatsManage;",
         "}"
@@ -1415,7 +1431,7 @@
         "public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AuditEntry>>, IAuditRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(",
-        "        TenancyAccess.RequiresOperator(),",
+        "        TenancyAccess.Operator(),",
         "        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));",
         "}"
       ]
@@ -1424,13 +1440,13 @@
       "language": "csharp",
       "lines": [
         "[SignedIn]",
-        "public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest;"
+        "public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest;"
       ]
     },
     "write.organization-units.property": {
       "language": "csharp",
       "lines": [
-        "public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest",
+        "public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();",
         "}"
@@ -1439,7 +1455,7 @@
     "write.add-unit.property": {
       "language": "csharp",
       "lines": [
-        "public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest",
+        "public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, Parent);",
         "}"
@@ -1448,7 +1464,7 @@
     "write.rename-seat.property": {
       "language": "csharp",
       "lines": [
-        "public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest",
+        "public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(",
         "        AccessRequirement.Own(Seat),",
@@ -1468,7 +1484,7 @@
     "write.register.property": {
       "language": "csharp",
       "lines": [
-        "public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest",
+        "public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();",
         "}"
@@ -1552,18 +1568,18 @@
     "check.caller": {
       "language": "csharp",
       "lines": [
-        "// CallerAccessCheck, the core's, shortened: who is calling, with nothing read",
+        "// CurrentUserAccessCheck, the core's, shortened: who is calling, with nothing read",
         "public bool Decides(AccessRequirement requirement)",
         "    => requirement is AccessRequirement.SignedInUser || (requirement is IOwnedRequirement owned && owned.CanBeAnswered(services));",
         "",
         "switch (requirement)",
         "{",
         "    case AccessRequirement.SignedInUser:",
-        "        if (!callers.Current.IsSignedIn)                         // a token that names a user",
+        "        if (!user.IsAuthenticated)                               // a token that names a user",
         "            throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);",
         "        return;",
         "    case IOwnedRequirement owned:                                // the request names the value, never whose it is",
-        "        if (!owned.IsTheCallers(callers.Current, services))",
+        "        if (!owned.IsTheCurrentUsers(user, services))",
         "            throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);",
         "        return;",
         "}"
@@ -1573,26 +1589,22 @@
       "language": "csharp",
       "lines": [
         "// TenancyAccessCheck, Tenancy.EntityFramework, shortened",
-        "public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement;",
+        "public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement && !IsOperatorCase(requirement);",
         "",
         "switch (requirement)",
         "{",
         "    case TenancyRequirement.InTenant:",
-        "        answers.RequireTenant();                                 // a seat here, or system work here",
+        "        access.CurrentTenant.Require();                          // a seat here, or system work here",
         "        break;",
         "    case TenancyRequirement.AtTenant required:",
-        "        answers.RequireTenant();                                 // nobody is refused without a statement",
+        "        access.CurrentTenant.Require();                          // nobody is refused without a statement",
         "        if (!await HoldsAtTenantAsync(required.Permission, cancellationToken))",
         "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Permission\", required.Permission));",
         "        break;",
         "    case TenancyRequirement.AtUnit<TUnitId> required:",
-        "        answers.RequireTenant();",
+        "        access.CurrentTenant.Require();",
         "        if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken))",
         "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Permission\", required.Permission), (\"Unit\", required.Unit));",
-        "        break;",
-        "    case TenancyRequirement.Operator:",
-        "        if (!options.IsOperator(callers.Current))                // the token's role, never a seat",
-        "            throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);",
         "        break;",
         "    default:",
         "        throw new InvalidOperationException(\"... which Tenancy's access check does not decide ...\");",
@@ -1676,7 +1688,7 @@
         "                             INNER JOIN \"projects\".\"ProjectRoles\" AS k ON h.\"RoleId\" = k.\"Id\"",
         "                             WHERE h.\"CrewMemberId\" = m.\"Id\" AND k.\"Status\" = 'Active' AND @permission = ANY (k.\"Permissions\")))",
         "         OR p.\"OwnerSeatId\" = @seat AS \"AsMember\",                                 -- or its owner",
-        "       p.\"UnitId\" IN (SELECT path.\"DescendantId\" FROM \"tenancy\".caller_permissions() AS r   -- or the permission where it sits",
+        "       p.\"UnitId\" IN (SELECT path.\"DescendantId\" FROM \"tenancy\".current_permissions() AS r   -- or the permission where it sits",
         "                      INNER JOIN \"tenancy\".tenant_unit_paths() AS path ON r.\"UnitId\" = path.\"AncestorId\"",
         "                      WHERE r.\"SeatId\" = @seat AND r.\"Permission\" = @permission) AS \"FromAbove\"",
         "FROM \"projects\".\"Projects\" AS p",
@@ -1689,7 +1701,7 @@
     "statement.member-hold-system": {
       "language": "sql",
       "lines": [
-        "-- EfMemberQuestions.HoldAsync for the application's own work: every permission, so only the project and its version",
+        "-- EfMemberQuestions.HoldAsync for system work: every permission, so only the project and its version",
         "SELECT p.\"Version\" FROM \"projects\".\"Projects\" AS p WHERE p.\"Id\" = @project LIMIT 1"
       ]
     },
@@ -1697,7 +1709,7 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Members read the units (select) for authenticated\" ON \"tenancy\".\"OrganizationUnits\" FOR SELECT TO authenticated",
-        "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()));"
+        "    USING (\"TenantId\" = (SELECT \"tenancy\".current_tenant()));"
       ]
     },
     "rows.units-read-system": {
@@ -1718,13 +1730,13 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Unit managers add below their units (insert) for authenticated\" ON \"tenancy\".\"OrganizationUnits\" FOR INSERT TO authenticated",
-        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"ParentId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_permission('tenancy.units.manage')))));",
+        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".current_tenant())) AND (\"ParentId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_permission('tenancy.units.manage')))));",
         "",
         "CREATE OR REPLACE FUNCTION \"tenancy\".units_where_i_hold_permission(permission text) RETURNS SETOF uuid",
         "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$",
         "SELECT DISTINCT p.\"DescendantId\" FROM \"tenancy\".\"SeatRights\" r",
         "JOIN \"tenancy\".\"OrganizationUnitPaths\" p ON p.\"AncestorId\" = r.\"UnitId\" AND p.\"TenantId\" = r.\"TenantId\"",
-        "WHERE r.\"SeatId\" = (SELECT \"tenancy\".caller_seat()) AND r.\"Permission\" = $1 AND \"tenancy\".permission_is_live($1)",
+        "WHERE r.\"SeatId\" = (SELECT \"tenancy\".current_seat()) AND r.\"Permission\" = $1 AND \"tenancy\".permission_is_live($1)",
         "  AND r.\"StartsAt\" <= pg_catalog.now() AND (r.\"EndsAt\" IS NULL OR r.\"EndsAt\" > pg_catalog.now())",
         "$function$;"
       ]
@@ -1748,14 +1760,14 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Managers and the seat change it (update) for authenticated\" ON \"tenancy\".\"Seats\" FOR UPDATE TO authenticated",
-        "    USING ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".caller_seat())))",
-        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".caller_seat())));",
+        "    USING ((\"TenantId\" = (SELECT \"tenancy\".current_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".current_seat())))",
+        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".current_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".current_seat())));",
         "",
         "CREATE OR REPLACE FUNCTION \"tenancy\".seats_displayname_column_rule() RETURNS trigger",
         "    LANGUAGE plpgsql SET search_path = '' AS $body$",
         "BEGIN",
         "    IF CURRENT_USER = 'authenticated' THEN",
-        "        IF ((OLD.\"Id\" = (SELECT \"tenancy\".caller_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD.\"Id\" IS DISTINCT FROM NEW.\"Id\" AND ((NEW.\"Id\" = (SELECT \"tenancy\".caller_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN",
+        "        IF ((OLD.\"Id\" = (SELECT \"tenancy\".current_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD.\"Id\" IS DISTINCT FROM NEW.\"Id\" AND ((NEW.\"Id\" = (SELECT \"tenancy\".current_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN",
         "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Name changes by the seat or with the seats permission'' does not let this caller change \"DisplayName\" of \"tenancy\".\"Seats\".';",
         "        END IF;",
         "    ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN",
@@ -1789,7 +1801,7 @@
         "UNION",
         "SELECT joined.id FROM \"projects\".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'",
         "UNION",
-        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r.\"OwnerSeatId\" = (SELECT \"tenancy\".caller_seat())",
+        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r.\"OwnerSeatId\" = (SELECT \"tenancy\".current_seat())",
         "UNION",
         "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IS NOT NULL AND r.\"UnitId\" IN (SELECT reached.place FROM \"tenancy\".units_where_i_hold_permission($1) AS reached(place))",
         "UNION",
@@ -1813,8 +1825,8 @@
         "    USING ((SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage')));",
         "-- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none",
         "CREATE POLICY \"Kept to its tenant (all) for authenticated\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR ALL TO authenticated",
-        "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()))",
-        "    WITH CHECK (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()));",
+        "    USING (\"TenantId\" = (SELECT \"tenancy\".current_tenant()))",
+        "    WITH CHECK (\"TenantId\" = (SELECT \"tenancy\".current_tenant()));",
         "CREATE POLICY \"Operators only read (insert) for tenancy_operator\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR INSERT TO tenancy_operator",
         "    WITH CHECK (false);",
         "-- ... and the same for update and delete"
@@ -1827,8 +1839,8 @@
         "    USING ((SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage')));",
         "-- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none",
         "CREATE POLICY \"Kept to its tenant (all) for authenticated\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR ALL TO authenticated",
-        "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()))",
-        "    WITH CHECK (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()));",
+        "    USING (\"TenantId\" = (SELECT \"tenancy\".current_tenant()))",
+        "    WITH CHECK (\"TenantId\" = (SELECT \"tenancy\".current_tenant()));",
         "CREATE POLICY \"Operators only read (insert) for tenancy_operator\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR INSERT TO tenancy_operator",
         "    WITH CHECK (false);",
         "-- ... and the same for update and delete"
@@ -1844,18 +1856,18 @@
     "rows.register": {
       "language": "csharp",
       "lines": [
-        "using (TenancyUseCases.BeginSystem())                             // system work outside any tenant, begun here",
+        "using (access.BeginSystem())                                      // system work outside any tenant, begun here",
         "{",
-        "    var made = await tenants.ProvisionAsync(new TenancyUseCases.TenantToProvision(",
+        "    var tenant = await tenants.ProvisionAsync(new TenantToProvision(",
         "        command.Slug, command.Name, TenantShape.Flat, command.Name, administrator), cancellationToken);",
-        "    return made.Tenant;",
-        "}                                                                 // the caller before it is current again"
+        "    return tenant;",
+        "}                                                                 // the user before it is current again"
       ]
     },
     "rows.register-forgotten": {
       "language": "csharp",
       "lines": [
-        "var made = await tenants.ProvisionAsync(new TenancyUseCases.TenantToProvision(",
+        "var tenant = await tenants.ProvisionAsync(new TenantToProvision(",
         "    command.Slug, command.Name, TenantShape.Flat, command.Name, administrator), cancellationToken);"
       ]
     }

@@ -75,13 +75,13 @@ public sealed class ApiaryDatabase
     public static readonly Guid BobId = Guid.Parse("b0b00000-0000-4000-8000-000000000022");
 
     /// <summary>A keeper.</summary>
-    public static readonly Caller Alice = Callers.FromClaims($$"""{"sub":"{{AliceId}}","role":"authenticated"}""");
+    public static readonly CurrentUserSnapshot Alice = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{AliceId}}","role":"authenticated"}""");
 
     /// <summary>Another keeper.</summary>
-    public static readonly Caller Bob = Callers.FromClaims($$"""{"sub":"{{BobId}}","role":"authenticated"}""");
+    public static readonly CurrentUserSnapshot Bob = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{BobId}}","role":"authenticated"}""");
 
     /// <summary>A ranger: a signed-in user whose token carries the role the apiary maps to a role of its own.</summary>
-    public static readonly Caller Ranger = Callers.FromClaims($$"""{"sub":"0a4de400-0000-4000-8000-000000000023","role":"{{ApiaryRules.Ranger}}"}""");
+    public static readonly CurrentUserSnapshot Ranger = CurrentUserSnapshot.FromClaims($$"""{"sub":"0a4de400-0000-4000-8000-000000000023","role":"{{ApiaryRules.Ranger}}"}""");
 
     /// <summary>
     /// The server's roles are made once per server, by whichever test comes first: through a lazy, because a
@@ -118,7 +118,7 @@ public sealed class ApiaryDatabase
     }
 
     /// <summary>
-    /// Makes the apiary in a new database of <paramref name="postgres"/>: the roles and the caller functions, the
+    /// Makes the apiary in a new database of <paramref name="postgres"/>: the roles and the current user functions, the
     /// tables from the model, owned by the superuser, and one access script.
     /// </summary>
     /// <param name="postgres">The run's Postgres.</param>
@@ -127,7 +127,7 @@ public sealed class ApiaryDatabase
     /// <param name="rules">The rules; the apiary's own when left out.</param>
     /// <param name="functions">The access functions the rules ask; none when left out.</param>
     public static async Task<ApiaryDatabase> CreateAsync(
-        ExplicitCallersPostgres postgres,
+        ExplicitCurrentUserPostgres postgres,
         bool logged = false,
         Func<RowAccessExport, RowAccessExport>? configure = null,
         IReadOnlyList<RowAccessRule>? rules = null,
@@ -155,7 +155,7 @@ public sealed class ApiaryDatabase
     /// </summary>
     /// <remarks>
     /// Each role is made only where the server has none of that name yet. The server is shared by every test of
-    /// this suite that asks <see cref="ExplicitCallersPostgres"/> for a database, and some of those run the
+    /// this suite that asks <see cref="ExplicitCurrentUserPostgres"/> for a database, and some of those run the
     /// toolkit's own scripts on it, which make the bookkeeping role as well: whichever runs first, the other finds
     /// the role there.
     /// </remarks>
@@ -168,7 +168,7 @@ public sealed class ApiaryDatabase
             {ServerRole.Create(LoginRole, $"LOGIN NOINHERIT PASSWORD '{LoginRole}'")}
             {ServerRole.Create(ApiaryRules.RangerRole, "NOLOGIN NOINHERIT")}
             {ServerRole.Create(SystemRole, "NOLOGIN NOINHERIT")}
-            GRANT anon, authenticated, {ExplicitCallersPostgres.SystemInRole}, {ApiaryRules.RangerRole}, {SystemRole} TO {LoginRole};
+            GRANT anon, authenticated, {ExplicitCurrentUserPostgres.SystemInRole}, {ApiaryRules.RangerRole}, {SystemRole} TO {LoginRole};
             """,
             connection);
         await command.ExecuteNonQueryAsync(CancellationToken.None);
@@ -222,7 +222,7 @@ public sealed class ApiaryDatabase
             roles.SystemRole = Export.Roles.System;
             roles.TokenRoles[ApiaryRules.Ranger] = ApiaryRules.RangerRole;
         });
-        collection.RequireExplicitCallers();
+        collection.RequireExplicitCurrentUser();
 
         void Configure(IServiceProvider provider, DbContextOptionsBuilder options)
             => (dataSource is null ? options.UseNpgsql(connectionString ?? ApplicationConnectionString) : options.UseNpgsql(dataSource))
@@ -245,15 +245,15 @@ public sealed class ApiaryDatabase
     }
 
     /// <summary>Runs <paramref name="work"/> on the context of a new scope of <paramref name="host"/>, as <paramref name="caller"/>.</summary>
-    public static async Task<T> AsAsync<T>(IServiceProvider host, Caller caller, Func<ApiaryContext, Task<T>> work)
+    public static async Task<T> AsAsync<T>(IServiceProvider host, CurrentUserSnapshot caller, Func<ApiaryContext, Task<T>> work)
     {
         await using var scope = host.CreateAsyncScope();
-        using var running = Callers.Begin(caller);
+        using var running = TestAccess.BeginAs(caller);
         return await work(scope.ServiceProvider.GetRequiredService<ApiaryContext>());
     }
 
     /// <summary>Runs <paramref name="work"/> on the context of a new scope of <paramref name="host"/>, as <paramref name="caller"/>.</summary>
-    public static Task AsAsync(IServiceProvider host, Caller caller, Func<ApiaryContext, Task> work)
+    public static Task AsAsync(IServiceProvider host, CurrentUserSnapshot caller, Func<ApiaryContext, Task> work)
         => AsAsync<object?>(host, caller, async context =>
         {
             await work(context);

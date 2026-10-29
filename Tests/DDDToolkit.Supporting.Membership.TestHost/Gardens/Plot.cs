@@ -114,11 +114,11 @@ public static class PlotPermissions
     public const string Water = "plots.water";
 
     /// <summary>Fence a plot: who holds it says who is let on it.</summary>
-    [On<Plot>(LocksMembers = true)]
+    [On<Plot>(ManagesMembers = true)]
     public const string Fence = "plots.fence";
 
     /// <summary>Sell a plot: no role gives it, and who holds it hands the plot on.</summary>
-    [On<Plot>(InRoles = false, LocksOwner = true)]
+    [On<Plot>(InRoles = false, NamesOwner = true)]
     public const string Sell = "plots.sell";
 }
 

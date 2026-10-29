@@ -23,7 +23,7 @@ public sealed class DatabaseRefusalLogTests : IDisposable
 
     private static readonly Guid BobId = Guid.Parse("b0b00000-0000-4000-8000-000000000012");
 
-    private static readonly Caller Bob = Callers.FromClaims($$"""{"sub":"{{BobId}}","role":"authenticated"}""");
+    private static readonly CurrentUserSnapshot Bob = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{BobId}}","role":"authenticated"}""");
 
     private readonly SqliteDatabase _db = new();
 

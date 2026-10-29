@@ -58,7 +58,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// <para>
 /// What the rules have somebody else answer is asked of functions by their logical names, <c>owner/name</c>: who
 /// the caller is as a member, and where the caller holds a permission above, of the function a contribution of the export
-/// answers for the type of the member or of the place (<see cref="ICallerFunctions"/>), an organization package's for
+/// answers for the type of the member or of the place (<see cref="ICurrentUserFunctions"/>), an organization package's for
 /// its seat and its unit, or of the one the rules name (<see cref="MemberSource.Resolved"/>, <see cref="MembershipRules.ReachFromAbove"/>);
 /// which of the roles kept elsewhere give a permission, of the one <see cref="Roles.External"/> names. The script finds a
 /// function wherever it is defined: in this context's script or another's it is written with. A name nothing
@@ -94,19 +94,19 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// That the member tables follow the resource's rules means whoever those rules let change a resource
 /// writes its member rows and its owner column, by any statement that reaches the database: a caller that
 /// only edits a resource could give itself a role on it, or make itself its owner. So the permissions the
-/// application's commands require for that are marked <c>LocksMembers</c> and <c>LocksOwner</c>, and the lock is
+/// application's commands require for that are marked <c>ManagesMembers</c> and <c>NamesOwner</c>, and the lock is
 /// written from them, for the database roles that may ask the functions:
 /// </para>
 /// <list type="bullet">
-/// <item><see cref="MembershipRules.MembersLockPermission"/>: a restrictive policy on both member tables for
+/// <item><see cref="MembershipRules.ManagesMembersPermission"/>: a restrictive policy on both member tables for
 /// adding, changing and removing a row. A row is written only on a resource the caller holds that permission on, or
-/// the one that locks the owner, where there is one: naming an owner writes member rows too. It
+/// the one that names the owner, where there is one: naming an owner writes member rows too. It
 /// narrows what the application's rules allow and allows nothing itself. Where a customer makes the
 /// roles, a second one on the table of the roles a member holds, for adding and changing a row: the role
 /// is one the caller sees in the role table, asked as the caller, so the application's own rules on that
 /// table decide it. The functions find a role by its id, whoever's it is; this keeps a role the caller does
 /// not see, another customer's, off a member list it writes.</item>
-/// <item><see cref="MembershipRules.OwnerLockPermission"/>: a trigger on the resource's table that refuses, as a
+/// <item><see cref="MembershipRules.NamesOwnerPermission"/>: a trigger on the resource's table that refuses, as a
 /// policy does, a statement that would leave a row with another owner, unless the caller held that permission on
 /// the resource before.</item>
 /// </list>
@@ -114,7 +114,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// The lock asks what the caller holds when each statement runs, as every policy does, and a change of a
 /// resource's members is several statements. Two things follow. A resource is opened with its owner on the
 /// list, and those first rows pass the lock like any other: an owner holds the permissions marked <c>Owner</c>
-/// (<see cref="MembershipRules.OwnerPermissions"/>), so the one that locks the members is one of them wherever a
+/// (<see cref="MembershipRules.OwnerPermissions"/>), so the one that manages the members is one of them wherever a
 /// caller opens a resource as itself. And an owner that hands its own resource on, holding the permissions by
 /// owning it alone, holds them no longer once the owner column has changed: the rows written after that are
 /// not its to write, under the lock or under an application's own rule that asks what the caller holds.
@@ -162,8 +162,8 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
     /// The kinds of answer the export's contributions may give about the caller: an organization package's for its seat and its unit. A
     /// package's contribution reaches the export inside the class the build writes for it, so that is looked into.
     /// </summary>
-    private static IEnumerable<ICallerFunctions> Answering(RowAccessExport export)
-        => export.Contributions.Select(static contribution => contribution is IPackageRowAccessContribution package ? package.Contribution : contribution).OfType<ICallerFunctions>();
+    private static IEnumerable<ICurrentUserFunctions> Answering(RowAccessExport export)
+        => export.Contributions.Select(static contribution => contribution is IPackageRowAccessContribution package ? package.Contribution : contribution).OfType<ICurrentUserFunctions>();
 
     /// <summary>The rules the functions are written from.</summary>
     public MembershipRules Rules { get; }
@@ -180,7 +180,7 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
     /// resource be reached from above, and it marks no place it hangs at; the roles are fixed, and the members
     /// hold roles that are not <see cref="NamedRole"/>; a customer makes the roles, and the model maps no role class
     /// for the resource, or one a member does not hold by its id; or the model stores a member, a moment of a period
-    /// or a role's permissions as something the functions cannot compare; or a permission locks the owner and a role the lock
+    /// or a role's permissions as something the functions cannot compare; or a permission names the owner and a role the lock
     /// cannot be written for may ask the functions; or a trigger's name would be longer than Postgres keeps one.
     /// </exception>
     public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export)
@@ -213,10 +213,10 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
             // Follows from the member id: a contribution that keeps such an id answers who the caller is as one; an id
             // over a Guid is the caller's own; anything else nobody can tell.
             var memberId = mapping.Members.FindProperty(nameof(MemberEntity<,,>.MemberId))!.ClrType;
-            members = Answering(export).Select(answers => answers.CallerAs(context, memberId)).FirstOrDefault(function => function is not null) is { } function
+            members = Answering(export).Select(answers => answers.CurrentUserAs(context, memberId)).FirstOrDefault(function => function is not null) is { } function
                 ? MemberSource.Resolved(function)
                 : string.Equals(RowAccessModel.ColumnType(mapping.Members, nameof(MemberEntity<,,>.MemberId)).Trim(), "uuid", StringComparison.OrdinalIgnoreCase)
-                    ? MemberSource.CallerId
+                    ? MemberSource.CurrentUserId
                     : throw new InvalidOperationException(
                         "Who the caller is as a member of " + what + " follows from what a member is known by, " + memberId.Name + ", and nothing answers it in the database: "
                         + "no contribution keeps such an id, and it is no id over a Guid, the caller's own. Map the read model of the package that keeps such ids where "
@@ -231,7 +231,7 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
                     "The rules '" + Rules.Name + "' let " + what + " be reached from above, and it marks no place it hangs at. "
                     + "Mark the property that says where it hangs [At], and map it with HasMembers.");
             places = above.Function
-                ?? Answering(export).Select(answers => answers.PlacesWhereCallerHolds(context, at.ClrType)).FirstOrDefault(function => function is not null)
+                ?? Answering(export).Select(answers => answers.PlacesWhereCurrentUserHolds(context, at.ClrType)).FirstOrDefault(function => function is not null)
                 ?? throw new InvalidOperationException(
                     "The rules '" + Rules.Name + "' let " + what + " be reached from above, where it hangs at a " + at.ClrType.Name + ", and nothing answers in the database where "
                     + "the caller holds a permission at one: no contribution keeps such a place. Map the read model of the package that keeps such places where the context maps "

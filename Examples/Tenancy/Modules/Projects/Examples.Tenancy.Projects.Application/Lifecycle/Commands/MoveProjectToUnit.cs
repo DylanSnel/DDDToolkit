@@ -41,11 +41,11 @@ public sealed record MoveProjectToUnit(ProjectId Id, OrganizationUnitId UnitId, 
 /// </summary>
 /// <param name="store">Where projects are loaded and saved.</param>
 /// <param name="reads">Where Tenancy's rows are read, for the destination.</param>
-/// <param name="tenancy">What the tenant allows: an active unit.</param>
+/// <param name="organization">What the tenant allows: an active unit.</param>
 public sealed class MoveProjectToUnitHandler(
     IProjectStore store,
     IProjectReads reads,
-    ProjectTenancy tenancy)
+    ProjectTenancy organization)
     : ICommandHandler<MoveProjectToUnit>
 {
     /// <inheritdoc />
@@ -61,7 +61,7 @@ public sealed class MoveProjectToUnitHandler(
         // The permissions were checked at the door, at the unit this command names: whether that unit takes anything new is
         // the tenant's state, not the caller's right, so it is asked here.
         await using var reading = reads.Open();
-        await tenancy.RequireActiveUnitAsync(reading, command.UnitId, cancellationToken);
+        await organization.RequireActiveUnitAsync(reading, command.UnitId, cancellationToken);
 
         project.MoveToUnit(command.UnitId);
         await store.SaveAsync(cancellationToken);

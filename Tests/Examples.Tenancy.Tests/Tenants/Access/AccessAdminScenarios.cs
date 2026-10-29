@@ -33,7 +33,7 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
     private static DemoProject PierSeven => Harbor.ProjectNamed("Pier 7");
 
     [Fact]
-    public async Task An_access_admin_holds_the_permissions_its_pack_lists_and_no_others()
+    public async Task An_access_admin_holds_the_permissions_its_starter_role_lists_and_no_others()
     {
         using var maud = await sample.ClientAsync("maud", Harbor.Slug);
 
@@ -52,10 +52,10 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
         me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which.GetProperty("grants").EnumerateArray()
             .Select(grant => grant.GetProperty("roleId").GetGuid()).Should().Equal(Harbor.Roles[SampleCatalogue.AccessAdmin].Value);
 
-        // The pack as the catalogue built it holds exactly those: a pack that lists its permissions is not given the rest.
-        var pack = (await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>().Packs.Single(candidate => candidate.Key == SampleCatalogue.AccessAdmin);
-        pack.Administers.Should().BeTrue();
-        pack.Permissions.Should().BeEquivalentTo(me.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetProperty("permission").GetString()));
+        // The starter role as the catalogue built it holds exactly those: a starter role that lists its permissions is not given the rest.
+        var starterRole = (await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>().StarterRoles.Single(candidate => candidate.Key == SampleCatalogue.AccessAdmin);
+        starterRole.Administers.Should().BeTrue();
+        starterRole.Permissions.Should().BeEquivalentTo(me.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetProperty("permission").GetString()));
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
                    new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.CrewLead].Value },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -103,7 +103,7 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
                    new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[SampleCatalogue.AccessAdmin].Value },
                    Cancellation))
         {
-            second.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            second.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using var herself = await maud.PostAsJsonAsync(
@@ -197,13 +197,13 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
             .Select(grant => grant.GetProperty("roleId").GetGuid()).Should().Equal(meadow.Roles[SampleCatalogue.TenantAdmin].Value);
         me.GetProperty("permissions").EnumerateArray().Where(permission => permission.GetProperty("atTenant").GetBoolean()).Select(permission => permission.GetProperty("permission").GetString())
             .Should().BeEquivalentTo(catalogue.LivePermissions);
-        catalogue.Packs.Single(pack => pack.Key == SampleCatalogue.TenantAdmin).Permissions.Should().BeEquivalentTo(catalogue.LivePermissions);
+        catalogue.StarterRoles.Single(starterRole => starterRole.Key == SampleCatalogue.TenantAdmin).Permissions.Should().BeEquivalentTo(catalogue.LivePermissions);
 
-        // Each shape has an administrators' pack seeded for it, and a tenant's roles hold the one seeded for its shape.
+        // Each shape has an administrators' starter role seeded for it, and a tenant's roles hold the one seeded for its shape.
         var roles = await tove.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation);
-        roles.EnumerateArray().Select(role => role.Text("fromPack")).Should().Contain(SampleCatalogue.TenantAdmin).And.NotContain(SampleCatalogue.AccessAdmin);
+        roles.EnumerateArray().Select(role => role.Text("fromStarterRole")).Should().Contain(SampleCatalogue.TenantAdmin).And.NotContain(SampleCatalogue.AccessAdmin);
         using var harbors = await sample.ClientAsync("ada", Harbor.Slug);
-        (await harbors.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation)).EnumerateArray().Select(role => role.Text("fromPack"))
+        (await harbors.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation)).EnumerateArray().Select(role => role.Text("fromStarterRole"))
             .Should().Contain(SampleCatalogue.AccessAdmin).And.NotContain(SampleCatalogue.TenantAdmin);
     }
 }

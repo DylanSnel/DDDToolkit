@@ -1,14 +1,15 @@
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 
 /// <summary>
-/// Gives a seat of the caller's tenant another name to be shown by: this application's own use case, about this
+/// Gives a seat of the caller's tenant another name to be shown by: this application's own command, about this
 /// application's own field, under this application's own rule.
 /// </summary>
 /// <remarks>
-/// Tenancy keeps no name of a seat, so it has no use case that renames one: the name is a field of the module's
+/// Tenancy keeps no name of a seat, so it has no manager method that renames one: the name is a field of the module's
 /// <c>Seat</c> class, and what guards it is the module's to say. Its rule: <b>a seat renames itself, and another
 /// seat takes <see cref="RequiredPermission"/> for the whole tenant</b>. Yours, or the permission: the request says so with
 /// <c>[RequiresPermission(RequiredPermission)]</c> and <c>[OrOwn]</c> on the seat, which is
@@ -28,7 +29,7 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// <param name="Seat">The seat: the caller's own, or any of the tenant's with the permission.</param>
 /// <param name="DisplayName">The name it is shown by from now on.</param>
 [RequiresPermission(RequiredPermission)]
-public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest
+public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest
 {
     /// <summary>The permission a caller holds for the whole tenant to rename a seat that is not its own.</summary>
     public const string RequiredPermission = TenancyPermissions.SeatsManage;
@@ -39,19 +40,20 @@ public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICom
 /// unit of work. Who may rename which seat its requirement said at the door.
 /// </summary>
 /// <param name="store">The unit of work Tenancy's aggregates are loaded and saved in.</param>
-public sealed class RenameSeatHandler(TenancyUseCases.IStore store) : ICommandHandler<RenameSeat>
+public sealed class RenameSeatHandler(TenancyStore store) : ICommandHandler<RenameSeat, Seat>
 {
     /// <inheritdoc />
+    /// <returns>The seat, with its new name.</returns>
     /// <exception cref="Exceptions.RefusalException">
     /// <c>tenancy.seat-not-found</c> for a seat that is no seat of the tenant, and <c>tenants.seat.display-name</c> for a
     /// name the seat refuses.
     /// </exception>
-    public async ValueTask<Unit> Handle(RenameSeat command, CancellationToken cancellationToken)
+    public async ValueTask<Seat> Handle(RenameSeat command, CancellationToken cancellationToken)
     {
         // The store keeps to the caller's tenant: a seat of another tenant is not found, as one of nobody is not.
         var seat = await store.FindSeatAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
         seat.Rename(command.DisplayName);
         await store.SaveAsync(cancellationToken);
-        return Unit.Value;
+        return seat;
     }
 }

@@ -28,7 +28,7 @@ internal static class BuildStepExport
     [
         DeskRules.Owners,
         DeskRules.Teammates,
-        RowAccessRule.For<Ticket>("Scoped work reads by role", RowOperations.Read, "({caller:role} IS NOT NULL)", RowAccessRoles.SystemIn),
+        RowAccessRule.For<Ticket>("Scoped work reads by role", RowOperations.Read, "({user:role} IS NOT NULL)", RowAccessRoles.SystemIn),
         RowAccessRule.For<Ticket>("Analysts read every ticket", RowOperations.Read, "TRUE", RowAccessRoles.Token("analyst")),
     ];
 

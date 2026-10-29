@@ -1,9 +1,14 @@
 # Start-up checks
 
-A host on Postgres relies on more than its code. The role it logs in as must hold nothing, every migration must
-be applied, and the policies and functions in the database must be the ones the code writes. None of that shows
-in a request until it goes wrong, so the packages check it when the host starts. Each registration that brings
-something to check brings the check with it, and one call runs them all, before the server binds its port:
+A host on Postgres depends on the state of its database:
+
+- the host's login role owns and holds nothing;
+- every migration is applied;
+- the policies and functions in the database are the ones the code writes.
+
+A request shows none of this until something fails. So the packages check it when the host starts. A
+registration that brings something to check also registers the check. `RunStartupChecks()` runs every registered
+check, before the server binds its port:
 
 ```csharp
 builder.Services.AddSupabaseRowLevelSecurity();   // checks the login role and the contexts
@@ -13,22 +18,32 @@ builder.Services.AddTenancyPostgres();            // checks Tenancy's part of th
 builder.Services.RunStartupChecks();
 ```
 
-The first check that finds something wrong stops the start with its own exception, which names what is wrong and
-the statement that puts it right. A module added later brings its checks with it, and nothing in the host lists
-them, so nothing in the host has to remember them.
+The first check that finds a problem stops the start. It throws its own exception, which names the problem and
+the statement that fixes it. The log names the check, and the exception carries the name in `Exception.Data`,
+under the key `StartupChecks.FailedCheckKey`. The host lists no checks. A module added later registers its own
+checks, and `RunStartupChecks()` runs those too.
 
-## The order
+## Stages and order
+
+Every check runs in one of four stages. In the diagram, purple marks the four stages in the order they run, and
+green marks the start of the host after every check passed:
 
 ```mermaid
 flowchart LR
-    Services["Services: how contexts and options are wired"] --> Login["Login: the callers' roles are the files', and the login role may become each"]
-    Login --> Migrations["Migrations: every one applied"]
-    Migrations --> Database["Database: roles, policies, functions, grants"]
-    Database --> Started["the hosted services start, and the server binds its port"]
+    services["<b>Services</b><br/><small>how contexts and options are wired</small>"]
+    login["<b>Login</b><br/><small>roles match the access files, the login role may switch</small>"]
+    migrations["<b>Migrations</b><br/><small>every migration applied</small>"]
+    database["<b>Database</b><br/><small>roles, policies, functions, grants</small>"]
+    started["<b>Host starts</b><br/><small>hosted services, then the server's port</small>"]
+    services --> login --> migrations --> database --> started
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class services,login,migrations,database strong
+    class started good
 ```
 
 <details>
-<summary>Show the code: registrations that bring a check of each stage, and the one call</summary>
+<summary>Show the code: a registration for each stage, and RunStartupChecks()</summary>
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
@@ -36,7 +51,7 @@ builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMed
 
 builder.Services.AddSupabaseRowLevelSecurity();
 //   Services:   postgres.row-level-security-wired
-//   Login:      supabase.roles-match-access-files, postgres.login-role-may-switch-to-callers
+//   Login:      supabase.roles-match-access-files, postgres.login-role-may-switch-to-user-roles
 //   Database:   postgres.login-role-owns-nothing, postgres.definer-owners-bypass
 
 // in a module: its context, marked [SupabaseMigrations]
@@ -44,8 +59,8 @@ services.AddDbContext<OrderingContext>((serviceProvider, options) => options
     .UseNpgsql(connectionString)
     .UseDDDToolkit(serviceProvider));
 
-// in the host: every marked context, in the one call the build writes into it, in the namespace named after the
-// host's assembly (using Shop.Host; in a top-level Program.cs)
+// in the host: one call for every marked context. The build writes AddSupabaseMigrations() into the host, in the
+// namespace named after the host's assembly (using Shop.Host; in a top-level Program.cs)
 builder.Services.AddSupabaseMigrations();
 //   Migrations: supabase.migrations-applied
 
@@ -55,58 +70,118 @@ builder.Services.RunStartupChecks();
 
 </details>
 
-Every check runs in a stage, `StartupCheckStage`, and every check of one stage runs before any of the next. The
-stages are the order in which one failure hides another, so a host is told the cause rather than one of its
-effects:
+The stage of a check is a value of `StartupCheckStage`. All checks of one stage run before any check of the next
+stage. The stages follow the order in which one failure hides another. So the host reports the cause of a problem
+before its effects:
 
-- **Services** reads the application's services and opens no connection: which options are registered, how
-  each context is configured, and whether what asks a module's access checks is in the pipeline. A context wired
-  wrong would fail every question put to the database through it, without saying why.
-- **Login** asks, as the role the host logs in as, whether the roles its callers run as are the ones the
-  database's access files were written for, and whether it may switch to every one of them. Every stage after it
-  asks as the system caller, and so switches to the system caller's role first.
-- **Migrations** asks whether every migration is applied. A policy or a function a missing migration would have
-  made is missing because of it, and this stage names the migration.
-- **Database** asks whether the database is set up as the application relies on: the login role holds nothing,
-  and the policies, functions, triggers, grants and extensions are the ones the code expects.
+- **Services** reads the application's services and opens no connection. It checks which options are registered,
+  how each context is configured, and whether the pipeline has the behaviors that ask a module's access checks. A
+  context that is wired wrong fails every query to the database without saying why, so these checks come first.
+- **Login** connects as the host's login role. It checks that the roles of the callers are the roles that
+  the database's access files were written for, and that the login role may switch to each of them. Every later
+  stage runs as system work, and so switches to the system role first.
+- **Migrations** checks that every migration is applied. A missing migration also means missing policies and
+  functions. This stage names the migration.
+- **Database** checks that the database is set up as the application expects. The login role holds nothing, and
+  the policies, functions, triggers, grants and extensions are the ones the code writes.
 
-Within a stage the checks run in the order they were registered. A check that has to come before another of its
-stage says so by name, in `RunsBefore`: Tenancy's checks of the database run before its read of the stored permissions,
-whatever order `AddTenancy` and `AddTenancyPostgres` were called in. A name no registration brought is passed
-over, and a check that says it runs before one of an earlier stage stops the start, since that cannot be.
+Within a stage, the checks run in the order they were registered. A check that must run before another check of
+its stage names that check in `RunsBefore`. For example, Tenancy's three checks of the database run before
+`tenancy.unknown-stored-permissions`, whatever order `AddTenancy` and `AddTenancyPostgres` were called in.
 
-The checks run as the application itself, `Caller.System`, as the toolkit's own bookkeeping does: a host that
-[requires explicit callers](row-level-security.md#fail-closed-callers) would refuse the first connection a check
-made otherwise. They read the catalogs of the database and change nothing.
+- A name in `RunsBefore` that no registration brought is skipped.
+- A check that names a check of an earlier stage in `RunsBefore` stops the start. Checks that name each other in a
+  circle stop the start too.
 
-## What the packages bring
+Each check runs as system work past the row access rules, `CurrentUserSnapshot.System`, like the toolkit's own
+bookkeeping. The runner begins that work for each check separately, with `access.BeginSystemBypassingRowAccess()`. Without it, a host that
+[requires an explicit current user](row-level-security.md#requiring-an-explicit-current-user) would refuse the first connection of a
+check. The checks read the catalogs of the database and change nothing.
 
-| Check | Constant | Brought by | Stage | What it holds the host to |
-|---|---|---|---|---|
-| `access.behaviors-registered` | `AccessBehaviorChecks.BehaviorsRegisteredCheck` | `AddAccessChecks`, and so `AddAccessCheck`, a package's registration of its check and the generated `Add{Module}AccessBehavior`, for an interface the toolkit wrote a behavior for | Services | Every command and query the host handles, of an interface the toolkit wrote a behavior for, has that behavior in its pipeline, the one for streams for a stream query, in every module ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)) |
-| `entity-framework.toolkit-wired` | `EntityFrameworkChecks.ToolkitWiredCheck` | `AddDDDToolkitEntityFramework` | Services | Every context that maps the toolkit's classes is built with `UseDDDToolkit`, or `UseDDDToolkitCore` ([Checking the wiring](entity-framework.md#checking-the-wiring)), and every context has the parts its model requires, Tenancy's save check for rows kept to a tenant ([A part a model cannot do without](entity-framework.md#a-part-a-model-cannot-do-without)) |
-| `entity-framework.owners-mapped` | `EntityFrameworkChecks.OwnersMappedCheck` | `AddDDDToolkitEntityFramework` | Services | The owner of every aggregate the host's requests ask about can be read: one registered context maps the aggregate, which marks one property `[Owner]` of a type with an own, and maps the property. The ids are the ones the generator says the request interfaces' assemblies ask about; what it finds is kept for the requests ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)) |
-| `postgres.row-level-security-wired` | `PostgresRowAccessChecks.RowLevelSecurityWiredCheck` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | Services | Every context on Postgres runs its commands as the caller, but one given the toolkit's base alone with `UseDDDToolkitCore`, which runs as the login role on purpose ([Running queries as the caller](row-level-security.md#running-queries-as-the-caller)) |
-| `supabase.roles-match-access-files` | `SupabaseRowAccessChecks.RolesMatchAccessFilesCheck` | `AddSupabaseRowLevelSecurity` | Login | The roles every such context switches to are the ones the newest access file the database applied records it was written for; it runs before the next ([Roles and caller functions of your own](supabase.md#roles-and-caller-functions-of-your-own)) |
-| `postgres.login-role-may-switch-to-callers` | `PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | Login | The login role may become every caller of every such context, the scoped system role where it exists ([A login that owns nothing](row-level-security.md#a-login-that-owns-nothing)) |
-| `postgres.login-role-owns-nothing` | `PostgresRowAccessChecks.LoginRoleOwnsNothingCheck` | the same | Database | The login role owns and holds nothing in the contexts' schemas, and reaches no role that does |
-| `postgres.definer-owners-bypass` | `PostgresRowAccessChecks.DefinerOwnersBypassCheck` | the same | Database | Every function that runs as its owner is owned by a role the forced policies let through |
-| `supabase.migrations-applied` | `SupabaseMigrations.AppliedCheck` | `AddSupabaseMigrations` | Migrations | Every registered context has every migration applied ([Checking at start-up](supabase.md#checking-at-start-up)) |
-| `tenancy.catalogue-builds` | `TenancyChecks.CatalogueBuildsCheck` | `AddTenancy` | Services | The catalogue holds together |
-| `tenancy.contexts-wired` | `TenancyChecks.ContextsWiredCheck` | `AddTenancy` | Services | Every context that keeps rows to a tenant checks its saves, after the toolkit's interceptors (one without the save check is told what `entity-framework.toolkit-wired` tells it), and one that keeps the access history says who acted as Tenancy knows the caller ([Keeping tenants apart](tenancy.md#keeping-tenants-apart-the-filter-and-the-save-check)) |
-| `tenancy.explicit-callers` | `TenancyPostgresChecks.ExplicitCallersCheck` | `AddTenancyPostgres` | Services | The host still requires explicit callers |
-| `tenancy.seated-token-roles` | `TenancyPostgresChecks.SeatedTokenRolesCheck` | `AddTenancyPostgres` | Services | Every token role Tenancy seats reaches the database as a signed-in user |
-| `tenancy.system-in-role-confined` | `TenancyPostgresChecks.SystemInRoleConfinedCheck` | `AddTenancyPostgres` | Database | System work in a tenant cannot leave it |
-| `tenancy.system-reads-across-tenants` | `TenancyPostgresChecks.SystemReadsAcrossTenantsCheck` | `AddTenancyPostgres` | Database | The few reads across tenants answer, with nothing past the policies |
-| `tenancy.policies-in-place` | `TenancyPostgresChecks.PoliciesInPlaceCheck` | `AddTenancyPostgres` | Database | The policies, functions and the index on a tenant's root are the ones the catalogue writes ([Setting it up](tenancy.md#setting-it-up)) |
-| `tenancy.unknown-stored-permissions` | `TenancyChecks.UnknownStoredPermissionsCheck` | `AddTenancy` | Database | Logs a permission a role holds that the catalogue has lost, and refuses nothing |
-| `membership.functions-in-place` | `MembershipPostgresChecks.FunctionsInPlaceCheck` | `AddMembershipPostgres` | Database | The functions and the lock of every resource's membership are written from its rules ([On Postgres](membership.md#on-postgres-the-second-lock)) |
-| `pgmq.extension-installed` | `PgmqQueue.ExtensionInstalledCheck` | `AddPgmqSink`, `AddPgmqConsumer` | Database | Every database a sink or a consumer uses has pgmq, with topics where they are used ([Transports](transports.md#queues-creation-and-the-missing-extension)) |
+## Checks in the packages
 
-Each name is a public constant, the one in the table, so a host turns a check off by the constant rather than by a
-string it could spell wrong. The method behind each check, such as
-`PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync`, is still there for a host that calls it itself. The log
-says which checks passed, in the order they ran:
+Each entry gives the name of the check, its public constant, the registration that brings it, and what it
+confirms. The entries are grouped by stage.
+
+### Services stage
+
+- **`access.behaviors-registered`** (`AccessBehaviorChecks.BehaviorsRegisteredCheck`), from `AddAccessChecks`.
+  `AddAccessCheck`, a package's registration of its check and the generated `Add{Module}AccessBehavior` call
+  `AddAccessChecks`. They bring the check only for an interface that the toolkit wrote a behavior for. Every
+  command and query that the host handles has the toolkit's behavior for its interface in its pipeline, in every
+  module. A stream query has the behavior for streams
+  ([When nothing asks the checks](access-requirements.md#handlers-reached-without-the-access-check)).
+- **`entity-framework.toolkit-wired`** (`EntityFrameworkChecks.ToolkitWiredCheck`), from
+  `AddDDDToolkitEntityFramework`. Every context that maps the toolkit's classes is built with `UseDDDToolkit` or
+  `UseDDDToolkitCore` ([Checking the wiring](entity-framework.md#checking-the-wiring)). Every context has the parts
+  its model requires, such as Tenancy's save check for rows that belong to a tenant
+  ([Parts a model requires](entity-framework.md#parts-a-model-requires)).
+- **`entity-framework.owners-mapped`** (`EntityFrameworkChecks.OwnersMappedCheck`), from
+  `AddDDDToolkitEntityFramework`. The host can read the owner of every aggregate that its requests ask about. One
+  registered context maps the aggregate. The aggregate marks one property `[Owner]`, and the context maps that
+  property. The type of the property is one that the toolkit can compare with the caller's own value. The
+  generator lists the ids that the assemblies of the request interfaces ask about. The check keeps what it finds
+  for the requests ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)).
+- **`postgres.row-level-security-wired`** (`PostgresRowAccessChecks.RowLevelSecurityWiredCheck`), from
+  `AddPostgresRowLevelSecurity` and `AddSupabaseRowLevelSecurity`. Every context on Postgres runs its commands as
+  the caller. A context built with `UseDDDToolkitCore` alone is the exception. It runs as the login role on
+  purpose ([Running queries as the caller](row-level-security.md#running-queries-as-the-caller)).
+- **`tenancy.catalogue-builds`** (`TenancyChecks.CatalogueBuildsCheck`), from `AddTenancy`. Tenancy's catalogue of
+  permissions builds. Two modules that declare the same permission, for example, stop the start here.
+- **`tenancy.contexts-wired`** (`TenancyChecks.ContextsWiredCheck`), from `AddTenancy`. Every context with rows
+  that belong to a tenant has the save check, after the toolkit's interceptors. A context without the save check
+  gets the message of `entity-framework.toolkit-wired`. A context that keeps the access history uses Tenancy's
+  accessor for who acted ([Keeping tenants apart](tenancy/keeping-tenants-apart.md)).
+- **`tenancy.explicit-current-user`** (`TenancyPostgresChecks.ExplicitCurrentUserCheck`), from `AddTenancyPostgres`. The
+  host requires an explicit current user.
+- **`tenancy.seated-token-roles`** (`TenancyPostgresChecks.SeatedTokenRolesCheck`), from `AddTenancyPostgres`.
+  Every token role that Tenancy gives a seat reaches the database as the role of a signed-in user.
+
+### Login stage
+
+- **`supabase.roles-match-access-files`** (`SupabaseRowAccessChecks.RolesMatchAccessFilesCheck`), from
+  `AddSupabaseRowLevelSecurity`. The roles that each context on Postgres switches to for its callers are the roles
+  that the newest applied access file was written for. Runs before `postgres.login-role-may-switch-to-user-roles`
+  ([Custom roles and current user functions](supabase.md#custom-roles-and-current-user-functions)).
+- **`postgres.login-role-may-switch-to-user-roles`** (`PostgresRowAccessChecks.LoginRoleMaySwitchToUserRolesCheck`),
+  from `AddPostgresRowLevelSecurity` and `AddSupabaseRowLevelSecurity`. The login role may switch to every caller
+  role of every context on Postgres, including the scoped system role where it exists
+  ([A login that owns nothing](row-level-security.md#a-login-that-owns-nothing)).
+
+### Migrations stage
+
+- **`supabase.migrations-applied`** (`SupabaseMigrations.AppliedCheck`), from `AddSupabaseMigrations`. Every
+  registered context has every migration applied ([Checking at start-up](supabase.md#checking-at-start-up)).
+
+### Database stage
+
+- **`postgres.login-role-owns-nothing`** (`PostgresRowAccessChecks.LoginRoleOwnsNothingCheck`), from
+  `AddPostgresRowLevelSecurity` and `AddSupabaseRowLevelSecurity`. The login role owns and holds nothing in the
+  schemas of the contexts, and is not a member of a role that does.
+- **`postgres.definer-owners-bypass`** (`PostgresRowAccessChecks.DefinerOwnersBypassCheck`), from
+  `AddPostgresRowLevelSecurity` and `AddSupabaseRowLevelSecurity`. Every function that runs as its owner is owned
+  by a role that the forced policies let through.
+- **`tenancy.system-in-role-confined`** (`TenancyPostgresChecks.SystemInRoleConfinedCheck`), from
+  `AddTenancyPostgres`. The scoped system role cannot leave the tenant of its work.
+- **`tenancy.system-reads-across-tenants`** (`TenancyPostgresChecks.SystemReadsAcrossTenantsCheck`), from
+  `AddTenancyPostgres`. Tenancy's reads across tenants work, and nothing in them runs past the policies.
+- **`tenancy.policies-in-place`** (`TenancyPostgresChecks.PoliciesInPlaceCheck`), from `AddTenancyPostgres`.
+  Tenancy's policies, functions, triggers and the unique index on a tenant's root are in the database, as the
+  catalogue writes them ([The start-up checks](tenancy/postgres.md#the-start-up-checks)).
+- **`tenancy.unknown-stored-permissions`** (`TenancyChecks.UnknownStoredPermissionsCheck`), from `AddTenancy`.
+  Logs a warning for each permission that a role holds and the catalogue no longer knows. Refuses nothing.
+- **`membership.functions-in-place`** (`MembershipPostgresChecks.FunctionsInPlaceCheck`), from
+  `AddMembershipPostgres`. The functions and the lock of each resource's membership are the ones its rules write
+  ([The start-up check](membership/postgres.md#the-start-up-check)).
+- **`pgmq.extension-installed`** (`PgmqQueue.ExtensionInstalledCheck`), from `AddPgmqSink` and `AddPgmqConsumer`.
+  Every database that a sink or a consumer uses has the pgmq extension, and has topics where the host uses topics
+  ([Transports](transports.md#queues-creation-and-the-extension-check)).
+
+### Names and the log
+
+Turn a check off by its constant, so a typo is a compile error. The method behind each check, such as
+`PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync`, stays public for a host that calls it itself. The log
+lists the checks that passed, in the order they ran:
 
 ```text
 info: DDDToolkit.Startup.StartupCheckRunner
@@ -115,7 +190,7 @@ info: DDDToolkit.Startup.StartupCheckRunner
 
 ## Turning a check off
 
-A host that answers a check's question some other way turns it off by name, and says why in its code. The log
+A host that checks the same thing in another way turns the check off by name, with a reason in its code. The log
 repeats the reason every time the host starts:
 
 ```csharp
@@ -124,72 +199,81 @@ builder.Services.SkipStartupCheck(
     reason: "the deployment checks the migrations before it starts the host");
 ```
 
-Turning a check off should be rare, and the reason should say what answers the question instead. One case is
-common enough to name: a host on Supabase that still logs in as `postgres`, the owner of its tables, while it runs
-its own queries [under row level security](supabase.md#checking-at-start-up). `postgres.login-role-owns-nothing`
-stops it, rightly: a login that owns the tables is what that check is there to find. The host turns that one check
-off, with that reason, until it logs in as a role of its own.
+Turn a check off rarely, and let the reason say what checks the same thing instead. One common case is a host on
+Supabase that still uses `postgres`, the owner of its tables, as its login role, while it runs its own queries
+[under row level security (RLS)](supabase.md#checking-at-start-up). `postgres.login-role-owns-nothing` stops that host,
+because a login that owns the tables is the problem that check looks for. The host turns off that one check, with
+that reason, until it has a login role of its own.
 
-`SkipStartupChecks(reason: ...)` turns every check off, for a host composed for something other than serving: a
-test that reads what the host registers, with no database behind it, say. A name that no registration brings is
-logged as a warning when the host starts, since a name spelled wrong turns nothing off.
+- `SkipStartupChecks(reason: ...)` turns every check off. Use it for a host that is built for something other
+  than serving, such as a test that reads what the host registers, with no database behind it.
+- A name that no registration brings is logged as a warning when the host starts, because a misspelled name turns
+  nothing off.
+- Turning the same check off a second time replaces the reason.
 
-## Off until the host asks
+## Turning the checks on
 
-The checks run once the host calls `RunStartupChecks()`, and not before, the pgmq check included. A registration
-brings its checks and runs none of them: a check opens connections and can refuse the start, so whether a host
-runs them is one line in the host's own code, where whoever reads `Program.cs` sees it. A host composed for
-something other than serving, a tool that reads the host's services or a test that builds them, does not call it
-and so runs none.
+The checks run only when the host calls `RunStartupChecks()`. This includes the pgmq check.
+
+- A registration adds its checks and runs none of them. A check opens connections and can stop the start, so the
+  host decides in one line of its own `Program.cs` whether the checks run.
+- A host built for something other than serving, such as a tool that reads the host's services or a test that
+  builds them, does not call `RunStartupChecks()` and runs no checks.
+- `RunStartupChecks()` also runs the checks registered after the call. Calling it more than once is harmless.
 
 ## Before the server binds its port
 
-The runner does its work in `IHostedLifecycleService.StartingAsync`. The host calls that for every lifecycle
-service before it calls any hosted service's `StartAsync`, so the checks run before the server binds its port,
-before a queue is read and before any seeding, in a `WebApplication` and in a generic host alike, whatever order
-the services were registered in.
+The runner does its work in `IHostedLifecycleService.StartingAsync`. The host calls `StartingAsync` of every
+lifecycle service before it calls `StartAsync` of any hosted service. So the checks run before the server binds
+its port, before a queue is read, and before any seeding. This holds in a `WebApplication` and in a generic host,
+whatever order the services were registered in.
 
-That also means the checks run before anything a host does to its database in a hosted service of its own. A host
-that applies its migrations as it starts, in development say, does so before `app.Run()`, or in the
-`StartingAsync` of a lifecycle service registered before `RunStartupChecks()`; or it turns
-`supabase.migrations-applied` off, with that reason.
+So the checks also run before a hosted service of your own changes the database. A host that applies its
+migrations when it starts, for example in development, has three options:
 
-The host calls the lifecycle services' `StartingAsync` in the order they were registered, and the runner sits
-where `RunStartupChecks()` was called; a host that calls it twice has it where it called it last. A host that
-starts its services concurrently, with `HostOptions.ServicesStartConcurrently`, calls every `StartingAsync` at
-once, so registering first means nothing there: it does what has to come first before `app.Run()`. The checks
-still run before any `StartAsync`, the server's included.
+- apply them before `app.Run()`;
+- apply them in the `StartingAsync` of a lifecycle service registered before `RunStartupChecks()`;
+- turn `supabase.migrations-applied` off, with that reason.
 
-## A host that still calls them by hand
+The order of the lifecycle services:
 
-A host that kept its own start-up class and also calls `RunStartupChecks()` runs those checks twice: once in the
-runner, and once in its class, after. Each of the toolkit's checks reads the catalogs and changes nothing, so the
-second run costs a few queries at start-up and nothing else. Nothing tries to tell which check a host already
-called, since a check skipped by a wrong guess is worse than one run twice. Delete the class when you can.
+- The host calls `StartingAsync` of the lifecycle services in the order they were registered. The runner has the
+  place of the `RunStartupChecks()` call. After a second call, the runner has the place of the last call.
+- With `HostOptions.ServicesStartConcurrently`, the host calls every `StartingAsync` at the same time, so the
+  order of registration does not matter. Such a host does the work that must come first before `app.Run()`. The
+  checks still run before any `StartAsync`, including the server's.
+
+## Replacing your own start-up class
+
+A host that keeps its own start-up class and also calls `RunStartupChecks()` runs those checks twice. The runner
+runs them first, and the class runs them again after. Each check of the toolkit reads the catalogs and changes
+nothing, so the second run costs a few queries at start-up. The runner does not try to detect which checks the
+host already calls, because a check skipped by a wrong guess is worse than a check run twice. Delete the class
+when you can.
 
 <details>
 <summary>Show the code: a host before and after</summary>
 
-Before, every host on Postgres wrote this class, and had to keep it in step with every package it used:
+Before, every host on Postgres wrote a class like this, and kept it up to date with every package it used:
 
 ```csharp
 public sealed class PostgresStartupCheck(IServiceProvider services) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        using var system = Callers.Begin(Caller.System);
+        using var system = services.GetRequiredService<AccessManager>().BeginSystemBypassingRowAccess();
 
         await using (var scope = services.CreateAsyncScope())
         {
             foreach (var contextType in EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider))
             {
                 var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
-                await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, cancellationToken);
+                await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToUserRolesAsync(context, cancellationToken);
             }
         }
 
         await services.EnsureSupabaseMigrationsAppliedAsync(cancellationToken);
-        TenancyPostgresChecks.EnsureExplicitCallers(services);
+        TenancyPostgresChecks.EnsureExplicitCurrentUser(services);
         // ... and seven more, in an order of its own
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services, cancellationToken);
         await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(services, cancellationToken);
@@ -201,7 +285,7 @@ public sealed class PostgresStartupCheck(IServiceProvider services) : IHostedSer
 services.AddHostedService<PostgresStartupCheck>();
 ```
 
-After, the registrations it already makes bring the checks, and the host asks for them:
+After, the registrations that the host already makes bring the checks, and the host runs them with one call:
 
 ```csharp
 using Shop.Host; // the namespace named after the host's assembly, where the build writes AddSupabaseMigrations()
@@ -219,8 +303,8 @@ builder.Services.RunStartupChecks();
 
 ## A check of your own
 
-A package, or a module, registers a check of its own where it registers what the check is about, so every host
-that uses it gets the check:
+A package or a module registers its own check in the same method that registers what the check is about. Every
+host that uses the package then gets the check:
 
 ```csharp
 public static IServiceCollection AddLedger(this IServiceCollection services)
@@ -233,20 +317,30 @@ public static IServiceCollection AddLedger(this IServiceCollection services)
 }
 ```
 
-The check is handed the application's root services: what it needs of a scope, a context say, it takes in a scope
-of its own. It throws to refuse the start, and what it throws is what the host's operator reads, so it names what
-is wrong and what puts it right. Registering a check under a name already taken registers nothing, so a
-registration that is called twice brings its check once. Name it with a prefix of your own, a dot and what holds.
-It runs, as every check does, once the host calls `RunStartupChecks()`.
+- The check receives the application's root services and the start-up cancellation token. For anything scoped,
+  such as a context, the check creates its own scope.
+- The check throws to stop the start. The host's operator reads that exception, so its message names the problem
+  and the fix.
+- A check with a name that is already registered is not added. So a registration that runs twice adds its check
+  once.
+- Name the check with your own prefix, a dot, and what the check confirms, as in `ledger.refunds-table`. A name
+  holds no white space.
+- The check runs when the host calls `RunStartupChecks()`, like every other check.
+- A host that also calls the method behind a check by hand runs it twice. So a check leaves nothing behind that a
+  second run would fail on.
 
-A check reads and changes nothing. Work that changes data at start-up is not a check, and has a call of its own
-beside `RunStartupChecks()`: Tenancy's `SyncRolePacks()`, which brings every tenant's roles up to the packs they
-were made from once the host has started, is one ([Packs after provisioning](tenancy.md#packs-after-provisioning)).
+A check reads and changes nothing. Work that changes data at start-up has its own call next to
+`RunStartupChecks()`. For example, Tenancy's `SyncStarterRoles()` updates every tenant's roles to the starter roles
+they were copied from, once the host has started
+([Starter roles after provisioning](tenancy/roles-and-permissions.md#starter-roles-after-provisioning)).
 
 ## Where to look next
 
-- [Access requirements](access-requirements.md#when-nothing-asks-the-checks), for the check of the access behaviors.
-- [Row level security](row-level-security.md#a-login-that-owns-nothing), for what the login role's checks ask.
-- [Supabase](supabase.md#checking-at-start-up), for the migrations' check and the login role the build writes.
-- [Tenancy](tenancy.md#setting-it-up) and [Membership](membership.md#on-postgres-the-second-lock), for what their
-  checks of the database hold you to.
+- [Access requirements](access-requirements.md#handlers-reached-without-the-access-check), for the check of the access
+  behaviors.
+- [Row level security](row-level-security.md#a-login-that-owns-nothing), for what the checks of the login role
+  ask.
+- [Supabase](supabase.md#checking-at-start-up), for the check of the migrations and the login role the build
+  writes.
+- [Tenancy](tenancy/postgres.md#the-start-up-checks) and [Membership](membership/postgres.md#the-start-up-check),
+  for what their checks of the database require.

@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Examples.Tenancy.Ui.Api.Wire;
 
 /// <summary>
@@ -11,7 +9,7 @@ public sealed record InvitationInfo(
     string Address,
     Guid UnitId,
     Guid RoleId,
-    [property: JsonPropertyName("until")] DateTimeOffset? RoleEndsAt,
+    DateTimeOffset? GrantUntil,
     DateTimeOffset IssuedAt,
     DateTimeOffset ExpiresAt,
     Guid? IssuedBy);

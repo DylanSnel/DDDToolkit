@@ -20,7 +20,10 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 public static class TenancyModelBuilderExtensions
 {
     /// <summary>The registration that brings the save check, as a context that lacks it is told to write it.</summary>
-    private const string TenancyRegistration = "services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework";
+    internal const string TenancyRegistration = "services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework";
+
+    /// <summary>The save check's own call on a context's options, as a context given the base alone is told to write it.</summary>
+    internal const string TenancyCall = "options.UseTenancy(serviceProvider)";
 
     /// <summary>
     /// Maps Tenancy's tables, closed over the application's classes and ids, into the context's default
@@ -50,8 +53,8 @@ public static class TenancyModelBuilderExtensions
     /// </para>
     /// <para>
     /// The views of the read model carry access facts only, here as in a module's model: ids, permissions, periods,
-    /// statuses, a unit's parent, and a role's pack and permissions. What a seat, a unit or a role is called is read
-    /// from the tables themselves, by the directory (<c>TenancyDirectory</c>), which answers names by id.
+    /// statuses, a unit's parent, and a role's starter role and permissions. What a seat, a unit or a role is called is read
+    /// from the tables themselves, by the managers' reads, which answer names by id.
     /// </para>
     /// <para>
     /// Pass the context's <c>Database</c> as well, <c>modelBuilder.AddTenancy(database: Database)</c>, and two
@@ -194,7 +197,7 @@ public static class TenancyModelBuilderExtensions
 
     /// <summary>
     /// Maps Tenancy's read model into a context that is not Tenancy's own, so its queries can ask Tenancy
-    /// inside them: <c>answers.Over(thisContext).UnitsWhereIHold(permission)</c> becomes a subquery of the module's
+    /// inside them: <c>db.Tenancy().UnitsWhereIHold(permission)</c> becomes a subquery of the module's
     /// own query, one statement and one round trip. The six rows the access questions read are keyless views
     /// over Tenancy's tables, their columns mapped exactly as <see cref="AddTenancy"/> maps them. Entity Framework
     /// creates no views, so this context's migrations never touch Tenancy's tables.
@@ -203,9 +206,9 @@ public static class TenancyModelBuilderExtensions
     /// modelBuilder.Entity&lt;Project&gt;().ScopeToTenant(project =&gt; project.TenantId);
     /// </code>
     /// <para>
-    /// The rows are access facts: ids, permissions, periods, statuses, a unit's parent, and a role's pack and permissions. None
+    /// The rows are access facts: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions. None
     /// has a name, so a module that maps them cannot show what a seat, a unit or a role is called: it answers
-    /// ids, and whoever shows them asks Tenancy's directory for the names, by id.
+    /// ids, and whoever shows them asks Tenancy's managers for the names, by id.
     /// <see cref="TenancyModel.ReadsBeyondAccessFacts"/> finds a module's model that maps more of Tenancy's than
     /// these rows.
     /// </para>
@@ -257,7 +260,7 @@ public static class TenancyModelBuilderExtensions
     /// the access questions read, each from the function of its name (<see cref="TenancyFunctionNames"/>) in
     /// <paramref name="schema"/>, under the column names that function answers. The module's model then names no
     /// table of Tenancy's, only functions, which are what Tenancy offers other modules; and
-    /// <c>answers.Over(thisContext)</c> works exactly as over the views of
+    /// <c>db.Tenancy()</c> works exactly as over the views of
     /// <see cref="AddTenancyReadModel{TTenantId, TSeatId, TUnitId, TRoleId}"/>: a question is a subquery of the
     /// module's own query, one statement and one round trip.
     /// <code>
@@ -279,7 +282,7 @@ public static class TenancyModelBuilderExtensions
     /// </para>
     /// <para>
     /// As with the views, the rows are access facts and none has a name: the functions answer no column a seat, a
-    /// unit or a role is called by, and names are asked of Tenancy's directory, by id.
+    /// unit or a role is called by, and names are asked of Tenancy's managers, by id.
     /// </para>
     /// <para>
     /// Use it where the database keeps the rights (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>); on
@@ -318,13 +321,10 @@ public static class TenancyModelBuilderExtensions
     }
 
     /// <summary>
-    /// Keeps an entity of any module to the current Tenancy caller's tenant. It adds the tenant filter, a named
+    /// Keeps an entity of any module to the current Tenancy user's tenant. It adds the tenant filter, a named
     /// query filter that sits next to the entity's other named filters rather than replacing them, and marks
     /// the entity for Tenancy's save check, which <c>UseDDDToolkit</c> adds: a row of another tenant is refused before anything is
     /// written, whoever loaded or made it.
-    /// <code>
-    /// modelBuilder.Entity&lt;Project&gt;().ScopeToTenant(project =&gt; project.TenantId);
-    /// </code>
     /// <para>
     /// The tenant of a row is fixed once the row is there (<c>IsFixedAfterInsert</c>): a save that changed it is
     /// refused, by the save check first, and where privileges are written from the policies its column is left
@@ -335,13 +335,29 @@ public static class TenancyModelBuilderExtensions
     /// <c>UseDDDToolkit</c> adds (<c>UseTenancy</c> after <c>UseDDDToolkitCore</c>), and
     /// <see cref="TenancyChecks.EnsureWired"/> checks it.
     /// </para>
+    /// <para>
+    /// A class whose tenant is marked <c>[OfTenant]</c> in the domain needs no call: <see cref="OfTenantConvention"/>,
+    /// which <c>AddDDDToolkitConventions()</c> runs, gives it the same. Call this for a class without the marker, or for
+    /// a tenant the context holds elsewhere than in the marked property: the call wins over the marker.
+    /// </para>
     /// </summary>
     /// <typeparam name="TEntity">The entity.</typeparam>
     /// <typeparam name="TTenantId">The application's tenant id.</typeparam>
     /// <param name="entity">The entity's builder.</param>
     /// <param name="tenant">The property that holds the entity's tenant, as <c>entity =&gt; entity.TenantId</c>.</param>
+    /// <returns>The entity's builder, for further calls.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="entity"/> or <paramref name="tenant"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="tenant"/> is not a property of the entity.</exception>
+    /// <example>
+    /// A table the module maps by hand, whose class has no <c>[OfTenant]</c> and keeps its tenant in
+    /// <c>CompanyId</c>, a property of the application's tenant id:
+    /// <code>
+    /// protected override void OnModelCreating(ModelBuilder modelBuilder)
+    /// {
+    ///     modelBuilder.Entity&lt;ImportedTimesheet&gt;().ScopeToTenant(sheet =&gt; sheet.CompanyId);
+    /// }
+    /// </code>
+    /// </example>
     public static EntityTypeBuilder<TEntity> ScopeToTenant<TEntity, TTenantId>(
         this EntityTypeBuilder<TEntity> entity,
         Expression<Func<TEntity, TTenantId>> tenant)
@@ -370,7 +386,7 @@ public static class TenancyModelBuilderExtensions
 
         // A context of this model cannot do without the save check: where it lacks it, because nothing registered
         // Tenancy or the context was given the base alone, its first save is refused rather than written unchecked.
-        entity.Metadata.Model.RequireContextPart(TenancySaveInterceptor.PartName, typeof(TenancySaveInterceptor), TenancyRegistration, "options.UseTenancy(serviceProvider)");
+        entity.Metadata.Model.RequireContextPart(TenancySaveInterceptor.PartName, typeof(TenancySaveInterceptor), TenancyRegistration, TenancyCall);
 
         // A row never moves to another tenant: Entity Framework refuses a save that changed the property, and the
         // privileges an export writes from the policies leave its column out of UPDATE.

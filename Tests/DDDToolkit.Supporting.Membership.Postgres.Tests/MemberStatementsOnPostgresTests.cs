@@ -12,17 +12,17 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
     [Fact]
     public async Task What_is_held_on_one_resource_and_the_permissions_held_on_many_are_one_statement_each()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
         var commands = filing.Services.Commands;
 
-        var held = await filing.Services.AsAsync(TestCallers.User(data.Ben), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().RequireAsync(data.Minutes, DocumentPermissions.Edit, Cancellation));
+        var held = await filing.Services.AsAsync(TestUsers.User(data.Ben), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().RequireAsync(data.Minutes, DocumentPermissions.Edit, Cancellation));
         commands.Count.Should().Be(1);
         held.Via.Should().Be(MemberVia.Members);
         commands.Commands[0].Should().Contain("EXISTS").And.Contain("filing.\"DocumentShares\"").And.Contain("filing.\"DocumentShareRoles\"");
 
         commands.Reset();
-        var permissions = await filing.Services.AsAsync(TestCallers.User(data.Ada), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>()
+        var permissions = await filing.Services.AsAsync(TestUsers.User(data.Ada), provider => provider.GetRequiredService<MembershipAccessManager<Document>>()
             .PermissionsOnAsync([data.Minutes, data.Budget, data.Outline], FilingScenario.DocumentPermissionsAsked, Cancellation));
         commands.Count.Should().Be(1);
         permissions[data.Minutes].Should().BeEquivalentTo([DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share]);
@@ -31,7 +31,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
 
         // A folder's, known by the claim: the same shape over the host's own table names.
         commands.Reset();
-        var staff = await filing.Services.AsAsync(TestCallers.Staff(data.Clerk), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>()
+        var staff = await filing.Services.AsAsync(TestUsers.Staff(data.Clerk), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>()
             .PermissionsOnAsync([data.Cabinet, data.Annex], FilingScenario.FolderPermissionsAsked, Cancellation));
         commands.Count.Should().Be(1);
         commands.Commands[0].Should().Contain($"filing.\"{FilingContext.FolderStaffTable}\"").And.Contain($"\"{FilingContext.StaffColumn}\"").And.NotContain("Document");
@@ -45,17 +45,17 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
     public async Task Questions_asked_side_by_side_each_run_as_their_caller_on_a_context_of_their_own()
     {
         // A host whose contexts come from a pool with a factory, and run as the caller under the policies.
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true, ownContexts: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true, ownContexts: true);
         var data = filing.Scenario;
         var commands = filing.Services.Commands;
 
         // Three questions of one request, asked at once as Ben: three statements, none on the request's own
         // context, each answered as Ben, under the policies.
-        using (Callers.Begin(TestCallers.User(data.Ben)))
+        using (TestAccess.BeginAs(TestUsers.User(data.Ben)))
         {
             await using var scope = filing.Services.Provider.CreateAsyncScope();
             var requests = scope.ServiceProvider.GetRequiredService<FilingContext>();
-            var access = scope.ServiceProvider.GetRequiredService<IMemberQuestions<DocumentId>>();
+            var access = scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>();
             commands.Reset();
 
             // Started together, the three may still run one after the other, each giving its context back to the
@@ -77,10 +77,10 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         }
 
         // The same questions as Hal, who is on no document: a context taken from the pool again does not keep the caller before.
-        using (Callers.Begin(TestCallers.User(data.Hal)))
+        using (TestAccess.BeginAs(TestUsers.User(data.Hal)))
         {
             await using var scope = filing.Services.Provider.CreateAsyncScope();
-            var access = scope.ServiceProvider.GetRequiredService<IMemberQuestions<DocumentId>>();
+            var access = scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>();
 
             var asked = await Task.WhenAll(
                 access.HoldAsync(data.Minutes, DocumentPermissions.Edit, Cancellation),
@@ -91,14 +91,14 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         }
 
         // And as the owner of the outline, the third is answered: it was the caller that hid it, not the question.
-        (await filing.Services.AsAsync(TestCallers.User(data.Cy), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(data.Outline, DocumentPermissions.View, Cancellation)))!
+        (await filing.Services.AsAsync(TestUsers.User(data.Cy), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(data.Outline, DocumentPermissions.View, Cancellation)))!
             .Via.Should().Be(MemberVia.Members);
     }
 
     [Fact]
     public async Task Until_when_a_permission_is_held_is_read_in_the_statement_that_reads_the_hold()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
         var commands = filing.Services.Commands;
         var precision = TimeSpan.FromMilliseconds(1);
@@ -106,7 +106,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         async Task<MemberHold<DocumentId>?> AskAsync(UserId user, string permission)
         {
             commands.Reset();
-            var held = await filing.Services.AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(data.Minutes, permission, Cancellation));
+            var held = await filing.Services.AsAsync(TestUsers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(data.Minutes, permission, Cancellation));
             commands.Count.Should().Be(1, "how " + permission + " is held, until when, and the document's version are one statement");
             return held;
         }
@@ -137,35 +137,35 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
 
         // A folder's, known by the claim, with a keeper's deputy for three days.
         await filing.Services.ChangeAsync(data.Cabinet, folder => folder.GiveRole(data.Visitor, FolderMembership.Keeper, MemberPeriod.Between(started, data.Now.AddDays(3)), started, by: data.Keeper));
-        var deputy = await filing.Services.AsAsync(TestCallers.Staff(data.Visitor), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Cabinet, FolderPermissions.Staff, Cancellation));
+        var deputy = await filing.Services.AsAsync(TestUsers.Staff(data.Visitor), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Cabinet, FolderPermissions.Staff, Cancellation));
         deputy!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision);
-        var keeper = await filing.Services.AsAsync(TestCallers.Staff(data.Keeper), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Cabinet, FolderPermissions.HandOver, Cancellation));
+        var keeper = await filing.Services.AsAsync(TestUsers.Staff(data.Keeper), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Cabinet, FolderPermissions.HandOver, Cancellation));
         (keeper!.Via, keeper.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null));
     }
 
     [Fact]
     public async Task A_reach_and_a_resources_own_columns_are_one_statement_of_the_modules_own()
     {
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
         var data = filing.Scenario;
         var commands = filing.Services.Commands;
 
-        var titles = await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        var titles = await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
-            var seen = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentPermissions.View);
+            var seen = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View);
             return await provider.GetRequiredService<FilingContext>().Documents.Within(seen).OrderBy(document => document.Title).Select(document => document.Title).ToListAsync(Cancellation);
         });
         titles.Should().Equal("Budget", "Minutes");
         commands.Count.Should().Be(1);
 
         commands.Reset();
-        var answer = await filing.Services.AsAsync(TestCallers.User(data.Cy), async provider =>
+        var answer = await filing.Services.AsAsync(TestUsers.User(data.Cy), async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<DocumentId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Document>>();
             var act = access.Reach(DocumentPermissions.Edit);
             var found = await provider.GetRequiredService<FilingContext>().Documents
                 .Where(document => document.Id == data.Minutes)
-                .Within(access.PermissionReach([]).See)
+                .Within(access.ReachSeen())
                 .Reached(act)
                 .Select(reached => new { reached.Resource.Title, reached.Resource.Archived, reached.AsMember, reached.FromAbove })
                 .SingleAsync(Cancellation);

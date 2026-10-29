@@ -6,8 +6,8 @@ namespace Examples.Tenancy.Tenants.Application.StoredTenancy;
 /// </summary>
 /// <remarks>
 /// What the application depends on, though no reference says so: <see cref="Rows"/> and <see cref="Queries"/>
-/// come from one provider and one context, so the access questions asked over the rows
-/// (<c>answers.Over(reading.Rows, reading.Queries)</c>) are queries of that context, and a query composed of them
+/// come from one provider and one context, so the access queries asked over the rows
+/// (<c>tenancy.In(reading.Rows, reading.Queries)</c>) are queries of that context, and a query composed of them
 /// and the rows is translated and sent as one statement. Nothing is tracked: a reading only reads.
 /// </remarks>
 public interface ITenancyReading : IAsyncDisposable

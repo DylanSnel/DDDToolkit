@@ -3,14 +3,17 @@ using System.Text.RegularExpressions;
 namespace DDDToolkit.Analyzers.Tests.Docs;
 
 /// <summary>
-/// The section "Design choices and where to see them" of docs/tenancy.md points a reader at code, at something
-/// to try and at a test for every choice. A pointer that names nothing sends the reader looking for a file that
-/// was moved or a test that was renamed, so each one is followed here: a path has to exist, a test class has to
+/// The page "Design choices and where to see them", docs/tenancy/sample/design-choices.md, points a reader at code, at
+/// something to try and at a test for every choice. A pointer that names nothing sends the reader looking for a file
+/// that was moved or a test that was renamed, so each one is followed here: a path has to exist, a test class has to
 /// be declared under Tests/, and a preset has to be one the sample's try-it page lists.
 /// </summary>
 public partial class TenancyDesignChoicesTests
 {
-    private const string Heading = "## Design choices and where to see them";
+    private const string Heading = "# Design choices and where to see them";
+
+    /// <summary>The page's folder below the repository's root, which its relative links start from.</summary>
+    private static readonly string[] PageFolder = ["docs", "tenancy", "sample"];
 
     /// <summary>The folders a path written as code starts with. A link is followed whatever it starts with.</summary>
     private static readonly string[] RootFolders = ["Examples/", "Source/", "Tests/", "docs/", "skills/", ".github/"];
@@ -25,7 +28,7 @@ public partial class TenancyDesignChoicesTests
         var linked = Links().Matches(section)
             .Select(match => match.Groups["target"].Value)
             .Where(target => !target.StartsWith('#') && !target.Contains("://", StringComparison.Ordinal))
-            .Select(target => Path.Combine("docs", target.Split('#')[0]));
+            .Select(target => Path.Combine([.. PageFolder, target.Split('#')[0]]));
         var written = CodeSpans(section).Where(span => RootFolders.Any(folder => span.StartsWith(folder, StringComparison.Ordinal)));
         var paths = linked.Concat(written).Distinct(StringComparer.Ordinal).ToList();
 
@@ -70,14 +73,14 @@ public partial class TenancyDesignChoicesTests
             .Should().BeEmpty("the test is named");
     }
 
-    /// <summary>The section's text, from its heading to the next heading of the same level.</summary>
+    /// <summary>The page's text below its title: the choices, under a heading per part.</summary>
     private static string Section()
     {
-        var lines = File.ReadAllLines(Path.Combine(Root, "docs", "tenancy.md"));
+        var lines = File.ReadAllLines(Path.Combine([Root, .. PageFolder, "design-choices.md"]));
         var start = Array.IndexOf(lines, Heading);
-        start.Should().BeGreaterThan(-1, $"docs/tenancy.md has the heading '{Heading}'");
+        start.Should().BeGreaterThan(-1, $"docs/tenancy/sample/design-choices.md has the title '{Heading}'");
 
-        return string.Join('\n', lines.Skip(start + 1).TakeWhile(line => !line.StartsWith("## ", StringComparison.Ordinal)));
+        return string.Join('\n', lines.Skip(start + 1));
     }
 
     /// <summary>

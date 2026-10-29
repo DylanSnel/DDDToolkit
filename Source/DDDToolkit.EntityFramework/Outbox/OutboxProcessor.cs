@@ -50,16 +50,16 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// <para>
 /// Each message is saved individually through the same context, so when an in-process handler resolves
 /// that scoped context and changes an aggregate without saving it, its change commits together with the
-/// processed mark, unless the host requires explicit callers (below).
+/// processed mark, unless the host requires an explicit current user (below).
 /// </para>
 /// <para>
-/// <b>Who it runs as.</b> Where the host requires explicit callers
-/// (<see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>), the processor begins
-/// <c>Caller.System</c> around its own bookkeeping: reading, marking and saving the rows, turning an event
+/// <b>Who it runs as.</b> Where the host requires an explicit current user
+/// (<see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>), the processor begins
+/// <c>CurrentUserSnapshot.System</c> around its own bookkeeping: reading, marking and saving the rows, turning an event
 /// into the contract it is published as (<see cref="Integration.IOutboundIntegrationEvent{TDomainEvent, TContract}"/>
 /// and <c>PublishAs</c>), and handing it to the sinks, a sink of your own included. Code of yours that runs
 /// there runs past row level security, so it reads only what the event's own module publishes, and writes
-/// nothing. The in-process dispatch runs with no caller, so a handler runs as the caller it begins itself;
+/// nothing. The in-process dispatch runs with nobody begun, so a handler runs as the user it begins itself;
 /// the module sink runs each module's handlers as the module's scopes say. A change an in-process handler
 /// leaves on this processor's context, rather than saving it itself, would be saved with the mark as the
 /// system: the message fails instead, the change is not saved, and the delivery is tried again. A handler
@@ -83,7 +83,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     private readonly DDDEntityFrameworkOptions _options;
     private readonly OutboxOptions _outbox;
     private readonly ILogger _logger;
-    private readonly bool _requireExplicitCallers;
+    private readonly bool _requireExplicitCurrentUser;
 
     /// <summary>Creates a processor for the (scoped) <paramref name="context"/>.</summary>
     /// <exception cref="InvalidOperationException"><typeparamref name="TContext"/> has no outbox, or it has neither a sink nor a dispatch delegate to deliver through.</exception>
@@ -93,7 +93,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? NullLogger<OutboxProcessor<TContext>>.Instance;
-        _requireExplicitCallers = ToolkitCallers.Required(serviceProvider);
+        _requireExplicitCurrentUser = ToolkitWork.Required(serviceProvider);
 
         // The context's own outbox when it has one, the shared one otherwise: the same answer the
         // interceptor gave when it wrote the rows.
@@ -127,7 +127,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
 
         // The rows, their marks and the sinks are the toolkit's own bookkeeping; the handlers are not.
-        using var bookkeeping = ToolkitCallers.BeginBookkeeping(_requireExplicitCallers);
+        using var bookkeeping = ToolkitWork.BeginBookkeeping(_requireExplicitCurrentUser);
 
         var outbox = _outbox;
         var maxAttempts = outbox.MaxAttempts;
@@ -291,13 +291,13 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
 
     /// <summary>
     /// Hands the event to the in-process dispatch. An in-process handler is not the processor's bookkeeping:
-    /// where the host requires explicit callers it runs with no caller and begins its own, and whatever it
+    /// where the host requires an explicit current user it runs with nobody begun and begins its own user, and whatever it
     /// leaves unsaved on this processor's context is taken off it rather than saved with the mark as the
     /// system, and fails the message.
     /// </summary>
     private async Task DispatchInProcessAsync(OutboxMessage message, IDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        if (!_requireExplicitCallers)
+        if (!_requireExplicitCurrentUser)
         {
             await _options.Dispatcher!(_serviceProvider, [domainEvent], cancellationToken).ConfigureAwait(false);
             return;
@@ -307,7 +307,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         IReadOnlyList<string> left;
         try
         {
-            using (ToolkitCallers.BeginHandler(required: true))
+            using (ToolkitWork.BeginHandler(required: true))
             {
                 await _options.Dispatcher!(_serviceProvider, [domainEvent], cancellationToken).ConfigureAwait(false);
             }
@@ -321,7 +321,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         {
             throw new InvalidOperationException(
                 $"An in-process handler of {message.EventName} left changes to {string.Join(", ", left)} on the outbox processor's context without saving them. " +
-                "This host requires explicit callers (RequireExplicitCallers), and the processor saves its context as the system, so they were not saved. " +
+                "This host requires an explicit current user (RequireExplicitCurrentUser), and the processor saves its context as the system, so they were not saved. " +
                 "Save the handler's work itself, under a caller it begins; with DeliverInTransaction, on a context of its own.");
         }
     }

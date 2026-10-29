@@ -41,7 +41,7 @@ public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, N
 /// <summary>
 /// Takes a user off a document: a member takes itself off a document it sees, or whoever holds the permission that shares it
 /// takes anybody off. Yours, or the permission on the resource: the caller's own <see cref="UserId"/> is what
-/// <see cref="CallersUser"/> says, and either way the document is read at the door, its version compared, and what the
+/// <see cref="CurrentUserId"/> says, and either way the document is read at the door, its version compared, and what the
 /// expert hold holds the save to kept.
 /// </summary>
 [RequiresPermission(DocumentPermissions.Share)]

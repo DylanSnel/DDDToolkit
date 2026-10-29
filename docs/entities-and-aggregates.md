@@ -1,25 +1,26 @@
 # Entities and aggregates
 
-An order is placed, gets another line, has its address corrected, is paid and is shipped. Every
-property changed, and it is still the same order. Something whose identity outlives its values is an
-entity, and two entities are the same when their identifiers are, whatever else they hold.
+An order is placed, gets another line, has its address corrected, is paid and is shipped. Every property changed, and
+it is still the same order. An object whose identity outlives its values is an **entity**. Two entities are the same
+when their identifiers are equal, whatever else they hold.
 
-Some rules are not about one entity. "A placed order has at least one line" is about an order and its
-lines together, and it only holds if nobody can take a line away without the order knowing. An
-aggregate is that group: a root entity, the order, and the objects it owns, the lines, treated as one
-unit. The root owns the cluster and forms the consistency boundary around it. It is the only way in:
-code outside holds the order, never a line on its own, and every change goes through a method on the
-order, which knows the rules.
+Some rules are about more than one entity. "A placed order has at least one line" is about an order and its lines
+together. The rule only holds if no code can remove a line without the order knowing. An **aggregate** is such a
+group: a root entity (the order) and the objects it owns (the lines), treated as one unit. The root is the only way
+in. Code outside the aggregate holds the order, and never a line on its own. Every change goes through a method on the
+order, and the order applies the rules.
 
-That is why the aggregate is the unit of consistency. Its rules hold after every change, and it is
-changed as a whole or not at all. Two aggregates, such as an order and the customer who placed it, are
-kept apart, and each answers only for itself.
+So the aggregate is the unit of consistency. Its rules hold after every change, and code changes it as a whole or not
+at all. Two aggregates, such as an order and the customer who placed it, are separate, and each aggregate is
+responsible only for itself.
 
-The toolkit distinguishes the two, and the distinction carries real behaviour. Use
-`[AggregateRoot<TId>]` for the object you load, save and reference from elsewhere. Use `[Entity<TId>]`
-for something that only exists inside one aggregate, like an order line. This page declares both, then
-the collections that hold one inside the other and the references between aggregates, then events,
-invariants and the version. Storage comes last.
+The toolkit has an attribute for each:
+
+- `[AggregateRoot<TId>]` for the object you load, save and refer to from elsewhere;
+- `[Entity<TId>]` for an object that exists only inside one aggregate, such as an order line.
+
+The two attributes generate different behavior. This page declares both. Then it covers the collections that hold one
+inside the other, the references between aggregates, events, invariants and the version. Storage comes last.
 
 ## Declaring an aggregate
 
@@ -38,12 +39,13 @@ public partial class Order
 }
 ```
 
-`OrderId` is an identifier type, declared with `[EntityId<Guid>]`; see [Identifiers](identifiers.md).
-The class has to be `partial` so the generator can add to it. It supplies the base class and a
-protected parameterless constructor for Entity Framework and serializers, which is why your own
-constructor calls `base(id)`:
+`OrderId` is an identifier type, declared with `[EntityId<Guid>]`. See [Identifiers](identifiers.md). The class must be
+`partial`, so the generator can add to it. The generator writes the base class and a protected parameterless
+constructor for Entity Framework and serializers. Your own constructor therefore calls `base(id)`:
 
-```csharp title="Order.g.cs, shortened"
+**Order.g.cs, shortened**
+
+```csharp
 partial class Order : AggregateRoot<OrderId>
 {
     protected Order()
@@ -56,12 +58,10 @@ partial class Order : AggregateRoot<OrderId>
 }
 ```
 
-The base class brings the `Id`, and for a root the `Version` and `RaiseDomainEvent` described further
-down.
+The base class brings `Id`. For a root, it also brings `Version` and `RaiseDomainEvent`, described further down.
 
-Equality comes from the base type and compares identifiers, so two instances of the same order loaded
-in different contexts are equal. `==`, `!=`, `Equals` and `GetHashCode` are all consistent and
-null-safe.
+Equality comes from the base type and compares identifiers. So two instances of the same order, loaded in different
+contexts, are equal. `==`, `!=`, `Equals` and `GetHashCode` agree with each other, and all of them handle `null`.
 
 ## Child entities
 
@@ -80,7 +80,9 @@ public partial class OrderLine
 
 The generator writes the same as for a root, with `Entity<OrderLineId>` as the base class:
 
-```csharp title="OrderLine.g.cs, shortened"
+**OrderLine.g.cs, shortened**
+
+```csharp
 partial class OrderLine : Entity<OrderLineId>
 {
     protected OrderLine()
@@ -91,18 +93,20 @@ partial class OrderLine : Entity<OrderLineId>
 }
 ```
 
-A child entity has identity and equality but no events and no version, because it is not a
-consistency boundary; its root is. With Entity Framework referenced, that package's generator adds a
-part of its own that marks it owned, so it is loaded and saved with the aggregate that owns it:
+A child entity has identity and equality, but no events and no version. The child is not a consistency boundary. Its
+root is. With Entity Framework referenced, that package's generator adds a part that marks the child as owned. So
+Entity Framework loads and saves the child with the aggregate that owns it:
 
-```csharp title="OrderLine.EntityFramework.g.cs"
+**OrderLine.EntityFramework.g.cs**
+
+```csharp
 [Owned]
 partial class OrderLine
 {
 }
 ```
 
-Side by side:
+The two attributes side by side:
 
 | | `[Entity<TId>]` | `[AggregateRoot<TId>]` |
 |---|---|---|
@@ -110,14 +114,14 @@ Side by side:
 | Identity and equality | Yes | Yes |
 | Domain events | No | Yes |
 | Concurrency version | No | Yes |
-| Invariants | Yes, run by a save that changes it | Yes, run by a save that changes it or anything it owns |
+| Invariants | Yes, checked by a save that changes the entity | Yes, checked by a save that changes the root or anything it owns |
 | Entity Framework | Mapped as an owned type | Mapped as its own entity type |
 
 ## Read-only collections
 
-An order holds its lines. Exposing a `List<T>` from the aggregate lets any caller add to it and bypass
-your invariants. Exposing `_items.AsReadOnly()` from a hand-written field is correct but tedious: a
-field, a property and a wrapper for every collection. The toolkit writes them for you.
+An order holds its lines. If the aggregate exposes a `List<T>`, any caller can add to the list and skip your
+invariants. Exposing `_items.AsReadOnly()` from a hand-written field is correct, but it needs a field, a property and
+a wrapper for every collection. The generator writes them for you.
 
 Declare the property you want, get-only and `partial`:
 
@@ -133,9 +137,11 @@ public partial class Order
 }
 ```
 
-The generator writes the field behind it and the read-only view in front of it:
+The generator writes the field behind the property and the read-only view in front of it:
 
-```csharp title="Order.g.cs, shortened"
+**Order.g.cs, shortened**
+
+```csharp
 partial class Order : AggregateRoot<OrderId>
 {
     // ...
@@ -149,13 +155,13 @@ partial class Order : AggregateRoot<OrderId>
 }
 ```
 
-`Lines` appears twice because it is one property, not two: C# 13 partial properties split into a
-declaring half, which you write, and an implementing half, which the generator writes. `_lines` is
-usable from your half the moment you declare the property, which is why `AddLine` above compiles
-without you having written the field.
+`Lines` appears twice because it is one property in two halves. A C# 13 partial property has a declaring half, which
+you write, and an implementing half, which the generator writes. Your half can use `_lines` as soon as you declare the
+property. So `AddLine` above compiles, although you never wrote the field.
 
-Callers see a read-only view that cannot be cast back to `List<T>`; the aggregate mutates through
-`_lines`. `[BackingField]` is for Entity Framework, and is described [below](#stored-with-entity-framework).
+Callers see a read-only view that cannot be cast back to `List<T>`. The aggregate changes the list through `_lines`.
+`[BackingField]` is for Entity Framework, and [Stored with Entity Framework](#stored-with-entity-framework) describes
+it.
 
 ### Supported property types
 
@@ -166,11 +172,11 @@ Callers see a read-only view that cannot be cast back to `List<T>`; the aggregat
 | `IEnumerable<T>` | `List<T>` | `AsReadOnly()` |
 | `IReadOnlySet<T>` | `HashSet<T>` | `ReadOnlySet<T>` wrapper |
 
-The field name is the property name in camel case with a leading underscore: `Lines` gives `_lines`,
-`OrderLines` gives `_orderLines`. Accessibility and `virtual`, `override` and `sealed` are mirrored
-from your declaration, so a `protected partial IReadOnlyList<T>` stays protected.
+The field name is the property name in camel case, with a leading underscore. `Lines` gives `_lines`, and
+`OrderLines` gives `_orderLines`. The generator copies the accessibility and the `virtual`, `override` and `sealed`
+modifiers from your declaration. So a `protected partial IReadOnlyList<T>` stays protected.
 
-Child entities may declare partial collection properties exactly like roots.
+Child entities can declare partial collection properties in the same way as roots.
 
 ### The property must be get-only
 
@@ -178,32 +184,33 @@ Child entities may declare partial collection properties exactly like roots.
 public partial IReadOnlyList<OrderLine> Lines { get; set; }   // DDD00020
 ```
 
-A setter would let a caller replace the whole collection, which defeats the purpose. Declaring one
-reports [DDD00020](diagnostics.md#ddd00020) and the property is left unimplemented, so the build
-fails loudly rather than silently producing something you did not ask for.
+A setter would let a caller replace the whole collection. A declared setter reports
+[DDD00020](diagnostics.md#ddd00020), and the generator leaves the property unimplemented. So the build fails, instead
+of producing code you did not ask for.
 
 ### Stored with Entity Framework
 
-Entity Framework reads and writes the field directly thanks to `[BackingField]`, so it never tries to
-write through the read-only property. See
+`[BackingField]` tells Entity Framework to read and write the field directly. So Entity Framework never writes through
+the read-only property. See
 [Child entities and owned collections](entity-framework.md#child-entities-and-owned-collections).
 
-The `[BackingField]` annotation is only emitted when the project references Entity Framework, so the
-same declaration works in a domain project with no persistence dependency.
+The generator writes `[BackingField]` only when the project references Entity Framework. So the same declaration works
+in a domain project without a persistence dependency.
 
-### Why the view is kept
+### Why the view is cached
 
-The view is held rather than rebuilt. `AsReadOnly()` is `new ReadOnlyCollection<T>(this)` with no
-cache of its own, so an expression bodied property would build one wrapper per read and throw it
-away: 24 bytes every time somebody looks. Holding it is safe because the list field is `readonly`, so
-the collection the view wraps can never be swapped out from under it, and the view is a window on the
-list rather than a copy, so it shows everything the aggregate does afterwards. See
-[Performance](performance.md#reading-a-read-only-collection).
+The generated property keeps the view in a field and does not build a new view on each read. `AsReadOnly()` is
+`new ReadOnlyCollection<T>(this)` and has no cache of its own. An expression-bodied property would build a new wrapper
+on every read and throw it away, at 24 bytes per read. Keeping the view is safe for two reasons:
+
+- The list field is `readonly`, so nothing can replace the list behind the view.
+- The view wraps the list and copies nothing, so it shows every later change to the list.
+
+See [Performance](performance.md#reading-a-read-only-collection).
 
 ## Reference other aggregates by id
 
-An aggregate owns everything inside it and nothing outside it. Another aggregate is referenced by its
-id:
+An aggregate owns everything inside it and nothing outside it. It refers to another aggregate by that aggregate's id:
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -215,17 +222,31 @@ public partial class Order
 }
 ```
 
-Holding the `Customer` itself instead reports [DDD00021](diagnostics.md#ddd00021).
+A field or property that holds the `Customer` itself reports [DDD00021](diagnostics.md#ddd00021).
+
+The diagram shows the order's boundary. Purple is the root, green is what the order owns, and grey is the other
+aggregate, which the order reaches only by its id:
 
 ```mermaid
 flowchart LR
-    subgraph aggregate ["the Order aggregate: one transaction, one Version"]
+    subgraph aggregate ["The Order aggregate: one transaction, one Version"]
         direction TB
-        Order["Order, the root"] --> Line1["OrderLine"]
-        Order --> Line2["OrderLine"]
-        Order --> Address(["Address, a value object"])
+        order["<b>Order</b><br/><small>the root</small>"]
+        line1["<b>OrderLine</b><br/><small>child entity</small>"]
+        line2["<b>OrderLine</b><br/><small>child entity</small>"]
+        address(["<b>Address</b><br/><small>value object</small>"])
+        order --> line1
+        order --> line2
+        order --> address
     end
-    Order -. "CustomerId, an id and nothing more" .-> Customer["Customer, another aggregate"]
+    customer["<b>Customer</b><br/><small>another aggregate</small>"]
+    order -. "CustomerId only" .-> customer
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    class order strong
+    class line1,line2,address good
+    class customer muted
 ```
 
 <details>
@@ -239,7 +260,7 @@ public partial class Order
     public Order(OrderId id, CustomerId buyer, Address shipTo) : base(id)
         => (Buyer, ShipTo) = (buyer, shipTo);
 
-    // The dotted arrow: which customer, and nothing more
+    // The dotted arrow: the customer's id only
     public CustomerId Buyer { get; private set; }
 
     // A value object: no id, part of the order
@@ -265,7 +286,7 @@ public partial class OrderLine
 [ValueObject]
 public partial record Address(string Street, string City, string PostalCode);
 
-// Outside it: an aggregate of its own, loaded and saved by itself, with a Version of its own
+// Outside the box: a separate aggregate, loaded and saved on its own, with its own Version
 [AggregateRoot<CustomerId>]
 public partial class Customer
 {
@@ -277,35 +298,34 @@ public partial class Customer
 
 </details>
 
-Everything inside the box is loaded and saved with the order and answers to its invariants. The
-customer is outside it: the order knows which customer, and nothing else about it.
+Everything inside the box is loaded and saved with the order, and the order's invariants check it. The customer is
+outside the box. The order knows which customer, and nothing else about the customer.
 
-### Why the id is what keeps the boundary
+### Why an id instead of a reference
 
 An aggregate is two boundaries at once, and a direct reference breaks both.
 
-It is a **loading boundary**. `context.Orders.Find(id)` should load an order, its lines and nothing
-else. The moment `Order` has a `Customer` property, Entity Framework has a navigation to follow.
-Either it loads the customer with every order, or it leaves a proxy that loads one later, per order,
-in a loop nobody wrote. An `OrderId`-shaped hole in the object graph is a decision you can see: the
-code that needs the customer asks for it, by id, through the customer repository.
+It is a **loading boundary**. `context.Orders.Find(id)` should load an order and its lines, and nothing else. Once
+`Order` has a `Customer` property, Entity Framework has a navigation to follow. Then Entity Framework either loads the
+customer with every order, or it leaves a proxy that loads the customer later, once per order, in a loop that nobody
+wrote. With an id, the code that needs the customer loads it by id, through the customer repository. The decision is
+visible in the code.
 
-It is a **consistency boundary**. Every root carries its own `Version`, and the point of that number
-is that one save changes one aggregate and one version says whether anyone else changed it. With a
-direct reference, `order.Buyer.Rename(...)` inside an order method makes a single `SaveChanges` write
-two roots in one transaction. Now a conflict on the customer rolls back the order, the order's
-version says nothing about the customer, and the two aggregates are one aggregate wearing two names.
+It is a **consistency boundary**. Every root has its own `Version`. One save changes one aggregate, and one version
+says whether anyone else changed it. With a direct reference, `order.Buyer.Rename(...)` inside an order method makes
+one `SaveChanges` write two roots in one transaction. A conflict on the customer then rolls back the order, and the
+order's version says nothing about the customer. The two aggregates have become one aggregate with two names.
 
-The id also survives things a reference does not. It serialises into an event, crosses a queue, goes
-into a URL, and still means the same customer when the two aggregates end up in different services or
-different databases. A reference only works while both objects are in the same unit of work.
+An id also works where a reference does not. An id can be serialized into an event, sent through a queue and put in a
+URL. It still means the same customer when the two aggregates live in different services or different databases. A
+reference works only while both objects are in the same unit of work.
 
-None of this is unique to this toolkit; it is the oldest rule in the pattern. What the toolkit adds is
-that it already knows which of your types are aggregate roots and which are ids, so it can check.
+This is the oldest rule of the pattern. The toolkit knows which of your types are aggregate roots and which are ids,
+so the analyzer can check the rule.
 
-### The one reference that is allowed
+### A child's reference to its root
 
-A child entity may navigate back to the root that owns it:
+A child entity may hold a navigation back to the root that owns it:
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -321,18 +341,20 @@ public partial class OrderLine
 }
 ```
 
-This one does not widen anything. The line is loaded with the order, saved with the order and cannot
-outlive it, and Entity Framework uses the inverse navigation when it maps the owned type.
+This reference does not widen the aggregate. The line is loaded with the order and saved with the order, and it cannot
+outlive the order. Entity Framework uses the inverse navigation when it maps the owned type.
 
-The toolkit checks the claim rather than taking it: `Order` has to hold `OrderLine` back, in a
-collection or in a single property, and the reference from the child has to be single valued. A child
-entity holding a root that does not own it reports DDD00021 like anything else.
+The analyzer checks that the reference points at the owning root:
 
-### When you disagree
+- `Order` must hold `OrderLine`, in a collection or in a single property.
+- The child's reference must be a single value, not a collection.
 
-DDD00021 is a warning, and nothing about generation changes when it fires. A model that really is
-loaded and saved as one unit, or a legacy mapping you are not ready to unpick, can keep its reference
-by turning the rule off for the project:
+A child entity that holds a root which does not own it reports DDD00021, like any other reference.
+
+### Turning DDD00021 off
+
+DDD00021 is a warning, and generation does not change when the analyzer reports it. A model that is loaded and saved
+as one unit, or a legacy mapping you cannot change yet, can keep its reference. Turn the rule off for the project:
 
 ```xml
 <PropertyGroup>
@@ -340,14 +362,14 @@ by turning the rule off for the project:
 </PropertyGroup>
 ```
 
-There is no per-member escape hatch. A `#pragma warning disable` cannot suppress a source generator's
-diagnostic, so it is the whole project or nothing. See [DDD00021](diagnostics.md#ddd00021) for why,
-and for the full list of what does and does not report.
+You cannot turn the rule off for one member. A `#pragma warning disable` cannot suppress a diagnostic from a source
+generator, so the setting applies to the whole project. [DDD00021](diagnostics.md#ddd00021) explains why, and lists
+what reports and what does not.
 
 ## Domain events
 
-Only aggregate roots raise events, because only the root is a consistency boundary. Raising is
-`protected`, so an event can only come from inside the aggregate that owns it:
+Only aggregate roots raise events, because only the root is a consistency boundary. `RaiseDomainEvent` is
+`protected`, so an event can only come from inside the aggregate:
 
 ```csharp
 public void Ship(TrackingCode code)
@@ -362,8 +384,8 @@ public void Ship(TrackingCode code)
 }
 ```
 
-Draining is not part of the public surface either. `IHasDomainEvents` is implemented explicitly, so
-the persistence layer can collect events and application code cannot quietly discard them:
+Code outside the aggregate also cannot remove the events. The root implements `IHasDomainEvents` explicitly. So the
+persistence layer can collect the events, and application code cannot discard them by accident:
 
 ```csharp
 IReadOnlyList<IDomainEvent> pending = order.DomainEvents;          // read-only view
@@ -375,9 +397,8 @@ See [Domain events](domain-events.md).
 
 ## Invariants
 
-A rule about the whole aggregate, such as "a placed order has at least one line", belongs to the
-root. The generator declared a `CheckInvariants()` seam in its half of the class; implement it in
-yours:
+A rule about the whole aggregate, such as "a placed order has at least one line", belongs to the root. The generator
+declares a `CheckInvariants()` method, the seam, in its half of the class. Implement the seam in your half:
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -393,112 +414,116 @@ public partial class Order
 }
 ```
 
-A rule that deserves a name, a code a caller can branch on, or a test of its own is better written as
-a nested `IInvariant<Order>` instead. The entity runs both.
+A rule that needs a name, a code that a caller can branch on, or a test of its own is better as a nested
+`IInvariant<Order>`. The entity runs both kinds.
 
-Once the aggregate is stored with Entity Framework, every save that writes it runs them, and a broken
-rule stops the save. An aggregate that states nothing costs nothing: the compiler erases an
-unimplemented `partial void` and every call to it.
+Once the aggregate is stored with Entity Framework, every save that writes the aggregate runs the rules, and a broken
+rule stops the save. An aggregate without rules costs nothing. The compiler removes an unimplemented `partial void`
+method and every call to it.
 
-The same question can be asked without a database, and asking the root asks the whole aggregate:
+The same check runs without a database. A check on the root covers the whole aggregate:
 
 ```csharp
 order.AddLine(line);
 
 var broken = order.GetInvariantViolations();   // the order's rules, and every line's
-order.EnsureInvariants();                      // the same, and throws instead of answering
+order.EnsureInvariants();                      // the same, and throws instead of returning a list
 ```
 
-See [Invariants](invariants.md) for the two stages, what one question covers and when the self-only
-pair is the one you want, for when to reach for each shape of rule, for the interceptor order, and for
-why an invariant across two aggregates is a design question rather than a missing feature.
+[Invariants](invariants.md) covers the two stages, what one check covers and when to check one object only. It also
+covers when to use each kind of rule, the order of the interceptors, and why an invariant across two aggregates is a
+design question.
 
-## Declaring the identifier with it
+## Declaring the identifier on the entity
 
-`OrderId` above is a type you declared with `[EntityId<Guid>]`. When the identifier is only ever used
-to identify this one aggregate, you can skip that declaration and name the raw value instead:
+`OrderId` above is a type you declared with `[EntityId<Guid>]`. When the identifier only identifies this one
+aggregate, you can skip that declaration and name the raw value type instead:
 
 ```csharp
 [AggregateRoot<Guid>("ORD")]
 public partial class Order { }          // also generates OrderId
 ```
 
-The toolkit then generates `OrderId` as well, as a `readonly partial record struct` with everything an
-explicitly declared identifier gets. The name is the entity's name with `Id` appended, and the first
-argument is the optional prefix. `[Entity<T>]` does the same for a child entity.
+The toolkit then also generates `OrderId`, as a `readonly partial record struct` with every member that an explicitly
+declared identifier gets. The name is the entity's name with `Id` appended. The first argument is the optional
+prefix. `[Entity<T>]` does the same for a child entity.
 
-Keep the separate `[EntityId<Guid>]` declaration for an identifier that other aggregates, DTOs or API
-contracts refer to; a type other people read deserves a declaration they can find. See
+Keep a separate `[EntityId<Guid>]` declaration for an identifier that other aggregates, DTOs or API contracts use.
+Readers of those types need a declaration they can find. See
 [Identifiers](identifiers.md#letting-the-entity-declare-the-id).
 
 ## Optimistic concurrency
 
-Every aggregate root carries a version, from its base class:
+Every aggregate root has a version, from its base class:
 
 ```csharp
 public long Version { get; private set; }
 ```
 
-It is 0 for a new aggregate. The Entity Framework integration increments it on every save that
-touches the aggregate, including saves that only changed something it owns, and refuses a save that
-carries a stale one: two users editing the same order produce a `ConcurrencyConflictException` for the
-second one, naming the aggregate type and id.
+The version is 0 for a new aggregate. The Entity Framework integration increments the version on every save that
+touches the aggregate, including a save that only changed something the aggregate owns. A save that carries an old
+version is refused. When two users edit the same order, the second save throws a `ConcurrencyConflictException` that
+names the aggregate type and id.
 
-The version is what makes an aggregate a unit of consistency. Without it two concurrent saves are
-last-write-wins, silently. It says nobody else changed the aggregate; it says nothing about whether
-the aggregate is *consistent*, which is what the [invariants](#invariants) are for.
+The version makes an aggregate a unit of consistency. Without it, two concurrent saves are last-write-wins, and
+nothing reports the lost write. The version says that nobody else changed the aggregate. It does not say whether the
+aggregate is *consistent*. The [invariants](#invariants) check that.
 
-See [Optimistic concurrency](entity-framework.md#optimistic-concurrency) for how the version is
-mapped and checked, what counts as touching the aggregate, and what to do when the exception arrives.
+See [Optimistic concurrency](entity-framework.md#optimistic-concurrency) for how the version is mapped and checked,
+what counts as touching the aggregate, and what to do with the exception.
 
 ## Designing aggregates
 
-Declaring an aggregate is one attribute. Deciding what belongs inside it is the hard part, and it is
-a question about your rules and your write patterns that no compiler can see. Vaughn Vernon's four
-rules of aggregate design are the best short guide to it. [Designing aggregates](aggregate-design.md)
-says why each rule exists, what the toolkit does for it, and, for the rule it cannot help with, what to
-ask yourself instead.
+Declaring an aggregate takes one attribute. Deciding what belongs inside it is the hard part. That decision depends on
+your rules and your write patterns, and no compiler can see either. Vaughn Vernon's four rules of aggregate design are
+a good short guide. [Designing aggregates](aggregate-design.md) explains why each rule exists and what the toolkit
+does for it. For the rule the toolkit cannot help with, the page lists questions to ask instead.
 
 ## Aggregates a supporting domain ships
 
-A [supporting domain](writing-a-supporting-domain.md) can ship an aggregate for you to extend. You declare
-your own class with the package's attribute instead of `[AggregateRoot<T>]`,
-`[Subscription<SubscriptionId>] partial class ShopSubscription`, and the generator derives it from the
-package's parent, whose rules then run with yours. See
+A [supporting domain](writing-a-supporting-domain.md) can ship an aggregate for you to extend. You declare your class
+with the package's attribute instead of `[AggregateRoot<T>]`, for example
+`[Subscription<SubscriptionId>] partial class ShopSubscription`. The generator derives your class from the package's
+parent class, and the parent's rules run with yours. See
 [What the application writes](writing-a-supporting-domain.md#what-the-application-writes).
 
 ## Persistence
 
-Nothing above needs a database. With `DDDToolkit.EntityFramework` referenced, the same declarations are
-mapped with no configuration: a root as an entity type, a child entity as an owned type, a read-only
-collection through its backing field, and `Version` as a concurrency token. See
-[Entity Framework](entity-framework.md).
+Nothing above needs a database. With `DDDToolkit.EntityFramework` referenced, Entity Framework maps the same
+declarations without configuration:
 
-What the toolkit deliberately does not add is the bookkeeping many persistence layers put on every
-row.
+- a root as an entity type;
+- a child entity as an owned type;
+- a read-only collection through its backing field;
+- `Version` as a concurrency token.
+
+See [Entity Framework](entity-framework.md).
+
+The toolkit does not add the bookkeeping columns that many persistence layers put on every row.
 
 ### Auditing and soft delete
 
-The toolkit has no `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IAuditable`, `IsDeleted` or
-`ISoftDeletable`, and it is not going to grow them. `Version` is the only bookkeeping field an
-aggregate root gets, and it is there because optimistic concurrency is a correctness property of the
-consistency boundary, not a reporting feature.
+The toolkit has no `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IAuditable`, `IsDeleted` or `ISoftDeletable`,
+and it will not add them. `Version` is the only bookkeeping field an aggregate root gets. It exists because optimistic
+concurrency is part of the correctness of the consistency boundary. Reporting is not its purpose.
 
-This is a deliberate position, not an omission. "Who last touched this row" is a question about your
-rows and your users, and the answer belongs to your persistence layer. Putting it on the domain type
-means every aggregate in the system carries four properties its behaviour never reads, your
-constructors take a user, and your unit tests need a logged-in principal to build an order. A base
-class in your own solution can do it in twenty lines and can say what your organisation actually
-means by "modified", which no library can guess.
+This is a deliberate choice. "Who last touched this row" is a question about your rows and your users, and your
+persistence layer should answer it. On the domain type, these fields would cost three things:
 
-Nothing in this section is generated, and the toolkit adds no convention or interceptor for it. What
-follows is plain Entity Framework, in your own context.
+- Every aggregate carries four properties that its behavior never reads.
+- Your constructors take a user.
+- Your unit tests need a signed-in principal to build an order.
 
-So decide which of these you are actually asking for.
+An interceptor in your own solution fills these columns in about twenty lines, with your organization's meaning of
+"modified". No library can know that meaning.
 
-**It is domain data.** "Who approved this order", "when was it cancelled" are facts the business
-talks about and rules depend on. Model them as ordinary properties, set by the method that does the
-thing:
+Nothing in this section is generated. The toolkit adds no convention or interceptor for it. The code below is plain
+Entity Framework, in your context.
+
+First decide which of these cases you have.
+
+**Domain data.** "Who approved this order" and "when was it cancelled" are facts the business talks about, and rules
+depend on them. Model them as ordinary properties, set by the method that performs the action:
 
 ```csharp
 public void Approve(EmployeeId approver, DateTimeOffset at)
@@ -509,11 +534,11 @@ public void Approve(EmployeeId approver, DateTimeOffset at)
 }
 ```
 
-That is not auditing. It is the domain, and it is testable without a database.
+This is part of the domain, and you can test it without a database.
 
-**It is row bookkeeping.** Nothing in the domain reads it; you want it for support and forensics.
-Keep it out of the domain type entirely and use Entity Framework shadow properties, so the columns
-exist and the C# class does not:
+**Row bookkeeping.** Nothing in the domain reads these values. You want them for support and for investigations. Keep
+them out of the domain type, and use Entity Framework shadow properties. The columns exist, and the C# class has no
+properties for them:
 
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -529,18 +554,19 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
-Fill them from an interceptor of your own, registered beside the toolkit's. Who is calling is the
-toolkit's `ICallerAccessor`, the same one [row level security](row-level-security.md#running-queries-as-the-caller)
-asks, so the column names whoever the database thought was calling:
+Fill the columns from an interceptor of your own, registered next to the toolkit's interceptors. The user comes from
+the toolkit's `ICurrentUser`, the same current user that
+[row level security (RLS)](row-level-security.md#running-queries-as-the-caller) reads. So the column holds the user
+that the database also saw:
 
 ```csharp
-public sealed class AuditInterceptor(ICallerAccessor callers, TimeProvider clock) : SaveChangesInterceptor
+public sealed class AuditInterceptor(ICurrentUser user, TimeProvider clock) : SaveChangesInterceptor
 {
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
-        // Caller.System for background work, which has no user: the columns stay null.
-        var caller = callers.Current;
+        // System work has no user id, so the columns stay null.
+        var by = user.Id;
 
         foreach (var entry in eventData.Context!.ChangeTracker.Entries())
         {
@@ -552,12 +578,12 @@ public sealed class AuditInterceptor(ICallerAccessor callers, TimeProvider clock
             if (entry.State == EntityState.Added)
             {
                 entry.Property("CreatedAt").CurrentValue = clock.GetUtcNow();
-                entry.Property("CreatedBy").CurrentValue = caller.UserId;
+                entry.Property("CreatedBy").CurrentValue = by;
             }
             else if (entry.State == EntityState.Modified)
             {
                 entry.Property("UpdatedAt").CurrentValue = clock.GetUtcNow();
-                entry.Property("UpdatedBy").CurrentValue = caller.UserId;
+                entry.Property("UpdatedBy").CurrentValue = by;
             }
         }
 
@@ -571,17 +597,17 @@ db.UseDDDToolkit(serviceProvider)
   .AddInterceptors(serviceProvider.GetRequiredService<AuditInterceptor>());
 ```
 
-**On Postgres, let the database fill them.** With [row level security](row-level-security.md) on, every
-connection a context opens already carries the caller, so a default and a trigger can fill the columns
-instead of the interceptor. Then they are right for every writer, the application, PostgREST and
-supabase-js alike, and none of them can forge them. The trigger goes in a migration of your own:
+**On Postgres, let the database fill the columns.** With [RLS](row-level-security.md) on, every connection a context
+opens already carries the caller. So a default and a trigger can fill the columns instead of the interceptor. Then
+the columns are correct for every writer: the application, PostgREST and supabase-js. No writer can forge them. The
+trigger goes in a migration of your own:
 
 ```sql
 create function ordering.touch_row() returns trigger language plpgsql as $$
 begin
     new."UpdatedAt" := now();
-    new."UpdatedBy" := ddd.caller_id();   -- auth.uid() on Supabase
-    new."CreatedAt" := old."CreatedAt";   -- where a row came from is never rewritten
+    new."UpdatedBy" := ddd.current_user_id();   -- auth.uid() on Supabase
+    new."CreatedAt" := old."CreatedAt";   -- an update never changes the creation columns
     new."CreatedBy" := old."CreatedBy";
     return new;
 end $$;
@@ -590,65 +616,66 @@ create trigger touch_row before update on ordering."Orders"
     for each row execute function ordering.touch_row();
 ```
 
-and the model says the database fills them, so Entity Framework neither sends them nor keeps a stale
-value after a save:
+The model says that the database fills the columns. So Entity Framework does not send them, and it does not keep an
+old value after a save:
 
 ```csharp
 modelBuilder.Entity<Order>(order =>
 {
     order.Property<DateTimeOffset>("CreatedAt").HasDefaultValueSql("now()");
-    order.Property<Guid?>("CreatedBy").HasDefaultValueSql("ddd.caller_id()");
+    order.Property<Guid?>("CreatedBy").HasDefaultValueSql("ddd.current_user_id()");
     order.Property<DateTimeOffset?>("UpdatedAt").ValueGeneratedOnAddOrUpdate();
     order.Property<Guid?>("UpdatedBy").ValueGeneratedOnAddOrUpdate();
 });
 ```
 
-Read a shadow property back with `context.Entry(order).Property<DateTimeOffset>("CreatedAt")`, or
-query it with `EF.Property<DateTimeOffset>(order, "CreatedAt")`. If you would rather have real
-properties, declare them on each aggregate and give them an interface of your own, such as
-`IAudited`, so the interceptor has one type to look for. A base class of your own does not work: the
-generator writes the base class of every `[AggregateRoot<T>]` and `[Entity<T>]` itself, so a class
-that also names a base fails to compile with CS0263 ("partial declarations must not specify
-different base classes").
+Read a shadow property with `context.Entry(order).Property<DateTimeOffset>("CreatedAt")`, or query it with
+`EF.Property<DateTimeOffset>(order, "CreatedAt")`. If you want real properties, declare them on each aggregate and give
+them an interface of your own, such as `IAudited`. The interceptor then looks for that one type. A base class of your
+own does not work. The generator writes the base class of every `[AggregateRoot<T>]` and `[Entity<T>]`. So a class
+that also names a base class fails to compile with CS0263 ("partial declarations must not specify different base
+classes").
 
-**It is a history of what happened.** Then you already have it. The domain events an aggregate
-raises are a record of every meaningful change, written by the aggregate that knows what the change
-meant. Turn on the [outbox](event-delivery.md#the-outbox) and keep the rows instead of deleting
-them, or write your own handler that appends them to an event table. An audit trail assembled from
-`UpdatedBy` columns tells you a row changed; a trail of `OrderCancelled` tells you what happened, and
-why.
+**A history of what happened.** The domain events record this already. The events an aggregate raises record every
+meaningful change, written by the aggregate that knows what the change meant. Turn on the
+[outbox](event-delivery.md#the-outbox) and keep its rows instead of deleting them, or write a handler that appends the
+events to an event table. An audit trail built from `UpdatedBy` columns tells you that a row changed. A trail of
+`OrderCancelled` events tells you what happened, and why.
 
-An audit trail people read, who did what and when across the whole application, is a supporting
-domain of its own rather than something every module carries: an Audit module that subscribes to the
-other modules' [integration events](integration-events.md) and keeps its own history, in its own
-schema, answering its own questions. The modules it audits do nothing for it beyond raising the events
-they already raise; an event the trail needs to attribute says who acted, as a field of its contract.
+An audit trail for people, with who did what and when across the whole application, is a supporting domain of its
+own. The modules do not each carry it. An Audit module subscribes to the other modules'
+[integration events](integration-events.md) and keeps its own history, in its own schema, for its own queries. The
+audited modules only raise the events they already raise. An event that the trail must attribute to a person carries
+that person in a field of its contract.
 
-**Soft delete** is the same answer. Entity Framework does it with a flag and a global query filter,
-and neither needs the toolkit:
+**Soft delete** follows the same approach. Entity Framework does it with a flag and a global query filter, and neither
+needs the toolkit:
 
 ```csharp
 modelBuilder.Entity<Order>().HasQueryFilter(order => !EF.Property<bool>(order, "IsDeleted"));
 ```
 
-Two things to know before you reach for it. A filtered row still occupies its unique indexes, so a
-"deleted" customer still owns their email address. And query filters do not apply to raw SQL or to
-anything outside Entity Framework, so the flag is a convention your reporting jobs have to know
-about. Often the honest model is a domain state, `OrderStatus.Cancelled`, which the rest of the
-domain can reason about, rather than a row that pretends not to exist.
+Know two things before you use it:
+
+- A filtered row still occupies its unique indexes. So a "deleted" customer still owns their email address.
+- Query filters do not apply to raw SQL or to anything outside Entity Framework. So your reporting jobs must know the
+  convention.
+
+A domain state, such as `OrderStatus.Cancelled`, is often the better model. The rest of the domain can reason about a
+state. A row that pretends not to exist gives the domain nothing to reason about.
 
 ## Requirements
 
-The declaration must be a `partial class`. A record or struct carrying `[Entity<T>]` or
-`[AggregateRoot<T>]` reports [DDD00002](diagnostics.md#ddd00002); a non-partial class reports
-[DDD00005](diagnostics.md#ddd00005).
+The declaration must be a `partial class`. A record or struct with `[Entity<T>]` or `[AggregateRoot<T>]` reports
+[DDD00002](diagnostics.md#ddd00002). A class without `partial` reports [DDD00005](diagnostics.md#ddd00005).
 
-The type argument is either an identifier, which is any type carrying `[EntityId<T>]` or implementing
-`IEntityId`, or the raw value an identifier should wrap, which must be a value type or a `string`.
-Anything else reports [DDD00008](diagnostics.md#ddd00008). When the toolkit generates the identifier
-and something else already holds the name it would take, that reports
-[DDD00007](diagnostics.md#ddd00007).
+The type argument is one of two things:
 
-A field or property typed as another aggregate root reports
-[DDD00021](diagnostics.md#ddd00021). That one is a warning: the code compiles and everything is still
-generated.
+- an identifier, which is any type with `[EntityId<T>]` or any type that implements `IEntityId`;
+- the raw value that a generated identifier wraps, which must be a value type or a `string`.
+
+Any other type argument reports [DDD00008](diagnostics.md#ddd00008). When the toolkit generates the identifier and
+another type already has its name, the analyzer reports [DDD00007](diagnostics.md#ddd00007).
+
+A field or property typed as another aggregate root reports [DDD00021](diagnostics.md#ddd00021). DDD00021 is a
+warning. The code compiles, and the generator still writes everything.

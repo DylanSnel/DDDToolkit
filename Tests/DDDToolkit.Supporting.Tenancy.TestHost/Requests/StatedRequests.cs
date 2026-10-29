@@ -33,9 +33,18 @@ public static class StatedRequests
     [RequiresPermission(TenancyPermissions.SeatsManage)]
     public sealed record ManageSeatsAt([AtUnit] OrganizationUnitId Unit) : IHostRequest;
 
-    /// <summary>One of the application's operators.</summary>
-    [RequiresOperator]
+    /// <summary>One of the application's operators. A command of it runs as operator work in no tenant.</summary>
+    [Operator]
     public sealed record ForOperators : IHostRequest;
+
+    /// <summary>One of the application's operators, about the tenant it names. A command of it runs as operator work there.</summary>
+    /// <param name="Tenant">The tenant.</param>
+    [Operator]
+    public sealed record ForOperatorsInTenant([ForTenant] TenantId Tenant) : IHostRequest;
+
+    /// <summary>One of the application's operators, in the tenant the request names beside it.</summary>
+    [Operator(Tenant = OperatorTenant.FromRequest)]
+    public sealed record ForOperatorsInTheNamedTenant : IHostRequest;
 
     /// <summary>A seat renames itself, and any seat with the key that manages seats for the whole tenant: yours, or the key.</summary>
     /// <param name="Seat">The seat.</param>

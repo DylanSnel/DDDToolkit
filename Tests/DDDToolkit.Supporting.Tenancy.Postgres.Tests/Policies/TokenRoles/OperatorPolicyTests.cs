@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
@@ -34,7 +35,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         await using var services = TallyDatabase.Services(database, operators: true);
 
         // The seed keeps no note on a tenant: one, so every table has a row to read and to try a write with.
-        await using (var seeding = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var seeding = await AsUser.OwnerAsync(database, Cancellation))
         {
             await seeding.ExecuteAsync("INSERT INTO tenancy.\"TenantNote\" (\"Id\", \"HostTenantId\", \"Text\") VALUES (gen_random_uuid(), 1, 'Moored at the quay')", Cancellation);
             await seeding.CommitAsync(Cancellation);
@@ -48,7 +49,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         const string Digests = "tenancy.\"InvitationDigests\"";
         var rows = new Dictionary<string, long>(StringComparer.Ordinal);
         string digest;
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             var tables = await owner.ListAsync<string>(
                 "SELECT pg_catalog.quote_ident(schemaname) || '.' || pg_catalog.quote_ident(tablename) FROM pg_catalog.pg_tables WHERE schemaname = 'tenancy' OR (schemaname = 'ddd' AND tablename = 'EventLog') ORDER BY 1",
@@ -76,7 +77,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
 
         // As a query of the application's own that forgot every condition would run: the mapped role, with every
         // privilege on the tables, and no tenant named on the connection.
-        await using (var asOperator = await AsCaller.TokenRoleAsync(database, TallyRules.OperatorRole, TallyRules.OperatorTokenRole, Operator, tenant: null, Cancellation))
+        await using (var asOperator = await AsUser.TokenRoleAsync(database, TallyRules.OperatorRole, TallyRules.OperatorTokenRole, Operator, tenant: null, Cancellation))
         {
             (await asOperator.ScalarAsync<string>("SELECT current_user::text", Cancellation)).Should().Be(TallyRules.OperatorRole);
 
@@ -114,39 +115,40 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
             await RefusedAsync(asOperator, "INSERT INTO tenancy.\"SeatRights\" SELECT * FROM tenancy.\"SeatRights\" LIMIT 1");
 
             // The questions a seat asks are not an operator's to ask: it has no seat for them to be about.
-            await RefusedAsync(asOperator, "SELECT tenancy.caller_seat()");
+            await RefusedAsync(asOperator, "SELECT tenancy.current_seat()");
             await RefusedAsync(asOperator, "SELECT tenancy.holds_permission('tenancy.seats.manage')");
         }
 
-        // In the application: no seat is chosen for an operator, whatever tenant the request names, and the
-        // tenants' directory answers it every tenant, read as its own database role.
-        using (Callers.Begin(Callers.FromClaims(Claims)))
+        // In the application: no seat is chosen for an operator, whatever tenant the request names; the tenant it names
+        // is found, as its own database role reads every tenant, and kept. The tenants' directory answers it every
+        // tenant, read as that role.
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
         {
-            var selected = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Callers.Ambient!, "harbor", Cancellation));
-            selected.Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
+            var selected = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(BegunUser!, "harbor", Cancellation));
+            selected.Should().Be(HostUser.OperatorNaming(Harbor));
 
-            using (TenancyCallers.Begin(selected))
+            using (TenancyUsers.Begin(selected))
             {
                 var (role, first) = await services.InScopeAsync(async scoped => (
-                    await scoped.Tenancy().Database.SqlQueryRaw<string>("SELECT current_user::text AS \"Value\"").SingleAsync(Cancellation),
-                    await scoped.TenantDirectory().ListAsync(after: null, size: 2, Cancellation)));
+                    await scoped.TenancyContext().Database.SqlQueryRaw<string>("SELECT current_user::text AS \"Value\"").SingleAsync(Cancellation),
+                    await scoped.Tenants().ListAsync(after: null, size: 2, Cancellation)));
 
                 role.Should().Be(TallyRules.OperatorRole);
-                first.Items.Should().Equal(
-                    new HostTenancy.TenantListing(Harbor, "harbor", "Harbor Works", TenantStatus.Active, ActiveSeats: 5),
-                    new HostTenancy.TenantListing(Orchard, "orchard", "Orchard Works", TenantStatus.Active, ActiveSeats: 2));
+                first.Items.Select(Listed).Should().Equal(
+                    (Harbor, "harbor", "Harbor Works", TenantStatus.Active, 5),
+                    (Orchard, "orchard", "Orchard Works", TenantStatus.Active, 2));
 
-                var second = await services.InScopeAsync(scoped => scoped.TenantDirectory().ListAsync(first.Next, size: 2, Cancellation));
-                second.Items.Should().Equal(new HostTenancy.TenantListing(Quay, "quay", "Quay Works", TenantStatus.Suspended, ActiveSeats: 1));
+                var second = await services.InScopeAsync(scoped => scoped.Tenants().ListAsync(first.Next, size: 2, Cancellation));
+                second.Items.Select(Listed).Should().Equal((Quay, "quay", "Quay Works", TenantStatus.Suspended, 1));
                 second.Next.Should().BeNull();
             }
         }
 
         // A seat is no operator, whatever it holds: Harbor's administrator is refused, and reads Harbor alone anyway.
-        var refused = await FluentActions.Awaiting(() => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.TenantDirectory().ListAsync(null, 10, Cancellation)))
+        var refused = await FluentActions.Awaiting(() => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Tenants().ListAsync(null, 10, Cancellation)))
             .Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
         refused.Which.Code.Should().Be(TenancyRefusals.OperatorsOnly);
-        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Tenancy().Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM tenancy.\"Seats\"").SingleAsync(Cancellation)))
+        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.TenancyContext().Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM tenancy.\"Seats\"").SingleAsync(Cancellation)))
             .Should().Be(6, "Harbor's seats, the suspended one included, and no other tenant's");
 
         // And the start-up check finds the operators' policy where the options say there are operators.
@@ -179,7 +181,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
             scope: TallyContext.Schema);
 
         var tallies = TallyDatabase.NamesOf(database);
-        await using (var asOperator = await AsCaller.TokenRoleAsync(database, TallyRules.OperatorRole, TallyRules.OperatorTokenRole, Operator, tenant: null, Cancellation))
+        await using (var asOperator = await AsUser.TokenRoleAsync(database, TallyRules.OperatorRole, TallyRules.OperatorTokenRole, Operator, tenant: null, Cancellation))
         {
             // What the module's rule admits, across tenants, and nothing of a module that has no rule for operators.
             (await asOperator.ListAsync<string>($"SELECT {tallies.Column("Name")} FROM {tallies.Table} ORDER BY 1", Cancellation)).Should().Equal("Apples", "Crates");
@@ -194,7 +196,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
                 $"INSERT INTO {tallies.Table} ({tallies.Columns}) VALUES ({TallyNames.Values(Harbor, North, "Smuggled", seat: null, "operator", Operator, shared: true)})");
         }
 
-        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(database, Cancellation))
         {
             (await owner.ListAsync<string>($"SELECT {tallies.Column("Name")} FROM {tallies.Table} ORDER BY 1", Cancellation)).Should().Equal("Apples", "Barrels", "Crates");
             (await owner.ListAsync<string>(
@@ -211,8 +213,8 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         }
 
         // In the application an operator acts in no tenant, so a query of the module's names that it looks across them.
-        using (Callers.Begin(Callers.FromClaims(Claims)))
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.NotSeated)))
         {
             var (filtered, across) = await services.InScopeAsync(async scoped => (
                 await scoped.Tallies().Tallies.Select(tally => tally.Name).ToListAsync(Cancellation),
@@ -342,9 +344,13 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
     private static RowAccessRoleNames Mapped()
         => RowAccessRoleNames.Default with { TokenRoles = new Dictionary<string, string> { [TallyRules.OperatorTokenRole] = TallyRules.OperatorRole } };
 
-    private static async Task RefusedAsync(AsCaller caller, string sql)
+    private static async Task RefusedAsync(AsUser caller, string sql)
     {
         var refusal = await FluentActions.Awaiting(() => caller.AttemptAsync(sql, Cancellation)).Should().ThrowAsync<PostgresException>(sql);
         refusal.Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege, sql);
     }
+
+    /// <summary>What a listing shows of a tenant: its id, slug, name, status and active seats.</summary>
+    private static (TenantId, string, string, TenantStatus, int) Listed(TenantManager.TenantListing listing)
+        => (listing.Tenant.Id, listing.Tenant.Slug.Value, listing.Name, listing.Tenant.Status, listing.ActiveSeats);
 }

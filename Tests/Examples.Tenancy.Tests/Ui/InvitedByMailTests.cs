@@ -91,12 +91,12 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         // And back in by the login page, with the address and the password, to what a surveyor at meadow's root reads.
         var again = (await login.SignInAsync(address, password, Cancellation)).Answer!;
         var seats = (await api.SeatsOfMineAsync(CallAs.Person(address, again.AccessToken), Cancellation)).Value!;
-        seats.Should().ContainSingle().Which.Seat.Id.Should().Be(accepted.Value!.SeatId);
+        seats.Should().ContainSingle().Which.Seat.Id.Should().Be(accepted.Value!.Seat.Id);
         session.SignIn(address, address, again.AccessToken, again.Expires, UiSession.TenantToStartIn(seats));
         session.Tenant.Should().Be(Meadow.Slug);
         var me = (await api.WhoAmIAsync(Cancellation)).Value!;
         me.Seat.DisplayName.Should().Be("Wren");
-        me.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.Role.Should().Be("Surveyor");
+        me.NameOf(me.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.RoleId).Should().Be("Surveyor");
         (await api.VisibleProjectsAsync(cancellationToken: Cancellation)).Value!.Items.Select(project => project.Name).Should().Equal("Garden shed");
 
         // The mail's link works once. Followed again, Auth sends the browser to the page with its refusal and
@@ -157,7 +157,7 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         var accepted = await api.AcceptInvitationAsync(link.Token, displayName: "Lark", Cancellation);
         accepted.Succeeded.Should().BeTrue("the API answered {0}", accepted.RawBody);
         (await api.SeatsOfMineAsync(CallAs.Person(address, arrived.AccessToken), Cancellation)).Value!
-            .Should().ContainSingle().Which.Seat.Id.Should().Be(accepted.Value!.SeatId);
+            .Should().ContainSingle().Which.Seat.Id.Should().Be(accepted.Value!.Seat.Id);
 
         // The mail that went unanswered lets nobody in any more: Auth's newer link took its place.
         var stale = AuthLink.Read(await auth.LandingOfAsync(unanswered, Cancellation));

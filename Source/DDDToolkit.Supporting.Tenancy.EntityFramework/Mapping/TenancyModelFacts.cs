@@ -54,11 +54,14 @@ internal sealed class TenancyModelFacts
 
     private readonly string? _attributedBelowTheRoot;
 
+    private readonly string? _markedButUnscoped;
+
     private TenancyModelFacts(IModel model)
     {
         var unfiltered = new List<string>();
         var unscoped = new List<string>();
         var belowTheRoot = new List<string>();
+        var markedButUnscoped = new List<string>();
         var (ownTables, views) = (false, false);
         foreach (var entityType in model.GetEntityTypes())
         {
@@ -81,6 +84,11 @@ internal sealed class TenancyModelFacts
 
             if (entityType.FindAnnotation(TenancyMapping.TenantPropertyAnnotation) is null)
             {
+                if (entityType.BaseType is null && !entityType.IsOwned() && !entityType.HasSharedClrType && IsMarked(entityType.ClrType))
+                {
+                    markedButUnscoped.Add(entityType.DisplayName());
+                }
+
                 continue;
             }
 
@@ -94,6 +102,7 @@ internal sealed class TenancyModelFacts
         _unfiltered = unfiltered.Count == 0 ? null : string.Join(", ", unfiltered.Order(StringComparer.Ordinal));
         _attributedButUnscoped = unscoped.Count == 0 ? null : string.Join(", ", unscoped.Order(StringComparer.Ordinal));
         _attributedBelowTheRoot = belowTheRoot.Count == 0 ? null : string.Join(", ", belowTheRoot.Order(StringComparer.Ordinal));
+        _markedButUnscoped = markedButUnscoped.Count == 0 ? null : string.Join(", ", markedButUnscoped.Order(StringComparer.Ordinal));
         ReadsTenancysTablesThroughViews = views && !ownTables && !TenancyModel.ReadsThroughFunctions(model);
     }
 
@@ -179,7 +188,7 @@ internal sealed class TenancyModelFacts
             {
                 findings.Add(
                     $"{entityType.DisplayName()} has the property {property.Name}, which is no part of Tenancy's read model. The rows carry access facts only: "
-                    + "ids, permissions, periods and statuses, and never a name. Ask the directory for names, by id.");
+                    + "ids, permissions, periods and statuses, and never a name. Ask Tenancy's managers for names, by id.");
             }
 
             foreach (var navigation in entityType.GetNavigations().Cast<IReadOnlyNavigationBase>().Concat(entityType.GetSkipNavigations()))
@@ -241,7 +250,7 @@ internal sealed class TenancyModelFacts
 
     /// <summary>
     /// Throws when an entity type keeps who changed its rows and is not kept to a tenant. Who changed a row is
-    /// the Tenancy caller of the save, and only a save of a tenant's row is sure to have one: on any other row the
+    /// the Tenancy user of the save, and only a save of a tenant's row is sure to have one: on any other row the
     /// columns would be left blank, in silence.
     /// <para>
     /// Throws as well when such a type is stored in the table of the type it derives from, which does not keep
@@ -259,7 +268,7 @@ internal sealed class TenancyModelFacts
         {
             throw new InvalidOperationException(
                 "These entity types keep who changed their rows, with RecordsWhoChanged, but are not kept to a tenant: " + _attributedButUnscoped
-                + ". Who changed a row is the Tenancy caller of the save, which only a tenant's row is sure to have: call ScopeToTenant on the entity as well.");
+                + ". Who changed a row is the Tenancy user of the save, which only a tenant's row is sure to have: call ScopeToTenant on the entity as well.");
         }
 
         if (_attributedBelowTheRoot is not null)
@@ -269,6 +278,27 @@ internal sealed class TenancyModelFacts
                 + ". The other rows of that table would keep nothing: call RecordsWhoChanged on the type at the root of the hierarchy instead.");
         }
     }
+
+    /// <summary>
+    /// Throws when an entity type marks its tenant with <c>[OfTenant]</c> and is not kept to a tenant: the context
+    /// that maps it did not run <see cref="OfTenantConvention"/>, because its <c>ConfigureConventions</c> does not call
+    /// <c>AddDDDToolkitConventions()</c>. Its reads would see every tenant's rows and its writes would go unchecked.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">An entity type marks its tenant and has neither the tenant filter nor the save check.</exception>
+    public void RequireMarkedTypesAreScoped()
+    {
+        if (_markedButUnscoped is not null)
+        {
+            throw new InvalidOperationException(
+                "These entity types mark their tenant with [OfTenant] but are not kept to a tenant: " + _markedButUnscoped
+                + ". Call configurationBuilder.AddDDDToolkitConventions() in ConfigureConventions, which keeps them to the caller's tenant, or ScopeToTenant on each.");
+        }
+    }
+
+    /// <summary>Whether <paramref name="type"/> has a property marked <c>[OfTenant]</c>, its own or one it inherits.</summary>
+    private static bool IsMarked(Type type)
+        => type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Any(static property => property.IsDefined(typeof(OfTenantAttribute), inherit: false));
 
     /// <summary>Whether two entity types of one hierarchy are stored in the same table.</summary>
     private static bool SharesATable(IEntityType entityType, IEntityType parent)

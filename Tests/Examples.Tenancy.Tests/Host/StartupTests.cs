@@ -106,11 +106,11 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
             var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
             var toolkit = () => EntityFrameworkChecks.EnsureToolkitWired(context);
             var tenancy = () => TenancyChecks.EnsureWired(context);
-            var asCaller = () => PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
+            var asUser = () => PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
 
             toolkit.Should().NotThrow("{0} saves through the toolkit's interceptors, and its outbox and the history it keeps are in its model", contextType.Name);
             tenancy.Should().NotThrow("{0} keeps rows to a tenant, and UseDDDToolkit gave it Tenancy's save check after the toolkit's interceptors", contextType.Name);
-            asCaller.Should().NotThrow("{0} runs as its caller: the host registered row level security, and UseDDDToolkit put it on the context", contextType.Name);
+            asUser.Should().NotThrow("{0} runs as its caller: the host registered row level security, and UseDDDToolkit put it on the context", contextType.Name);
 
             // Each module wrote UseDDDToolkit and nothing more: the toolkit's interceptors, then the caller on every
             // connection, then Tenancy's save check, each once, in that order.
@@ -131,14 +131,14 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
         // Tenancy's generator collected into the host. The program that exports has no host, and Tenancy's package
         // builds it there from what the sample marks: the part marked [TenancyCatalogue] and every list marked
         // [TenancyPermissions]. Policies written from another catalogue than the host's would let other grants
-        // through than the application gives, so the two are held to the same permissions, packs and containment.
+        // through than the application gives, so the two are held to the same permissions, starter roles and containment.
         var running = (await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>();
         var exported = ExportedMarks.Tenancy().Catalogue;
 
         exported.Permissions.Select(permission => (permission.Name, permission.ManagesAccess, permission.Retired))
             .Should().BeEquivalentTo(running.Permissions.Select(permission => (permission.Name, permission.ManagesAccess, permission.Retired)));
-        exported.Packs.Select(pack => (pack.Key, Keys: string.Join(",", pack.Permissions.Order(StringComparer.Ordinal)), pack.Administers))
-            .Should().BeEquivalentTo(running.Packs.Select(pack => (pack.Key, Keys: string.Join(",", pack.Permissions.Order(StringComparer.Ordinal)), pack.Administers)));
+        exported.StarterRoles.Select(starterRole => (starterRole.Key, Keys: string.Join(",", starterRole.Permissions.Order(StringComparer.Ordinal)), starterRole.Administers))
+            .Should().BeEquivalentTo(running.StarterRoles.Select(starterRole => (starterRole.Key, Keys: string.Join(",", starterRole.Permissions.Order(StringComparer.Ordinal)), starterRole.Administers)));
         exported.ContainAccessManagingPermissions.Should().Be(running.ContainAccessManagingPermissions);
     }
 
@@ -251,7 +251,7 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
         }
 
         // And it is not only listed: a statement of a request passes through it.
-        using (SampleCallers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
         {
             added.WatchThisFlow();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(new VisibleProjects(), Cancellation);

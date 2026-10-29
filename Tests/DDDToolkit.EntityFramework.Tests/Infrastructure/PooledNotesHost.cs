@@ -21,7 +21,7 @@ public sealed class PooledContextPostgres : ICollectionFixture<SupabaseRowLevelS
 /// <summary>
 /// A host, in miniature, whose <see cref="NotesContext"/> comes from a context pool and runs under row level
 /// security: the options callback calls <c>UseDDDToolkit</c> and <c>UsePostgresRowLevelSecurity</c>, once, with
-/// the root provider, and every flow of work says who it runs as (<c>RequireExplicitCallers</c>). One
+/// the root provider, and every flow of work says who it runs as (<c>RequireExplicitCurrentUser</c>). One
 /// interceptor, one set of options and one settings provider serve every context of the pool, so whatever
 /// differs per caller has to be read per use.
 /// </summary>
@@ -35,8 +35,8 @@ public sealed class PooledNotesHost : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddDDDToolkitEntityFramework();
         services.AddPostgresRowLevelSecurity(options => options.SystemRole = SupabaseRowLevelSecurity.ServiceRole);
-        services.RequireExplicitCallers();
-        services.AddRowLevelSecuritySettings<TeamOfTheCaller>();
+        services.RequireExplicitCurrentUser();
+        services.AddRowLevelSecuritySettings<TeamOfTheUser>();
         services.AddPooledDbContextFactory<NotesContext>((provider, options) => options
             .UseNpgsql(connectionString)
             .UseDDDToolkit(provider)
@@ -48,9 +48,9 @@ public sealed class PooledNotesHost : IAsyncDisposable
     /// <summary>Rents from the pool, with no scope.</summary>
     public IDbContextFactory<NotesContext> Factory => _provider.GetRequiredService<IDbContextFactory<NotesContext>>();
 
-    /// <summary>A signed-in user, optionally in a team, which <see cref="TeamOfTheCaller"/> turns into a setting.</summary>
-    public static Caller User(Guid id, string? team = null)
-        => Callers.FromClaims(team is null
+    /// <summary>A signed-in user, optionally in a team, which <see cref="TeamOfTheUser"/> turns into a setting.</summary>
+    public static CurrentUserSnapshot User(Guid id, string? team = null)
+        => CurrentUserSnapshot.FromClaims(team is null
             ? $$"""{"sub":"{{id}}","role":"authenticated"}"""
             : $$"""{"sub":"{{id}}","role":"authenticated","team":"{{team}}"}""");
 
@@ -63,7 +63,7 @@ public sealed class PooledNotesHost : IAsyncDisposable
     {
         // SQL the tests write themselves; nothing in it comes from outside.
         var from = hold is { } time ? FormattableString.Invariant($" FROM pg_sleep({time.TotalSeconds:0.###})") : string.Empty;
-        var sql = $"""SELECT coalesce(auth.uid()::text, 'none') || '|' || current_user || '|' || coalesce(current_setting('{TeamOfTheCaller.Setting}', true), '') AS "Value"{from}""";
+        var sql = $"""SELECT coalesce(auth.uid()::text, 'none') || '|' || current_user || '|' || coalesce(current_setting('{TeamOfTheUser.Setting}', true), '') AS "Value"{from}""";
 
         return await context.Database.SqlQueryRaw<string>(sql).SingleAsync(cancellationToken);
     }
@@ -85,12 +85,12 @@ public sealed class PooledNotesHost : IAsyncDisposable
 /// A setting that follows the caller: the team their token names, or nothing. A singleton, like every
 /// settings provider, that keeps nothing between two calls.
 /// </summary>
-public sealed class TeamOfTheCaller : IRowLevelSecuritySettings
+public sealed class TeamOfTheUser : IRowLevelSecuritySettings
 {
     public const string Setting = "test.team";
 
     public IReadOnlyCollection<string> Names { get; } = [Setting];
 
-    public IEnumerable<KeyValuePair<string, string>> For(Caller caller)
-        => caller.Claim("team") is { } team ? [new(Setting, team)] : [];
+    public IEnumerable<KeyValuePair<string, string>> For(CurrentUserSnapshot caller)
+        => caller.FindClaim("team") is { } team ? [new(Setting, team)] : [];
 }

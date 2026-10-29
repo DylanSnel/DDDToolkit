@@ -17,7 +17,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// nothing: every rule of the apiary runs with exactly them, and whatever no rule allows is refused by the
 /// database before a policy is asked.
 /// </summary>
-public sealed class RowAccessPrivilegePostgresTests(ExplicitCallersPostgres postgres)
+public sealed class RowAccessPrivilegePostgresTests(ExplicitCurrentUserPostgres postgres)
 {
     private const string Hives = ApiaryContext.Schema + ".\"Hives\"";
 
@@ -93,7 +93,7 @@ public sealed class RowAccessPrivilegePostgresTests(ExplicitCallersPostgres post
         });
 
         // A visitor reads the open hives, and adds none: no rule lets a visitor write, so there is no privilege to.
-        await ApiaryDatabase.AsAsync(host, Caller.Anonymous, async context =>
+        await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.Anonymous, async context =>
         {
             (await context.Hives.Select(hive => hive.Number).ToListAsync(Cancellation)).Should().Equal(1);
             context.Hives.Add(new Hive(HiveId.CreateSequential(), number: 3, "A visitor's", keeper: null, isOpen: true));
@@ -120,7 +120,7 @@ public sealed class RowAccessPrivilegePostgresTests(ExplicitCallersPostgres post
         });
 
         // Scoped system work writes the inbox, as the handlers of integration events do, and reaches no hive.
-        await ApiaryDatabase.AsAsync(host, Caller.SystemIn("apiary"), async context =>
+        await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.SystemIn("apiary"), async context =>
         {
             context.Inbox.Add(new InboxMessage { MessageId = Guid.CreateVersion7(), Consumer = "apiary.test", ProcessedAt = DateTimeOffset.UtcNow });
             await context.SaveChangesAsync(Cancellation);
@@ -233,7 +233,7 @@ public sealed class RowAccessPrivilegePostgresTests(ExplicitCallersPostgres post
 
         // The same role, in a statement that goes around the processor: how a delivery went is its to write, the
         // event is not. An event nobody delivered yet would otherwise be whatever the last statement made of it.
-        await ApiaryDatabase.AsAsync(host, Caller.System, async context =>
+        await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.System, async context =>
         {
             (await ScalarAsync(context, """SELECT current_user::text AS "Value" """)).Should().Be(ApiaryDatabase.SystemRole);
 

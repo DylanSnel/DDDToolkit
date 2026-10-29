@@ -33,11 +33,11 @@ public sealed class DepotOwnFunctions : IRowAccessContribution
         return new RowAccessContributionResult(
         [
             new ContributedFunction(
-                DepotFunctions.CallerPorter.Name,
+                DepotFunctions.CurrentPorter.Name,
                 "",
                 "uuid",
                 $"SELECT p.{Column(porters, nameof(Porter.Id))} FROM {RowAccessModel.Table(porters)} p "
-                + $"WHERE p.{Column(porters, nameof(Porter.UserId))} = {{caller:uid}} AND p.{Column(porters, nameof(Porter.Active))}",
+                + $"WHERE p.{Column(porters, nameof(Porter.UserId))} = {{user:uid}} AND p.{Column(porters, nameof(Porter.Active))}",
                 SecurityDefiner: true),
             new ContributedFunction(
                 DepotFunctions.RolesWithPermission.Name,
@@ -53,7 +53,7 @@ public sealed class DepotOwnFunctions : IRowAccessContribution
                 "SETOF uuid",
                 $"SELECT path.{Column(paths, nameof(BayPath.BayId))} FROM {RowAccessModel.Table(holds)} held "
                 + $"JOIN {RowAccessModel.Table(paths)} path ON path.{Column(paths, nameof(BayPath.AboveId))} = held.{Column(holds, nameof(BayHold.BayId))} "
-                + $"WHERE held.{Column(holds, nameof(BayHold.PorterId))} = (SELECT {{fn:{DepotFunctions.CallerPorter}}}()) AND held.{Column(holds, nameof(BayHold.Permission))} = $1",
+                + $"WHERE held.{Column(holds, nameof(BayHold.PorterId))} = (SELECT {{fn:{DepotFunctions.CurrentPorter}}}()) AND held.{Column(holds, nameof(BayHold.Permission))} = $1",
                 SecurityDefiner: true),
         ],
         [],
@@ -77,14 +77,14 @@ public sealed class PostgresDepot : IDisposable
     private const string PlainTemplate = "depot_plain";
     private const string SecuredTemplate = "depot_secured";
 
-    private PostgresDepot(FilingDatabase database, bool asCaller)
+    private PostgresDepot(FilingDatabase database, bool asUser)
     {
         Database = database;
         Services = new DepotServices(
             options => options.UseNpgsql(database.ConnectionString),
             TimeProvider.System,
             services => services.AddPostgresRowLevelSecurity(),
-            wiring: asCaller ? null : (options, provider) => options.UseDDDToolkitCore(provider));
+            wiring: asUser ? null : (options, provider) => options.UseDDDToolkitCore(provider));
         Scenario = new DepotScenario(DateTimeOffset.UtcNow);
     }
 
@@ -135,16 +135,16 @@ public sealed class PostgresDepot : IDisposable
     /// </summary>
     /// <param name="server">The run's Postgres.</param>
     /// <param name="secured">Whether the access file is applied.</param>
-    /// <param name="asCaller">Whether the context runs every command as the caller, under the policies.</param>
+    /// <param name="asUser">Whether the context runs every command as the caller, under the policies.</param>
     /// <param name="seed">Whether the scenario is saved.</param>
-    public static async Task<PostgresDepot> CreateAsync(FilingPostgres server, bool secured = true, bool asCaller = false, bool seed = true)
+    public static async Task<PostgresDepot> CreateAsync(FilingPostgres server, bool secured = true, bool asUser = false, bool seed = true)
     {
         var database = await server.CreateDatabaseAsync(
             secured ? SecuredTemplate : PlainTemplate,
             (template, cancellationToken) => PrepareAsync(template, secured, cancellationToken),
             TestContext.Current.CancellationToken);
 
-        var depot = new PostgresDepot(database, asCaller);
+        var depot = new PostgresDepot(database, asUser);
         if (seed)
         {
             await depot.Scenario.SaveAsync(depot.Services);
@@ -155,7 +155,7 @@ public sealed class PostgresDepot : IDisposable
     }
 
     /// <summary>A session on the database as <paramref name="person"/>, past the application: what its own SQL would be answered.</summary>
-    public Task<CallerSession> SessionAsync(DepotPerson person) => CallerSession.BeginAsync(Database, person.Caller);
+    public Task<UserSession> SessionAsync(DepotPerson person) => UserSession.BeginAsync(Database, person.Caller);
 
     /// <summary>Runs <paramref name="sql"/> as the login role, which owns everything of the depot's.</summary>
     public Task ExecuteAsync(string sql) => FilingPostgres.ExecuteAsync(Database.ConnectionString, sql, TestContext.Current.CancellationToken);

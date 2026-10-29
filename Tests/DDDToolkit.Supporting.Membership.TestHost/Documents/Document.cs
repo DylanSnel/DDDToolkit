@@ -11,8 +11,8 @@ public sealed partial class DocumentShare;
 
 /// <summary>
 /// A document, shared with users: the first of the host's two kinds of resource with members. The aggregate is
-/// the host's own, declared as it always was. It keeps its owner and its shares, holds a member list over them,
-/// puts its own guard in front of every change, and raises its own events from what the member list answers.
+/// the host's own, declared as it always was. It keeps its owner and its shares, and writes its guard and its events
+/// in the hooks the generator declares, which the member manager, <c>DocumentShareManager</c>, calls around each change.
 /// </summary>
 [AggregateRoot<DocumentId>]
 public sealed partial class Document
@@ -50,57 +50,44 @@ public sealed partial class Document
     /// </summary>
     private static MembershipCodes Codes => DocumentRefusals.Membership;
 
+    /// <summary>
+    /// The way to the members the member manager takes, which the generator writes: the methods below, which the tests
+    /// set up their documents with, change the members through it as the manager does, so the hooks raise the events.
+    /// </summary>
+    private IMembershipResource<DocumentShare, UserId, NamedRole> Managed => this;
+
     /// <summary>Shares the document with a user, with no role yet.</summary>
-    public DocumentShare ShareWith(UserId with, MemberPeriod period, DateTimeOffset now, UserId? by)
-    {
-        RequireNotArchived();
-        var share = Members.Add(with, period, now, by);
-        RaiseDomainEvent(new DocumentShared(Id, with));
-        return share;
-    }
+    public DocumentShare ShareWith(UserId with, MemberPeriod period, DateTimeOffset now, UserId? by) => Managed.AddMember(with, null, period, now, by);
 
     /// <summary>Shares the document with a user in a role, both for the same period.</summary>
-    public DocumentShare ShareWith(UserId with, NamedRole role, MemberPeriod period, DateTimeOffset now, UserId? by)
-    {
-        RequireNotArchived();
-        var share = Members.Add(with, role, period, now, by);
-        RaiseDomainEvent(new DocumentShared(Id, with));
-        RaiseDomainEvent(new DocumentRoleGiven(Id, with, role));
-        return share;
-    }
+    public DocumentShare ShareWith(UserId with, NamedRole role, MemberPeriod period, DateTimeOffset now, UserId? by) => Managed.AddMember(with, role, period, now, by);
 
     /// <summary>Gives a user the document is shared with a role.</summary>
-    public MemberRole<UserId, NamedRole> GiveRole(UserId to, NamedRole role, MemberPeriod period, DateTimeOffset now, UserId? by)
-    {
-        RequireNotArchived();
-        var given = Members.GiveRole(to, role, period, now, by);
-        RaiseDomainEvent(new DocumentRoleGiven(Id, to, role));
-        return given;
-    }
+    public MemberRole<UserId, NamedRole> GiveRole(UserId to, NamedRole role, MemberPeriod period, DateTimeOffset now, UserId? by) => Managed.GiveRole(to, role, period, now, by);
 
     /// <summary>Takes a role from a user the document is shared with.</summary>
-    public void TakeRole(UserId from, NamedRole role)
-    {
-        RequireNotArchived();
-        Members.TakeRole(from, role);
-        RaiseDomainEvent(new DocumentRoleTaken(Id, from, role));
-    }
+    public void TakeRole(UserId from, NamedRole role) => Managed.TakeRole(from, role);
 
     /// <summary>Stops sharing the document with a user.</summary>
-    public void Unshare(UserId user)
-    {
-        RequireNotArchived();
-        Members.Remove(user);
-        RaiseDomainEvent(new DocumentUnshared(Id, user));
-    }
+    public void Unshare(UserId user) => Managed.RemoveMember(user);
 
-    /// <summary>Hands the document to another owner, and raises the host's events for everything that came with it.</summary>
-    public void HandOver(UserId to, FormerOwner<NamedRole> formerOwner, DateTimeOffset now)
-    {
-        RequireNotArchived();
-        var named = Members.NameOwner(to, formerOwner, now);
-        OwnerId = named.Owner;
+    /// <summary>Hands the document to another owner.</summary>
+    public void HandOver(UserId to, FormerOwner<NamedRole> formerOwner, DateTimeOffset now) => Managed.NameOwner(to, formerOwner, now);
 
+    /// <summary>The host's guard, which runs in front of every change of the members: the whole hook.</summary>
+    partial void OnChangingMembers() => RequireNotArchived();
+
+    partial void OnMemberAdded(DocumentShare member) => RaiseDomainEvent(new DocumentShared(Id, member.MemberId));
+
+    partial void OnMemberRemoved(UserId member) => RaiseDomainEvent(new DocumentUnshared(Id, member));
+
+    partial void OnRoleGiven(UserId member, MemberRole<UserId, NamedRole> role) => RaiseDomainEvent(new DocumentRoleGiven(Id, member, role.RoleId));
+
+    partial void OnRoleTaken(UserId member, MemberRole<UserId, NamedRole> role) => RaiseDomainEvent(new DocumentRoleTaken(Id, member, role.RoleId));
+
+    /// <summary>The host's events for everything that came with a hand-over.</summary>
+    partial void OnOwnerNamed(OwnerNamed<UserId, NamedRole> named)
+    {
         // What the new owner held on the list: it holds by owning now, so its roles go.
         foreach (var dropped in named.RolesDropped)
         {

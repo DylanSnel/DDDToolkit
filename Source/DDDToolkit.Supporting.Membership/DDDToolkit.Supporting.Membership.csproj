@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+    <!-- The markers for domain classes, [At] among them, so a project with Membership has them without a second reference. -->
+    <ProjectReference Include="..\DDDToolkit.Supporting.Membership.Abstractions\DDDToolkit.Supporting.Membership.Abstractions.csproj" />
   </ItemGroup>
 
   <!--

@@ -1,5 +1,3 @@
-using DDDToolkit.Supporting.Tenancy.Access;
-using DDDToolkit.Access;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
@@ -18,17 +16,13 @@ public sealed record RenameProjectRole(ProjectRoleId Id, string Name, string? De
     public const string RequiredPermission = ProjectRoleListing.ManageRolesPermission;
 }
 
-/// <summary>Handles <see cref="RenameProjectRole"/>: loads the role, renames it and saves.</summary>
+/// <summary>Handles <see cref="RenameProjectRole"/> with one call to the project role manager, which renames the role and saves.</summary>
 /// <remarks>
-/// Nothing of a package's stands between this command and the role, and nothing else asks who may send it, so the
-/// handler asks again what its request declared, of the very checks the pipeline asks. It then decides the same
-/// wherever it runs, in a program that left the module's access behavior out of the pipeline as much as in the
-/// host, for the check's statement a second time on a command that is sent rarely.
+/// The manager asks again who may: the permission the projects' rules name for their roles, held for the whole tenant,
+/// which the join with Tenancy answers.
 /// </remarks>
-/// <param name="store">Where project roles are loaded and saved.</param>
-/// <param name="membership">The projects' rules.</param>
-/// <param name="checks">The module's access checks, which hold a request to what it declared.</param>
-public sealed class RenameProjectRoleHandler(IProjectStore store, ProjectMembership membership, AccessChecks<IProjectsRequest> checks) : ICommandHandler<RenameProjectRole>
+/// <param name="roles">The project role manager.</param>
+public sealed class RenameProjectRoleHandler(ProjectRoleManager roles) : ICommandHandler<RenameProjectRole>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
@@ -38,12 +32,7 @@ public sealed class RenameProjectRoleHandler(IProjectStore store, ProjectMembers
     /// </exception>
     public async ValueTask<Unit> Handle(RenameProjectRole command, CancellationToken cancellationToken)
     {
-        await checks.RequireAsync(command, cancellationToken);
-
-        var role = await store.LoadRoleAsync(command.Id, cancellationToken) ?? throw ProjectRefusals.Refuse(ProjectRefusals.RoleNotFound);
-
-        role.RenameRole(command.Name, command.Description, membership.Rules);
-        await store.SaveAsync(cancellationToken);
+        await roles.RenameAsync(command.Id, command.Name, command.Description, cancellationToken);
         return Unit.Value;
     }
 }

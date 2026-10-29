@@ -150,6 +150,9 @@
   <data name="tenancy.operators-only" xml:space="preserve">
     <value>Only an operator can do this.</value>
   </data>
+  <data name="tenancy.tenant-mismatch" xml:space="preserve">
+    <value>This request names two different tenants.</value>
+  </data>
   <data name="tenancy.page-size-invalid" xml:space="preserve">
     <value>A page holds 1 to {Max} tenants.</value>
   </data>

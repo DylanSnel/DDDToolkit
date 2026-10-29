@@ -3,7 +3,7 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// <summary>The permissions Inspections asks for.</summary>
 /// <remarks>
 /// Kept in the module, not in a contracts project: no other module asks for them. The host names them when it
-/// builds the role packs, which a composition root may.
+/// builds the starter roles, which a composition root may.
 /// </remarks>
 public static class InspectionPermissionNames
 {

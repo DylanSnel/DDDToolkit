@@ -8,14 +8,14 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// [AccessFunction&lt;Project&gt;("projects.is_member")]
 /// public static partial class ProjectMembership
 /// {
-///     public static bool Allows(Project project, Caller caller)
-///         =&gt; project.Members.Any(member =&gt; member.UserId == caller.UserId);
+///     public static bool Allows(Project project, ICurrentUser user)
+///         =&gt; project.Members.Any(member =&gt; member.UserId == user.Id);
 /// }
 ///
 /// [RowAccess&lt;Project&gt;(RowOperations.Read)]
 /// public static partial class MembersSeeTheirProjects
 /// {
-///     public static bool Allows(Project project, Caller caller) =&gt; ProjectMembership.Allows(project, caller);
+///     public static bool Allows(Project project, ICurrentUser user) =&gt; ProjectMembership.Allows(project, user);
 /// }
 /// </code>
 /// </summary>
@@ -28,11 +28,11 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// class. The generator adds <c>Name</c>, and an <c>Allows(key)</c> a rule calls with a key rather than an
 /// aggregate, <c>ProjectMembership.Allows(task.ProjectId)</c>, which only the database can answer. Another
 /// module, which sees only this module's contracts, asks it through an
-/// <see cref="AccessFunctionContractAttribute{TKey}"/> there. <c>Allows(project, caller)</c> stays an
+/// <see cref="AccessFunctionContractAttribute{TKey}"/> there. <c>Allows(project, user)</c> stays an
 /// ordinary method, so C# asks the same question of an aggregate it holds.
 /// </para>
 /// <para>
-/// <c>Allows</c> may take more than the aggregate and the caller: strings, numbers, flags, <c>Guid</c>s and
+/// <c>Allows</c> may take more than the aggregate and the current user: strings, numbers, flags, <c>Guid</c>s and
 /// ids, which the function takes as parameters after the key, and a rule passes along with it:
 /// <c>ProjectMembership.Allows(task.ProjectId, "lead")</c>. With <see cref="Shape"/> set to
 /// <see cref="AccessFunctionShape.Set"/>, the function answers with the keys of every aggregate it allows,

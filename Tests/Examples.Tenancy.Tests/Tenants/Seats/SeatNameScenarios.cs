@@ -39,7 +39,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
 
         using (var renamed = await leo.PutAsJsonAsync($"/tenancy/seats/{Leo}/name", new { displayName = "  Leo Marsh  " }, Cancellation))
         {
-            renamed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            renamed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Who he is, the tenant's seats and the directory by id: each from the seat the directory read, with no read more.
@@ -82,7 +82,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
 
         using (var renamed = await ada.PutAsJsonAsync($"/tenancy/seats/{Leo}/name", new { displayName = "Leopold" }, Cancellation))
         {
-            renamed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            renamed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         (await ada.GetFromJsonAsync<JsonElement>("/tenancy/seats", Cancellation)).EnumerateArray()
@@ -112,14 +112,14 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
         using (var inMeadow = await host.ClientAsync("tove", meadow.Slug))
         using (var renamed = await inMeadow.PutAsJsonAsync($"/tenancy/seats/{tovesMeadowSeat}/name", new { displayName = "Tove of the meadow" }, Cancellation))
         {
-            renamed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            renamed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Her own seats are read across tenants, before one is picked, each with the name its tenant keeps, from the
         // seats the package read anyway; and never with her identity.
         using var tove = await host.ClientAsync("tove", tenant: null);
         var mine = (await tove.GetFromJsonAsync<JsonElement>("/me/seats", Cancellation)).EnumerateArray()
-            .ToDictionary(row => row.GetProperty("tenant").Text("slug")!, row => row.GetProperty("seat"));
+            .ToDictionary(row => row.Text("slug")!, row => row.GetProperty("seat"));
 
         mine.Keys.Should().BeEquivalentTo([Harbor.Slug, meadow.Slug]);
         mine[Harbor.Slug].Text("displayName").Should().Be(DemoPeople.Tove.Name);
@@ -129,8 +129,8 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
             .Should().BeEquivalentTo(["id", "displayName", "status"], "a seat is answered as every answer writes one, never with an identity");
 
         // GraphQL's picker answers the Seat every other field answers, with the same name.
-        var picked = (await tove.GraphQLDataAsync("{ seatsOfMine { tenant { slug } seat { id displayName status } } }")).GetProperty("seatsOfMine").EnumerateArray()
-            .ToDictionary(row => row.GetProperty("tenant").Text("slug")!, row => row.GetProperty("seat").Text("displayName"));
+        var picked = (await tove.GraphQLDataAsync("{ seatsOfMine { slug seat { id displayName status } } }")).GetProperty("seatsOfMine").EnumerateArray()
+            .ToDictionary(row => row.Text("slug")!, row => row.GetProperty("seat").Text("displayName"));
         picked.Should().BeEquivalentTo(new Dictionary<string, string?> { [Harbor.Slug] = DemoPeople.Tove.Name, [meadow.Slug] = "Tove of the meadow" });
     }
 }

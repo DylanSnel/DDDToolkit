@@ -18,7 +18,7 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "ddd-row-access-" + Guid.NewGuid().ToString("N"));
 
     private static readonly RowAccessRule ShelvesByName = RowAccessRule.For<SupabaseShelf>(
-        "Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {caller:claim:shelf})");
+        "Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {user:claim:shelf})");
 
     public void Dispose()
     {
@@ -94,7 +94,7 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
     public void A_changed_rule_is_a_new_file_and_the_old_one_stays_because_it_may_have_been_applied()
     {
         Export(rules: ShelvesByName);
-        var changed = RowAccessRule.For<SupabaseShelf>("Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {caller:claim:app_metadata.shelf})");
+        var changed = RowAccessRule.For<SupabaseShelf>("Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {user:claim:app_metadata.shelf})");
 
         var report = Export(now: new DateTimeOffset(2026, 9, 26, 9, 0, 0, TimeSpan.Zero), changed);
 
@@ -192,7 +192,7 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         sql.Should().Contain(
             "CREATE POLICY \"TicketComment (insert) for authenticated\" ON \"desk\".\"TicketComment\" FOR INSERT TO authenticated\n" +
             "    WITH CHECK (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (((SELECT auth.uid()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT auth.uid())))));",
-            "writing one asks the root's write rules, with Supabase's caller functions, about the root row");
+            "writing one asks the root's write rules, with Supabase's current user functions, about the root row");
         sql.Should().NotContain("FOR ALL TO anon, authenticated\n    USING (EXISTS", "no entity policy lets whoever reads the root write its entities");
         sql.Should().Contain("CREATE OR REPLACE FUNCTION \"ddd\".written_in_this_transaction(row_xmin xid)", "the access file brings what its policies ask");
         sql.Should().Contain("FOR UPDATE TO authenticated\n    USING (((SELECT auth.uid()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT auth.uid())))\n    WITH CHECK");
@@ -223,15 +223,15 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
     public void Custom_caller_functions_reach_every_policy_of_the_export()
     {
         using var context = DeskContext.Create();
-        var byRole = RowAccessRule.For<Ticket>("Scoped work reads by role", RowOperations.Read, "({caller:role} IS NOT NULL)", RowAccessRoles.SystemIn);
+        var byRole = RowAccessRule.For<Ticket>("Scoped work reads by role", RowOperations.Read, "({user:role} IS NOT NULL)", RowAccessRoles.SystemIn);
         var options = Options(null, [DeskRules.Owners, DeskRules.Teammates, DeskRules.Watchers, DeskRules.TeamFiles, byRole]);
         options.RowAccessFunctions.Add(DeskRules.IsWatcher);
-        options.CallerFunctions = new PostgresCallerFunctions("who.id()", "who.role()", "who.claims()");
+        options.CurrentUserFunctions = new PostgresCurrentUserFunctions("who.id()", "who.role()", "who.claims()");
 
         SupabaseMigrations.Export(context, _directory, options);
 
         var sql = File.ReadAllText(Directory.GetFiles(_directory, "*_access.*").Single());
-        sql.Should().NotContain("auth.", "none of Supabase's own caller functions is left");
+        sql.Should().NotContain("auth.", "none of Supabase's own current user functions is left");
         sql.Should().Contain("WHERE root.\"Id\" = $1 AND (EXISTS (SELECT 1 FROM \"desk\".\"TicketWatcher\" e1 WHERE e1.\"TicketId\" = root.\"Id\" AND ((e1.\"User\" IS NOT DISTINCT FROM (SELECT who.id()))))))", "the access function asks it too");
         sql.Should().Contain("FOR SELECT TO ddd_system_in\n    USING ((SELECT who.role()) IS NOT NULL);");
 
@@ -668,7 +668,7 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
     private static SpotContribution Shelving() => new("shelving", context => context is SupabaseShelfContext
         ? new(
             [new ContributedFunction("any_shelf", "", "boolean", $"SELECT EXISTS (SELECT 1 FROM {RowAccessModel.Table(SpotContribution.Of<SupabaseShelf>(context))})", SecurityDefiner: true, GrantTo: [RowAccessRoles.User])],
-            [new ContributedPolicy(SpotContribution.Of<SupabaseShelf>(context), "Shelves are read by the signed in", "SELECT", RowAccessRoles.User, "{caller:signedin}", null)],
+            [new ContributedPolicy(SpotContribution.Of<SupabaseShelf>(context), "Shelves are read by the signed in", "SELECT", RowAccessRoles.User, "{user:signedin}", null)],
             [])
         : null);
 

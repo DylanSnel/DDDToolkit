@@ -18,7 +18,7 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
     private static readonly SupabaseMigrationSource Shelves = SupabaseMigrationSource.For(() => SupabaseShelfContext.Create());
 
     private static readonly RowAccessRule ShelvesByName = RowAccessRule.For<SupabaseShelf>(
-        "Shelves by name", RowOperations.All, "({col:Name} IS NOT DISTINCT FROM {caller:claim:shelf})", RowAccessRoles.User);
+        "Shelves by name", RowOperations.All, "({col:Name} IS NOT DISTINCT FROM {user:claim:shelf})", RowAccessRoles.User);
 
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "ddd-privileges-" + Guid.NewGuid().ToString("N"));
 
@@ -56,7 +56,7 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
     private (int ExitCode, string Output) Build(RowAccessRule[] rules, string? roles = null, string? grants = null, string? force = null)
     {
         using var output = new StringWriter();
-        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], rules, [], [], _directory, start: null, roles, callerFunctions: null, grants, force, output);
+        var exitCode = SupabaseMigrationBuild.Run("Write", [Shelves], rules, [], [], _directory, start: null, roles, currentUserFunctions: null, grants, force, output);
         return (exitCode, output.ToString());
     }
 
@@ -216,7 +216,7 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
         // By hand, through either form: every file would make the role and refuse it where it is applied, since
         // service_role bypasses row level security. The build's system=service_role says another thing, below.
         var options = Options(options => options.Roles = options.Roles with { System = "service_role" }, ShelvesByName);
-        const string refused = "The bookkeeping role, Roles.System, is not one the access files can make. 'service_role' is one of Postgres's or Supabase's own roles.*Set it to null where the system caller runs as service_role, as system=service_role in SupabaseRowAccessRoles does, or name a role of the application's own, such as ddd_system.";
+        const string refused = "The bookkeeping role, Roles.System, is not one the access files can make. 'service_role' is one of Postgres's or Supabase's own roles.*Set it to null where system work runs as service_role, as system=service_role in SupabaseRowAccessRoles does, or name a role of the application's own, such as ddd_system.";
         ((Action)(() => Export(options))).Should().Throw<InvalidOperationException>().WithMessage(refused);
         ((Action)(() => SupabaseMigrations.Export([Shelves], _directory, options))).Should().Throw<InvalidOperationException>().WithMessage(refused);
         Directory.Exists(_directory).Should().BeFalse("nothing is written for a role no file could make");
@@ -249,7 +249,7 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
 
         exitCode.Should().Be(0, output);
         output.Should().StartWith("warning : SupabaseRowAccessGrants is None, so no access file makes the bookkeeping role ddd_system")
-            .And.Contain("Add system=none to SupabaseRowAccessRoles where the system caller runs as the role the application logs in as");
+            .And.Contain("Add system=none to SupabaseRowAccessRoles where system work runs as the role the application logs in as");
         Build([ShelvesByName], roles: "system=ddd_system", grants: "None").Output.Should().NotContain("warning", "a role the project names is one it makes itself");
         Build([ShelvesByName], roles: "system=none", grants: "None").Output.Should().NotContain("warning");
         Build([ShelvesByName]).Output.Should().NotContain("warning", "the files that write the privileges make the role");

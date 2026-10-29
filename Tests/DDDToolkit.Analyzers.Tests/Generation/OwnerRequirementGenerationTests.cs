@@ -65,11 +65,11 @@ public class OwnerRequirementGenerationTests
         """;
 
     /// <summary>The application's handle of its own user id, beside the requests, where the generator sees it.</summary>
-    internal const string CallersUser =
+    internal const string CurrentUserId =
         """
-        public sealed class CallersUser : ICallersOwn<UserId>
+        public sealed class CurrentUserId : IOwnedByCurrentUser<UserId>
         {
-            public UserId? Find(DDDToolkit.Abstractions.Access.Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+            public UserId? Find(DDDToolkit.Abstractions.Access.ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
         }
 
         """;
@@ -109,7 +109,7 @@ public class OwnerRequirementGenerationTests
     public void The_owner_alone_of_a_board_is_owner_of_the_board_its_request_names()
     {
         var result = Module(
-            CallersUser
+            CurrentUserId
             + """
               [OwnOnly]
               public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;
@@ -133,7 +133,7 @@ public class OwnerRequirementGenerationTests
     public void The_owner_or_the_key_is_any_of_the_two_the_owner_first()
     {
         var result = Module(
-            CallersUser
+            CurrentUserId
             + """
               [RequiresPermission("boards.manage")]
               public sealed record RenameBoard([OrOwn] BoardId Board, string Name) : IBillingRequest;
@@ -172,14 +172,14 @@ public class OwnerRequirementGenerationTests
     [Fact]
     public void The_own_of_the_id_itself_wins_over_the_owner_of_its_aggregate()
     {
-        // An ICallersOwn of the id's own reads nothing, and says the caller's own of the id first: the line compares the
+        // An IOwnedByCurrentUser of the id's own reads nothing, and says the caller's own of the id first: the line compares the
         // id, documented as the choice, and the owner the board marks is not read.
         var result = OverTheDomain(
-            CallersUser
+            CurrentUserId
             + """
-              public sealed class CallersBoard : ICallersOwn<BoardId>
+              public sealed class CurrentBoard : IOwnedByCurrentUser<BoardId>
               {
-                  public BoardId? Find(DDDToolkit.Abstractions.Access.Caller caller) => null;
+                  public BoardId? Find(DDDToolkit.Abstractions.Access.ICurrentUser user) => null;
               }
 
               [OwnOnly]
@@ -242,7 +242,7 @@ public class OwnerRequirementGenerationTests
         // The lines of [Own] and [OrOwn] on an aggregate's id, and a call the project writes itself, once each; a seat
         // is the caller's own seat, no owner of anything, and a project that asks about none says nothing.
         var result = Module(
-            CallersUser
+            CurrentUserId
             + """
               [OwnOnly]
               public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;
@@ -276,7 +276,7 @@ public class OwnerRequirementGenerationTests
     [Fact]
     public void An_aggregate_of_a_project_the_requests_reference_is_read_as_one_of_their_own()
     {
-        var result = OverTheDomain(CallersUser + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;").RunCore();
+        var result = OverTheDomain(CurrentUserId + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;").RunCore();
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();

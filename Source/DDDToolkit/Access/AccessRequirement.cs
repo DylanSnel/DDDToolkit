@@ -22,7 +22,7 @@ namespace DDDToolkit.Access;
 ///     : TenancyAccess.AtTenant(BillingPermissions.Close);
 ///
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
-///     TenancyAccess.RequiresOperator(),
+///     TenancyAccess.Operator(),
 ///     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 /// </code>
 /// The cases spelled here are about who is calling, or combine other cases, so the core decides them, and a host
@@ -31,10 +31,11 @@ namespace DDDToolkit.Access;
 /// decides them, and a module adds cases of its own the same way. A record, so two requirements that say the same
 /// are equal, and a test can hold every request to the requirement it is meant to declare.
 /// <para>
-/// A requirement says who may send a request, never what the work runs with: the application's own work is
-/// no requirement but a scope, begun on purpose by trusted code around the work, <c>Callers.Begin(Caller.System)</c>
-/// or a supporting domain's own way such as Tenancy's <c>TenancyUseCases.BeginSystem()</c>, after which the caller
-/// before it is current again. And it says what is asked, never who may: it carries a permission and the ids the request
+/// A requirement says who may send a request. What the work runs with is begun on purpose. The application's own work
+/// is no requirement but a scope, begun by trusted code around the work with <c>access.BeginSystem(scope)</c> on
+/// <see cref="AccessManager"/>, or on a supporting domain's manager that derives from it, such as Tenancy's, after which
+/// the caller before it is current again. A check may begin work around the handler of a request it let through
+/// (<see cref="IBeginsWork"/>), as Tenancy's does for a command an operator sends. And it says what is asked, never who may: it carries a permission and the ids the request
 /// names, and the check reads the rest where it is kept. What a requirement cannot say is decided where it can
 /// be: in the handler, in plain sight; in the use case of the package the handler calls; and in the database's
 /// own row level security, which asks again for every row, as the caller.
@@ -67,7 +68,7 @@ public abstract partial record AccessRequirement
     public static Anyone AllowAnonymous() => new();
 
     /// <summary>
-    /// The caller is a signed-in user (<see cref="Abstractions.Access.Caller.IsSignedIn"/>), who need not hold
+    /// The caller is a signed-in user (<see cref="Abstractions.Access.ICurrentUser.IsAuthenticated"/>), who need not hold
     /// anything yet: accepting an invitation, listing the caller's own seats, registering a first tenant. Anyone
     /// else is refused with <see cref="Exceptions.ToolkitRefusals.NotSignedIn"/>: a caller who did not sign in,
     /// and the application's own work, which is nobody's sign-in. A request says it with
@@ -113,7 +114,7 @@ public abstract partial record AccessRequirement
     /// combine.
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
-    ///     TenancyAccess.RequiresOperator(),
+    ///     TenancyAccess.Operator(),
     ///     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
     /// </code>
     /// No attribute says it, since stacked attributes all hold: a request whose caller may be one or another says it
@@ -152,10 +153,10 @@ public abstract partial record AccessRequirement
     /// caller's own alone.
     /// </summary>
     /// <remarks>
-    /// What the caller's own value is, whoever knows says, with an <see cref="ICallersOwn{TValue}"/>: the core for a
+    /// What the caller's own value is, whoever knows says, with an <see cref="IOwnedByCurrentUser{TValue}"/>: the core for a
     /// <see cref="Guid"/>, the caller's verified identity, which is the id its token names; Tenancy for its seat id, the
     /// caller's seat in the tenant of the request; and the application for a type of its own, its own user id say,
-    /// with a small implementation it registers, <c>services.AddCallersOwn&lt;UserId, CallersUser&gt;()</c>. A value of
+    /// with a small implementation it registers, <c>services.AddOwnedByCurrentUser&lt;UserId, CurrentUserId&gt;()</c>. A value of
     /// a type nobody said that for lets nobody through: the request is stopped as one with a requirement no check
     /// decides.
     /// </remarks>
@@ -178,10 +179,10 @@ public abstract partial record AccessRequirement
     }
 
     /// <summary>
-    /// What <see cref="SignedIn"/> answers: a signed-in user. Decided by <see cref="CallerAccessCheck"/>, which
+    /// What <see cref="SignedIn"/> answers: a signed-in user. Decided by <see cref="CurrentUserAccessCheck"/>, which
     /// a set of checks registered with <c>AddAccessChecks</c> asks before the module's own.
     /// </summary>
-    [AccessCheckRegistration("services.AddAccessChecks<{TRequests}>(), which puts the core's CallerAccessCheck first in the module's set")]
+    [AccessCheckRegistration("services.AddAccessChecks<{TRequests}>(), which puts the core's CurrentUserAccessCheck first in the module's set")]
     public sealed record SignedInUser : AccessRequirement
     {
         /// <summary>Made by <see cref="SignedIn"/>, the one spelling a request writes.</summary>

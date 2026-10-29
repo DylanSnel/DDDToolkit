@@ -13,7 +13,7 @@ namespace Examples.Tenancy.Tests.Architecture;
 
 /// <summary>
 /// How a module declares its GraphQL schema, held to what HotChocolate offers, for every module from this one
-/// place: a type is declared over the record the application's queries answer with, a field that takes a read
+/// place: a type is declared over what the application's queries answer with, a field that takes a read
 /// of its own loads through a generated data loader and says what it weighs, a list pages as a connection with
 /// HotChocolate's own page sizes, and a class is marked <c>[QueryType]</c> only to hold a paged field. Nothing
 /// of that is written by hand a second time.
@@ -191,8 +191,9 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
             .Should().BeEmpty("no type of {0}'s schema is made from another by a mapping", module);
 
         // A class marked [ObjectType<T>] is static, is named after the type it declares, and declares it over T:
-        // an answer of the module's application project, a record of the Tenancy package where the module answers
-        // with those, or a reference to another module's entity, which is its key and nothing else.
+        // an answer of the module's application project; where the module answers with Tenancy's, one of Tenancy's
+        // classes or a record of the package's managers; or a reference to another module's entity, which is its key
+        // and nothing else.
         var objectTypes = (await SchemaOfAsync(module)).Types.OfType<ObjectType>().ToDictionary(type => type.Name, StringComparer.Ordinal);
         var declared = own.Select(type => (Class: type, Over: Declares(type))).Where(found => found.Over is not null).ToList();
 
@@ -211,7 +212,9 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
             }
             else
             {
-                Assembly[] answers = Held[module].AnswersOfThePackage ? [application, typeof(TenancyUseCases.PermissionReach).Assembly] : [application];
+                Assembly[] answers = Held[module].AnswersOfThePackage
+                    ? [application, SampleLayout.Project(module, Layer.Domain).Anchor.Assembly, typeof(SeatManager.PermissionReach).Assembly]
+                    : [application];
                 answers.Should().Contain(over.Assembly, "{0} is declared over what {1}'s application layer answers", typeClass.Name, module);
             }
         }
@@ -283,7 +286,10 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
     /// The types of its schema that are records of the API project itself, each with why it has no record of the
     /// application behind it.
     /// </param>
-    /// <param name="AnswersOfThePackage">Whether its application layer answers with records of the Tenancy package as well as its own.</param>
+    /// <param name="AnswersOfThePackage">
+    /// Whether its application layer answers with Tenancy's classes and the records of the package's managers as well as
+    /// its own.
+    /// </param>
     private sealed record Declared(
         string[] Loaders,
         string[] PagedFields,

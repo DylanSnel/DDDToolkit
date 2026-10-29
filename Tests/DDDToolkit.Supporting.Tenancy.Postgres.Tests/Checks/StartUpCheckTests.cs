@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
@@ -27,14 +28,14 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
     {
         await using (var registered = new ServiceCollection().AddPostgresRowLevelSecurity().AddTenancyPostgres().BuildServiceProvider())
         {
-            TenancyPostgresChecks.EnsureExplicitCallers(registered);
+            TenancyPostgresChecks.EnsureExplicitCurrentUser(registered);
         }
 
         // Options registered again after AddTenancyPostgres() shadow the ones it turned on.
-        await using (var shadowed = new ServiceCollection().AddPostgresRowLevelSecurity().AddTenancyPostgres().AddSingleton(new CallerOptions()).BuildServiceProvider())
+        await using (var shadowed = new ServiceCollection().AddPostgresRowLevelSecurity().AddTenancyPostgres().AddSingleton(new CurrentUserOptions()).BuildServiceProvider())
         {
-            FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCallers(shadowed))
-                .Should().Throw<InvalidOperationException>().WithMessage("*do not require explicit callers*");
+            FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCurrentUser(shadowed))
+                .Should().Throw<InvalidOperationException>().WithMessage("*do not require a begun user*");
         }
 
         // An interceptor made without the options, as one made by hand is, would log a caller that changes inside a
@@ -43,15 +44,15 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
                          .AddPostgresRowLevelSecurity()
                          .AddTenancyPostgres()
                          .AddSingleton(services => new PostgresRowLevelSecurityInterceptor(
-                             services.GetRequiredService<ICallerAccessor>(), services.GetRequiredService<PostgresRowLevelSecurityOptions>()))
+                             services.GetRequiredService<ICurrentUser>(), services.GetRequiredService<PostgresRowLevelSecurityOptions>()))
                          .BuildServiceProvider())
         {
-            FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCallers(handMade))
-                .Should().Throw<InvalidOperationException>().WithMessage("*interceptor was built without explicit callers*");
+            FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCurrentUser(handMade))
+                .Should().Throw<InvalidOperationException>().WithMessage("*interceptor was built without RequireExplicitCurrentUser*");
         }
 
         await using var withoutRowLevelSecurity = new ServiceCollection().AddTenancyPostgres().BuildServiceProvider();
-        FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCallers(withoutRowLevelSecurity))
+        FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCurrentUser(withoutRowLevelSecurity))
             .Should().Throw<InvalidOperationException>().WithMessage("Row level security is not registered*");
     }
 
@@ -285,17 +286,17 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await ConfinementFailsAsync(database, "scoped_as_the_owner", "*has the privileges of tenancy_app, which owns tables*REVOKE tenancy_app FROM scoped_as_the_owner*");
 
         // And for a function of Tenancy's that runs as its owner, which the anonymous role may execute.
-        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "GRANT EXECUTE ON FUNCTION tenancy.caller_seat() TO anon", Cancellation);
+        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "GRANT EXECUTE ON FUNCTION tenancy.current_seat() TO anon", Cancellation);
         await using var granted = new TenancyServices(database);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(granted.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*anon may execute \"tenancy\".caller_seat()*REVOKE EXECUTE*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*anon may execute \"tenancy\".current_seat()*REVOKE EXECUTE*");
 
         // And for each function that answers about other seats' rights, writes the rights, reads across tenants, or
         // takes the tenant as an argument, given to the anonymous role or to every role at once.
-        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "REVOKE EXECUTE ON FUNCTION tenancy.caller_seat() FROM anon", Cancellation);
+        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "REVOKE EXECUTE ON FUNCTION tenancy.current_seat() FROM anon", Cancellation);
         foreach (var function in new[]
                  {
-                     "\"tenancy\".tenant_administrators()", "\"tenancy\".permissions_a_move_changes(uuid,uuid)", "\"tenancy\".seats_holding_permission_at(text,uuid)",
+                     "\"tenancy\".tenant_administrators()", "\"tenancy\".permissions_a_unit_move_changes(uuid,uuid)", "\"tenancy\".seats_holding_permission_at(text,uuid)",
                      "\"tenancy\".rewrite_tenant_rights()", "\"tenancy\".rights_follow_grants()",
                      "\"tenancy\".role_permissions_in_use()", "\"tenancy\".tenants_to_sweep()", "\"tenancy\".seats_of_identity(uuid)",
                      "\"tenancy\".seat_in_tenant(bigint)", "\"tenancy\".seated_in_tenant(bigint)", "\"tenancy\".holds_permission_in_tenant(bigint,text)",
@@ -338,15 +339,15 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
                 "*permission_manages_access in the database was written from another catalogue*widget.create*marked [TenancyCatalogue]*where the project that runs the export sees it*",
                 "the way to export with the catalogue the host runs with is to mark it where the export finds it");
 
-        // A pack gains a permission, and the access file written with it is not applied yet.
+        // A starter role gains a permission, and the access file written with it is not applied yet.
         await using var wider = new TenancyServices(
             secured,
             catalogue: HostCatalogue.Application with
             {
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Permissions = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate] } : pack)],
+                StarterRoles = [.. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole.Key == HostCatalogue.WatcherStarterRole ? starterRole with { Permissions = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate] } : starterRole)],
             });
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(wider.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*pack_permissions in the database was written from another catalogue*watcher*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*starter_role_permissions in the database was written from another catalogue*watcher*");
 
         // The application retires a permission, and the access file written without it is not applied yet: the database would
         // go on writing rights for it.
@@ -355,10 +356,10 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
             catalogue: HostCatalogue.Application with
             {
                 Permissions = [.. HostCatalogue.Permissions.Select(permission => permission.Name == HostCatalogue.WidgetCreate ? permission with { Retired = true } : permission)],
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack with { Permissions = [.. pack.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
+                StarterRoles = [.. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole with { Permissions = [.. starterRole.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
             });
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(retired.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*pack_permissions in the database was written from another catalogue*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*starter_role_permissions in the database was written from another catalogue*");
         await TenancyPostgres.ExecuteAsync(secured.ConnectionString, "CREATE OR REPLACE FUNCTION tenancy.permission_is_live(permission text) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT true $$", Cancellation);
         await using (var services = new TenancyServices(secured))
         {
@@ -483,8 +484,8 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await TenancyPostgres.ExecuteAsync(
             database.ConnectionString,
             """
-            ALTER FUNCTION tenancy.caller_permissions() SET search_path = '';
-            ALTER FUNCTION tenancy.tenant_roles_with_permissions() SECURITY DEFINER;
+            ALTER FUNCTION tenancy.current_permissions() SET search_path = '';
+            ALTER FUNCTION tenancy.tenant_roles_with_starter_roles() SECURITY DEFINER;
             ALTER FUNCTION tenancy.tenant_units() STRICT;
             ALTER FUNCTION tenancy.tenant_unit_paths() VOLATILE;
             DROP FUNCTION tenancy.tenant_seats();
@@ -495,7 +496,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage(
                 "The functions of \"tenancy\" that modules read Tenancy through are not as Tenancy's contribution writes them: " +
-                $"caller_permissions{Changed}, tenant_roles_with_permissions{Changed}, tenant_seats (missing), tenant_unit_paths{Changed}, tenant_units{Changed}.*AddTenancyReadFunctions*");
+                $"current_permissions{Changed}, tenant_roles_with_starter_roles{Changed}, tenant_seats (missing), tenant_unit_paths{Changed}, tenant_units{Changed}.*AddTenancyReadFunctions*");
 
         // The access files applied again write each as it was: replacing a function takes its settings off as well.
         foreach (var script in TenancyPostgres.AccessScripts())

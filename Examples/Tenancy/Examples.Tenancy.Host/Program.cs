@@ -56,7 +56,7 @@ builder.Services.AddBrowserCors(browserOrigins);
 // pollers begin the system caller for their own bookkeeping only. With row level security this is what makes the
 // sample fail closed: work that named no caller is refused before its first command, rather than run as the role
 // the host logs in as.
-builder.Services.RequireExplicitCallers();
+builder.Services.RequireExplicitCurrentUser();
 
 // A malformed id or body throws, rather than answering an empty 400, so RefusalProblems answers it with a code
 // like every other refusal.
@@ -82,7 +82,7 @@ builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetim
 builder.Services.AddRequestTracing();
 
 // The modules, each through the one entry its API project has. Tenancy brings the application's catalogue with
-// it, and the other modules ask Tenancy's answers, so Tenancy comes first. Projects is given the starter project
+// it, and the other modules ask Tenancy, so Tenancy comes first. Projects is given the starter project
 // roles the application declares for its tenants' crews, which its rules are made with. Inspections asks
 // Projects' gate, so it follows Projects.
 builder.Services.AddTenantsModule(host, SampleCatalogue.Application);
@@ -144,13 +144,13 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.Criti
 // says what puts it right. A module added later brings its own, and no class of the host lists them.
 builder.Services.RunStartupChecks();
 
-// Once the host has started, in the background: every tenant's roles made from a pack follow that pack as the
-// catalogue has it now. A permission a module brings later reaches the flat tenants' Tenant admin, whose pack lists
-// none and so holds every permission, and a permission added to a pack reaches every role made from it; what a tenant
+// Once the host has started, in the background: every tenant's roles made from a starter role follow that starter role as the
+// catalogue has it now. A permission a module brings later reaches the flat tenants' Tenant admin, whose starter role lists
+// none and so holds every permission, and a permission added to a starter role reaches every role made from it; what a tenant
 // changed in a role itself stays. It is a call of its own and not a check, since it changes the tenants' roles. Each
-// role whose permissions change raises RoleFollowedItsPack, which the Tenants module keeps in the access history,
+// role whose permissions change raises RoleFollowedItsStarterRole, which the Tenants module keeps in the access history,
 // where the tenant's administrators read it on the History page; the host logs what the run did.
-builder.Services.SyncRolePacks();
+builder.Services.SyncStarterRoles();
 
 // Hosted services start in the order they are added, all of them after the checks above. With
 // Sample:SeedAuthUsers on, the demonstration people are made users of Supabase Auth first, under the ids their

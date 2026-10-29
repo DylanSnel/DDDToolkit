@@ -5,7 +5,7 @@ using Mediator;
 namespace Examples.Tenancy.Tenants.Application.Catalogue.Queries;
 
 /// <summary>
-/// Everything the application's catalogue lists: every permission and every role pack, for the screens that
+/// Everything the application's catalogue lists: every permission and every starter role, for the screens that
 /// make roles.
 /// </summary>
 /// <remarks>
@@ -17,10 +17,10 @@ public sealed record CatalogueContents : IQuery<CatalogueOverview>, ITenantsRequ
 
 /// <summary>The catalogue as a client reads it.</summary>
 /// <param name="Permissions">Every permission, retired ones included, in the catalogue's order.</param>
-/// <param name="Packs">Every role pack a tenant's roles are copied from.</param>
+/// <param name="StarterRoles">Every starter role a tenant's roles are copied from.</param>
 public sealed record CatalogueOverview(
     IReadOnlyList<PermissionOverview> Permissions,
-    IReadOnlyList<PackOverview> Packs);
+    IReadOnlyList<StarterRoleOverview> StarterRoles);
 
 /// <summary>A permission.</summary>
 /// <param name="Name">The permission, such as <c>projects.edit</c>.</param>
@@ -37,8 +37,8 @@ public sealed record PermissionOverview(
     bool Retired,
     bool ManagesAccess);
 
-/// <summary>A role pack.</summary>
-/// <param name="Key">The pack's key.</param>
+/// <summary>A starter role.</summary>
+/// <param name="Key">The starter role's key.</param>
 /// <param name="Permissions">The permissions a role copied from it holds.</param>
 /// <param name="Name">What a role copied from it is called.</param>
 /// <param name="Description">What the role is for.</param>
@@ -46,8 +46,8 @@ public sealed record PermissionOverview(
 /// The one shape of tenant that is given a copy, or <see langword="null"/> for every shape. It says which tenants
 /// get a role made from it, not a shape of the role.
 /// </param>
-/// <param name="Administers">Whether it is the administrators' pack.</param>
-public sealed record PackOverview(
+/// <param name="Administers">Whether it is the administrators' starter role.</param>
+public sealed record StarterRoleOverview(
     string Key,
     IReadOnlyList<string> Permissions,
     string Name,
@@ -74,5 +74,5 @@ public sealed class CatalogueContentsHandler(TenancyCatalogue catalogue, IFailur
                 permission.Implies ?? [],
                 permission.Retired,
                 permission.ManagesAccess))],
-            [.. catalogue.Packs.Select(pack => new PackOverview(pack.Key, pack.Permissions, pack.Name, pack.Description, pack.SeededFor, pack.Administers))]));
+            [.. catalogue.StarterRoles.Select(starterRole => new StarterRoleOverview(starterRole.Key, starterRole.Permissions, starterRole.Name, starterRole.Description, starterRole.SeededFor, starterRole.Administers))]));
 }

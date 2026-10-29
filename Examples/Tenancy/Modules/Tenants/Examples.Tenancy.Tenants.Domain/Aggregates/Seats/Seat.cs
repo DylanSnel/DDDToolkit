@@ -18,9 +18,9 @@ namespace Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 /// in the callback of the package's use case that makes it: the host's demo seeder in <c>ConfigureFirstSeat</c> when
 /// it provisions a tenant and in the <c>configure</c> of <c>AddSeatAsync</c>, and the module's
 /// <c>AcceptInvitation</c> in the <c>configure</c> of <c>AcceptAsync</c>, with the name the person gives. Renaming is
-/// the module's own command, <c>RenameSeat</c>, with its own rule. The package's directory, and its lookup of a
-/// person's own seats for the tenant picker, answer this class whole, and the module's queries select what they
-/// show of it into a <c>SeatListing</c>, so every answer shows the name with no read more.
+/// the module's own command, <c>RenameSeat</c>, with its own rule. The seat manager, and the package's lookup of a
+/// person's own seats for the tenant picker, answer this class whole. The module's routes and its GraphQL type show
+/// the name, the id and the status of it, so every answer shows the name with no read more.
 /// </para>
 /// <para>
 /// <b>Guarding the fields is this application's too.</b> In the database the package holds its own columns of the

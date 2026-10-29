@@ -51,9 +51,9 @@ public partial class Hub
 }
 
 /// <summary>The application's handle: the postman a caller is, by the id its token names.</summary>
-public sealed class CallersPostman : ICallersOwn<PostmanId>
+public sealed class CurrentPostman : IOwnedByCurrentUser<PostmanId>
 {
-    public PostmanId? Find(Caller caller) => caller.UserId is { } id ? new PostmanId(id) : null;
+    public PostmanId? Find(ICurrentUser user) => user.Id is { } id ? new PostmanId(id) : null;
 }
 
 /// <summary>What every request of the hub implements: the generator writes what each requires into it.</summary>
@@ -145,11 +145,11 @@ public sealed class AggregateOwnerTests : IDisposable
     {
         await using var host = Host();
 
-        await AskAsync(host, Caller.User(Ann), new DeliverLetter(AnnsLetter));
+        await AskAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(AnnsLetter));
 
-        (await RefusedAsync(host, Caller.User(Ann), new DeliverLetter(BobsLetter))).Code.Should().Be(ToolkitRefusals.NotOwn, "Bob carries it");
-        (await RefusedAsync(host, Caller.User(Ann), new DeliverLetter(NobodysLetter))).Code.Should().Be(ToolkitRefusals.NotOwn, "a letter nobody carries is nobody's");
-        var missing = await RefusedAsync(host, Caller.User(Ann), new DeliverLetter(NoLetter));
+        (await RefusedAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(BobsLetter))).Code.Should().Be(ToolkitRefusals.NotOwn, "Bob carries it");
+        (await RefusedAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(NobodysLetter))).Code.Should().Be(ToolkitRefusals.NotOwn, "a letter nobody carries is nobody's");
+        var missing = await RefusedAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(NoLetter));
         missing.Code.Should().Be(ToolkitRefusals.NotFound);
         missing.Kind.Should().Be(RefusalKind.NotFound);
     }
@@ -159,7 +159,7 @@ public sealed class AggregateOwnerTests : IDisposable
     {
         await using var host = Host();
 
-        await AskAsync(host, Caller.User(Ann), new DeliverLetter(AnnsLetter));
+        await AskAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(AnnsLetter));
 
         var statement = _statements.Read.Should().ContainSingle("one row is read, once").Subject;
         statement.Should().Contain("\"Postman\"").And.Contain("FROM \"Letters\"").And.Contain("LIMIT");
@@ -171,8 +171,8 @@ public sealed class AggregateOwnerTests : IDisposable
     {
         await using var host = Host();
 
-        (await RefusedAsync(host, Caller.Anonymous, new DeliverLetter(AnnsLetter))).Code.Should().Be(ToolkitRefusals.NotOwn);
-        (await RefusedAsync(host, Caller.System, new DeliverLetter(AnnsLetter))).Code.Should().Be(ToolkitRefusals.NotOwn, "the application's own work carries no letter");
+        (await RefusedAsync(host, CurrentUserSnapshot.Anonymous, new DeliverLetter(AnnsLetter))).Code.Should().Be(ToolkitRefusals.NotOwn);
+        (await RefusedAsync(host, CurrentUserSnapshot.System, new DeliverLetter(AnnsLetter))).Code.Should().Be(ToolkitRefusals.NotOwn, "the application's own work carries no letter");
         _statements.Read.Should().BeEmpty("nothing is sent for a caller who owns nothing");
     }
 
@@ -183,8 +183,8 @@ public sealed class AggregateOwnerTests : IDisposable
         services.AddDbContextFactory<LettersContext>((provider, options) => Configure(provider, options));
         await using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
-        await AskAsync(host, Caller.User(Ann), new DeliverLetter(AnnsLetter));
-        (await RefusedAsync(host, Caller.User(Bob), new DeliverLetter(AnnsLetter))).Code.Should().Be(ToolkitRefusals.NotOwn);
+        await AskAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(AnnsLetter));
+        (await RefusedAsync(host, CurrentUserSnapshot.User(Bob), new DeliverLetter(AnnsLetter))).Code.Should().Be(ToolkitRefusals.NotOwn);
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public sealed class AggregateOwnerTests : IDisposable
         await using var host = Host();
 
         var hub = HubId.Create();
-        (await FailedAsync(host, Caller.User(Ann), new CloseHub(hub)))
+        (await FailedAsync(host, CurrentUserSnapshot.User(Ann), new CloseHub(hub)))
             .WithMessage("'Hub', whose id is HubId, marks no property [Owner]*Mark the property that names its owner [Owner].");
     }
 
@@ -204,7 +204,7 @@ public sealed class AggregateOwnerTests : IDisposable
         services.AddDbContext<LettersReadContext>((provider, options) => options.UseSqlite(_database.Connection).UseDDDToolkit(provider));
         await using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
-        (await FailedAsync(host, Caller.User(Ann), new CloseHub(HubId.Create())))
+        (await FailedAsync(host, CurrentUserSnapshot.User(Ann), new CloseHub(HubId.Create())))
             .WithMessage("No context the host registered maps an aggregate whose id is HubId*register an IAggregateOwners<HubId>*");
     }
 
@@ -216,7 +216,7 @@ public sealed class AggregateOwnerTests : IDisposable
         services.AddDbContext<LettersReadContext>((provider, options) => options.UseSqlite(_database.Connection).UseDDDToolkit(provider));
         await using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
-        (await FailedAsync(host, Caller.User(Ann), new DeliverLetter(AnnsLetter)))
+        (await FailedAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(AnnsLetter)))
             .WithMessage("An aggregate whose id is LetterId is mapped more than once, 'Letter' by 'LettersContext' and 'Letter' by 'LettersReadContext'*");
     }
 
@@ -228,7 +228,7 @@ public sealed class AggregateOwnerTests : IDisposable
         services.AddScoped<IAggregateOwners<LetterId>, EverythingIsBobs>();
         await using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
-        await AskAsync(host, Caller.User(Bob), new DeliverLetter(AnnsLetter));
+        await AskAsync(host, CurrentUserSnapshot.User(Bob), new DeliverLetter(AnnsLetter));
         _statements.Read.Should().BeEmpty("the host's own reader read it");
     }
 
@@ -272,7 +272,7 @@ public sealed class AggregateOwnerTests : IDisposable
         await OwnersMapped(services).RunAsync(passing, Cancellation);
 
         // What the check found is what the requests use: the letter's owner is read, and nothing more is looked for.
-        await AskAsync(passing, Caller.User(Ann), new DeliverLetter(AnnsLetter));
+        await AskAsync(passing, CurrentUserSnapshot.User(Ann), new DeliverLetter(AnnsLetter));
         _statements.Read.Should().ContainSingle();
     }
 
@@ -294,7 +294,7 @@ public sealed class AggregateOwnerTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddDDDToolkitEntityFramework();
-        services.AddCallersOwn<PostmanId, CallersPostman>();
+        services.AddOwnedByCurrentUser<PostmanId, CurrentPostman>();
         services.AddAccessChecks<ILettersRequest>();
         return services;
     }
@@ -302,17 +302,17 @@ public sealed class AggregateOwnerTests : IDisposable
     private void Configure(IServiceProvider provider, DbContextOptionsBuilder options)
         => options.UseSqlite(_database.Connection).UseDDDToolkit(provider).AddInterceptors(_statements);
 
-    private static async Task AskAsync(IServiceProvider host, Caller caller, ILettersRequest request)
+    private static async Task AskAsync(IServiceProvider host, CurrentUserSnapshot caller, ILettersRequest request)
     {
         await using var scope = host.CreateAsyncScope();
-        using var running = Callers.Begin(caller);
+        using var running = TestAccess.BeginAs(caller);
         await scope.ServiceProvider.GetRequiredService<AccessChecks<ILettersRequest>>().RequireAsync(request, Cancellation);
     }
 
-    private static async Task<RefusalException> RefusedAsync(IServiceProvider host, Caller caller, ILettersRequest request)
+    private static async Task<RefusalException> RefusedAsync(IServiceProvider host, CurrentUserSnapshot caller, ILettersRequest request)
         => (await FluentActions.Awaiting(() => AskAsync(host, caller, request)).Should().ThrowAsync<RefusalException>()).Which;
 
-    private static async Task<FluentAssertions.Specialized.ExceptionAssertions<InvalidOperationException>> FailedAsync(IServiceProvider host, Caller caller, ILettersRequest request)
+    private static async Task<FluentAssertions.Specialized.ExceptionAssertions<InvalidOperationException>> FailedAsync(IServiceProvider host, CurrentUserSnapshot caller, ILettersRequest request)
         => await FluentActions.Awaiting(() => AskAsync(host, caller, request)).Should().ThrowAsync<InvalidOperationException>("a request whose owner cannot be read lets nobody through");
 
     /// <summary>A reader of the host's own: every hive is nobody's.</summary>

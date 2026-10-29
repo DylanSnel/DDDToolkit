@@ -31,7 +31,7 @@ public sealed class CombinedRequirementsUnderTheHoldTests
         var data = filing.Scenario;
 
         // Dee is a member of the minutes with no role: she sees them, and does not hold the permission that shares them.
-        await filing.Services.SendAsync(TestCallers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee));
+        await filing.Services.SendAsync(TestUsers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee));
 
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Dee);
     }
@@ -43,10 +43,10 @@ public sealed class CombinedRequirementsUnderTheHoldTests
         var data = filing.Scenario;
 
         // Ada owns the minutes, so she holds every permission on them.
-        await filing.Services.SendAsync(TestCallers.User(data.Ada), new LeaveDocument(data.Minutes, data.Cy));
+        await filing.Services.SendAsync(TestUsers.User(data.Ada), new LeaveDocument(data.Minutes, data.Cy));
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Cy);
 
-        var refused = (await FluentActions.Awaiting(() => filing.Services.SendAsync(TestCallers.User(data.Dee), new LeaveDocument(data.Minutes, data.Ben)))
+        var refused = (await FluentActions.Awaiting(() => filing.Services.SendAsync(TestUsers.User(data.Dee), new LeaveDocument(data.Minutes, data.Ben)))
             .Should().ThrowAsync<RefusalException>()).Which;
         refused.Code.Should().Be(ToolkitRefusals.Refused);
         ((IReadOnlyList<RefusalReason>)refused.Arguments[ToolkitRefusals.ReasonsArgument]!).Select(reason => reason.Code)
@@ -64,12 +64,12 @@ public sealed class CombinedRequirementsUnderTheHoldTests
         // Somebody changes the minutes after Dee read them.
         await filing.Services.ChangeAsync(data.Minutes, minutes => minutes.Unshare(data.Eve));
 
-        var lost = await FluentActions.Awaiting(() => filing.Services.SendAsync(TestCallers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee, ExpectedVersion: read)))
+        var lost = await FluentActions.Awaiting(() => filing.Services.SendAsync(TestUsers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee, ExpectedVersion: read)))
             .Should().ThrowAsync<ConcurrencyConflictException>("the door compares the version on the way the caller comes through, whichever it is");
         lost.Which.AggregateId.Should().Be(data.Minutes);
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Dee);
 
-        await filing.Services.SendAsync(TestCallers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee, ExpectedVersion: read + 1));
+        await filing.Services.SendAsync(TestUsers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee, ExpectedVersion: read + 1));
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Dee);
     }
 
@@ -80,7 +80,7 @@ public sealed class CombinedRequirementsUnderTheHoldTests
         var data = filing.Scenario;
 
         // Hal is a member of nothing: his own id he may name, and the minutes are not there for him either way.
-        var refused = (await FluentActions.Awaiting(() => filing.Services.SendAsync(TestCallers.User(data.Hal), new LeaveDocument(data.Minutes, data.Hal)))
+        var refused = (await FluentActions.Awaiting(() => filing.Services.SendAsync(TestUsers.User(data.Hal), new LeaveDocument(data.Minutes, data.Hal)))
             .Should().ThrowAsync<RefusalException>()).Which;
         ((IReadOnlyList<RefusalReason>)refused.Arguments[ToolkitRefusals.ReasonsArgument]!).Select(reason => reason.Code)
             .Should().Equal(DocumentRefusals.Membership[MembershipRefusals.NotFound], DocumentRefusals.Membership[MembershipRefusals.NotFound]);
@@ -96,7 +96,7 @@ public sealed class CombinedRequirementsUnderTheHoldTests
         await filing.Services.ChangeAsync(data.Budget, budget => budget.GiveRole(data.Ada, DocumentMembership.Manager, MemberPeriod.Open(data.Now.AddDays(-1)), data.Now, by: data.Ben));
 
         var command = new ShareOnBoth(data.Minutes, data.Budget, data.Hal);
-        await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
             await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
             Checked<MemberHold<DocumentId>>.FindAllInHand().Select(hold => hold.Resource).Should().Equal([data.Minutes, data.Budget], "one hold for each document the door read, in the order of the cases");
@@ -123,7 +123,7 @@ public sealed class CombinedRequirementsUnderTheHoldTests
 
         // Ada holds the permission on the minutes and only looks on at the budget: the first case passes, the second refuses.
         var command = new ShareOnBoth(data.Minutes, data.Budget, data.Hal);
-        await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
             await FluentActions.Awaiting(() => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation).AsTask())
                 .Should().ThrowAsync<RefusalException>();

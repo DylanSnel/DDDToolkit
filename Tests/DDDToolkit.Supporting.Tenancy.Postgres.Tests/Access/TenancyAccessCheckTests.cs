@@ -48,8 +48,8 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
         recorder.Clear();
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IHostRequest>(scoped, request));
         var asked = recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which;
-        asked.Caller!.UserId.Should().Be(Ada.Identity, "the statement runs as the person, under the policies");
-        asked.TenancyCaller.Should().Be(HostCaller.InSeat(Harbor, Ada.Seat));
+        asked.Caller!.Id.Should().Be(Ada.Identity, "the statement runs as the person, under the policies");
+        asked.TenancyUser.Should().Be(HostUser.InSeat(Harbor, Ada.Seat));
 
         // Seth manages seats at North, which is not the whole tenant.
         var refusal = await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, request)));
@@ -76,7 +76,7 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
 
         recorder.Clear();
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageEverySeat()));
-        recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which.Caller!.UserId.Should().Be(Ada.Identity);
+        recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which.Caller!.Id.Should().Be(Ada.Identity);
         (await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageEverySeat()))))
             .Arguments["Permission"].Should().Be(TenancyPermissions.SeatsManage);
 
@@ -99,7 +99,7 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
             database,
 
             // A module that only asks Tenancy declares none of its classes, and writes the four ids out.
-            configure: registered => registered.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IWidgetRequest, WidgetContext>(),
+            configure: registered => registered.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, IWidgetRequest, WidgetContext>(),
             contexts: options => options.AddInterceptors(recorder));
         var request = new OfWidgetsDeclaring(ManagesSeats);
 
@@ -107,7 +107,7 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IWidgetRequest>(scoped, request));
 
         var statement = recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which.Text;
-        statement.Should().Contain("tenancy." + TenancyFunctionNames.CallerPermissions + "(", "a module reads the caller's rights from the function that answers them");
+        statement.Should().Contain("tenancy." + TenancyFunctionNames.CurrentPermissions + "(", "a module reads the caller's rights from the function that answers them");
         statement.Should().NotContain(names.Of("SeatRights"), "and names no table of Tenancy's");
 
         var refusal = await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IWidgetRequest>(scoped, request)));
@@ -126,13 +126,13 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped =>
         {
             // The scope's own context, the unit of work of its commands, rented before the checks run.
-            var ofTheScope = scoped.Tenancy();
+            var ofTheScope = scoped.TenancyContext();
             recorder.Clear();
 
             await Task.WhenAll(RequireAsync<IHostRequest>(scoped, request), RequireAsync<IHostRequest>(scoped, request));
 
             recorder.Sent.Should().HaveCount(2, "two requests of one scope are checked side by side, each in one statement");
-            recorder.Sent.Should().OnlyContain(sent => sent.Caller!.UserId == Ada.Identity && Equals(sent.TenancyCaller, HostCaller.InSeat(Harbor, Ada.Seat)));
+            recorder.Sent.Should().OnlyContain(sent => sent.Caller!.Id == Ada.Identity && Equals(sent.TenancyUser, HostUser.InSeat(Harbor, Ada.Seat)));
             ofTheScope.ChangeTracker.Entries().Should().BeEmpty("a check never reads on the request's unit of work");
         });
 

@@ -14,7 +14,7 @@ public sealed class SupabaseMigrationOptions
 
     private RowAccessRoleNames _roles = SupabaseRowLevelSecurity.DefaultRoles;
 
-    private PostgresCallerFunctions _callerFunctions = SupabaseRowLevelSecurity.CallerFunctions;
+    private PostgresCurrentUserFunctions _currentUserFunctions = SupabaseRowLevelSecurity.CurrentUserFunctions;
 
     private string? _loginRole;
 
@@ -74,7 +74,7 @@ public sealed class SupabaseMigrationOptions
     /// <see cref="RowAccessRoleNames.System"/>, where one is set. <see cref="SupabaseRowLevelSecurity.DefaultRoles"/>
     /// by default, Supabase's <c>authenticated</c> and <c>anon</c>, <c>ddd_system_in</c>, and <c>ddd_system</c> for the
     /// bookkeeping, with no token role mapped: the roles <c>AddSupabaseRowLevelSecurity</c> switches to unless told
-    /// otherwise. Set <see cref="RowAccessRoleNames.System"/> to <see langword="null"/> where the system caller has no
+    /// otherwise. Set <see cref="RowAccessRoleNames.System"/> to <see langword="null"/> where system work has no
     /// bookkeeping role of the application's own, because it runs as the role the application logs in as or as
     /// <c>service_role</c>. The build takes them from the <c>SupabaseRowAccessRoles</c> property of the project that
     /// runs the export.
@@ -91,15 +91,15 @@ public sealed class SupabaseMigrationOptions
     }
 
     /// <summary>
-    /// How a policy asks about the caller: <see cref="SupabaseRowLevelSecurity.CallerFunctions"/> by default,
+    /// How a policy asks about the caller: <see cref="SupabaseRowLevelSecurity.CurrentUserFunctions"/> by default,
     /// <c>auth.uid()</c>, <c>auth.role()</c> and <c>auth.jwt()</c>. The build takes them from the
-    /// <c>SupabaseCallerFunctions</c> property of the project that runs the export.
+    /// <c>SupabaseCurrentUserFunctions</c> property of the project that runs the export.
     /// </summary>
     /// <exception cref="ArgumentNullException">Set to null.</exception>
-    public PostgresCallerFunctions CallerFunctions
+    public PostgresCurrentUserFunctions CurrentUserFunctions
     {
-        get => _callerFunctions;
-        set => _callerFunctions = value ?? throw new ArgumentNullException(nameof(value));
+        get => _currentUserFunctions;
+        set => _currentUserFunctions = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     /// <summary>

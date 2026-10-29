@@ -1,5 +1,6 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,13 +23,13 @@ public sealed class PooledContextTests
         var harbor = await services.ProvisionAsync("harbor");
         var orchard = await services.ProvisionAsync("orchard");
         var north = await services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        var operators = harbor.RolesByPack[HostCatalogue.OperatorPack];
+        var operators = harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
 
         // Every command in a scope of its own, whose context is one of the pool's.
         var rented = new List<DbContext>();
         Task<T> AsHarborsAdministrator<T>(Func<IServiceProvider, Task<T>> act) => services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
         {
-            var context = scoped.Tenancy();
+            var context = scoped.TenancyContext();
             context.IsPooled().Should().BeTrue();
             FluentActions.Invoking(() => TenancyChecks.EnsureWired(context)).Should().NotThrow("a pooled context is wired like any other");
             rented.Add(context);
@@ -36,7 +37,7 @@ public sealed class PooledContextTests
         });
 
         // A seat added, placed and given a role by Harbor's administrator, through the use cases.
-        var grace = await AsHarborsAdministrator(scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Grace")));
+        var grace = (await AsHarborsAdministrator(scoped => scoped.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Grace")))).Id;
         await AsHarborsAdministrator(async scoped =>
         {
             await scoped.Seats().PlaceAsync(grace, north, primary: true, Cancellation);
@@ -44,7 +45,7 @@ public sealed class PooledContextTests
         });
         await AsHarborsAdministrator(async scoped =>
         {
-            await scoped.Seats().GrantAsync(grace, north, operators, until: null, reason: null, Cancellation);
+            await scoped.Seats().GrantAsync(grace, operators, north, until: null, reason: null, Cancellation);
             return true;
         });
 
@@ -59,7 +60,7 @@ public sealed class PooledContextTests
         // And each save stored its events with what it changed.
         await using (var scope = services.Scope())
         {
-            var stored = await scope.ServiceProvider.Tenancy().Set<OutboxMessage>()
+            var stored = await scope.ServiceProvider.TenancyContext().Set<OutboxMessage>()
                 .Select(message => new { message.EventName, message.AggregateId })
                 .ToListAsync(Cancellation);
             stored.Where(message => message.AggregateId!.Contains(grace.Value.ToString(), StringComparison.OrdinalIgnoreCase))
@@ -112,10 +113,10 @@ public sealed class PooledContextTests
         // pool those are the services the pool's options were built with, and the context is the one AddScopedFromPool
         // binds to that scope: a second one of the pool, while the caller holds its own.
         await using var scope = services.Scope();
-        var asking = scope.ServiceProvider.Tenancy();
+        var asking = scope.ServiceProvider.TenancyContext();
 
         services.Commands.Reset();
-        var tenants = await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(asking, "widgets", Cancellation);
+        var tenants = await scope.ServiceProvider.Access().TenantsToSweepAsync("widgets", Cancellation);
 
         tenants.Should().BeEquivalentTo([harbor.Tenant, orchard.Tenant]);
         var read = services.Commands.Sent.Should().ContainSingle("the read is one query").Which;
@@ -131,17 +132,17 @@ public sealed class PooledContextTests
     {
         // A database with a tenant in it, made by services of the usual kind.
         using var database = new SqliteDatabase();
-        HostTenancy.ProvisionedTenant harbor;
+        ProvisionedTenant harbor;
         using (var usual = new TestServices(database: database))
         {
             harbor = await usual.ProvisionAsync("harbor");
         }
 
-        // A context made with new: its options name no services of the application, so the read has none to make its
-        // own context from.
+        // A context made with new: its options name no services of the application, so a read across tenants has none to
+        // make its own context from. The start-up check's read says so.
         await using (var made = new TestTenancyContext(database.Options<TestTenancyContext>().Options))
         {
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(made, "widgets", Cancellation))
+            await FluentActions.Awaiting(() => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(made, TenancyCatalogue.Build(HostCatalogue.Application, []), Cancellation))
                 .Should().ThrowAsync<InvalidOperationException>()
                 .WithMessage("'TestTenancyContext' was not made by the application's services*AddDbContext<TestTenancyContext>*AddScopedFromPool<TestTenancyContext>()*");
         }
@@ -163,9 +164,9 @@ public sealed class PooledContextTests
         }
 
         await using (var provider = WithAPoolMadeByHand().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }))
-        await using (var taken = await provider.GetRequiredService<IDbContextFactory<TestTenancyContext>>().CreateDbContextAsync(Cancellation))
+        await using (var scope = provider.CreateAsyncScope())
         {
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(taken, "widgets", Cancellation))
+            await FluentActions.Awaiting(() => scope.ServiceProvider.Access().TenantsToSweepAsync("widgets", Cancellation))
                 .Should().ThrowAsync<InvalidOperationException>()
                 .WithMessage("No 'TestTenancyContext' is registered under its own type*AddDbContext<TestTenancyContext>*AddScopedFromPool<TestTenancyContext>()*");
         }
@@ -174,9 +175,9 @@ public sealed class PooledContextTests
         var registered = WithAPoolMadeByHand();
         registered.AddScopedFromPool<TestTenancyContext>();
         await using (var provider = registered.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }))
-        await using (var taken = await provider.GetRequiredService<IDbContextFactory<TestTenancyContext>>().CreateDbContextAsync(Cancellation))
+        await using (var scope = provider.CreateAsyncScope())
         {
-            (await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(taken, "widgets", Cancellation)).Should().Equal(harbor.Tenant);
+            (await scope.ServiceProvider.Access().TenantsToSweepAsync("widgets", Cancellation)).Should().Equal(harbor.Tenant);
         }
     }
 }

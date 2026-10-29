@@ -99,8 +99,8 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
         // System work in a tenant cannot leave it, and nobody without a seat asks what Tenancy answers about one.
         ["a function of Tenancy's the anonymous role may ask"] = (
-            $"GRANT EXECUTE ON FUNCTION {TenantsContext.Schema}.caller_seat() TO anon",
-            $"anon may execute {RowAccessModel.Schema(TenantsContext.Schema)}.caller_seat()",
+            $"GRANT EXECUTE ON FUNCTION {TenantsContext.Schema}.current_seat() TO anon",
+            $"anon may execute {RowAccessModel.Schema(TenantsContext.Schema)}.current_seat()",
             TenancyPostgresChecks.SystemInRoleConfinedCheck),
 
         // The few reads across tenants are the application's own, and no signed-in user's.
@@ -125,7 +125,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // A project's owner changes only for a seat that holds the permission that names one.
         ["no lock on a project's owner"] = (
             $"""DROP TRIGGER projects_owner_stays ON {ProjectsContext.Schema}."{ProjectsContext.ProjectsTable}" """,
-            "(its owner column is not held to the permission that locks the owner)",
+            "(its owner column is not held to the permission that names the owner)",
             MembershipPostgresChecks.FunctionsInPlaceCheck),
     };
 
@@ -174,6 +174,30 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await login.OpenAsync(Cancellation);
         (await RefusedAsync(login, "SELECT count(*) FROM projects.\"Projects\"")).Should().Be(PostgresErrorCodes.InsufficientPrivilege);
         (await RefusedAsync(login, "SELECT count(*) FROM tenancy.\"Seats\"")).Should().Be(PostgresErrorCodes.InsufficientPrivilege);
+    }
+
+    [Fact]
+    public async Task The_files_leave_no_function_procedure_or_trigger_under_a_name_that_says_caller()
+    {
+        await using var sample = await StartedAsync();
+
+        // Earlier access files made Tenancy's functions, the attribution trigger and the procedure that sets the user
+        // under names that said caller. Later access files make the same under the new names. The file written by
+        // hand after them drops what is left of the old ones.
+        var left = await sample.AsOwnerAsync<string>(
+            """
+            SELECT coalesce(string_agg(name, ', ' ORDER BY name), '') FROM (
+                SELECT n.nspname || '.' || p.proname AS name
+                FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname IN ('ddd', 'tenancy', 'projects', 'inspections') AND p.proname LIKE '%caller%'
+                UNION ALL
+                SELECT c.relname || '.' || t.tgname
+                FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+                WHERE NOT t.tgisinternal AND t.tgname LIKE '%caller%') named
+            """,
+            Cancellation);
+
+        left.Should().BeEmpty();
     }
 
     [Fact]
@@ -242,7 +266,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         using var asHana = await sample.Host.ClientAsync("hana", Harbor.Slug);
         using (var given = await asHana.PostAsJsonAsync($"/tenancy/seats/{leo}/grants", new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = observer }, Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent, await given.Content.ReadAsStringAsync(Cancellation));
+            given.StatusCode.Should().Be(HttpStatusCode.OK, await given.Content.ReadAsStringAsync(Cancellation));
         }
 
         // The seeding gave every role as system work, so the one grant a seat made is hers: the row's own columns
@@ -320,7 +344,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // Through the host it is the same role that reads: every tenant, and one tenant's projects.
         using var asOperator = await sample.Host.ClientAsync("orla", tenant: null);
         var tenants = await asOperator.GetFromJsonAsync<JsonElement>("/operations/tenants", Cancellation);
-        tenants.GetProperty("items").EnumerateArray().Select(tenant => tenant.Text("slug")).Should().Equal(Harbor.Slug, Meadow.Slug);
+        tenants.GetProperty("items").EnumerateArray().Select(listed => listed.GetProperty("tenant").Text("slug")).Should().Equal(Harbor.Slug, Meadow.Slug);
         (await asOperator.GetFromJsonAsync<JsonElement>($"/operations/tenants/{Meadow.Id.Value}/projects", Cancellation))
             .EnumerateArray().Names().Should().Equal("Garden shed");
 
@@ -342,7 +366,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await RunAsync(tove, $$"""
             SET ROLE authenticated;
             SELECT set_config('request.jwt.claims', '{"sub":"{{DemoPeople.Tove.Id}}","role":"authenticated"}', false);
-            SELECT set_config('tenancy.caller_tenant', '{{Harbor.Id.Value}}', false);
+            SELECT set_config('tenancy.current_tenant', '{{Harbor.Id.Value}}', false);
             """);
 
         async Task<(bool OnTheCrew, bool SeesThroughTheCrew)> AskAsync()
@@ -401,7 +425,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             await RunAsync(connection, $$"""
                 SET ROLE authenticated;
                 SELECT set_config('request.jwt.claims', '{"sub":"{{person.Id}}","role":"authenticated"}', false);
-                SELECT set_config('tenancy.caller_tenant', '{{Harbor.Id.Value}}', false);
+                SELECT set_config('tenancy.current_tenant', '{{Harbor.Id.Value}}', false);
                 """);
             return connection;
         }
@@ -615,7 +639,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             made.StatusCode.Should().Be(HttpStatusCode.Created, await made.Content.ReadAsStringAsync(Cancellation));
             var opener = (await made.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
             using var given = await ada.PostAsJsonAsync($"/tenancy/seats/{juno}/grants", new { unitId = northCoast, roleId = opener }, Cancellation);
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent, await given.Content.ReadAsStringAsync(Cancellation));
+            given.StatusCode.Should().Be(HttpStatusCode.OK, await given.Content.ReadAsStringAsync(Cancellation));
         }
 
         // Each statement is recorded as changed by Juno, which another trigger holds her to: what refuses below is a
@@ -681,7 +705,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
         async Task RenameAsync(DemoPerson by, string name)
         {
-            using (SampleCallers.BeginSeatOf(by, Harbor))
+            using (SampleUsers.BeginSeatOf(by, Harbor))
             {
                 await using var scope = sample.Host.Services.CreateAsyncScope();
                 var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
@@ -859,7 +883,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await RunAsync(connection, $$"""
             SET ROLE authenticated;
             SELECT set_config('request.jwt.claims', '{"sub":"{{DemoPeople.Vic.Id}}","role":"authenticated"}', false);
-            SELECT set_config('tenancy.caller_tenant', '{{Harbor.Id.Value}}', false);
+            SELECT set_config('tenancy.current_tenant', '{{Harbor.Id.Value}}', false);
             """);
 
         // He renames the project: editing is his.
@@ -1018,7 +1042,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             made.StatusCode.Should().Be(HttpStatusCode.Created, await made.Content.ReadAsStringAsync(Cancellation));
             var opener = (await made.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
             using var given = await ada.PostAsJsonAsync($"/tenancy/seats/{leo}/grants", new { unitId = northCoast, roleId = opener }, Cancellation);
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent, await given.Content.ReadAsStringAsync(Cancellation));
+            given.StatusCode.Should().Be(HttpStatusCode.OK, await given.Content.ReadAsStringAsync(Cancellation));
         }
 
         string Opening(string number, Guid owner) => $"""
@@ -1152,13 +1176,13 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         }
 
         // The toolkit's own bookkeeping, which is what the system caller is: the connections kept for the background.
-        using (Callers.Begin(Caller.System))
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             (await ApplicationNameAsync()).Should().Be("tenancy-background");
         }
 
         // Anyone else: the connections requests are answered on. Read at each rental, so the same factory serves both.
-        using (Callers.Begin(Caller.User(DemoPeople.Tove.Id)))
+        using (TestAccess.BeginAs(DemoPeople.Tove.Id))
         {
             (await ApplicationNameAsync()).Should().Be("tenancy-requests");
         }
@@ -1312,7 +1336,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         refused.Where(failure => CheckOf(failure) == SupabaseRowAccessChecks.RolesMatchAccessFilesCheck).Select(failure => failure.Message)
             .Should().ContainSingle("the check stops the start before the switch check would, on a role that is missing, and the host gave up with {0}", Described(refused))
             .Which.Should().Contain(
-                "- the system caller: the files give the outbox, the inbox and the migration history to ddd_system, and this host's system caller runs as the role it logs in as. " +
+                "- system work: the files give the outbox, the inbox and the migration history to ddd_system, and this host's system work runs as the role it logs in as. " +
                 "Fix: system=ddd_system in this host's SupabaseRowAccessRoles, or options.SystemRole = \"ddd_system\" in its code; or system=none in SupabaseRowAccessRoles of the project that exports.\n" +
                 $"- the token role '{SampleTokenRoles.Operator}': the policies are for {SampleTokenRoles.Operator}, and this host runs it as tenancy_reader. " +
                 $"Fix: token:{SampleTokenRoles.Operator}={SampleTokenRoles.Operator} in this host's SupabaseRowAccessRoles, or options.TokenRoles[\"{SampleTokenRoles.Operator}\"] = \"{SampleTokenRoles.Operator}\" in its code; or token:{SampleTokenRoles.Operator}=tenancy_reader in SupabaseRowAccessRoles of the project that exports.");
@@ -1362,7 +1386,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await RunAsync(connection, $$"""
             SET ROLE authenticated;
             SELECT set_config('request.jwt.claims', '{"sub":"{{person.Id}}","role":"authenticated"}', false);
-            SELECT set_config('tenancy.caller_tenant', '{{tenant.Id.Value}}', false);
+            SELECT set_config('tenancy.current_tenant', '{{tenant.Id.Value}}', false);
             """);
         return connection;
     }

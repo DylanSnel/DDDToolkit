@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// [RowAccess&lt;Report&gt;(RowOperations.Read, To = [RowAccessRoles.User])]
 /// public static partial class ReportsAreReadWhereThePermissionIsHeld
 /// {
-///     public static bool Allows(Report report, Caller caller)
+///     public static bool Allows(Report report, ICurrentUser user)
 ///         =&gt; TenancyRowAccess.UnitsWhereIHold&lt;OrganizationUnitId&gt;("reports.read").Contains(report.UnitId);
 /// }
 /// </code>
@@ -19,7 +19,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// Only the database answers them: the SQL functions of the same names, which
 /// <c>DDDToolkit.Supporting.Tenancy.Postgres</c> writes into the schema of the context that maps Tenancy's
 /// tables, for the caller whose identity and tenant the connection carries. Called in C#, each throws. In C#,
-/// ask <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}"/>, which gives the same answers to a
+/// ask <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}"/>, which gives the same answers to a
 /// seat.
 /// </para>
 /// <para>
@@ -32,8 +32,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </para>
 /// <para>
 /// The same questions say who reads Tenancy's own seats and invitations, where the application replaces Tenancy's
-/// default with a read rule on its class: <c>seat.TenantId == CallerTenant&lt;TenantId&gt;()</c> for the caller's
-/// tenant, <c>seat.Id == CallerSeatId&lt;SeatId&gt;()</c> for the caller itself,
+/// default with a read rule on its class: <c>seat.TenantId == CurrentTenant&lt;TenantId&gt;()</c> for the caller's
+/// tenant, <c>seat.Id == CurrentSeatId&lt;SeatId&gt;()</c> for the caller itself,
 /// <c>UnitsWhereIHold&lt;OrganizationUnitId&gt;(permission).Contains(invitation.UnitId)</c> for where it holds a permission,
 /// <see cref="HoldsPermission"/> and <see cref="HoldsAtTenant"/>, and <see cref="SeatsInMyUnits{TSeatId}"/> for the
 /// seats placed where it is placed, or below.
@@ -58,7 +58,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// Every unit where the calling seat holds <paramref name="permission"/> now: the units it is held at, and every unit
-    /// below them. As <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.UnitsWhereIHold"/>.
+    /// below them. As <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.UnitsWhereIHold(string)"/>.
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     [AccessSet("units_where_i_hold_permission")]
@@ -67,7 +67,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// The units the calling seat belongs to: each unit it is placed in, and every unit below it. As
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.ReadableUnits"/>.
+    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.ReadableUnits"/>.
     /// </summary>
     [AccessSet("readable_units")]
     public static partial AccessSet<TUnitId> ReadableUnits<TUnitId>()
@@ -83,7 +83,7 @@ public static partial class TenancyRowAccess
     /// [RowAccess&lt;Seat&gt;(RowOperations.Read)]
     /// public static partial class MembersReadThePeopleOfTheirUnits
     /// {
-    ///     public static bool Allows(Seat seat, Caller caller) =&gt; TenancyRowAccess.SeatsInMyUnits&lt;SeatId&gt;().Contains(seat.Id);
+    ///     public static bool Allows(Seat seat, ICurrentUser user) =&gt; TenancyRowAccess.SeatsInMyUnits&lt;SeatId&gt;().Contains(seat.Id);
     /// }
     /// </code>
     /// </summary>
@@ -93,7 +93,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// The active roles of the caller's tenant that grant <paramref name="permission"/>. As
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.RolesWithPermission"/>.
+    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.RolesWithPermission(string)"/>.
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     [AccessSet("roles_with_permission")]
@@ -103,10 +103,10 @@ public static partial class TenancyRowAccess
     /// <summary>
     /// The id of the calling seat: the active seat of the caller's verified identity in the tenant the connection
     /// names, when that tenant is active too; <c>NULL</c> otherwise. A rule of any module asks it, also one whose
-    /// context does not map the seats: <c>inspection.RecordedBy == TenancyRowAccess.CallerSeatId&lt;SeatId&gt;()</c>.
+    /// context does not map the seats: <c>inspection.RecordedBy == TenancyRowAccess.CurrentSeatId&lt;SeatId&gt;()</c>.
     /// </summary>
-    [AccessScalar("caller_seat")]
-    public static partial TSeatId CallerSeatId<TSeatId>()
+    [AccessScalar("current_seat")]
+    public static partial TSeatId CurrentSeatId<TSeatId>()
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>;
 
     /// <summary>
@@ -115,25 +115,25 @@ public static partial class TenancyRowAccess
     /// [RowAccess&lt;Organization&gt;(RowOperations.Read, Restrictive = true)]
     /// public static partial class OnlyEmployeesReadTheOrganization
     /// {
-    ///     public static bool Allows(Organization organization, Caller caller)
-    ///         =&gt; TenancyRowAccess.CallerSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
+    ///     public static bool Allows(Organization organization, ICurrentUser user)
+    ///         =&gt; TenancyRowAccess.CurrentSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
     /// }
     /// </code>
-    /// A field is <c>(SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1)</c> in the policy, the column the model maps
+    /// A field is <c>(SELECT q1."Kind" FROM "tenancy".current_seat_row() q1)</c> in the policy, the column the model maps
     /// it to; an enum or a value object compared with it is written as that column stores it. The function runs as its
     /// owner, so a rule on the seats themselves may read it too, and a seat reads its own fields whatever a read rule
     /// on the seats says. For a caller without a seat it answers no row, so every field is <c>NULL</c>, and a
     /// comparison with one is SQL's own: such a caller never passes it, negated or not. Only a rule of the context that
-    /// maps the seats can ask it; a rule of another module asks <see cref="CallerSeatId{TSeatId}"/>.
+    /// maps the seats can ask it; a rule of another module asks <see cref="CurrentSeatId{TSeatId}"/>.
     /// </summary>
     /// <typeparam name="TSeat">The application's seat class, the one declared with <c>[SeatAggregate]</c> (DDD00101 for another).</typeparam>
-    [AccessRow("caller_seat_row")]
-    public static partial TSeat CallerSeat<TSeat>()
+    [AccessRow("current_seat_row")]
+    public static partial TSeat CurrentSeat<TSeat>()
         where TSeat : class;
 
-    /// <summary>The tenant of <see cref="CallerSeatId{TSeatId}"/>; <c>NULL</c> when there is no such seat.</summary>
-    [AccessScalar("caller_tenant")]
-    public static partial TTenantId CallerTenant<TTenantId>()
+    /// <summary>The tenant of <see cref="CurrentSeatId{TSeatId}"/>; <c>NULL</c> when there is no such seat.</summary>
+    [AccessScalar("current_tenant")]
+    public static partial TTenantId CurrentTenant<TTenantId>()
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>;
 
     /// <summary>Whether the calling seat holds <paramref name="permission"/> now, at any unit.</summary>
@@ -143,7 +143,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// Whether the calling seat holds <paramref name="permission"/> now for the whole tenant: at its root. As
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.HoldsAtTenantAsync"/>.
+    /// <see cref="ITenancyQueries{TTenantId, TSeatId, TUnitId, TRoleId}.HoldsAtTenantAsync"/>.
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     [AccessScalar("holds_at_tenant")]
@@ -151,7 +151,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// The seat the caller's verified identity has in <paramref name="tenant"/>, while that seat and the tenant
-    /// are active; <c>NULL</c> otherwise. As <see cref="CallerSeatId{TSeatId}"/>, of a tenant given as an argument
+    /// are active; <c>NULL</c> otherwise. As <see cref="CurrentSeatId{TSeatId}"/>, of a tenant given as an argument
     /// rather than the one the connection names.
     /// </summary>
     /// <param name="tenant">The tenant asked about.</param>

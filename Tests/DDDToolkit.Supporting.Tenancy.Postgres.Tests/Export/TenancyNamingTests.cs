@@ -74,7 +74,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
             """;
 
         var snake = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, TenancyNaming.SnakeCase);
-        await using (var owner = await AsCaller.OwnerAsync(snake, Cancellation))
+        await using (var owner = await AsUser.OwnerAsync(snake, Cancellation))
         {
             var named = await owner.ListAsync<string>(Named, Cancellation);
             named.Should().HaveCountGreaterThan(100).And.Contain(["relation seat_rights", "column seat_role_grants.granted_by", "relation ix_seat_rights_seat_id_permission", "constraint pk_seat_role_grants"]);
@@ -83,7 +83,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
 
         // The same question finds the capitals of the default names, so an empty answer above says something.
         var plain = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
-        await using var plainOwner = await AsCaller.OwnerAsync(plain, Cancellation);
+        await using var plainOwner = await AsUser.OwnerAsync(plain, Cancellation);
         (await plainOwner.ListAsync<string>(Named, Cancellation)).Should().Contain(["relation SeatRights", "column SeatRoleGrants.GrantedBy"]);
     }
 
@@ -102,7 +102,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         // In the database: the seeded rows hold the snake_case text, the policies on them compare with it, and a
         // module is still answered the names.
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, TenancyNaming.SnakeCase);
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>("SELECT DISTINCT \"Status\" FROM tenancy.\"Seats\" ORDER BY 1", Cancellation)).Should().Equal("active", "suspended");
         (await owner.ListAsync<string>("SELECT DISTINCT \"Status\" || ' ' || \"Shape\" FROM tenancy.\"Tenants\" ORDER BY 1", Cancellation)).Should().Equal("active hierarchical", "suspended hierarchical");
         (await owner.ListAsync<string>("SELECT DISTINCT \"Status\" FROM tenancy.tenant_seats() ORDER BY 1", Cancellation)).Should().Equal("Active", "Suspended");
@@ -113,7 +113,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
 
         // The application reads and writes through the same converters: Sue is suspended, as the use cases left her.
         await using var services = new TenancyServices(database);
-        (await services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<HostSeat>().Where(seat => seat.Status == SeatStatus.Suspended).Select(seat => seat.Id).ToListAsync(Cancellation)))
+        (await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostSeat>().Where(seat => seat.Status == SeatStatus.Suspended).Select(seat => seat.Id).ToListAsync(Cancellation)))
             .Should().Equal(Sue.Seat);
     }
 
@@ -145,7 +145,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         foreach (var names in new[] { TenancyNaming.Default, TenancyNaming.SnakeCase })
         {
             var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation, names);
-            await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+            await using var owner = await AsUser.OwnerAsync(database, Cancellation);
 
             // The two indexes with a condition, as Postgres made them from the tables' script.
             (await owner.ListAsync<string>("SELECT indexdef FROM pg_catalog.pg_indexes WHERE schemaname = 'tenancy' AND indexdef LIKE '% WHERE %' ORDER BY indexname", Cancellation))
@@ -172,7 +172,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         var secured = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, TenancyNaming.SnakeCase);
         await using (var services = new TenancyServices(secured))
         {
-            TenancyPostgresChecks.EnsureExplicitCallers(services.Provider);
+            TenancyPostgresChecks.EnsureExplicitCurrentUser(services.Provider);
             await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(services.Provider, Cancellation);
             await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(services.Provider, Cancellation);
             await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);
@@ -203,7 +203,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         await using var first = await factory.CreateDbContextAsync(Cancellation);
         await using var second = await factory.CreateDbContextAsync(Cancellation);
         await using var scope = requests.Scope();
-        var ofRequest = scope.ServiceProvider.Tenancy();
+        var ofRequest = scope.ServiceProvider.TenancyContext();
 
         second.Should().NotBeSameAs(first);
         second.Model.Should().BeSameAs(first.Model, "one model for every context of the pool");
@@ -220,8 +220,8 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         await using var widgets = await pooled.Provider.GetRequiredService<IDbContextFactory<WidgetContext>>().CreateDbContextAsync(Cancellation);
         widgets.Model.FindEntityType(typeof(Widget))!.GetTableName().Should().Be("widgets");
         var rights = widgets.Model.FindEntityType(typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>))!;
-        rights.GetFunctionName().Should().Be(TenancyFunctionNames.CallerPermissions);
-        var function = StoreObjectIdentifier.DbFunction(widgets.Model.FindDbFunction(TenancyFunctionNames.CallerPermissions)!.ModelName);
+        rights.GetFunctionName().Should().Be(TenancyFunctionNames.CurrentPermissions);
+        var function = StoreObjectIdentifier.DbFunction(widgets.Model.FindDbFunction(TenancyFunctionNames.CurrentPermissions)!.ModelName);
         rights.GetProperties().Select(property => property.GetColumnName(function)).Should().BeEquivalentTo(["TenantId", "SeatId", "UnitId", "RoleId", "Permission", "StartsAt", "EndsAt"]);
     }
 

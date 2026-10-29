@@ -23,7 +23,7 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
     private const string Timeout = """SELECT pg_catalog.current_setting('statement_timeout') AS "Value" """;
     private const string Slow = """SELECT pg_sleep(2)::text AS "Value" """;
 
-    private readonly CallerOfTheTest _caller = new();
+    private readonly UserOfTheTest _user = new();
     private readonly SentStatements _sent = new();
     private readonly string _pool = "timeout-" + Guid.NewGuid().ToString("N")[..12];
 
@@ -78,14 +78,14 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
         await using var dataSource = DataSource(RowLevelSecurityScope.Connection);
         await using var context = Context(dataSource, RowLevelSecurityScope.Connection);
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         (await context.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be("200ms");
 
         var slow = () => context.Database.SqlQueryRaw<string>(Slow).SingleAsync(Cancellation);
         (await slow.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.QueryCanceled, "57014: the statement was cancelled by its timeout");
 
         // Another kind, another timeout.
-        _caller.Current = Caller.Anonymous;
+        _user.Current = CurrentUserSnapshot.Anonymous;
         (await context.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be("100ms");
     }
 
@@ -96,11 +96,11 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
         await using var dataSource = DataSource(RowLevelSecurityScope.Connection);
         await using var context = Context(dataSource, RowLevelSecurityScope.Connection);
 
-        _caller.Current = Caller.SystemIn("tenancy");
+        _user.Current = CurrentUserSnapshot.SystemIn("tenancy");
         (await context.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be(LoginTimeout, "no timeout is configured for a scoped system caller");
 
         // A user whose token's role is on no list, and who runs as an anonymous caller, gets that caller's.
-        _caller.Current = Caller.User(Alice, role: "stranger");
+        _user.Current = CurrentUserSnapshot.User(Alice, role: "stranger");
         await using var lenient = Context(dataSource, RowLevelSecurityScope.Connection, options => options.UnknownTokenRole = UnknownTokenRole.Anonymous);
         (await lenient.Database.SqlQueryRaw<string>("""SELECT current_user || '|' || pg_catalog.current_setting('statement_timeout') AS "Value" """).SingleAsync(Cancellation))
             .Should().Be("anon|100ms");
@@ -115,10 +115,10 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
         await context.Database.OpenConnectionAsync(Cancellation);
         var backend = ((NpgsqlConnection)context.Database.GetDbConnection()).ProcessID;
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         (await context.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be("200ms");
 
-        _caller.Current = Caller.System;
+        _user.Current = CurrentUserSnapshot.System;
         (await context.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be(
             LoginTimeout, "a timeout never outlives the caller it was set for: the system is given the login role's own, not the user's and not none");
         ((NpgsqlConnection)context.Database.GetDbConnection()).ProcessID.Should().Be(backend, "on the very connection the user ran on");
@@ -138,7 +138,7 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
         await using var dataSource = DataSource(RowLevelSecurityScope.Connection);
         await using var context = Context(dataSource, RowLevelSecurityScope.Connection, settings: [new TenantSetting { Current = "north" }]);
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         (await context.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be("200ms");
 
         const string caller = "set_config('role'";
@@ -154,7 +154,7 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
         // Without any timeout configured the statement is what it always was.
         await using var untimed = new NotesContext(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql(dataSource)
-            .AddInterceptors(PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Connection))
+            .AddInterceptors(PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Connection))
             .Options);
         (await untimed.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be(LoginTimeout);
         _sent.Sent.Last(sent => sent.Contains(caller, StringComparison.Ordinal)).Should().EndWith("set_config('request.jwt.claim', '', false)");
@@ -166,7 +166,7 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Transaction);
         await using var context = Context(dataSource, RowLevelSecurityScope.Transaction);
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         // Outside a transaction, where the call in front of the command sets it.
         (await context.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be("200ms");
@@ -184,7 +184,7 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
         await ShouldHaveTheLoginTimeoutAsync(dataSource);
 
         // A kind without one sets nothing: the transaction runs under what the session has.
-        _caller.Current = Caller.SystemIn("tenancy");
+        _user.Current = CurrentUserSnapshot.SystemIn("tenancy");
         (await context.Database.SqlQueryRaw<string>(Timeout).SingleAsync(Cancellation)).Should().Be(LoginTimeout);
 
         async Task ShouldHaveTheLoginTimeoutAsync(NpgsqlDataSource source)
@@ -207,14 +207,14 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
     [MemberData(nameof(NotATimeout))]
     public void A_timeout_is_at_least_a_millisecond_and_no_more_than_postgres_counts(TimeSpan timeout)
     {
-        var register = () => new ServiceCollection().AddPostgresRowLevelSecurity(options => options.StatementTimeouts[CallerKind.User] = timeout);
+        var register = () => new ServiceCollection().AddPostgresRowLevelSecurity(options => options.StatementTimeouts[CurrentUserKind.User] = timeout);
         register.Should().Throw<ArgumentOutOfRangeException>().WithParameterName(nameof(PostgresRowLevelSecurityOptions.StatementTimeouts))
             .WithMessage("The statement timeout of a User caller is at least a millisecond and at most 2147483647 milliseconds.*");
 
-        var build = () => new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions { StatementTimeouts = { [CallerKind.User] = timeout } });
+        var build = () => new PostgresRowLevelSecurityInterceptor(_user, new PostgresRowLevelSecurityOptions { StatementTimeouts = { [CurrentUserKind.User] = timeout } });
         build.Should().Throw<ArgumentOutOfRangeException>("an interceptor built by hand checks its options as the registration does");
 
-        var kind = () => new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions { StatementTimeouts = { [(CallerKind)99] = TimeSpan.FromSeconds(1) } });
+        var kind = () => new PostgresRowLevelSecurityInterceptor(_user, new PostgresRowLevelSecurityOptions { StatementTimeouts = { [(CurrentUserKind)99] = TimeSpan.FromSeconds(1) } });
         kind.Should().Throw<ArgumentOutOfRangeException>().WithMessage("A statement timeout is for a kind of caller that exists.*");
     }
 
@@ -230,10 +230,10 @@ public sealed class StatementTimeoutTests(PoolerFixture database) : IAsyncLifeti
     private NotesContext Context(NpgsqlDataSource dataSource, RowLevelSecurityScope scope, Action<PostgresRowLevelSecurityOptions>? configure = null, IEnumerable<IRowLevelSecuritySettings>? settings = null)
         => new(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql(dataSource)
-            .AddInterceptors(PoolerFixture.Interceptor(_caller, scope, settings, configure: options =>
+            .AddInterceptors(PoolerFixture.Interceptor(_user, scope, settings, configure: options =>
             {
-                options.StatementTimeouts[CallerKind.User] = TimeSpan.FromMilliseconds(200);
-                options.StatementTimeouts[CallerKind.Anonymous] = TimeSpan.FromMilliseconds(100);
+                options.StatementTimeouts[CurrentUserKind.User] = TimeSpan.FromMilliseconds(200);
+                options.StatementTimeouts[CurrentUserKind.Anonymous] = TimeSpan.FromMilliseconds(100);
                 configure?.Invoke(options);
             }))
             .Options);

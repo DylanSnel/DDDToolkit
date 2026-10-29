@@ -79,7 +79,7 @@ public class RowAccessGenerationTests
         [AccessFunction<Order>("shop.is_member")]
         public static partial class Membership
         {
-            public static bool Allows(Order order, Caller caller) => order.Members.Any(member => member.UserId == caller.UserId);
+            public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.UserId == user.Id);
         }
 
 
@@ -98,7 +98,7 @@ public class RowAccessGenerationTests
     /// <summary>The SQL the generator wrote into an access function.</summary>
     private static string FunctionSqlOf(string expression)
     {
-        var result = Function($"public static bool Allows(Order order, Caller caller) => {expression};");
+        var result = Function($"public static bool Allows(Order order, ICurrentUser user) => {expression};");
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00041").ShouldCompile();
         return ConstantIn(result.Source("TheFunction.AccessFunction"));
     }
@@ -125,7 +125,7 @@ public class RowAccessGenerationTests
     /// <summary>The SQL the generator wrote into the rule, as the string the export reads.</summary>
     private static string SqlOf(string expression)
     {
-        var result = Rule($"public static bool Allows(Order order, Caller caller) => {expression};");
+        var result = Rule($"public static bool Allows(Order order, ICurrentUser user) => {expression};");
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00040").ShouldCompile();
 
         var literal = CSharpSyntaxTree.ParseText(result.Source("TheRule.RowAccess")).GetRoot()
@@ -137,13 +137,13 @@ public class RowAccessGenerationTests
 
     [Fact]
     public void A_customer_and_a_guest_is_ownership_with_csharps_nulls()
-        => SqlOf("order.PlacedBy == null || order.PlacedBy?.Value == caller.UserId")
-            .Should().Be("(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}))");
+        => SqlOf("order.PlacedBy == null || order.PlacedBy?.Value == user.Id")
+            .Should().Be("(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {user:uid}))");
 
     [Fact]
     public void Roles_and_departments_are_claims_and_an_amount_is_a_column_of_a_value_object()
-        => SqlOf("caller.Claim(\"app_metadata.role\") == \"staff\" && (order.Total.Amount <= 500 || caller.Claim(\"app_metadata.department\") == \"finance\")")
-            .Should().Be("(({caller:claim:app_metadata.role} IS NOT DISTINCT FROM 'staff') AND (coalesce({col:Total.Amount} <= 500, FALSE) OR ({caller:claim:app_metadata.department} IS NOT DISTINCT FROM 'finance')))");
+        => SqlOf("user.FindClaim(\"app_metadata.role\") == \"staff\" && (order.Total.Amount <= 500 || user.FindClaim(\"app_metadata.department\") == \"finance\")")
+            .Should().Be("(({user:claim:app_metadata.role} IS NOT DISTINCT FROM 'staff') AND (coalesce({col:Total.Amount} <= 500, FALSE) OR ({user:claim:app_metadata.department} IS NOT DISTINCT FROM 'finance')))");
 
     [Fact]
     public void An_enum_constant_is_left_for_the_column_to_say_how_it_is_stored()
@@ -155,8 +155,8 @@ public class RowAccessGenerationTests
     {
         SqlOf("order.Status == OrderStatus.Placed && order.IsPublic == true && order.Level != 3")
             .Should().Be("((({col:Status} = {val:Status:0}) AND ({col:IsPublic} = TRUE)) AND ({col:Level} <> 3))", "none of them can be null in C#, so SQL's = means ==, and an index can answer it");
-        SqlOf("order.PlacedBy?.Value == caller.UserId")
-            .Should().Be("({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})", "a customer id that may be null equals a caller without one in C#");
+        SqlOf("order.PlacedBy?.Value == user.Id")
+            .Should().Be("({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})", "a customer id that may be null equals a caller without one in C#");
         SqlOf("order.Team == \"north\"")
             .Should().Be("({col:Team} IS NOT DISTINCT FROM 'north')", "a string may be null");
         SqlOf("order.Id == order.Id")
@@ -178,11 +178,11 @@ public class RowAccessGenerationTests
             [AccessFunctions(Owner = "shop")]
             public static partial class ShopQuestions
             {
-                [AccessScalar("caller_customer")]
-                public static partial CustomerId CallerCustomer();
+                [AccessScalar("current_customer")]
+                public static partial CustomerId CurrentCustomer();
 
-                [AccessScalar("caller_level")]
-                public static partial int CallerLevel();
+                [AccessScalar("current_level")]
+                public static partial int CurrentLevel();
             }
 
 
@@ -195,7 +195,7 @@ public class RowAccessGenerationTests
                 [RowAccess<Order>(RowOperations.Read)]
                 public static partial class TheRule
                 {
-                    public static bool Allows(Order order, Caller caller) => {{expression}};
+                    public static bool Allows(Order order, ICurrentUser user) => {{expression}};
                 }
                 """).RunCore();
 
@@ -203,12 +203,12 @@ public class RowAccessGenerationTests
             return ConstantIn(result.Source("TheRule.RowAccess"));
         }
 
-        Of("order.PlacedBy == ShopQuestions.CallerCustomer()")
-            .Should().Be("({col:PlacedBy} = (SELECT {fn:shop/caller_customer}()))", "a caller the question does not know answers null, and a null customer must not match it: SQL's = is null then, which a policy counts as no");
-        Of("order.PlacedBy != ShopQuestions.CallerCustomer()")
-            .Should().Be("({col:PlacedBy} <> (SELECT {fn:shop/caller_customer}()))", "IS DISTINCT FROM a null would pass every order that has a customer");
-        Of("ShopQuestions.CallerLevel() == order.Level")
-            .Should().Be("((SELECT {fn:shop/caller_level}()) = {col:Level})", "the question need not be on the right");
+        Of("order.PlacedBy == ShopQuestions.CurrentCustomer()")
+            .Should().Be("({col:PlacedBy} = (SELECT {fn:shop/current_customer}()))", "a caller the question does not know answers null, and a null customer must not match it: SQL's = is null then, which a policy counts as no");
+        Of("order.PlacedBy != ShopQuestions.CurrentCustomer()")
+            .Should().Be("({col:PlacedBy} <> (SELECT {fn:shop/current_customer}()))", "IS DISTINCT FROM a null would pass every order that has a customer");
+        Of("ShopQuestions.CurrentLevel() == order.Level")
+            .Should().Be("((SELECT {fn:shop/current_level}()) = {col:Level})", "the question need not be on the right");
     }
 
     [Fact]
@@ -219,11 +219,11 @@ public class RowAccessGenerationTests
             [AccessFunctions(Owner = "shop")]
             public static partial class ShopQuestions
             {
-                [AccessScalar("caller_customer")]
-                public static partial CustomerId CallerCustomer();
+                [AccessScalar("current_customer")]
+                public static partial CustomerId CurrentCustomer();
 
-                [AccessScalar("caller_level")]
-                public static partial int CallerLevel();
+                [AccessScalar("current_level")]
+                public static partial int CurrentLevel();
             }
 
 
@@ -236,7 +236,7 @@ public class RowAccessGenerationTests
                 [RowAccess<Order>(RowOperations.Read)]
                 public static partial class TheRule
                 {
-                    public static bool Allows(Order order, Caller caller) => {{expression}};
+                    public static bool Allows(Order order, ICurrentUser user) => {{expression}};
                 }
                 """).RunCore();
 
@@ -246,14 +246,14 @@ public class RowAccessGenerationTests
 
         // coalesce(..., FALSE) would be FALSE for such a caller, and NOT would make that a yes: SQL's own
         // comparison is null, and NOT null is null, which a policy counts as no.
-        Of("!(order.PlacedBy == ShopQuestions.CallerCustomer())")
-            .Should().Be("(NOT ({col:PlacedBy} = (SELECT {fn:shop/caller_customer}())))");
-        Of("!(ShopQuestions.CallerLevel() < order.Level)")
-            .Should().Be("(NOT ((SELECT {fn:shop/caller_level}()) < {col:Level}))");
-        Of("(order.PlacedBy == ShopQuestions.CallerCustomer()) == false")
-            .Should().Be("(({col:PlacedBy} = (SELECT {fn:shop/caller_customer}())) = FALSE)", "a comparison of the comparison stays SQL's own too");
-        Of("!(order.PlacedBy == ShopQuestions.CallerCustomer() && order.IsPublic)")
-            .Should().Be("(NOT (({col:PlacedBy} = (SELECT {fn:shop/caller_customer}())) AND {col:IsPublic}))");
+        Of("!(order.PlacedBy == ShopQuestions.CurrentCustomer())")
+            .Should().Be("(NOT ({col:PlacedBy} = (SELECT {fn:shop/current_customer}())))");
+        Of("!(ShopQuestions.CurrentLevel() < order.Level)")
+            .Should().Be("(NOT ((SELECT {fn:shop/current_level}()) < {col:Level}))");
+        Of("(order.PlacedBy == ShopQuestions.CurrentCustomer()) == false")
+            .Should().Be("(({col:PlacedBy} = (SELECT {fn:shop/current_customer}())) = FALSE)", "a comparison of the comparison stays SQL's own too");
+        Of("!(order.PlacedBy == ShopQuestions.CurrentCustomer() && order.IsPublic)")
+            .Should().Be("(NOT (({col:PlacedBy} = (SELECT {fn:shop/current_customer}())) AND {col:IsPublic}))");
     }
 
     [Fact]
@@ -262,13 +262,13 @@ public class RowAccessGenerationTests
 
     [Fact]
     public void A_flag_the_caller_and_a_negation()
-        => SqlOf("caller.IsSignedIn && !order.IsPublic && caller.Role == \"authenticated\"")
-            .Should().Be("(({caller:signedin} AND (NOT {col:IsPublic})) AND ({caller:role} IS NOT DISTINCT FROM 'authenticated'))");
+        => SqlOf("user.IsAuthenticated && !order.IsPublic && user.Role == \"authenticated\"")
+            .Should().Be("(({user:signedin} AND (NOT {col:IsPublic})) AND ({user:role} IS NOT DISTINCT FROM 'authenticated'))");
 
     [Fact]
     public void A_team_from_the_token_against_a_column()
-        => SqlOf("order.Team != null && order.Team == caller.Claim(\"app_metadata.team\") && order.Level < 3")
-            .Should().Be("((({col:Team} IS NOT NULL) AND ({col:Team} IS NOT DISTINCT FROM {caller:claim:app_metadata.team})) AND coalesce({col:Level} < 3, FALSE))");
+        => SqlOf("order.Team != null && order.Team == user.FindClaim(\"app_metadata.team\") && order.Level < 3")
+            .Should().Be("((({col:Team} IS NOT NULL) AND ({col:Team} IS NOT DISTINCT FROM {user:claim:app_metadata.team})) AND coalesce({col:Level} < 3, FALSE))");
 
     [Fact]
     public void Braces_in_a_constant_are_doubled_so_they_are_not_filled_in()
@@ -277,8 +277,8 @@ public class RowAccessGenerationTests
 
     [Fact]
     public void A_sql_function_is_called_with_its_arguments_translated_like_the_rest()
-        => SqlOf("order.PlacedBy?.Value == caller.UserId || Sql.Call<bool>(\"private.is_support_agent\", caller.UserId, order.Level)")
-            .Should().Be("(({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}) OR private.is_support_agent({caller:uid}, {col:Level}))");
+        => SqlOf("order.PlacedBy?.Value == user.Id || Sql.Call<bool>(\"private.is_support_agent\", user.Id, order.Level)")
+            .Should().Be("(({col:PlacedBy} IS NOT DISTINCT FROM {user:uid}) OR private.is_support_agent({user:uid}, {col:Level}))");
 
     [Fact]
     public void Raw_sql_goes_in_as_it_is_in_parentheses_with_its_braces_kept()
@@ -289,12 +289,12 @@ public class RowAccessGenerationTests
     [InlineData("Sql.Call<bool>(\"private.check; DROP TABLE x\")")]
     [InlineData("Sql.Raw<bool>(order.Team!)")]
     public void Sql_that_is_not_a_function_name_or_not_written_in_the_rule_is_refused(string expression)
-        => Rule($"public static bool Allows(Order order, Caller caller) => {expression};").Count("DDD00039").Should().Be(1);
+        => Rule($"public static bool Allows(Order order, ICurrentUser user) => {expression};").Count("DDD00039").Should().Be(1);
 
     [Fact]
     public void A_body_that_returns_is_the_same_as_an_arrow()
     {
-        var result = Rule("public static bool Allows(Order order, Caller caller) { return order.IsPublic; }");
+        var result = Rule("public static bool Allows(Order order, ICurrentUser user) { return order.IsPublic; }");
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldContain("TheRule.RowAccess", "{col:IsPublic}");
     }
@@ -303,8 +303,8 @@ public class RowAccessGenerationTests
 
     [Fact]
     public void An_access_function_asks_the_aggregates_entities_with_an_exists()
-        => FunctionSqlOf("order.Members.Any(member => member.UserId == caller.UserId && member.IsAdmin)")
-            .Should().Be("{exists:Members:e1}(({col:e1:UserId} IS NOT DISTINCT FROM {caller:uid}) AND {col:e1:IsAdmin}){/exists}");
+        => FunctionSqlOf("order.Members.Any(member => member.UserId == user.Id && member.IsAdmin)")
+            .Should().Be("{exists:Members:e1}(({col:e1:UserId} IS NOT DISTINCT FROM {user:uid}) AND {col:e1:IsAdmin}){/exists}");
 
     [Fact]
     public void Any_without_a_condition_is_whether_there_is_one()
@@ -399,7 +399,7 @@ public class RowAccessGenerationTests
             [AccessFunction<Order>("shop.orders_on_duty", Shape = AccessFunctionShape.Set)]
             public static partial class TheFunction
             {
-                public static bool Allows(Order order, Caller caller, string kind) => {{expression}};
+                public static bool Allows(Order order, ICurrentUser user, string kind) => {{expression}};
             }
             """).RunCore();
 
@@ -413,11 +413,11 @@ public class RowAccessGenerationTests
     [Fact]
     public void An_entity_of_an_entity_is_asked_with_an_exists_inside_the_exists()
         => EntitiesOfEntitiesSqlOf(
-                "order.Members.Any(member => member.UserId == caller.UserId"
+                "order.Members.Any(member => member.UserId == user.Id"
                 + " && (member.EndsAt == null || member.EndsAt > DateTimeOffset.UtcNow)"
                 + " && member.Duties.Any(duty => duty.Kind == kind && (duty.EndsAt == null || duty.EndsAt > DateTimeOffset.UtcNow)))")
             .Should().Be(
-                "{exists:Members:e1}((({col:e1:UserId} IS NOT DISTINCT FROM {caller:uid})"
+                "{exists:Members:e1}((({col:e1:UserId} IS NOT DISTINCT FROM {user:uid})"
                 + " AND (({col:e1:EndsAt} IS NULL) OR coalesce({col:e1:EndsAt} > now(), FALSE)))"
                 + " AND {exists:e1:Duties:e2}(({col:e2:Kind} IS NOT DISTINCT FROM {arg:1})"
                 + " AND (({col:e2:EndsAt} IS NULL) OR coalesce({col:e2:EndsAt} > now(), FALSE))){/exists}){/exists}",
@@ -455,7 +455,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, Caller caller) => order.Members.Any(member => member.Duties.Any());
+                public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.Duties.Any());
             }
             """).RunCore();
 
@@ -471,7 +471,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class MembersSeeTheirOrders
             {
-                public static bool Allows(Order order, Caller caller) => order.IsPublic || Membership.Allows(order, caller);
+                public static bool Allows(Order order, ICurrentUser user) => order.IsPublic || Membership.Allows(order, user);
             }
             """).RunCore();
 
@@ -487,7 +487,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, Caller caller) => Membership.Allows(order, Caller.Anonymous);
+                public static bool Allows(Order order, ICurrentUser user) => Membership.Allows(order, null!);
             }
             """).RunCore();
 
@@ -512,7 +512,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class MembersSeeTheirOrders
             {
-                public static bool Allows(Order order, Caller caller) => Membership.Allows(order.Id);
+                public static bool Allows(Order order, ICurrentUser user) => Membership.Allows(order.Id);
             }
             """).RunCore();
 
@@ -531,7 +531,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class MembersSeeTheirOrders
             {
-                public static bool Allows(Order order, Caller caller) => OrderMembers.Allows(order.Id);
+                public static bool Allows(Order order, ICurrentUser user) => OrderMembers.Allows(order.Id);
             }
             """).RunCore();
 
@@ -553,14 +553,14 @@ public class RowAccessGenerationTests
     [InlineData("is_member", "DDD00052")]
     [InlineData("shop.is-member", "DDD00038")]
     public void An_access_function_named_without_its_schema_and_owner_or_not_as_an_identifier_is_an_error(string name, string id)
-        => Function("public static bool Allows(Order order, Caller caller) => order.IsPublic;", name).Count(id).Should().Be(1);
+        => Function("public static bool Allows(Order order, ICurrentUser user) => order.IsPublic;", name).Count(id).Should().Be(1);
 
     // ------------------------------------------------------------------ DDD00041
 
     [Fact]
     public void A_rule_that_reads_the_entities_itself_is_told_to_ask_an_access_function()
     {
-        var result = Rule("public static bool Allows(Order order, Caller caller) => order.Members.Any(member => member.UserId == caller.UserId);");
+        var result = Rule("public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.UserId == user.Id);");
 
         result.ReportedDiagnostics.Single(diagnostic => diagnostic.Id == "DDD00041").GetMessage().Should().Contain("[AccessFunction<Order>]");
         result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
@@ -571,10 +571,10 @@ public class RowAccessGenerationTests
     [Theory]
     [InlineData("order.Team!.StartsWith(\"n\")", "order.Team!.StartsWith(\"n\")")]
     [InlineData("DateTime.UtcNow.Year > 2000", "DateTime.UtcNow.Year")]
-    [InlineData("caller.Claim(\"app_metadata.role\").Length > 0", "caller.Claim(\"app_metadata.role\").Length")]
+    [InlineData("user.FindClaim(\"app_metadata.role\").Length > 0", "user.FindClaim(\"app_metadata.role\").Length")]
     public void What_the_database_cannot_check_is_an_error_on_that_expression_and_nothing_is_generated(string expression, string reported)
     {
-        var result = Rule($"public static bool Allows(Order order, Caller caller) => {expression};");
+        var result = Rule($"public static bool Allows(Order order, ICurrentUser user) => {expression};");
 
         result.Count("DDD00039").Should().Be(1);
         result.ReportedDiagnostics.Single(diagnostic => diagnostic.Id == "DDD00039").GetMessage().Should().Contain(reported);
@@ -584,11 +584,11 @@ public class RowAccessGenerationTests
     // ------------------------------------------------------------------ DDD00038
 
     [Theory]
-    [InlineData("public static bool Allows(Order order, Caller caller) => true;", "public static class")]
+    [InlineData("public static bool Allows(Order order, ICurrentUser user) => true;", "public static class")]
     [InlineData("public static bool Allows(Order order) => true;", "public static partial class")]
-    [InlineData("public static bool Allows(Order order, Caller caller) { var yes = true; return yes; }", "public static partial class")]
-    [InlineData("public static int Allows(Order order, Caller caller) => 1;", "public static partial class")]
-    [InlineData("public static bool Check(Order order, Caller caller) => true;", "public static partial class")]
+    [InlineData("public static bool Allows(Order order, ICurrentUser user) { var yes = true; return yes; }", "public static partial class")]
+    [InlineData("public static int Allows(Order order, ICurrentUser user) => 1;", "public static partial class")]
+    [InlineData("public static bool Check(Order order, ICurrentUser user) => true;", "public static partial class")]
     public void A_rule_of_another_shape_is_an_error(string body, string declaration)
     {
         var result = Rule(body, declaration: declaration);
@@ -618,7 +618,7 @@ public class RowAccessGenerationTests
             [RowAccess<Line>(RowOperations.Read)]
             public static partial class LinesAreEveryones
             {
-                public static bool Allows(Line line, Caller caller) => line.IsPublic;
+                public static bool Allows(Line line, ICurrentUser user) => line.IsPublic;
             }
             """).RunCore();
 

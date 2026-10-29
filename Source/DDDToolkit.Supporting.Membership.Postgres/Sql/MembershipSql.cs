@@ -18,7 +18,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// What the rules have the application answer, who the caller is as a member, which roles give a permission, where
 /// the caller holds a permission above, is asked of functions by their logical names: those the rules name, or those
 /// another package's contribution answers for the type of the member or of the place
-/// (<see cref="ICallerFunctions"/>), an organization package's for its seat and its unit. Nothing here refers to whatever defines
+/// (<see cref="ICurrentUserFunctions"/>), an organization package's for its seat and its unit. Nothing here refers to whatever defines
 /// them, and the script that these functions are written into refuses a name nothing defines.
 /// </para>
 /// <para>
@@ -34,7 +34,7 @@ internal static class MembershipSql
     /// that still holds what an earlier version of the package wrote is found by the start-up check, although
     /// its rules have not changed. Change the SQL, and change this: a test keeps the two together.
     /// </summary>
-    internal const string SqlForm = "8";
+    internal const string SqlForm = "9";
 
     /// <summary>What the line of each function's body that names the roles that may execute it starts with.</summary>
     internal const string ExecutedBy = "-- Executed by: ";
@@ -139,13 +139,13 @@ internal static class MembershipSql
             }
         }
 
-        if (rules.MembersLockPermission is { } membersPermission)
+        if (rules.ManagesMembersPermission is { } membersPermission)
         {
             Mark("members-permission");
             Say(membersPermission);
         }
 
-        if (rules.OwnerLockPermission is { } ownerPermission)
+        if (rules.NamesOwnerPermission is { } ownerPermission)
         {
             Mark("owner-permission");
             Say(ownerPermission);
@@ -246,8 +246,8 @@ internal static class MembershipSql
             " AND ",
             toMember.Properties.Select((property, index) => "h." + Column(held, property.Name) + " = m." + Column(members, toMember.PrincipalKey.Properties[index].Name)));
 
-        var caller = Caller(rules, mapping, written.Members);
-        var memberNow = "m." + Column(members, nameof(MemberEntity<,,>.MemberId)) + " = " + caller + " AND " + Now(members, "m");
+        var currentMember = CurrentMember(rules, mapping, written.Members);
+        var memberNow = "m." + Column(members, nameof(MemberEntity<,,>.MemberId)) + " = " + currentMember + " AND " + Now(members, "m");
         var marker = Marker(rules, mapping, written.SystemInRole) + "\n" + ExecutedBy + string.Join(", ", written.Executors);
         var returns = "SETOF " + RowAccessModel.ColumnType(resource, id.Name);
         string Own(string name) => Asked(owner + "/" + name);
@@ -266,7 +266,7 @@ internal static class MembershipSql
         // role scoped work runs as, and one of those scopes. Nobody else's token says that role.
         var ownWork = rules.SystemScopes.Count == 0
             ? null
-            : $"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE {{caller:role}} = {Text(written.SystemInRole)} AND {{caller:claim:scope}} IN ({string.Join(", ", rules.SystemScopes.Select(Text))})";
+            : $"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE {{user:role}} = {Text(written.SystemInRole)} AND {{user:claim:scope}} IN ({string.Join(", ", rules.SystemScopes.Select(Text))})";
 
         // Every body is put together line by line, with the line ending said here: a function is the same text
         // whichever machine wrote the access file, and whatever line endings this file was checked out with.
@@ -296,7 +296,7 @@ internal static class MembershipSql
             marker,
             $"SELECT joined.id FROM {Own(rules.Functions.AsMember)}() AS joined(id)",
             "UNION",
-            $"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE r.{Column(resource, mapping.Owner.Name)} = {caller}",
+            $"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE r.{Column(resource, mapping.Owner.Name)} = {currentMember}",
         ];
         if (above is not null && rules.EveryMemberPermission is { } seenWith)
         {
@@ -326,7 +326,7 @@ internal static class MembershipSql
         if (rules.OwnerPermissions.Count > 0)
         {
             heldOn.Add("UNION");
-            heldOn.Add($"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE $1 IN ({string.Join(", ", rules.OwnerPermissions.Select(Text))}) AND r.{Column(resource, mapping.Owner.Name)} = {caller}");
+            heldOn.Add($"SELECT r.{Column(resource, id.Name)} FROM {Table(resource)} r WHERE $1 IN ({string.Join(", ", rules.OwnerPermissions.Select(Text))}) AND r.{Column(resource, mapping.Owner.Name)} = {currentMember}");
         }
 
         if (above is not null)
@@ -372,7 +372,7 @@ internal static class MembershipSql
         return name.Length <= LongestName
             ? name
             : throw new InvalidOperationException(
-                "A permission of " + rules.Resource.Name + " locks the owner, and the lock on the owner column would be called '" + name
+                "A permission of " + rules.Resource.Name + " names the owner, and the lock on the owner column would be called '" + name
                 + "', which is longer than the 63 characters Postgres keeps of a name. Give the resource a shorter name, with [Members(\"...\")].");
     }
 
@@ -386,8 +386,8 @@ internal static class MembershipSql
     private static string OwnerLockName(MembershipRules rules) => rules.Name.Replace('.', '_').Replace('-', '_') + "_owner_stays";
 
     /// <summary>
-    /// The lock on the two member tables, for rules with a permission that locks the members
-    /// (<see cref="MembershipRules.MembersLockPermission"/>): for each database role that may ask the
+    /// The lock on the two member tables, for rules with a permission that manages the members
+    /// (<see cref="MembershipRules.ManagesMembersPermission"/>): for each database role that may ask the
     /// functions, a restrictive policy for adding, changing and removing a row of either table, which lets a
     /// row be written only on a resource the caller holds that permission on. Restrictive, so it narrows whatever the
     /// application's own rules allow, and allows nothing itself: reading the rows stays what those rules say.
@@ -415,7 +415,7 @@ internal static class MembershipSql
     /// <exception cref="InvalidOperationException">A customer makes the roles, and the model maps no role class for the resource.</exception>
     public static IReadOnlyList<ContributedPolicy> Policies(MemberMapping mapping, MembershipRules rules, string owner, Written written)
     {
-        if (rules.MembersLockPermission is not { } permission)
+        if (rules.ManagesMembersPermission is not { } permission)
         {
             return [];
         }
@@ -432,7 +432,7 @@ internal static class MembershipSql
 
         // Asked once for a statement: the resources the caller holds a permission on, as the functions answer it.
         string Held(string held) => "(SELECT held.id FROM " + Asked(owner + "/" + rules.Functions.HeldOn) + "(" + Text(held) + ") AS held(id))";
-        var handsOn = rules.OwnerLockPermission is { } ownerPermission && !string.Equals(ownerPermission, permission, StringComparison.Ordinal) ? ownerPermission : null;
+        var handsOn = rules.NamesOwnerPermission is { } ownerPermission && !string.Equals(ownerPermission, permission, StringComparison.Ordinal) ? ownerPermission : null;
         var policies = new List<ContributedPolicy>();
         foreach (var (table, column) in new[] { (mapping.Members, ofMember), (mapping.Roles, ofRole) })
         {
@@ -472,7 +472,7 @@ internal static class MembershipSql
     /// <summary>
     /// What the policy of the lock that holds a role given to one the caller sees is about, which its name
     /// starts with: written on the table of the roles a member holds, where a customer makes the roles and a
-    /// permission locks the members.
+    /// permission manages the members.
     /// </summary>
     public const string RoleSeen = "Members hold roles the caller sees";
 
@@ -514,8 +514,8 @@ internal static class MembershipSql
     private static string FunctionIn(string schema, string name) => Braces(schema) + "." + name;
 
     /// <summary>
-    /// The lock on the owner column, for rules with a permission that locks the owner
-    /// (<see cref="MembershipRules.OwnerLockPermission"/>): a trigger on the resource's table that fires when a
+    /// The lock on the owner column, for rules with a permission that names the owner
+    /// (<see cref="MembershipRules.NamesOwnerPermission"/>): a trigger on the resource's table that fires when a
     /// statement would leave a row with another owner than it had, and refuses it, as a policy refuses, unless
     /// the caller held that permission on the resource before the change. A trigger, because a policy sees the row a
     /// statement leaves behind and not the one it found: only here are both at hand, and nothing a caller can
@@ -533,7 +533,7 @@ internal static class MembershipSql
         var resource = mapping.Resource;
 
         // No role may ask the functions, so no caller is held to the lock: what reaches the table is the tables' owner.
-        if (rules.OwnerLockPermission is not { } permission || written.GrantTo.Count == 0)
+        if (rules.NamesOwnerPermission is not { } permission || written.GrantTo.Count == 0)
         {
             // Rules whose lock could never have been written, its name being too long, left nothing to take away.
             var left = OwnerLockName(rules);
@@ -593,7 +593,7 @@ internal static class MembershipSql
         if (trigger.Split(BodyQuote).Length != 3)
         {
             throw new InvalidOperationException(
-                "The lock on the owner column of " + resource.DisplayName() + " cannot be written from the rules '" + rules.Name + "': the permission that locks the owner, '" + permission
+                "The lock on the owner column of " + resource.DisplayName() + " cannot be written from the rules '" + rules.Name + "': the permission that names the owner, '" + permission
                 + "', a role or a name of the model has '" + BodyQuote + "' in it, which would end the function's body early.");
         }
 
@@ -748,23 +748,23 @@ internal static class MembershipSql
     /// or what the application's function answers, compared with the column that holds who a member is.
     /// </summary>
     /// <exception cref="InvalidOperationException">The column does not store what the source answers, or the rules name no function.</exception>
-    private static string Caller(MembershipRules rules, MemberMapping mapping, MemberSource members)
+    private static string CurrentMember(MembershipRules rules, MemberMapping mapping, MemberSource members)
     {
         var stored = RowAccessModel.ColumnType(mapping.Members, nameof(MemberEntity<,,>.MemberId)).Trim();
         var what = mapping.Resource.DisplayName();
 
         switch (members.Kind)
         {
-            case MemberSourceKind.CallerId:
+            case MemberSourceKind.CurrentUserId:
                 return string.Equals(stored, "uuid", StringComparison.OrdinalIgnoreCase)
-                    ? "{caller:uid}"
+                    ? "{user:uid}"
                     : throw new InvalidOperationException(
-                        "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CallerId, a uuid, and the members of " + what + " are stored as " + stored
+                        "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CurrentUserId, a uuid, and the members of " + what + " are stored as " + stored
                         + ". Known by an id over a Guid, a member is stored as uuid.");
 
             case MemberSourceKind.Claim:
                 return IsText(stored)
-                    ? "{caller:claim:" + members.ClaimPath + "}"
+                    ? "{user:claim:" + members.ClaimPath + "}"
                     : throw new InvalidOperationException(
                         "The rules '" + rules.Name + "' take the caller's member id from the claim '" + members.ClaimPath + "', a text, and the members of " + what + " are stored as " + stored
                         + ". Known by an id over a text, a member is stored as text or character varying.");
@@ -775,7 +775,7 @@ internal static class MembershipSql
                     ? "(SELECT " + Asked(function) + "())"
                     : throw new InvalidOperationException(
                         "The rules '" + rules.Name + "' have the application resolve who the caller is as a member of " + what + ", and name no function that answers it in the database. "
-                        + "Name it, the organization package's caller_seat say, or a DatabaseFunction of the application's: a function without parameters that answers the caller's member id, as the members are stored, or NULL.");
+                        + "Name it, the organization package's current_seat say, or a DatabaseFunction of the application's: a function without parameters that answers the caller's member id, as the members are stored, or NULL.");
         }
     }
 

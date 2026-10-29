@@ -1,6 +1,5 @@
-using Examples.Tenancy.Tenants.Api.Directory.GraphQL;
-using Examples.Tenancy.Tenants.Application.Seats;
 using Examples.Tenancy.Tenants.Application.Seats.Commands;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 using HotChocolate;
 using Mediator;
 
@@ -8,7 +7,7 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 
 /// <summary>
 /// What changes a seat: whether it counts, which the package decides, and the name it is shown by, which is this
-/// application's own. A mutation sends the command its route sends, then reads what it changed and answers that; a
+/// application's own. A mutation sends the command its route sends and answers the seat the command answers; a
 /// refusal is not caught here, and arrives in the payload's <c>errors</c>.
 /// </summary>
 internal static class SeatsMutations
@@ -18,33 +17,21 @@ internal static class SeatsMutations
     /// itself; another seat takes <c>tenancy.seats.manage</c> for the whole tenant.
     /// </summary>
     [Mutation]
-    public static async Task<SeatListing?> SeatRenameAsync(SeatId seatId, string displayName, [Service] ISender sender, CancellationToken cancellationToken)
-    {
-        await sender.Send(new RenameSeat(seatId, displayName), cancellationToken);
-        return await sender.SeatNowAsync(seatId, cancellationToken);
-    }
+    public static async Task<Seat> SeatRenameAsync(SeatId seatId, string displayName, [Service] ISender sender, CancellationToken cancellationToken)
+        => await sender.Send(new RenameSeat(seatId, displayName), cancellationToken);
 
     /// <summary>Suspends a seat: it keeps its placements and roles, and counts for nothing until it is reactivated.</summary>
     [Mutation]
-    public static async Task<SeatListing?> SeatSuspendAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
-    {
-        await sender.Send(new SuspendTenantSeat(seatId), cancellationToken);
-        return await sender.SeatNowAsync(seatId, cancellationToken);
-    }
+    public static async Task<Seat> SeatSuspendAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
+        => await sender.Send(new SuspendTenantSeat(seatId), cancellationToken);
 
     /// <summary>Makes a suspended seat count again.</summary>
     [Mutation]
-    public static async Task<SeatListing?> SeatReactivateAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
-    {
-        await sender.Send(new ReactivateTenantSeat(seatId), cancellationToken);
-        return await sender.SeatNowAsync(seatId, cancellationToken);
-    }
+    public static async Task<Seat> SeatReactivateAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
+        => await sender.Send(new ReactivateTenantSeat(seatId), cancellationToken);
 
     /// <summary>Deactivates a seat for good.</summary>
     [Mutation]
-    public static async Task<SeatListing?> SeatDeactivateAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
-    {
-        await sender.Send(new DeactivateTenantSeat(seatId), cancellationToken);
-        return await sender.SeatNowAsync(seatId, cancellationToken);
-    }
+    public static async Task<Seat> SeatDeactivateAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
+        => await sender.Send(new DeactivateTenantSeat(seatId), cancellationToken);
 }

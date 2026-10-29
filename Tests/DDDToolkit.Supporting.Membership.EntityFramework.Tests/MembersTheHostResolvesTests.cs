@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
 /// <summary>
@@ -15,7 +17,7 @@ public sealed class MembersTheHostResolvesTests
     {
         using var depot = await SqliteDepot.SeededAsync();
         var data = depot.Scenario;
-        var pears = await depot.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<DepotContext>().Pallets.AsNoTracking().SingleAsync(pallet => pallet.Id == data.Pears, Cancellation));
+        var pears = await depot.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<DepotContext>().Pallets.AsNoTracking().SingleAsync(pallet => pallet.Id == data.Pears, Cancellation));
 
         // As a member: a loader loads, and holds no permission its role does not give.
         (await depot.Services.PalletsAsync(data.Bo, access => access.HoldAsync(data.Pears, PalletPermissions.Load, Cancellation)))
@@ -55,7 +57,7 @@ public sealed class MembersTheHostResolvesTests
             var seen = data.PalletsSeenBy(person);
             var seenInTheDatabase = await depot.Services.AsAsync(person.Caller, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<PalletId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Pallet>>().ReachSeen();
                 return await provider.GetRequiredService<DepotContext>().Pallets.Within(see).Select(pallet => pallet.Id).ToListAsync(Cancellation);
             });
             seenInTheDatabase.Should().BeEquivalentTo(seen, "of what " + person + " sees");
@@ -66,7 +68,7 @@ public sealed class MembersTheHostResolvesTests
                 var held = data.PalletsHeldBy(person, permission);
                 var heldInTheDatabase = await depot.Services.AsAsync(person.Caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<PalletId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Pallet>>().Reach(permission);
                     return await provider.GetRequiredService<DepotContext>().Pallets.Within(reach).Select(pallet => pallet.Id).ToListAsync(Cancellation);
                 });
 
@@ -105,17 +107,18 @@ public sealed class MembersTheHostResolvesTests
         });
         (await depot.Services.PalletsAsync(data.Ned, access => access.HoldAsync(data.Pears, PalletPermissions.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
 
-        // And nobody the depot counts is put on a pallet in the first place: the admission asks the depot.
-        await depot.Services.AsAsync(Caller.System, async provider =>
+        // And nobody the depot does not count is put on a pallet in the first place: the member manager asks the depot.
+        // One it counts is admitted, and what refuses him then is the period, which ends before it starts.
+        await depot.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
-            var admission = provider.GetRequiredService<MemberAdmission<PalletId, PorterId, NamedRole>>();
-            await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.MemberNotActive, () => admission.RequireMemberAsync(PorterId.CreateSequential(), Cancellation).AsTask());
-            await admission.RequireMemberAsync(data.Eli.Porter!.Value, Cancellation);
+            var pallets = provider.GetRequiredService<PalletPorterManager>();
+            await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.MemberNotActive, () => pallets.AddAsync(data.Pears, PorterId.CreateSequential(), null, null, Cancellation));
+            await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.InvalidPeriod, () => pallets.AddAsync(data.Pears, data.Eli.Porter!.Value, null, DateTimeOffset.MinValue, Cancellation));
 
-            // The roles are the ones the rules declare, asked of the rules: no row of the depot's says them.
-            await admission.RequireRoleAsync(PalletMembership.Loader, Cancellation);
-            await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(new NamedRole("packer"), Cancellation).AsTask());
-            provider.GetRequiredService<IMemberRoles<PalletId, NamedRole>>().Should().BeOfType<NamedRoles<PalletId>>();
+            // The roles are the ones the rules declare, asked of the rules: no row of the depot's says them, and nothing is registered for them.
+            await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.InvalidPeriod, () => pallets.AddAsync(data.Pears, data.Eli.Porter!.Value, PalletMembership.Loader, DateTimeOffset.MinValue, Cancellation));
+            await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.RoleNotForMembers, () => pallets.AddAsync(data.Pears, data.Eli.Porter!.Value, new NamedRole("packer"), null, Cancellation));
+            provider.GetService<IMemberRoles<PalletId, NamedRole>>().Should().BeNull();
         });
     }
 
@@ -147,7 +150,7 @@ public sealed class MembersTheHostResolvesTests
         (await depot.Services.PalletsAsync(data.Ivo, access => access.HoldAsync(data.Limes, PalletPermissions.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
 
         // Only a signed-in user is asked about at all: the host is not asked who an anonymous caller is.
-        (await depot.Services.AsAsync(Caller.Anonymous, provider => provider.GetRequiredService<IMemberQuestions<PalletId>>().HoldAsync(data.Limes, PalletPermissions.See, Cancellation))).Should().BeNull();
+        (await depot.Services.AsAsync(CurrentUserSnapshot.Anonymous, provider => provider.GetRequiredService<MembershipAccessManager<Pallet>>().HoldAsync(data.Limes, PalletPermissions.See, Cancellation))).Should().BeNull();
     }
 
     [Fact]

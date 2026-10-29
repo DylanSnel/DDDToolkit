@@ -85,9 +85,11 @@ public static class DependencyInjection
             services.TryAddSingleton<AggregateVersionInterceptor>();
             services.TryAddSingleton<InvariantInterceptor>();
             services.TryAddSingleton<DatabaseRefusalInterceptor>();
-            // Who is acting, which an event log writes on every row: the toolkit's own caller, unless a package
+            services.AddCurrentUser();
+
+            // Who is acting, which an event log writes on every row: the toolkit's current user, unless a package
             // or the host registered an accessor that knows more. A singleton, asked once per save.
-            services.TryAddSingleton<IActedByAccessor, CallerActedByAccessor>();
+            services.TryAddSingleton<IActedByAccessor, CurrentUserActedByAccessor>();
 
             // Which contexts UseDDDToolkit gave the parts the packages bring, so each is named once in the log.
             services.TryAddSingleton<ContextParts>();

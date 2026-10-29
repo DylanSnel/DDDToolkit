@@ -1,7 +1,9 @@
 # Diagnostics
 
-A source generator that produces nothing when it is misused is the hardest kind of bug to find: the
-type looks annotated and behaves like a plain class. Every misuse below reports a diagnostic instead.
+A source generator that cannot handle a declaration produces nothing. The type then compiles as a plain class
+without the generated members, and nothing says why. The DDDToolkit generators and analyzers report a diagnostic
+for each such misuse instead. Each section below shows code that triggers one diagnostic, why the code is a
+problem, and the fix.
 
 | Id | Severity | Meaning |
 |---|---|---|
@@ -98,71 +100,99 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00098](#ddd00098) | Error | Rules that reach a resource from above read where it hangs from its [At] property |
 | [DDD00099](#ddd00099) | Warning | A permission says what it lets somebody do |
 | [DDD00100](#ddd00100) | Error | A restrictive rule narrows a table it can reach |
-| [DDD00101](#ddd00101) | Error | TenancyRowAccess.CallerSeat answers with the application's seat class |
+| [DDD00101](#ddd00101) | Error | TenancyRowAccess.CurrentSeat answers with the application's seat class |
+| [DDD00102](#ddd00102) | Error | A marker of a requirement's argument goes beside the attribute whose call it is |
+| [DDD00103](#ddd00103) | Error | An operator's command takes its tenant from the request or from itself |
+| [DDD00104](#ddd00104) | Error | [Operator] stands beside no requirement an operator cannot meet |
+| [DDD00105](#ddd00105) | Warning | [Operator] on a query names no tenant and no scope |
+| [DDD00106](#ddd00106) | Info | A member or role manager is not written |
 
-Most of these say the generator could not do what you asked. The rest are a different kind: they are
-rules about the model rather than about the declaration, and each of them names code that compiles,
-reads well and does not do what it looks like it does. [DDD00021](#ddd00021) is about the boundary
-between two aggregates; [DDD00022](#ddd00022) and [DDD00023](#ddd00023) are about the boundary
-between two [modules](modules.md) and say nothing at all until a project declares itself one, and
-[DDD00064](#ddd00064) about a project whose `DDD_Module` could not declare one, and [DDD00068](#ddd00068) about
-one whose `DDD_ModuleContracts` could not make it its module's contracts;
-[DDD00024](#ddd00024) to [DDD00027](#ddd00027) are about [invariants](invariants.md), where the
-failure worth catching is a rule that is written, tested, and never run; [DDD00028](#ddd00028) to
-[DDD00030](#ddd00030) are about [composite keys](composite-keys.md), and the section after them lists
-the one key-part mistake that can only be caught when the Entity Framework model is built.
-[DDD00031](#ddd00031), [DDD00054](#ddd00054), [DDD00055](#ddd00055) and [DDD00069](#ddd00069) to [DDD00073](#ddd00073) are about the
-[Supabase export](supabase.md), where the failure worth catching is a module whose migrations, or the
-policies a package writes, never reach Supabase, are written from what the host does not run with, or are
-written twice, or whose files a rename writes a second time.
-[DDD00032](#ddd00032) is about
-[Relay node ids](graphql.md#relay-node-ids), where it is a node id that silently carries nothing, and
-[DDD00062](#ddd00062) about [a field for one schema only](graphql.md#a-field-for-one-schema-only), where it is
-an administration field that every schema offers after all.
-[DDD00033](#ddd00033) is about the [generated integration event registration](integration-events.md#registered-when-the-module-compiles),
-where it is an outbound class or a handler that is never registered.
-[DDD00034](#ddd00034) to [DDD00037](#ddd00037) are about [event names](domain-events.md#stable-names), where
-it is a stored row or a message read back as the wrong type, or as the wrong shape.
-[DDD00038](#ddd00038) to [DDD00041](#ddd00041), [DDD00051](#ddd00051) and [DDD00052](#ddd00052) are about
-[row access rules](row-level-security.md#row-access-rules-written-in-c), where it is a rule the database
-enforces differently from the C# that states it, asks more often than it has to, or not at all.
-[DDD00056](#ddd00056) to [DDD00058](#ddd00058) and [DDD00061](#ddd00061) are about the
-[access behavior written for a request interface](access-requirements.md#the-generated-behavior-with-mediator), where it
-is a message that reaches its handler with nothing having asked what it requires, and [DDD00077](#ddd00077) to
-[DDD00086](#ddd00086) about [what a request declares](access-requirements.md#what-a-request-declares), where it is a
-request that says nothing, reads as if it said one thing with its attributes and says another, or says a thing twice.
-[DDD00087](#ddd00087) and [DDD00088](#ddd00088) are about [the owner an aggregate marks](access-requirements.md#the-owner-of-an-aggregate),
-where it is a request about the owner's own that no row could ever let through.
-[DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
-[member list of a resource](membership.md#the-member-list-is-written-for-you), and say what the generator of
-the Membership package could not tell, and which member class names the wrong resource.
-[DDD00092](#ddd00092) to [DDD00095](#ddd00095) are about [permissions declared once](membership.md#the-settings-of-a-permission),
-where it is a permission read as something it is not, said twice, or that never reaches the rules or the catalogue;
-[DDD00090](#ddd00090) and [DDD00091](#ddd00091) about [the names of resources with members](membership.md#names), where
-it is a code clients read or a function that changes with a class's name; and [DDD00096](#ddd00096) to
-[DDD00098](#ddd00098) about the owner and the place of a resource with members, where it is an attribute that adds
-nothing, or rules that read a place nobody said.
-[DDD00074](#ddd00074) is about [the migration history](entity-framework.md#the-migration-history), where it is a
-`dotnet ef database update` or an exported file that records the migrations in a table the application never reads.
-[DDD00075](#ddd00075) is about [two modules with Tenancy's classes](tenancy.md#two-modules-with-the-classes), where it is a name that
-compiles in each module and is two classes in the host, and [DDD00076](#ddd00076) about the same class, where it is a
-naming line that reads as if it named it and changes nothing.
+The Meaning column is the title the IDE shows for each id.
 
-That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
-not do what you asked", and DDD00020 upwards for rules about the model, with one exception:
-[DDD00042](#ddd00042) to [DDD00050](#ddd00050), [DDD00053](#ddd00053), and [DDD00065](#ddd00065) to [DDD00067](#ddd00067), about
-[supporting domains](writing-a-supporting-domain.md), [DDD00052](#ddd00052), about a function's name, and
-[DDD00056](#ddd00056) and [DDD00057](#ddd00057), about an access behavior,
-say what the generator could not do, and are numbered after the rest because they came later. Severity
-does not follow the split. [DDD00020](#ddd00020) and [DDD00027](#ddd00027) are errors even though they
-sit in the second group, because in both the generator drops the member rather than emitting something
-wrong, and a warning would leave you with a rule that silently never runs. [DDD00014](#ddd00014) is a
-warning in the first group: the generator could not read the name the project asked for, and what it
-generates under the assembly's name instead still compiles.
+Most of these diagnostics say that a generator could not do what a declaration asks. The others are rules about
+the model. The code they report compiles, reads well, and does something other than what it seems to do. These
+rules, by topic:
 
-The table above is the complete list: DDD00012 and DDD00015 to DDD00019 have never been assigned, and
-the gaps are room to grow rather than something that was removed. Ids are stable and are never reused,
-so a number that is missing here is missing from the compiler too.
+- [DDD00021](#ddd00021): the boundary between two aggregates.
+- [DDD00022](#ddd00022) and [DDD00023](#ddd00023): the boundary between two [modules](modules.md). They report
+  nothing until a project declares itself a module. [DDD00064](#ddd00064) reports a project whose `DDD_Module`
+  could not declare a module. [DDD00068](#ddd00068) reports a project whose `DDD_ModuleContracts` could not make it
+  its module's contracts.
+- [DDD00024](#ddd00024) to [DDD00027](#ddd00027): [invariants](invariants.md). They catch a rule that is written
+  and tested and never runs.
+- [DDD00028](#ddd00028) to [DDD00030](#ddd00030): [composite keys](composite-keys.md). One more key-part mistake
+  shows only when Entity Framework builds the model. The section after DDD00101 describes it.
+- [DDD00031](#ddd00031), [DDD00054](#ddd00054), [DDD00055](#ddd00055) and [DDD00069](#ddd00069) to
+  [DDD00073](#ddd00073): the [Supabase export](supabase.md). They catch a module's migrations or a package's
+  policies that never reach Supabase, that are written from settings the host does not run with, or that are
+  written twice. They also catch migration files that a class rename would write a second time.
+- [DDD00032](#ddd00032): [Relay node ids](graphql.md#relay-node-ids). It catches a node id that stores nothing.
+- [DDD00062](#ddd00062): [a field for one schema only](graphql.md#a-field-for-one-schema-only). It catches an
+  administration field that every schema offers.
+- [DDD00033](#ddd00033): the [generated integration event registration](integration-events.md#the-generated-registration).
+  It catches an outbound class or a handler that is never registered.
+- [DDD00034](#ddd00034) to [DDD00037](#ddd00037): [event names](domain-events.md#stable-names). They catch a
+  stored row or a message that is read back as the wrong type or in the wrong shape.
+- [DDD00038](#ddd00038) to [DDD00041](#ddd00041), [DDD00051](#ddd00051) and [DDD00052](#ddd00052):
+  [row access rules](row-level-security.md#row-access-rules-written-in-c). They catch a rule that the database
+  checks differently from the C# method, checks more often than needed, or does not check at all.
+  [DDD00100](#ddd00100) and [DDD00101](#ddd00101) do the same for rules over Tenancy's tables.
+- [DDD00056](#ddd00056) to [DDD00058](#ddd00058) and [DDD00061](#ddd00061): the
+  [access behavior written for a request interface](access-requirements.md#the-generated-behavior-with-mediator).
+  They catch a message that reaches its handler without a check of what it requires.
+- [DDD00077](#ddd00077) to [DDD00086](#ddd00086) and [DDD00089](#ddd00089):
+  [what a request declares](access-requirements.md#what-a-request-declares). They catch a request that declares
+  nothing, a request whose attributes say something other than what is checked, and a request that says one
+  thing twice.
+- [DDD00087](#ddd00087) and [DDD00088](#ddd00088): [the owner an aggregate marks](access-requirements.md#the-owner-of-an-aggregate).
+  They catch a request about the owner that no row could ever let through.
+- [DDD00102](#ddd00102) to [DDD00105](#ddd00105): [an operator's request](access-requirements.md#an-operators-request),
+  `[Operator]`. They catch a tenant marker that nothing reads, a command that names two tenants for its work, a
+  request that no caller can send, and a query that names work it never begins.
+- [DDD00059](#ddd00059) and [DDD00060](#ddd00060): the
+  [member list of a resource](membership/resources-and-members.md#the-generated-member-list). They report what
+  the Membership generator could not tell, and a member class that names the wrong resource.
+  [DDD00106](#ddd00106) reports a [manager](membership/resources-and-members.md#the-managers) the generator does not
+  write.
+- [DDD00092](#ddd00092) to [DDD00095](#ddd00095) and [DDD00099](#ddd00099):
+  [permissions declared once](membership/permissions-and-roles.md#the-settings-of-a-permission). They catch a
+  permission that is read as something else, that is declared twice, that never reaches the rules or the
+  catalogue, or that has no description.
+- [DDD00090](#ddd00090) and [DDD00091](#ddd00091): [the names of resources with members](membership/resources-and-members.md#names).
+  They catch a code that clients read, or a function name, that changes when a class is renamed.
+- [DDD00096](#ddd00096) to [DDD00098](#ddd00098): the owner and the place of a resource with members. They catch
+  an attribute that adds nothing, and rules that read a place no property declares.
+- [DDD00074](#ddd00074): [the migration history](entity-framework.md#the-migration-history). It catches a
+  `dotnet ef database update` or an exported file that records the migrations in a table the application never
+  reads.
+- [DDD00075](#ddd00075) and [DDD00076](#ddd00076):
+  [two modules with Tenancy's classes](tenancy/your-module.md#two-modules-with-tenancys-classes). DDD00075 catches
+  a class name that compiles in each module and is two classes in the host. DDD00076 catches a naming line that
+  looks as if it names the class and changes nothing.
+
+The numbers follow this split. DDD00001 to DDD00019 are reserved for "the generator could not do what you
+asked". DDD00020 and up are rules about the model. These ids are exceptions, numbered later because they were
+added later:
+
+- [DDD00042](#ddd00042) to [DDD00050](#ddd00050), [DDD00053](#ddd00053), and [DDD00065](#ddd00065) to
+  [DDD00067](#ddd00067), about [supporting domains](writing-a-supporting-domain.md).
+- [DDD00052](#ddd00052), about a function's name.
+- [DDD00056](#ddd00056) and [DDD00057](#ddd00057), about an access behavior.
+
+Each of these says what the generator could not do.
+
+The severity does not follow the split:
+
+- [DDD00020](#ddd00020) and [DDD00027](#ddd00027) are errors in the second group. In both, the generator drops
+  the member instead of emitting something wrong. A warning would leave you with a rule that never runs, and no
+  error.
+- [DDD00014](#ddd00014) is a warning in the first group. The generator could not read the name the project
+  asked for. The code it generates under the assembly's name still compiles.
+
+The table above lists every id. DDD00012 and DDD00015 to DDD00019 were never assigned. DDD00063 was removed when
+a module's permissions moved into a `[Permissions]` class. [DDD00095](#ddd00095) now reports a list marked
+`[TenancyPermissions]` by hand. Ids are stable and never reused, so an id missing from this page is missing from
+the compiler too.
 
 ---
 
@@ -175,16 +205,16 @@ so a number that is missing here is missing from the compiler too.
 public partial class Address { }        // DDD00001
 ```
 
-`[ValueObject]` and `[SingleValueObject<T>]` generate structural equality members and an always-valid
-twin that derives from your type. Both require a reference record.
+`[ValueObject]` and `[SingleValueObject<T>]` generate structural equality members and an always-valid twin that
+derives from your type. Both need a record class:
 
 ```csharp
 [ValueObject]
 public partial record Address { }
 ```
 
-Nothing is generated for the type until it is a record, so expect follow-on errors about missing
-members until you fix this one.
+The generator generates nothing for the type until it is a record. Expect follow-on errors about missing members
+until you fix this one.
 
 ---
 
@@ -197,14 +227,17 @@ members until you fix this one.
 public partial record Order { }         // DDD00002
 ```
 
-Entities have identity, not value semantics, and derive from a generated base class. A record would
-give you value equality across all properties, which is wrong for an entity: an order whose status
-changed is still the same order.
+An entity has identity. Two entities are the same entity when their ids are equal. A record gives value equality
+over all its properties. For an entity this is wrong, because an order whose status changed is still the same
+order. An entity also derives from a generated base class, and only a class can do that. Declare it as a
+`partial class`:
 
 ```csharp
 [AggregateRoot<OrderId>]
 public partial class Order { }
 ```
+
+The generator generates nothing for the type until it is a class.
 
 ---
 
@@ -217,8 +250,8 @@ public partial class Order { }
 public partial class OrderId { }        // DDD00003
 ```
 
-Identifiers rely on record equality. Use a record struct for an allocation-free id, or a record class
-when you need inheritance or the always-valid twin:
+An identifier uses record equality. Declare it as a `readonly partial record struct` for an id that allocates
+nothing. Declare it as a `partial record` (a record class) when you need inheritance or the always-valid twin:
 
 ```csharp
 [EntityId<Guid>]
@@ -228,7 +261,8 @@ public readonly partial record struct OrderId;
 public partial record OrderId;
 ```
 
-See [Identifiers](identifiers.md) for which to choose.
+[Identifiers](identifiers.md) explains which one to choose. The generator generates nothing for the type until it
+is a record.
 
 ---
 
@@ -241,9 +275,8 @@ See [Identifiers](identifiers.md) for which to choose.
 public partial record struct OrderId;   // DDD00004, generation still happens
 ```
 
-A warning, not an error: the identifier is generated either way. Adding `readonly` states that the id
-cannot be mutated after construction and lets the compiler skip defensive copies when the struct is
-passed around.
+DDD00004 is a warning. The identifier is generated either way. With `readonly`, the compiler refuses any change to
+the id after construction, and it skips the defensive copies it otherwise makes when the struct is passed around.
 
 ```csharp
 [EntityId<Guid>]
@@ -261,12 +294,15 @@ public readonly partial record struct OrderId;
 public class Order { }                  // DDD00005
 ```
 
-The generator adds a second declaration of your type, which requires `partial`. Add the keyword:
+The generator adds a second declaration of your type. Two declarations of one type need `partial`. Add the
+keyword:
 
 ```csharp
 [AggregateRoot<OrderId>]
 public partial class Order { }
 ```
+
+The generator generates nothing for the type until it is `partial`.
 
 ---
 
@@ -287,13 +323,15 @@ public partial class Repository<T>
 
 A type nested in a non-generic container is fine and generates normally.
 
-The generated members have to name your type from places that cannot see a type parameter. A struct
-identifier carries `[JsonConverter(typeof(Reference<T>.SystemTextJsonConverter))]`, and an attribute
-argument may not name an open generic. The `Add<Module>Converters` and
-`Add<Module>GraphQlRuntimeBindings` registrations live outside the type and cannot name it at all.
+The generated code names your type from places where a type parameter is not in scope:
 
-The rule covers a type nested inside a generic type for the same reason: the type parameter is still
-in scope, so the same references are still unspeakable.
+- A struct identifier carries `[JsonConverter(typeof(Reference<T>.SystemTextJsonConverter))]`. An attribute
+  argument cannot name an open generic type.
+- The `Add<Module>Converters` and `Add<Module>GraphQlRuntimeBindings` registrations are outside the type. They
+  cannot name an open generic type at all.
+
+A type nested inside a generic type has the same problem. The outer type parameter is still in scope, so the
+generated code still cannot name the type.
 
 Give the type a concrete identity instead:
 
@@ -301,6 +339,8 @@ Give the type a concrete identity instead:
 [EntityId<Guid>]
 public readonly partial record struct OrderReference;
 ```
+
+The generator generates nothing for the type until it has no type parameters.
 
 ---
 
@@ -315,12 +355,12 @@ public sealed class OrderId { }         // something else, in the same namespace
 public partial class Order { }          // DDD00007
 ```
 
-`[AggregateRoot<Guid>]` and `[Entity<Guid>]` name a raw value, so the toolkit generates the
-identifier as well, called `OrderId`. Another type of that name in the same namespace or containing
-type would be a duplicate definition. Without this diagnostic the compiler would report CS0101
+`[AggregateRoot<Guid>]` and `[Entity<Guid>]` name a raw value, so the toolkit also generates the identifier. It
+names the identifier after the entity, with `Id` added: `OrderId`. A second type of that name in the same
+namespace or containing type would be a duplicate definition. Without DDD00007, the compiler would report CS0101
 against generated code you never wrote.
 
-Either point the attribute at the identifier you already have:
+Point the attribute at the identifier you already have:
 
 ```csharp
 [EntityId<Guid>("ORD")]
@@ -330,11 +370,10 @@ public readonly partial record struct OrderId;
 public partial class Order { }
 ```
 
-Or rename whichever of the two types should not be called `OrderId`.
+Or rename the type that should not be called `OrderId`.
 
-The one exception is a `partial record struct` of that name with no `[EntityId<T>]` on it. That is
-taken as your own half of the generated identifier and reports nothing, which is how you add members
-to it:
+One case reports nothing: a `partial record struct` of that name without `[EntityId<T>]`. The generator takes it
+as your part of the generated identifier. Use such a part to add members to the identifier:
 
 ```csharp
 public readonly partial record struct OrderId
@@ -343,12 +382,12 @@ public readonly partial record struct OrderId
 }
 ```
 
-Such a part must be `partial`, must be a `record struct`, and must not state an accessibility
-different from the entity's. A part that states `internal` where the generated part says `public`
-would be CS0262, so it reports DDD00007 instead.
+This part must be `partial`, must be a `record struct`, and must not state an accessibility other than the
+entity's. A part that says `internal` where the generated part says `public` would be CS0262, so DDD00007 reports
+it instead.
 
-Nothing is generated for the entity until the clash is gone, so expect follow-on errors about its
-missing base class.
+The generator generates nothing for the entity until the name clash is gone. Expect follow-on errors about the
+entity's missing base class.
 
 ---
 
@@ -363,10 +402,13 @@ public sealed class Money { }
 public partial class Order { }          // DDD00008
 ```
 
-The type argument of `[Entity<T>]` and `[AggregateRoot<T>]` is one of two things: an identifier you
-already have, meaning any type carrying `[EntityId<T>]` or implementing `IEntityId`, or the raw value
-an identifier should wrap. A reference type that is not a `string` is neither. It can be null and it
-is not copied by value, and an identifier has to be both.
+The type argument of `[Entity<T>]` and `[AggregateRoot<T>]` is one of two things:
+
+- An identifier you already have: a type with `[EntityId<T>]`, or any type that implements `IEntityId`.
+- The raw value that a generated identifier wraps.
+
+A reference type other than `string` is neither. It can be null, and it is copied by reference. An identifier
+must never be null and must be copied by value.
 
 ```csharp
 [AggregateRoot<Guid>("ORD")]            // a value the toolkit can wrap
@@ -376,10 +418,10 @@ public partial class Order { }
 public partial class Order { }
 ```
 
-`Guid`, `int`, `long`, `string`, `DateOnly` and your own structs all work. `Guid?` does not: an
-optional identifier is `OrderId?`, not an identifier over a nullable value.
+`Guid`, `int`, `long`, `string`, `DateOnly` and your own structs all work. `Guid?` does not work. For an optional
+identifier, make the identifier nullable: `OrderId?`.
 
-Nothing is generated for the entity until the type argument is one of the two.
+The generator generates nothing for the entity until the type argument is one of the two.
 
 ---
 
@@ -393,15 +435,19 @@ Nothing is generated for the entity until the type argument is one of the two.
 public partial class Widget { }         // DDD00009
 ```
 
-An aggregate root is a consistency boundary. A child entity lives inside one. A type cannot be both,
+An aggregate root is a consistency boundary. A child entity lives inside one aggregate. A type cannot be both,
 and the two attributes generate different base types for the same declaration.
 
-Keep whichever describes the type. Use `[AggregateRoot<T>]` for something you load, save and reference
-from elsewhere, and `[Entity<T>]` for something that only exists inside one aggregate. See
-[Entities and aggregates](entities-and-aggregates.md).
+Keep the attribute that describes the type:
 
-Before this diagnostic existed, both attributes on one class made the generator throw and contribute
-nothing at all, leaving only a `CS8785` about a crashed generator and no hint about the cause.
+- `[AggregateRoot<T>]` for something you load, save and reference from elsewhere.
+- `[Entity<T>]` for something that exists only inside one aggregate.
+
+See [Entities and aggregates](entities-and-aggregates.md). The generator generates nothing for the type until one
+of the two attributes is removed.
+
+Before DDD00009 existed, both attributes on one class made the generator throw. The generator then added nothing,
+and the only error was `CS8785`, a crashed generator, without the cause.
 
 ---
 
@@ -417,32 +463,29 @@ public partial record Address
 }
 ```
 
-A record with a publicly writable property can be cloned with `with` into a state that never passed
-validation:
+A caller can copy a record with a public `init` setter into a state that never passed validation:
 
 ```csharp
 var invalid = address with { City = "" };
 ```
 
-Making the setter `protected` keeps `with` available inside the type and its always-valid twin while
-closing it to callers:
+A `protected` setter keeps `with` available inside the type and its always-valid twin, and closes it to callers:
 
 ```csharp
 public string City { get; protected init; }
 ```
 
-The copy does not go through validation, and on the always-valid twin that produces a
-`ValidAddress` holding an invalid value, even from code that only knows about `Address`.
-[Why `with` is closed to callers](value-objects.md#why-with-is-closed-to-callers) goes through the
-mechanics, and why checking the copy at the `with` is not possible.
+The copy skips validation. On the always-valid twin, `with` produces a `ValidAddress` that holds an invalid value,
+even from code that only knows `Address`.
+[Why `with` is closed to callers](value-objects.md#why-with-is-closed-to-callers) explains the mechanics, and why
+the toolkit cannot check the copy at the `with`.
 
-A code fix makes that change for you: `protected init`, or `private protected init` on an
-`internal` property. Callers that need a changed copy use the generated
-[`With(...)`](value-objects.md#changing-a-value-with) instead of `with`.
+A code fix makes the change: `protected init`, or `private protected init` on an `internal` property. A caller
+that needs a changed copy uses the generated [`With(...)`](value-objects.md#changing-a-value-with) instead of
+`with`.
 
-A positional record does not report DDD00010. Its parameters would become `public init` properties,
-so the generator declares them itself as `protected init`; see
-[Positional records](value-objects.md#positional-records).
+A positional record does not report DDD00010. Its parameters would become `public init` properties, so the
+generator declares them itself as `protected init` ([Positional records](value-objects.md#positional-records)).
 
 ---
 
@@ -458,15 +501,15 @@ public partial record Address
 }
 ```
 
-A non-init setter lets any deriving type change the value after construction. Value objects are
+A setter without `init` lets every derived type change the value after construction. Value objects are
 immutable, so the setter must be `init`:
 
 ```csharp
 public string City { get; protected init; }
 ```
 
-DDD00010 and DDD00011 are separate rules and a property with a plain `public set` reports both. The
-fix for both is `protected init`, and the code fix described under [DDD00010](#ddd00010) applies it.
+DDD00010 and DDD00011 are separate rules. A property with a plain `public set` reports both. `protected init`
+fixes both, and the code fix under [DDD00010](#ddd00010) applies it.
 
 ---
 
@@ -479,11 +522,11 @@ fix for both is `protected init`, and the code fix described under [DDD00010](#d
 public sealed partial record EmailAddress { }   // DDD00013
 ```
 
-The generator emits `ValidEmailAddress`, which derives from `EmailAddress`. A sealed record cannot be
-derived from, so the twin cannot exist. Remove `sealed`.
+The generator emits `ValidEmailAddress`, which derives from `EmailAddress`. No type can derive from a sealed
+record, so the twin cannot exist. Remove `sealed`.
 
-Record structs are never affected: they are implicitly sealed but get no twin, since a struct cannot
-be derived from at all.
+A record struct never reports DDD00013. A struct is sealed implicitly, and it gets no twin, because no type can
+derive from a struct.
 
 ---
 
@@ -502,26 +545,27 @@ be derived from at all.
 </ItemGroup>
 ```
 
-A generator only sees an MSBuild property the project lists as a `CompilerVisibleProperty`. The
-`DDDToolkit.Analyzers` package lists the ones the toolkit's generators read, in a props file NuGet
-imports into every project the generators arrive in. Here the generators arrived and that file did
-not, so `DDD_Module` is ignored whatever the project sets, and `{Module}EventNames`,
-`Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` are
-named after the assembly. Before this warning existed that happened without a word.
+A source generator sees only the MSBuild properties that the project lists as `CompilerVisibleProperty`. The
+`DDDToolkit.Analyzers` package lists the properties the toolkit's generators read, in a props file. NuGet imports
+that file into every project the generators arrive in. Here the generators arrived and the props file did not.
+The generators then ignore `DDD_Module`, whatever the project sets. They name `{Module}EventNames`,
+`Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` after the
+assembly. Before DDD00014 existed, this happened without any message.
 
-The generator can tell the two cases apart. A property that is listed and not set reaches it as an
-empty value, which means "use the assembly name" and is never reported. A property that is not listed
-does not reach it at all.
+The generator tells the two cases apart:
 
-Two ways it happens, and the fix for each:
+- A property that is listed and not set reaches the generator as an empty value. An empty value means "use the
+  assembly name". It is never reported.
+- A property that is not listed does not reach the generator at all. DDD00014 reports this case.
 
-- **The reference leaves the package's build assets out**, with `ExcludeAssets`, or with an
-  `IncludeAssets` that names `analyzers` and not `build` and `buildTransitive`. Take the restriction
-  off. `PrivateAssets="all"` is fine: it decides what travels on to projects that reference yours, not
-  what yours gets.
-- **The generator is referenced as an assembly**, not as a package: an `<Analyzer Include="...dll" />`,
-  or a project reference with `OutputItemType="Analyzer"`. Nothing imports a props file then, so list
-  the property yourself, in the project or in `Directory.Build.props`:
+It happens in two ways. The fix for each:
+
+- **The reference leaves out the package's build assets**, with `ExcludeAssets`, or with an `IncludeAssets` that
+  names `analyzers` and not `build` and `buildTransitive`. Remove the restriction. `PrivateAssets="all"` is fine.
+  It decides what flows on to projects that reference yours, and does not limit what your project gets.
+- **The generator is referenced as an assembly** instead of a package: an `<Analyzer Include="...dll" />`, or a
+  project reference with `OutputItemType="Analyzer"`. Then nothing imports a props file. List the property
+  yourself, in the project or in `Directory.Build.props`:
 
   ```xml
   <ItemGroup>
@@ -529,14 +573,13 @@ Two ways it happens, and the fix for each:
   </ItemGroup>
   ```
 
-  Such a project gets no build step from the package either, so `DDD_Module` names its code and declares no
-  module there, which [DDD00064](#ddd00064) then says: import the package's targets file as well, or declare the
-  module with `[assembly: Module]`.
+  Such a project also gets no build step from the package. `DDD_Module` then names the project's generated code
+  and declares no module, and [DDD00064](#ddd00064) reports that. Import the package's targets file as well, or
+  declare the module with `[assembly: Module]`.
 
-It is reported once per project and has no line to point at, since no line of your code is wrong. An
-assembly that declares `[assembly: Module]` is not reported: the module names its generated code, and
-the property is not read. See
-[DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it).
+DDD00014 is reported once per project, without a line, because no line of your code is wrong. An assembly that
+declares `[assembly: Module]` is not reported. The module names its generated code, and the generator does not
+read the property. See [DDD_Module, and the package that brings it](modules.md#the-module-name-in-generated-code).
 
 ---
 
@@ -552,21 +595,22 @@ public partial class Order
 }
 ```
 
-The generator implements the property as a read-only view over a private backing field. A setter
-would let a caller replace the whole collection and bypass the aggregate's invariants, which is the
-thing the read-only view exists to prevent.
+The generator implements the property as a read-only view over a private backing field. A setter would let a
+caller replace the whole collection and skip the aggregate's invariants. The read-only view exists to prevent
+that. Remove the setter:
 
 ```csharp
 public partial IReadOnlyList<OrderLine> Lines { get; }
 ```
 
-Mutate through the generated field instead:
+Change the collection through the generated field, from inside the entity:
 
 ```csharp
 public void AddLine(OrderLine line) => _lines.Add(line);
 ```
 
-See [Entities and aggregates](entities-and-aggregates.md#read-only-collections).
+The generator does not implement the property until it is get-only, so DDD00020 is an error. See
+[Entities and aggregates](entities-and-aggregates.md#read-only-collections).
 
 ---
 
@@ -598,14 +642,18 @@ public partial class Order
 }
 ```
 
-Each aggregate is a separate loading and consistency boundary. A field or property typed as another
-root pulls that root inside this one: Entity Framework builds a navigation from it, one save then
-writes two roots, and neither `Version` guards its own aggregate any more. See
-[Entities and aggregates](entities-and-aggregates.md#reference-other-aggregates-by-id) for the longer
-version.
+Each aggregate is a separate boundary for loading and for consistency. A field or property typed as another
+root pulls that root inside this one:
 
-A warning, not an error. The code compiles, everything is still generated, and a team that disagrees
-can turn the rule off for a project:
+- Entity Framework builds a navigation from it.
+- One save then writes two roots.
+- The `Version` of each root no longer guards its own aggregate.
+
+[Entities and aggregates](entities-and-aggregates.md#reference-other-aggregates-by-id) explains this in more
+detail.
+
+DDD00021 is a warning. The code compiles, and everything is still generated. A team that disagrees can turn the
+rule off for a project:
 
 ```xml
 <PropertyGroup>
@@ -613,12 +661,11 @@ can turn the rule off for a project:
 </PropertyGroup>
 ```
 
-`#pragma warning disable DDD00021` around one property does **not** work, and neither does
-`[SuppressMessage]`. That is a limitation of source generators rather than a choice: a generator
-reports its diagnostics with a location rebuilt from a file path and holding no syntax tree, which is
-what keeps the pipeline cacheable, and the compiler has no tree to match a pragma against. `NoWarn` is
-read from the compilation options, so it reaches them. The same is true of every DDD diagnostic; this
-is the only one you are likely to want to switch off.
+`#pragma warning disable DDD00021` around one property does **not** work, and `[SuppressMessage]` does not work
+either. This is a limit of source generators. A generator reports a diagnostic with a location that it rebuilds
+from a file path, without a syntax tree. This keeps the generator's pipeline cacheable. The compiler then has no
+tree to match a pragma against. `NoWarn` is read from the compilation options, so it works. The same holds for
+every DDD diagnostic that a generator reports. DDD00021 is the one you are most likely to turn off.
 
 ### What reports and what does not
 
@@ -634,10 +681,10 @@ is the only one you are likely to want to switch off.
 | A method parameter or return type | No |
 | A `static` member | No |
 
-Two rows deserve a word.
+Two of these rows need more detail.
 
-**The back-navigation.** A child entity may hold the root that owns it, which is the inverse
-navigation Entity Framework wants:
+**The back-navigation.** A child entity may hold the root that owns it. This is the inverse navigation that
+Entity Framework needs:
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -653,16 +700,16 @@ public partial class OrderLine
 }
 ```
 
-The exemption is checked, not assumed: `Order` has to hold `OrderLine` back, through a collection or
-a single property, and the reference from the child has to be single valued. A child entity pointing
-at some other root still reports, because that reference does widen the boundary.
+The rule checks this exception. `Order` must hold `OrderLine`, through a collection or a single property, and the
+reference from the child must be a single value. A child entity that points at another root still reports,
+because that reference widens the boundary.
 
-**Methods.** `order.PlaceFor(customer)` takes the other root, reads what it needs and stores nothing,
-which is how two aggregates are meant to cooperate. Entity Framework cannot see a method either, so
-no navigation comes of it. The rule is about what an aggregate *holds*.
+**Methods.** `order.PlaceFor(customer)` takes the other root, reads what it needs and stores nothing. This is how
+two aggregates work together. Entity Framework does not see methods, so a method creates no navigation. The rule
+is about what an aggregate *holds*.
 
-The rule reads the declared type of a member, so a property typed as an interface that an aggregate
-root happens to implement is not recognised, and neither is `object`.
+The rule reads the declared type of a member. It does not recognise a property typed as an interface that an
+aggregate root implements, or a property typed as `object`.
 
 ---
 
@@ -686,7 +733,7 @@ public sealed class OrderReport
 }
 ```
 
-Either publish the type, in the module that owns it:
+Publish the type in the module that owns it:
 
 ```csharp
 namespace Crm;
@@ -695,10 +742,10 @@ namespace Crm;
 public sealed record CustomerSummary(CustomerId Id, string Name);
 ```
 
-or, when it belongs in Crm's contracts project, put it there: a project that says it is its module's contracts,
-with `<DDD_ModuleContracts>true</DDD_ModuleContracts>` or `[assembly: ModuleContracts]`, publishes every public
-type it declares without a mark on each ([A contracts project](modules.md#a-contracts-project)). Or go through
-something already published, which for an aggregate is usually its id and its integration events:
+Or put the type in Crm's contracts project, if it belongs there. A project that declares itself its module's
+contracts, with `<DDD_ModuleContracts>true</DDD_ModuleContracts>` or `[assembly: ModuleContracts]`, publishes every
+public type it declares, without a mark on each ([A contracts project](modules.md#a-contracts-project)). Or use
+something the module publishes already. For an aggregate, that is usually its id and its integration events:
 
 ```csharp
 namespace Sales;
@@ -709,33 +756,37 @@ public sealed class OrderReport
 }
 ```
 
-A module is an assembly that declares one: with `DDD_Module` in its project file, which the build turns into
-`[assembly: Module("Name")]`, or with that attribute in its source. Its published contract is every type
-marked `[ModuleContract]`, every type marked `[IntegrationEvent]`, anything nested inside one of
-those, and every public type of a project of the module that says it is the module's contracts. Everything else
-the assembly declares is the owning team's business, `public` or not. A project is never the module's contracts
-because of its name: `Legal.Contracts` may be a domain about contracts, and only the property or the attribute
-says otherwise. An `internal` type of a contracts project is not published, even to a project its
-`InternalsVisibleTo` lets in.
+A module is an assembly that declares a module. It declares it with `DDD_Module` in its project file, which the
+build turns into `[assembly: Module("Name")]`, or with that attribute in its source. A module's published contract
+is:
 
-The rule is silent unless both assemblies declare a module, so it reports nothing in a codebase that
-has not opted in, and never against the framework, a NuGet package or a shared kernel. Two assemblies
-that declare the same module name are one module and no boundary runs between them. Where it reports the
-types of a shared kernel, the kernel sets `DDD_Module` to name its generated code and was declared a module
-by it: set `<DDD_DeclareModule>false</DDD_DeclareModule>` beside it, or no `DDD_Module` at all
+- every type marked `[ModuleContract]`;
+- every type marked `[IntegrationEvent]`;
+- every type nested inside one of those;
+- every public type of a project of the module that declares itself the module's contracts.
+
+Everything else the assembly declares belongs to the team that owns the module, `public` or not. A project is
+never the module's contracts because of its name. `Legal.Contracts` may be a domain about legal contracts. Only
+the property or the attribute makes a project the contracts project. An `internal` type of a contracts project is
+not published, even to a project that its `InternalsVisibleTo` lets in.
+
+The rule reports nothing unless both assemblies declare a module. So it reports nothing in a codebase that has not
+opted in, and nothing against the framework, a NuGet package or a shared kernel. Two assemblies that declare the
+same module name are one module, with no boundary between them. If the rule reports the types of a shared kernel,
+the kernel sets `DDD_Module` to name its generated code, and the build declared it a module because of that. Set
+`<DDD_DeclareModule>false</DDD_DeclareModule>` beside it, or remove `DDD_Module`
 ([A module named by its folder](modules.md#a-module-named-by-its-folder)).
 
-It reports where you *name* another module's unpublished type: a parameter, a field, a base type, a
-generic argument, an attribute, a `typeof`, a `new`, a static call, a `using` alias. It cannot see a
-type you never name (`var`), an extension method called on an instance, an inherited member, or
-anything resolved by reflection. [Modules](modules.md#what-the-analyzer-cannot-catch) has the full
-list, which is worth reading before you trust the rule.
+The rule reports where you *name* another module's unpublished type: a parameter, a field, a base type, a generic
+argument, an attribute, a `typeof`, a `new`, a static call, a `using` alias. It does not see a type you never name
+(`var`), an extension method called on an instance, an inherited member, or anything resolved by reflection.
+[Modules](modules.md#what-the-analyzer-cannot-catch) has the full list. Read it before you rely on the rule.
 
-A warning, for the same reason as DDD00021: it states a design decision, and a team adopting modules
-wants the list before it has to fix it. This one comes from an analyzer rather than from a generator,
-so `#pragma warning disable DDD00022`, `[SuppressMessage]` and `NoWarn` all work, and
-`<WarningsAsErrors>$(WarningsAsErrors);DDD00022</WarningsAsErrors>` turns it into a build break once
-the list is empty.
+DDD00022 is a warning, for the same reason as DDD00021. It states a design decision, and a team that adopts
+modules wants the list of findings before it has to fix them. DDD00022 comes from an analyzer, so
+`#pragma warning disable DDD00022`, `[SuppressMessage]` and `NoWarn` all work.
+`<WarningsAsErrors>$(WarningsAsErrors);DDD00022</WarningsAsErrors>` turns it into a build error once the list is
+empty.
 
 ---
 
@@ -752,7 +803,7 @@ public partial class Order
 }
 ```
 
-Hold the other module's published id, and react to what it publishes:
+Hold the other module's published id, and react to the events the other module publishes:
 
 ```csharp
 [AggregateRoot<Guid>("ORD")]
@@ -764,14 +815,18 @@ public partial class Order
 }
 ```
 
-A property typed as another module's entity is a navigation. Entity Framework maps it, a query in one
-module loads rows owned by the other, and one `SaveChanges` writes into both inside one transaction.
-The two modules can then no longer be tested, migrated or separated on their own, and nothing in the
-code looks wrong.
+A property typed as another module's entity is a navigation:
 
-Publishing the entity does not help and does not silence this rule, and neither does declaring it in the other
-module's contracts project. `[ModuleContract]` and `[assembly: ModuleContracts]` say you may name a type; they
-cannot say you may make that type part of your own transaction.
+- Entity Framework maps it.
+- A query in one module loads rows that the other module owns.
+- One `SaveChanges` writes into both modules in one transaction.
+
+The two modules can then no longer be tested, migrated or separated on their own, and the code shows no sign of
+it.
+
+Publishing the entity does not fix this, and does not silence DDD00023. Declaring the entity in the other
+module's contracts project does not either. `[ModuleContract]` and `[assembly: ModuleContracts]` let you name a
+type. They do not let you make that type part of your own transaction.
 
 ### What reports and what does not
 
@@ -788,12 +843,12 @@ cannot say you may make that type part of your own transaction.
 | A `static` member | No |
 | The generated backing field of a collection property | No, the property is reported instead |
 
-Like DDD00022 this is a warning and comes from an analyzer, so pragmas, `[SuppressMessage]`, `NoWarn`
-and `WarningsAsErrors` all work on it.
+Like DDD00022, DDD00023 is a warning from an analyzer. Pragmas, `[SuppressMessage]`, `NoWarn` and
+`WarningsAsErrors` all work on it.
 
-Holding another module's *aggregate root* reports [DDD00021](#ddd00021) as well: one says hold the id,
-the other says do not reach across the boundary, and both are answered by the same edit. See
-[Modules](modules.md) for the longer version.
+A property that holds another module's *aggregate root* also reports [DDD00021](#ddd00021). DDD00021 asks for the
+id, and DDD00023 forbids the reference across the module boundary. The same edit fixes both. See
+[Modules](modules.md) for more detail.
 
 ---
 
@@ -811,7 +866,7 @@ public sealed class MustHaveLines : IInvariant<Order>      // DDD00024
 }
 ```
 
-Nest it inside the entity it judges, in a part of your own:
+Nest it inside the entity it checks, in a part of your own:
 
 ```csharp
 // Ordering/Invariants/MustHaveLines.cs
@@ -824,20 +879,18 @@ public partial class Order
 }
 ```
 
-An entity runs the rules it finds among its own nested types. That is what lets a rule read the
-entity's private state, and it is what keeps discovery free of a scan over the whole compilation. A
-rule declared anywhere else compiles, reads well, passes the unit test you wrote for it, and never
-runs on a save. It is the one failure the invariants feature is built to make impossible to ship
-unnoticed, which is why this fires at all.
+An entity runs the rules it finds among its own nested types. This lets a rule read the entity's private state,
+and the generator finds the rules without a scan over the whole compilation. A rule declared anywhere else
+compiles, reads well and passes the unit test you wrote for it. It never runs on a save. DDD00024 reports such a
+rule, because otherwise nothing would.
 
-This is the only one of the four that comes from a real analyzer rather than from the generator, and
-for a plain reason: a type outside an entity is by definition not among any entity's nested types, so
-only a pass over the compilation can see it. That also means `#pragma warning disable DDD00024`,
-`[SuppressMessage]`, `NoWarn` and `WarningsAsErrors` all work on it, which the three below cannot
-offer.
+DDD00024 is the only invariant diagnostic that comes from an analyzer. The generator reports the other three. A
+type outside an entity is not among any entity's nested types, so only a pass over the whole compilation can find
+it. As a result, `#pragma warning disable DDD00024`, `[SuppressMessage]`, `NoWarn` and `WarningsAsErrors` all work
+on DDD00024. A pragma and `[SuppressMessage]` do not work on the other three.
 
-A warning rather than an error, because an author who really did mean to hand the rule to something
-else of their own should be able to say so and move on.
+DDD00024 is a warning. An author who means to hand the rule to other code of their own can suppress it and move
+on.
 
 ### What reports and what does not
 
@@ -871,7 +924,7 @@ public partial class Order
 }
 ```
 
-Nest it inside the type it is about instead:
+Nest it inside the type it is about:
 
 ```csharp
 public partial class OrderLine
@@ -880,16 +933,16 @@ public partial class OrderLine
 }
 ```
 
-An entity runs the nested rules that are about *itself*. This one is in the right kind of place and
-still never runs, which makes it harder to spot than [DDD00024](#ddd00024) rather than easier. In
-practice the type argument was copied from a rule next to it.
+An entity runs only the nested rules that are about *itself*. This rule is in the right kind of place and still
+never runs, so it is harder to spot than [DDD00024](#ddd00024). Usually the type argument was copied from a rule
+next to it.
 
-A rule about a base class or an interface of the entity is accepted and reported by nothing:
-`IInvariant<T>` is contravariant in `T`, so `IInvariant<IHasCustomer>` nested inside `Order` runs on
-an `Order` perfectly well. Only a type argument the entity cannot be handed to is reported.
+A rule about a base class or an interface of the entity is accepted, and nothing reports it. `IInvariant<T>` is
+contravariant in `T`, so an `IInvariant<IHasCustomer>` nested inside `Order` runs on an `Order`. Only a type
+argument that the entity cannot be passed as is reported.
 
-Reported by the generator, so `NoWarn` reaches it and a pragma does not. The same is true of
-DDD00026 and DDD00027; [DDD00021](#ddd00021) explains why.
+The generator reports DDD00025, so `NoWarn` works on it and a pragma does not. The same holds for DDD00026 and
+DDD00027. [DDD00021](#ddd00021) explains why.
 
 ---
 
@@ -912,16 +965,14 @@ public partial class Order
 }
 ```
 
-The code exists so that a caller can act on a broken rule without matching on its message, which is
-the difference between a rule you can branch on and a string you can only display. Two rules
-answering to one code takes that back: `GetInvariantViolations()` returns two entries the caller
-cannot tell apart, and the branch that was supposed to catch one catches both.
+The code lets a caller act on a broken rule without matching on its message. A caller can branch on a code. A
+caller can only display a message. Two rules with one code take this away. `GetInvariantViolations()` returns two
+entries that the caller cannot tell apart, and a branch meant for one rule catches both.
 
-Both rules are still generated and both still run. Nothing about this stops compiling; what stops
-working is the thing the code was for.
+Both rules are still generated, and both still run. The project still compiles. Only the caller loses the
+ability to tell the two rules apart.
 
-Only the second rule is reported, and only codes this pass can read as a constant are compared at
-all:
+Only the second rule is reported. The generator compares only codes it can read as a constant:
 
 | `Code` written as | Compared |
 |---|---|
@@ -931,8 +982,8 @@ all:
 | `=> $"ORDER_{Reason}"` or anything computed | No |
 | Inherited from a base class as a constant | Yes |
 
-A code built at run time is left alone rather than guessed at, because a wrong guess would report two
-rules as sharing a code they do not share.
+The generator skips a code that is built at run time. A guess could report two rules as sharing a code that they
+do not share.
 
 ---
 
@@ -951,24 +1002,23 @@ public partial class Order
 }
 ```
 
-The generator creates one instance of every rule per entity type and reuses it for every check, so a
-rule has to be constructible without arguments, and has to be stateless for that reuse to be sound.
-The limit in the example belongs to the entity, not to the rule, and the rule reads it off the
-`Order` it is handed:
+The generator creates one instance of every rule per entity type and reuses it for every check. So a rule must
+have a constructor without parameters, and it must be stateless for the reuse to be safe. In the example, the
+limit belongs to the entity. The rule reads it from the `Order` it is given:
 
 ```csharp
 public InvariantFailure? Check(Order order)
     => order.Total > order.CreditLimit ? $"An order may not exceed {order.CreditLimit}." : null;
 ```
 
-An error rather than a warning. Nothing is generated for a rule the generated code cannot build, so a
-warning would leave the rule silently dropped, which is the exact silence the other three exist to
-prevent. The entity itself is still generated and everything else about it still works: you get this
-one error rather than a page of follow-on ones.
+DDD00027 is an error. The generator generates nothing for a rule that the generated code cannot construct. As a
+warning, DDD00027 would let that rule disappear with no error, and the other three invariant diagnostics exist to
+prevent a rule that never runs. The entity itself is still generated, and the rest of it works. You get this one
+error and no follow-on errors.
 
-Accessibility is asked of the compiler rather than read off the modifiers, because the two do not
-line up here. A rule nested inside the entity may be `private` and is still reachable from the
-generated code, which is written inside that same entity; a `private` constructor on it is not.
+The generator asks the compiler whether the constructor is accessible. It does not read the modifiers, because
+here the two differ. A rule nested inside the entity may be `private`, and the generated code still reaches it,
+because the generated code is written inside the same entity. A `private` constructor on the rule is out of reach.
 
 | | Reports |
 |---|---|
@@ -995,9 +1045,9 @@ public partial record Address
 }
 ```
 
-`[KeyPart]` puts a property into a primary key ahead of the identifier. Only an `[AggregateRoot<T>]`
-or an `[Entity<T>]` has an identifier and a permission, so anywhere else the attribute would do nothing,
-silently. Remove it, or move the property to the entity that is keyed on it. See
+`[KeyPart]` puts a property into the primary key, ahead of the identifier. Only an `[AggregateRoot<T>]` or an
+`[Entity<T>]` has an identifier and a primary key. On any other type the attribute would do nothing, and nothing
+would say so. Remove it, or move the property to the entity that is keyed on it. See
 [Composite keys](composite-keys.md).
 
 ---
@@ -1022,10 +1072,10 @@ Set it once, in the constructor, and make it get-only:
 public RegionId RegionId { get; }
 ```
 
-A key part is part of the primary key, and a primary key does not change once the row exists: Entity
-Framework refuses to save a modified key value, and every owned child's foreign key carries the same
-value. `{ get; }`, `private set`, `protected set` and `init` are all fine; only a public, non-init
-setter reports. A warning: everything is still generated.
+A key part is part of the primary key. A primary key does not change once the row exists. Entity Framework
+refuses to save a changed key value, and the foreign key of every owned child carries the same value. `{ get; }`,
+`private set`, `protected set` and `init` are all fine. Only a public setter without `init` reports. DDD00029 is a
+warning, and everything is still generated.
 
 ---
 
@@ -1048,7 +1098,7 @@ public partial class Project
 }
 ```
 
-Move them into one part of the class, in the order you want the permission:
+Move them into one part of the class, in the order you want in the key:
 
 ```csharp
 public partial class Project
@@ -1058,10 +1108,10 @@ public partial class Project
 }
 ```
 
-Key parts join the primary key in declaration order. Within one file that order is plain; between
-the files of a partial class there is none, only the order the compiler happens to read the files in,
-and a permission whose column order could change with a file rename is not a permission you want. Nothing is
-generated for the type until the key parts are together.
+Key parts join the primary key in the order they are declared. Within one file, that order is clear. Between the
+files of a partial class, there is no declaration order, only the order in which the compiler reads the files. A
+file rename could then change the column order of the key. The generator generates nothing for the type until its
+key parts are in one file.
 
 ---
 
@@ -1069,37 +1119,51 @@ generated for the type until the key parts are together.
 
 **A [SupabaseMigrations] context or factory must be one the build can make.**
 
-Reported in the project of a context marked `[SupabaseMigrations]`, about a context the build cannot write a
-design-time factory for, and in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`),
-normally the host, about a context or a factory in a module it references.
+DDD00031 is reported in two projects:
+
+- In the project of a context marked `[SupabaseMigrations]`, about a context that the build cannot write a
+  design-time factory for.
+- In the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), normally the host, about a
+  context or a factory in a module it references.
 
 ```csharp
 [SupabaseMigrations]
 public sealed class OrderingContext(DbContextOptions<OrderingContext> options, string schema) : DbContext(options)  // DDD00031: no constructor that takes its options alone
 ```
 
-For a marked context the build writes the factory beside it, `OrderingContextDesignTimeFactory`, which makes the
-context with `new OrderingContext(options)` on Npgsql. That needs a context that is neither abstract nor generic,
-with a constructor that takes its options alone, `DbContextOptions<OrderingContext>` or `DbContextOptions`, with
-nothing after them but optional parameters, and marked `[SetsRequiredMembers]` where the context has `required`
-members, in a project that references `Npgsql.EntityFrameworkCore.PostgreSQL`. Where it cannot write one, write a
-factory of your own beside the context: the build then writes none and uses yours, and says nothing. The project
-that exports also reports a marked context whose assembly has no factory for it, or more than one, or for which it
-declares more than one itself, where it cannot tell which the export makes it with: mark that one
-`[SupabaseMigrations]` instead. It reports a context it cannot see as well, and a factory of a module's own it cannot
-create: one that is not public, or has no public parameterless constructor.
+For a marked context, the build writes a design-time factory beside it, `OrderingContextDesignTimeFactory`. That
+factory makes the context with `new OrderingContext(options)` on Npgsql. The build can write the factory when:
 
-A factory may be marked instead of its context, as it was up to 3.1. It is reported in the project that exports:
+- the context is neither abstract nor generic, and not private inside another type;
+- the context has a constructor, not private or protected, that takes its options alone:
+  `DbContextOptions<OrderingContext>` or `DbContextOptions`, followed only by optional or `params` parameters;
+- that constructor is marked `[SetsRequiredMembers]` if the context has `required` members;
+- the project references `Npgsql.EntityFrameworkCore.PostgreSQL`.
+
+If the build cannot write a factory, write a factory of your own beside the context. The build then writes none,
+uses yours, and reports nothing.
+
+The project that exports also reports:
+
+- A marked context whose assembly has no factory for it.
+- A marked context with more than one factory, in its assembly or in the exporting project. The export cannot
+  tell which factory to make the context with. Mark the factory to use `[SupabaseMigrations]` instead of the
+  context.
+- A marked context that the exporting project cannot see.
+- A module's own factory that the exporting project cannot create: a factory that is not public, or that has no
+  public parameterless constructor.
+
+A factory may be marked instead of its context, as in versions up to 3.1. The project that exports reports it:
 
 ```csharp
 [SupabaseMigrations]
 internal sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>  // DDD00031: the host cannot see it
 ```
 
-The build creates every marked factory from code generated into the host, as
-`SupabaseMigrationSource.For<TContext, TFactory>()`. That needs a public, non-abstract, non-generic
-class with a public parameterless constructor, implementing `IDesignTimeDbContextFactory<TContext>`
-for a context the host can see too:
+The build creates every marked factory from code that it generates into the host, as
+`SupabaseMigrationSource.For<TContext, TFactory>()`. For this, the factory must be a public, non-abstract,
+non-generic class with a public parameterless constructor. It must implement `IDesignTimeDbContextFactory<TContext>`
+for a context that the host can also see:
 
 ```csharp
 [SupabaseMigrations]
@@ -1109,9 +1173,9 @@ public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<Orderin
 }
 ```
 
-The message names what is missing. A factory that fails is left out of the export, which is why this is
-an error: a module whose migrations were silently skipped would be found by a failing deployment, or by
-a branch database without its tables, instead of by the build.
+The message names what is missing. The export leaves out a context or a factory that fails these checks, so
+DDD00031 is an error. Without it, the first sign of the missing migrations would be a failed deployment, or a
+branch database without the module's tables.
 
 ## DDD00032
 
@@ -1121,15 +1185,15 @@ a branch database without its tables, instead of by the build.
 graphql.AddNodeIdValueSerializerFrom<OrderId>();   // DDD00032
 ```
 
-`AddNodeIdValueSerializerFrom<T>()` is intercepted by HotChocolate's own generator, which writes a
-serializer from the properties `T` declares in source. A toolkit identifier's `Value` is written by the
-toolkit's generator, and source generators do not see each other's output, so HotChocolate's finds no
-property and writes a serializer that stores nothing. Every order's node id becomes `Order:` and reads
-back as an empty `OrderId`. Nothing fails to compile and nothing throws.
+HotChocolate's own generator intercepts `AddNodeIdValueSerializerFrom<T>()`. It writes a serializer from the
+properties that `T` declares in source. The toolkit's generator writes a toolkit identifier's `Value`, and source
+generators do not see each other's output. So HotChocolate's generator finds no property and writes a serializer
+that stores nothing. Every order's node id becomes `Order:`, and every node id reads back as an empty `OrderId`.
+The code compiles, and nothing throws.
 
-Remove the call. `Add{Module}GraphQlRuntimeBindings()` already registers a serializer for every
-identifier over a `Guid`, `string`, `int`, `long` or `short`, in HotChocolate's own format; see
-[Relay node ids](graphql.md#relay-node-ids).
+Remove the call. `Add{Module}GraphQlRuntimeBindings()` already registers a serializer, in HotChocolate's own
+format, for every identifier over a `Guid`, `string`, `int`, `long` or `short`
+([Relay node ids](graphql.md#relay-node-ids)).
 
 ---
 
@@ -1145,34 +1209,37 @@ public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, 
 }
 ```
 
-The generated `Add{Module}IntegrationEvents()` registers every outbound class and every handler in the
-module by writing `new` for it, and takes each constructor parameter from the scope the message is
-delivered in. That only works for a class with one accessible constructor with the most parameters,
-whose parameters are not `ref`, `out` or `params`, and whose parameter types the assembly can see. The
-message says which of those failed.
+The generated `Add{Module}IntegrationEvents()` registers every outbound class and every handler of the module. It
+constructs each one with `new`, and takes each constructor parameter from the scope that the message is delivered
+in. For this, a class needs:
 
-A class the registration cannot construct is left out of it, so its domain event is never published, or
-its contract is never handled. That is a warning rather than silence because nothing else would tell
-you. Give the class a constructor the registration can call, or register it by hand.
+- one accessible constructor with the most parameters;
+- no `ref`, `out` or `params` parameters on that constructor;
+- parameter types that the assembly can see.
 
-The registration also names the domain events of the module's projects that do not reference Entity
-Framework, such as a domain project next to the infrastructure project that holds the outbox. One of those
-that this project cannot see, an `internal` event, is left out the same way, and reported on the project's
-`[assembly: Module]` attribute. Where no file of the project that somebody edits declares the module, it is
-reported at the project file instead: the build declared the module from `DDD_Module`, or an
-`<AssemblyAttribute>` item wrote the attribute into `obj/`
-([A module named by its folder](modules.md#a-module-named-by-its-folder)). Set its severity there with
-`<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig`; a `[*.cs]` section of `.editorconfig` does not reach the
-project file.
+The message says which of these failed.
+
+The registration leaves out a class that it cannot construct. The domain event of a left-out outbound class is
+never published. The contract of a left-out handler is never handled. Nothing else would tell you, so DDD00033 is
+a warning. Give the class a constructor that the registration can call, or register the class by hand.
+
+The registration also names the domain events of the module's projects that do not reference Entity Framework.
+An example is a domain project next to the infrastructure project that holds the outbox. A domain event that this
+project cannot see, such as an `internal` event, is left out in the same way. DDD00033 reports it on the
+project's `[assembly: Module]` attribute. If no file of the project that somebody edits declares the module,
+DDD00033 is reported at the project file instead. In that case the build declared the module from `DDD_Module`, or
+an `<AssemblyAttribute>` item wrote the attribute into `obj/`
+([A module named by its folder](modules.md#a-module-named-by-its-folder)). Set the severity there with `<NoWarn>`,
+`<WarningsAsErrors>` or a `.globalconfig`. A `[*.cs]` section of `.editorconfig` does not reach the project file.
 
 ```
 'Sales.Domain.OrderAudited' is left out of the generated integration event registration: a domain event of
 Sales.Domain, a project of this module, that this project cannot see; make it public
 ```
 
-Make the event public. Left out, it is still stored when it is raised, under the same name, and never
-delivered: the processor records the missing registration on its row at every attempt (see
-[Registering event types](event-delivery.md#registering-event-types)).
+Make the event public. A left-out event is still stored when it is raised, under the same name, and it is never
+delivered. The processor records the missing registration on the event's row at every attempt
+([Registering event types](event-delivery.md#registering-event-types)).
 
 ---
 
@@ -1185,15 +1252,21 @@ delivered: the processor records the missing registration on its row at every at
 public sealed record OrderPlacedV2(OrderId OrderId);
 ```
 
-A class name that ends in `V` and a number is that version of its event by convention, and `Version` on
-`[IntegrationEvent]` states one explicitly. The stated version wins wherever the version is read: the
-outbox, the published message, the generated registration. So this event is version 3, and the `V2` in its
-name is ignored. Nothing is ambiguous, which is why this is a warning and not an error, but a name that
-says 2 about an event that is 3 is how somebody ends up writing an upcaster for the wrong version.
+By convention, a class name that ends in `V` and a number is that version of its event. `Version` on
+`[IntegrationEvent]` states a version explicitly. The stated version wins wherever the version is read: the
+outbox, the published message, the generated registration. So this event is version 3, and the toolkit ignores
+the `V2` in its name. The version is clear, so DDD00034 is a warning. A name that says 2 on an event that is
+version 3 leads someone to write an upcaster for the wrong version.
 
-There are two fixes. The first renames the class to the version it is, `OrderPlacedV3`, everywhere it is
-used; the event does not change. The second removes `Version = 3`, which makes the event version 2, the
-name's, for when the name was right and the attribute was not. See [Versions are in the class name](domain-events.md#versions-are-in-the-class-name).
+Two code fixes make the name and the version agree:
+
+- **Rename the class** to the version it is, `OrderPlacedV3`, everywhere it is used. The event does not change.
+  This fix is offered first. It is not offered when the namespace or the containing type already has a type of
+  the new name.
+- **Remove `Version = 3`.** The event then becomes version 2, as its name says. Use this fix when the name was
+  right and the attribute was wrong.
+
+See [Versions are in the class name](domain-events.md#the-version-in-the-class-name).
 
 ---
 
@@ -1206,10 +1279,10 @@ public sealed record OrderPlacedV0(OrderId OrderId) : DomainEvent;    // DDD0003
 public sealed record OrderPlacedV01(OrderId OrderId) : DomainEvent;   // DDD00035
 ```
 
-Every event's class name is read for a version suffix. Versions start at 1 and are written without leading
-zeros, so `V0` and `V01` cannot be one, and reading them as part of the name instead would give this event
-a version rule of its own. Rename the class: `V1` for a first version, or a name that does not end in `V`
-and digits. Digits that do not follow a `V`, as in `Level2Reached`, are part of the name and fine.
+The toolkit reads every event's class name for a version suffix. Versions start at 1 and have no leading zeros, so
+`V0` and `V01` cannot be versions. Reading them as part of the name would make this event the only one whose
+suffix is not its version. Rename the class: `V1` for a first version, or a name that does not end in `V` and
+digits. Digits that do not follow a `V`, as in `Level2Reached`, are part of the name and are fine.
 
 ---
 
@@ -1224,19 +1297,20 @@ namespace Ordering.Orders  { public sealed record OrderPlaced(OrderId OrderId) :
 namespace Ordering.Returns { public sealed record OrderPlaced(OrderId OrderId) : DomainEvent; }   // DDD00036
 ```
 
-An event is found by its name and version when a stored row or a delivered message is read back, and both
-of these are `ordering.order-placed` version 1. The registry would refuse the second at start-up; this
-refuses it when the module compiles, on both classes, because neither is more wrong than the other.
+When a stored row or a delivered message is read back, the toolkit finds its event by name and version. Both
+events above are `ordering.order-placed` version 1. The registry would refuse the second event at start-up.
+DDD00036 refuses it when the module compiles. It is reported on both classes, because neither is more wrong than
+the other.
 
-The code fix pins another name on the class you invoke it on, made from its namespace or containing type:
-`[DomainEventName("ordering.returns-order-placed")]` on a domain event, the name in its
-`[IntegrationEvent("...")]` on a contract. A class whose name is already pinned is offered nothing, since
-that name was chosen by hand. Renaming one of the classes works as well.
+The code fix pins another name on the class you run it on. It makes the name from the class's namespace or
+containing type: `[DomainEventName("ordering.returns-order-placed")]` on a domain event, or the name in
+`[IntegrationEvent("...")]` on a contract. A class whose name is pinned already gets no code fix, because
+somebody chose that name by hand. Renaming one of the classes also fixes the error.
 
-Two domain events are compared with each other, and two contracts with each other. A domain event and the
-contract it is published as share a name on purpose, and so do the versions of one event; neither is
-reported. The toolkit does not make a name unique from the namespace by itself, because that name would
-change when the class moved. See [Two events with one name](domain-events.md#two-events-with-one-name).
+The toolkit compares domain events with domain events, and contracts with contracts. A domain event and the
+contract it is published as share a name on purpose. The versions of one event also share a name. Neither case is
+reported. The toolkit does not make a name unique from the namespace by itself, because that name would change
+when the class moved. See [Two events with one name](domain-events.md#two-events-with-one-name).
 
 ---
 
@@ -1252,12 +1326,12 @@ public sealed record OrderPlaced(OrderId OrderId) : DomainEvent;
 public sealed record PlacedOrder(OrderId OrderId) : DomainEvent;
 ```
 
-Every name gets a constant in the generated `{Module}EventNames`, named after the name without its module
-and in PascalCase: both of these would be `OrderingEventNames.OrderPlaced`. Whichever name the constant
-held, code that reached for it meaning the other event would bind a topic or a test to the wrong event and
-never find out, so this is an error, on the events of both names. Pin one of the names to something that
-reads differently. Until then the first name in ordinal order keeps the constant, only so that code already
-using it does not add errors of its own to this one.
+Every event name gets a constant in the generated `{Module}EventNames` class. The constant is named after the
+event name without its module, in PascalCase. Both names above give `OrderingEventNames.OrderPlaced`. Whichever
+name the constant held, code that used it for the other event would bind a topic or a test to the wrong event,
+and nothing would show it. So DDD00037 is an error, on the events of both names. Pin one of the names to
+something that reads differently. Until then, the first name in ordinal order keeps the constant. This only stops
+code that uses the constant from adding errors of its own.
 
 ## DDD00038
 
@@ -1267,53 +1341,62 @@ using it does not add errors of its own to this one.
 [RowAccess<Order>(RowOperations.Read)]
 public static class ACustomerSeesTheirOrders                      // DDD00038: not partial
 {
-    public static bool Allows(Order order) => order.PlacedBy == null;   // DDD00038: no Caller
+    public static bool Allows(Order order) => order.PlacedBy == null;   // DDD00038: no ICurrentUser
 }
 ```
 
-The generator writes the rule's SQL into another part of the class, so the class is `static partial`. And it
-translates `Allows`, which is a static method taking the aggregate the rule is about and a `Caller`,
-returning `bool`, with a single expression for a body: after `=>`, or as its only `return` statement.
-Nothing is generated until the rule has that shape, and a rule without SQL never reaches the database.
+The generator writes the rule's SQL into another part of the class, so the class is `static partial`. The
+generator translates `Allows`. `Allows` is a static method that takes the aggregate the rule is about and an
+`ICurrentUser`, returns `bool`, and has a single expression for a body: after `=>`, or as its only `return` statement.
+The generator generates nothing until the rule has this shape. A rule without SQL never reaches the database.
 
-The same holds, with a little more, for the others the generator reads:
+The same holds for the other classes the generator reads, with more requirements:
 
-- **An `[AccessFunction]`** has a rule's shape, and may take more after the caller: `string`, `bool`, `int`,
-  `long`, `Guid` or an id, each a parameter of the SQL function after the permission. A decimal, a list or a
-  nullable value type is not one. With `Shape = AccessFunctionShape.Set` its aggregate's permission is one
-  column, because the function answers with the permissions of the rows it allows.
+- **An `[AccessFunction]`** has a rule's shape. After the caller it may take more parameters: `string`, `bool`,
+  `int`, `long`, `Guid` or an id. Each one becomes a parameter of the SQL function, after the row's primary key. A
+  `decimal`, a list or a nullable value type is not allowed. With `Shape = AccessFunctionShape.Set`, the
+  aggregate's primary key must be one column, because the function answers with the primary keys of the rows it
+  allows.
 - **An `[AccessFunctionContract]`** declares nothing, or one question for the generator to implement:
-  `static partial bool Allows(TKey permission, ...)`, or `static partial AccessSet<TKey> Ids(...)`, which also needs
+  `static partial bool Allows(TKey key, ...)`, or `static partial AccessSet<TKey> Ids(...)`. `Ids` also needs
   `Shape = AccessFunctionShape.Set` if the attribute names a shape.
-- **A `[ResourceAccessContract]`** is keyed by the id of the resource's aggregate, such as `ProjectId`, since
-  the export finds the resource by the type of its id, and publishes `ResourceAccessSet.Seen` or `HeldOn`. The
-  id is one declared with `[EntityId<T>]`, the one the toolkit writes beside an aggregate root of the same
-  project declared with a value, `[AggregateRoot<Guid>]`, or one a package's switch writes into the project,
-  `[assembly: GenerateTenancyIds]`; a name the generator finds as none of these is reported with the line that
-  declares it. The contract is declared in the module that owns the id, since a module
-  publishes the sets of its own resources: one of an id whose assembly declares another module is reported,
-  and the other module's rules ask the contract the owner publishes. It declares nothing, or the `Ids` its set
-  is asked with for the generator to implement: `static partial AccessSet<ProjectId> Ids()` for the resources
-  seen, `static partial AccessSet<ProjectId> Ids(string permission)` for those a permission is held on
-  ([a resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id)).
+- **A `[ResourceAccessContract]`** is keyed by the id of the resource's aggregate, such as `ProjectId`, because
+  the export finds the resource by the type of its id. It publishes `ResourceAccessSet.Seen` or `HeldOn`. The id
+  is one of these:
+  - an id declared with `[EntityId<T>]`;
+  - the id that the toolkit writes beside an aggregate root of the same project declared with a value,
+    `[AggregateRoot<Guid>]`;
+  - an id that a package's switch writes into the project, `[assembly: GenerateTenancyIds]`.
+
+  A name that the generator finds as none of these is reported, with the line that declares it. The contract is
+  declared in the module that owns the id, because a module publishes the sets of its own resources. A contract
+  for an id whose assembly declares another module is reported. The other module's rules ask the contract that
+  the owner publishes. The contract declares nothing, or the `Ids` its set is asked with, for the generator to
+  implement: `static partial AccessSet<ProjectId> Ids()` for the resources seen, and
+  `static partial AccessSet<ProjectId> Ids(string permission)` for the resources a permission is held on
+  ([a resource's access, asked by its id](row-level-security.md#resource-access-contracts)).
 - **A question of an `[AccessFunctions]` class** is a `static partial` method without a body, in a
-  `static partial` class: an `[AccessSet]` returns `AccessSet<T>`, an `[AccessScalar]` returns a value, and
-  its parameters are the types above, or a type parameter constrained to `IEntityId`. An `[AccessSet]` or
-  `[AccessScalar]` method in a class without `[AccessFunctions]` has nothing to write its body.
-- **A function's name** is `schema.name`, `owner/name`, or a name relative to its owner, each part letters,
-  digits and underscores, and the owner lower case letters, digits and dashes. A relative name with no owner
+  `static partial` class. An `[AccessSet]` question returns `AccessSet<T>`, and an `[AccessScalar]` question
+  returns a value. Its parameters are the types above, or a type parameter constrained to `IEntityId`. No
+  generator writes the body of an `[AccessSet]` or `[AccessScalar]` method in a class without `[AccessFunctions]`,
+  so such a method is reported.
+- **A function's name** is `schema.name`, `owner/name`, or a name relative to its owner. Each part has letters,
+  digits and underscores. The owner has lower-case letters, digits and dashes. A relative name without an owner
   is [DDD00052](#ddd00052).
 - **A [column rule](row-level-security.md#column-rules)**, a rule with `Columns`, is for `RowOperations.Change`
-  alone: reading, adding and removing are about whole rows. Each name in `Columns` is a property of the
-  aggregate, its parent or its template's parent, or a property of a value object it holds, written with a
-  dot: `"Planned.From"`. It is not a collection of its entities, whose rows are in a table of their own and
-  follow the rules for the aggregate's row; a collection of values, such as a list of strings stored as an
-  array, is one column and may be named whole. It is reported on the `Columns` argument. Whether the model
-  stores the property in a column of the aggregate's table only the export knows, and it refuses one that it
-  does not, naming the rule.
-- **A function a column rule calls with `Sql.Call`** names its schema: `"public.is_agent"`, or
-  `"pg_catalog.lower"` for one of Postgres's own. A column rule is asked in a trigger whose search path is
-  empty, where a name without a schema finds Postgres's own functions alone. It is reported on the name.
+  alone. Reading, adding and removing are about whole rows. Each name in `Columns` is one of these:
+  - a property of the aggregate, of its parent, or of its template's parent;
+  - a property of a value object the aggregate holds, written with a dot: `"Planned.From"`.
+
+  A name in `Columns` cannot be a collection of the aggregate's entities. Their rows are in a table of their own
+  and follow the rules for the aggregate's row. A collection of values, such as a list of strings stored as an
+  array, is one column and may be named as a whole. DDD00038 is reported on the `Columns` argument. Only the
+  export knows whether the model stores the property in a column of the aggregate's table. The export refuses a
+  property that is not stored there, and names the rule.
+- **A function that a column rule calls with `Sql.Call`** names its schema: `"public.is_agent"`, or
+  `"pg_catalog.lower"` for a built-in Postgres function. A column rule is checked in a trigger whose search path
+  is empty. There, a name without a schema finds only Postgres's built-in functions. DDD00038 is reported on the
+  name.
 
 ```csharp
 [RowAccess<Project>(RowOperations.Read | RowOperations.Change, Columns = [nameof(Project.State)])]   // DDD00038: Change alone
@@ -1325,22 +1408,29 @@ The same holds, with a little more, for the others the generator reads:
 **A row access rule can only say what the database can check.**
 
 ```csharp
-public static bool Allows(Order order, Caller caller)
+public static bool Allows(Order order, ICurrentUser user)
     => order.Team!.StartsWith("north");                           // DDD00039, on the call
 ```
 
-A rule becomes a condition the database evaluates for every row, so it can use the aggregate's own
-properties, constants written in the rule, and the caller: `caller.UserId`, `caller.IsSignedIn`,
-`caller.Role` and `caller.Claim("app_metadata.team")`. It can compare them, with `==`, `!=`, `<`, `<=`,
-`>` and `>=`, and combine the comparisons with `&&`, `||` and `!`. The time is `DateTimeOffset.UtcNow` or
-`DateTime.UtcNow`, which the database answers as `now()`. What only the database knows it asks through an
-[access function](row-level-security.md#asking-the-aggregates-entities-access-functions), a
-[question](row-level-security.md#set-shaped-questions) of an `[AccessFunctions]` class, or a
-[resource access contract](row-level-security.md#a-resources-access-asked-by-its-id), and a set-shaped
-question only with `Contains`. A method call, a local variable or another object has no column and no claim
-to become, and leaving it out would make the database answer differently from the C# method, so it is an
-error on the part that cannot be translated. Store what the rule needs as a property of the aggregate, or
-put it in the caller's `app_metadata`.
+The generator turns a rule into a condition that the database checks for every row. So a rule can use only these:
+
+- the aggregate's own properties;
+- constants written in the rule;
+- the current user: `user.Id`, `user.IsAuthenticated`, `user.Role` and `user.FindClaim("app_metadata.team")`;
+- the time, as `DateTimeOffset.UtcNow` or `DateTime.UtcNow`, which the database answers as `now()`;
+- SQL written with `Sql.Call` or `Sql.Raw`.
+
+A rule compares these with `==`, `!=`, `<`, `<=`, `>` and `>=`, and combines the comparisons with `&&`, `||` and
+`!`. A rule asks what only the database knows through an
+[access function](row-level-security.md#access-functions), a
+[question](row-level-security.md#set-shaped-access-functions) of an `[AccessFunctions]` class, or a
+[resource access contract](row-level-security.md#resource-access-contracts). It asks a set-shaped
+question only with `Contains`.
+
+A method call, a local variable or another object has no column and no claim to become. If the generator left it
+out, the database would answer differently from the C# method. So DDD00039 is an error, on the part that cannot
+be translated. Store what the rule needs as a property of the aggregate, or put it in the caller's
+`app_metadata`.
 
 ## DDD00040
 
@@ -1351,14 +1441,14 @@ put it in the caller's `app_metadata`.
 public static partial class LinesOfBigOrders { ... }
 ```
 
-An aggregate is read and changed as a whole. A rule on one of its entities could hide some of an order's
-lines and not the order, and Entity Framework would load half an aggregate whose invariants then check half
-the data. Write the rule for the root. The export gives the tables of the aggregate's entities a policy
-that follows it: a line is visible exactly when its order is.
+An aggregate is read and changed as a whole. A rule on one of its entities could hide some of an order's lines
+and not the order. Entity Framework would then load half an aggregate, and the aggregate's invariants would check
+half the data. Write the rule for the root. The export gives the tables of the aggregate's entities a policy that
+follows the root. A line is visible when its order is visible, and hidden when its order is hidden.
 
-A rule about a supporting domain's parent, `[RowAccess<SubscriptionAggregate<SubscriptionId>>]`, reports
-this too: the parent is abstract and has no table. Write the rule for the application's class declared
-with the parent's template; it reads the parent's properties like its own.
+A rule about a supporting domain's parent, `[RowAccess<SubscriptionAggregate<SubscriptionId>>]`, also reports
+DDD00040. The parent is abstract and has no table. Write the rule for the application's class declared with the
+parent's template. That class reads the parent's properties like its own.
 
 ---
 
@@ -1370,30 +1460,33 @@ with the parent's template; it reads the parent's properties like its own.
 [RowAccess<Project>(RowOperations.Read)]
 public static partial class MembersSeeTheirProjects
 {
-    public static bool Allows(Project project, Caller caller)
-        => project.Members.Any(member => member.UserId == caller.UserId);   // DDD00041
+    public static bool Allows(Project project, ICurrentUser user)
+        => project.Members.Any(member => member.UserId == user.Id);   // DDD00041
 }
 ```
 
-The tables of an aggregate's entities have policies that ask the aggregate's table whether their row is
-visible. A policy on the aggregate's table that read those tables would ask itself, and Postgres stops the
-query with infinite recursion. Put the question in an [access function](row-level-security.md#asking-the-aggregates-entities-access-functions),
-which runs as its owner and reads the entities without their policies, and call it from the rule:
+The tables of an aggregate's entities have policies that ask the aggregate's table whether their row is visible.
+A policy on the aggregate's table that read those tables would ask itself. Postgres stops such a query with
+infinite recursion. Put the question in an
+[access function](row-level-security.md#access-functions). An access function runs
+as its owner (`SECURITY DEFINER`), so it reads the entities without their policies. Call it from the rule:
 
 ```csharp
 [AccessFunction<Project>("projects.is_member")]
 public static partial class ProjectMembership
 {
-    public static bool Allows(Project project, Caller caller)
-        => project.Members.Any(member => member.UserId == caller.UserId);
+    public static bool Allows(Project project, ICurrentUser user)
+        => project.Members.Any(member => member.UserId == user.Id);
 }
 
 [RowAccess<Project>(RowOperations.Read)]
 public static partial class MembersSeeTheirProjects
 {
-    public static bool Allows(Project project, Caller caller) => ProjectMembership.Allows(project, caller);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectMembership.Allows(project, user);
 }
 ```
+
+The rule calls the function with the row's id. The SQL function is written once, however many rules call it.
 
 ---
 
@@ -1406,12 +1499,18 @@ public static partial class MembersSeeTheirProjects
 public partial class SubscriptionAggregate<TSubscriptionId> { ... }   // DDD00042: not abstract
 ```
 
-A package ships a parent for the application's own classes to derive from, and the generator writes its
-base class the way it does for any aggregate root or entity: `AggregateRoot<TId>` or `Entity<TId>`, closed
-over the parent's first type parameter. So the parent is abstract, since only what derives from it is ever
-created; the id is its first type parameter; it is not nested in a generic type; and the id is constrained
-the way the toolkit's base classes require. Like every entity it is also a `partial class`, which
-[DDD00005](#ddd00005) and [DDD00002](#ddd00002) report:
+A package ships a parent class that the application's own classes derive from. The generator writes the parent's
+base class as it does for any aggregate root or entity: `AggregateRoot<TId>` or `Entity<TId>`, closed over the
+parent's first type parameter. So the parent must have this shape:
+
+- It is `abstract`, because only the classes that derive from it are ever created.
+- Its first type parameter is the id.
+- It is not nested in a generic type.
+- The id parameter has the constraint that the toolkit's base classes require:
+  `where TId : IEntityId, IEquatable<TId>`.
+
+Like every entity, the parent is also a `partial class`. [DDD00005](#ddd00005) and [DDD00002](#ddd00002) report
+that:
 
 ```csharp
 [AggregateRootBase]
@@ -1422,11 +1521,10 @@ public abstract partial class SubscriptionAggregate<TSubscriptionId>
 }
 ```
 
-A parent with more than one problem reports the first; the next is reported once that one is fixed. A
-class declared with the template of a parent that reports this gets nothing generated either, and no
-diagnostic of its own: the parent is the one to fix. The compiler errors in that class, such as a
-`base(...)` call it cannot make or a parent's property it cannot find, come from the missing base class
-and go away once the parent is fixed.
+A parent with more than one problem reports the first one. The next one is reported once the first is fixed. A
+class declared with the template of such a parent gets nothing generated either, and no diagnostic of its own.
+Fix the parent. The compiler errors in that class, such as a `base(...)` call it cannot make or a parent's
+property it cannot find, come from the missing base class. They go away once the parent is fixed.
 
 ---
 
@@ -1439,10 +1537,10 @@ and go away once the parent is fixed.
 public sealed partial class ShopSubscription;
 ```
 
-A template attribute names the id of the class it declares, and that class derives from a parent closed
-over the id. Unlike `[AggregateRoot<Guid>]`, a template never generates an id from a raw value: the id
-belongs to the application, which declares it where every module that refers to it can see it, usually a
-contracts project.
+A template attribute names the id of the class it declares, and that class derives from a parent closed over the
+id. Unlike `[AggregateRoot<Guid>]`, a template never generates an id from a raw value. The id belongs to the
+application. The application declares the id where every module that refers to it can see it, usually in a
+contracts project:
 
 ```csharp
 [EntityId<Guid>]
@@ -1451,6 +1549,8 @@ public readonly partial record struct SubscriptionId;                // in Shop.
 [Subscription<SubscriptionId>]
 public sealed partial class ShopSubscription;
 ```
+
+The generator generates nothing for the class until its id is an `[EntityId<T>]`.
 
 ---
 
@@ -1463,21 +1563,24 @@ public sealed partial class ShopSubscription;
 public sealed partial class ShopInvoice;
 ```
 
-Some parents need more than the id of the class that derives from them: the parent of an invoice needs the
-subscription's id and the class of its lines. The template attribute takes those from the one class
-declared with the template it names, so each is declared once and every class agrees on it. It looks in
-the project first and, when the project declares none, in the projects it references. Declare the class
-the message names, with the attribute it names, in one of them.
+Some parents need more than the id of the class that derives from them. The parent of an invoice needs the
+subscription's id and the class of its lines. The template attribute takes those types from the one class
+declared with the template it names. So each type is declared once, and every class agrees on it. The generator
+looks in the project first. If the project declares no such class, the generator looks in the projects it
+references. Declare the class that the message names, with the attribute it names, in one of them.
 
-A code fix declares it for you, next to the class the error is on: `[Subscription<SubscriptionId>] public
-sealed partial class ShopSubscription;`, named after that class (`ShopInvoice` gives the prefix `Shop`) and
-declared with the id whose name matches the parent's id parameter (`TSubscriptionId` gives
-`SubscriptionId`). When no id has that name, it looks for the template's name with `Id` after it instead,
-so `[OrganizationUnit]`, whose parent's parameter is `TUnitId`, finds your `OrganizationUnitId`. It is
-offered when exactly one such id is found, in the project or in a project it references. A template of more
-than one word gives the new class the prefix and the last word only: an organization called
-`ShopOrganization` that has no unit gets `ShopUnit`. A class named for its template alone has no prefix,
-and the new class is then named after its template in full: `Organization` gets `OrganizationUnit`.
+A code fix declares the class for you, next to the class with the error:
+`[Subscription<SubscriptionId>] public sealed partial class ShopSubscription;`.
+
+- It names the new class after the class with the error. `ShopInvoice` gives the prefix `Shop`.
+- It declares the class with the id whose name matches the parent's id parameter. `TSubscriptionId` gives
+  `SubscriptionId`. If no id has that name, it looks for the template's name with `Id` after it. So
+  `[OrganizationUnit]`, whose parent's parameter is `TUnitId`, finds your `OrganizationUnitId`.
+- It is offered only when it finds exactly one such id, in the project or in a project it references.
+- For a template name of more than one word, the new class gets the prefix and the last word only. An
+  organization called `ShopOrganization` that has no unit gets `ShopUnit`.
+- A class named after its template alone has no prefix. The new class is then named after its template in full.
+  `Organization` gets `OrganizationUnit`.
 
 ---
 
@@ -1493,34 +1596,39 @@ and the new class is then named after its template in full: `Organization` gets 
 public sealed partial class ShopInvoice;
 ```
 
-The parent takes a type argument from the one class declared with another template. With two there is no
-telling which one is meant, and picking one would bind the parent to it without a word. Keep one.
+The parent takes a type argument from the one class declared with another template. With two such classes, the
+generator cannot tell which one is meant. Picking one would bind the parent to it with no message. Keep one.
 
 A [registration closed over your classes](writing-a-supporting-domain.md#a-registration-closed-over-your-classes)
-takes its type arguments the same way, and reports this too, on the first class of the project declared with
-one of its templates: `'SubscriptionModelBuilderExtensions.AddSubscriptions' is declared with
-[TemplateRegistration], which takes 'TSubscription' from the class declared with [Subscription], and there
+takes its type arguments in the same way, and also reports DDD00045. It reports it on the first class of the
+project declared with one of its templates: `'SubscriptionModelBuilderExtensions.AddSubscriptions' is declared
+with [TemplateRegistration], which takes 'TSubscription' from the class declared with [Subscription], and there
 are several`.
 
-A package can say that a template is meant to be declared more than once, with `AllowSeveral = true` on its
-marker: the comments on a subscription and the comments on an invoice. For a registration several classes of
-such a template are no mistake. It is written
-[once per class, named after the class](writing-a-supporting-domain.md#a-template-declared-more-than-once),
-and this is reported only for what still cannot be told apart, with the way out instead of "keep one":
+A package can declare that a template is meant to be used more than once, with `AllowSeveral = true` on its
+marker. Examples are the comments on a subscription and the comments on an invoice. For a registration, several
+classes of such a template are fine. The registration is written
+[once per class, named after the class](writing-a-supporting-domain.md#a-template-declared-more-than-once).
+DDD00045 then reports only the cases that still cannot be told apart, with a fix for each:
 
-- **Two templates of one method each have several classes.** There is no telling which class of the one goes
-  with which of the other. Call the package's generic method for these, with its type arguments written out.
-- **Two of the classes have one name,** in two namespaces. The registrations are named after their classes;
-  give each a name of its own.
-- **Two registrations would be called the same.** A method that
-  [says what its registration is called](writing-a-supporting-domain.md#a-registration-named-after-what-it-is-for)
-  names each after what its class says of itself, the aggregate it belongs to say, and two classes that say the
-  same come to one name: `the registration of each would be called 'AddShopInvoiceDiscounts'`. Let what they
-  are named after differ; with Membership, a resource has one member class. The other classes keep their
-  registrations.
+- **Two templates of one method each have several classes.** The generator cannot tell which class of one
+  template goes with which class of the other. Call the package's generic method for these classes, with its type
+  arguments written out.
+- **Two of the classes have one name,** in two namespaces. The registrations are named after their classes. Give
+  each class a name of its own.
+- **Two registrations would get the same name.** A method that
+  [says what its registration is called](writing-a-supporting-domain.md#naming-a-registration)
+  names each registration after what its class says of itself, such as the aggregate it belongs to. Two classes
+  that say the same thing give one name: `the registration of each would be called 'AddShopInvoiceDiscounts'`.
+  Make the things they are named after differ. With Membership, a resource has one member class. The other
+  classes keep their registrations.
 
-A parent that takes a type from such a template is still closed over one class, so two are reported there
-as for any other template.
+The last case is reported once, however many of the package's registrations it stops, on the class to fix. If the
+type that the registrations are named after holds one of the classes in a property or field, as a resource holds
+its members, DDD00045 is reported on the other class. Otherwise it is reported on the class declared last.
+
+A parent that takes a type from such a template is still closed over one class. So two classes are reported
+there, as for any other template.
 
 ---
 
@@ -1533,12 +1641,14 @@ as for any other template.
 public sealed class InvoiceAttribute<TInvoiceId> : Attribute;        // DDD00046: nothing fills the other three
 ```
 
-This is a mistake in the package that declares the template attribute. It is reported on the attribute
-when the package is built, and on the class that uses it when the package was built without the
-generator, because that is where the generator then meets it. The marker names an open parent marked
-`[AggregateRootBase]` for `[AggregateRootTemplate]`, or `[EntityBase]` for `[EntityTemplate]`. The
-attribute's own type arguments fill the parent's first type parameters, the id first, and every parameter
-after them is filled by exactly one `[TemplateArgument]`:
+DDD00046 reports a mistake in the package that declares the template attribute. It is reported on the attribute
+when the package is built. It is also reported on a class that uses the attribute when the package was built
+without the generator, because there the generator first sees the attribute. The rules:
+
+- The marker names an open parent marked `[AggregateRootBase]` for `[AggregateRootTemplate]`, or `[EntityBase]`
+  for `[EntityTemplate]`.
+- The attribute's own type arguments fill the parent's first type parameters, the id first.
+- Exactly one `[TemplateArgument]` fills each parameter after those.
 
 ```csharp
 [AggregateRootTemplate(typeof(InvoiceAggregate<,,,>))]
@@ -1548,15 +1658,17 @@ after them is filled by exactly one `[TemplateArgument]`:
 public sealed class InvoiceAttribute<TInvoiceId> : Attribute;
 ```
 
-A parameter that takes the application's class, with `Take = TemplateArgumentKind.Type`, is not
-constrained `new()`: the parameterless constructor the generator writes for that class is never public,
-so it could never meet it. A parent creates the application's class through a static abstract factory
-instead, as [Writing your own supporting domain](writing-a-supporting-domain.md#creating-the-applications-entities)
-shows.
+A parameter that takes the application's class, with `Take = TemplateArgumentKind.Type`, has no `new()`
+constraint. The generator writes a parameterless constructor for that class, and that constructor is never
+public. So the class could never meet a `new()` constraint. A parent creates the application's class through a
+static abstract factory instead, as
+[Writing your own supporting domain](writing-a-supporting-domain.md#creating-the-applications-entities) shows.
 
-Type arguments the attribute has beyond what its parent takes are no mistake. They are the template's own,
-such as the aggregate a class belongs to, and a registration
-[takes them by position](writing-a-supporting-domain.md#a-registration-named-after-what-it-is-for).
+The attribute may have more type arguments than its parent takes. These belong to the template, such as the
+aggregate a class belongs to, and a registration
+[takes them by position](writing-a-supporting-domain.md#naming-a-registration).
+
+The generator generates nothing for a class declared with the attribute until the package is fixed.
 
 ---
 
@@ -1570,10 +1682,11 @@ such as the aggregate a class belongs to, and a registration
 public sealed partial class ShopSubscription;
 ```
 
-`[AggregateRoot<TId>]`, `[Entity<TId>]`, `[AggregateRootBase]`, `[EntityBase]` and a package's template
-attributes each give the class a base class, and a class has only one. Keep the one that describes it:
-the template, when the class is meant to extend what the package ships. `[AggregateRoot<TId>]` together
-with `[Entity<TId>]` is [DDD00009](#ddd00009).
+`[AggregateRoot<TId>]`, `[Entity<TId>]`, `[AggregateRootBase]`, `[EntityBase]` and a package's template attributes
+each give the class a base class. A class has only one base class. Keep the attribute that describes the class.
+Keep the template when the class is meant to extend what the package ships. `[AggregateRoot<TId>]` together with
+`[Entity<TId>]` is [DDD00009](#ddd00009). The generator generates nothing for the class until one attribute is
+left.
 
 ---
 
@@ -1589,11 +1702,11 @@ public sealed partial class ShopInvoiceLine;                          // no IInv
 public sealed partial class ShopInvoice;
 ```
 
-A `[TemplateArgument]` with `Take = TemplateArgumentKind.Type` hands one of the application's own classes
-to the parent as a type argument, here the class of an invoice's lines. The parent may ask more of that
-class than being declared with the right template, such as an interface it creates the class through.
-Without it, the parent closed over the class would be a compile error inside generated code, so nothing
-is generated and the message names what the class is missing:
+A `[TemplateArgument]` with `Take = TemplateArgumentKind.Type` passes one of the application's own classes to the
+parent as a type argument. Here it is the class of an invoice's lines. The parent may require more of that class
+than the right template, such as an interface that the parent creates the class through. If the class does not
+have it, the parent closed over the class would be a compile error inside generated code, where you cannot fix
+it. So the generator generates nothing, and the message names what the class is missing:
 
 ```csharp
 [InvoiceLine<InvoiceLineId>]
@@ -1618,12 +1731,12 @@ public sealed partial class ShopSubscription;
 modelBuilder.AddSubscriptions();                                      // closed over the subscription and the invoice
 ```
 
-A package's `[TemplateRegistration]` method, such as `modelBuilder.AddSubscriptions()`, is written into
-every project that declares a class with one of its templates, closed over that project's classes. Each of
-its `[TemplateType]` type parameters takes the one class declared with a template, or that class's id,
-looked for in the project first and then in the projects it references, as a `[TemplateArgument]` is. This
-project declares a class with one of the method's templates, so it is meant to get the registration, and
-nobody declares a class with the template the message names:
+A package's `[TemplateRegistration]` method, such as `modelBuilder.AddSubscriptions()`, is written into every
+project that declares a class with one of its templates. It is closed over that project's classes. Each of its
+`[TemplateType]` type parameters takes the one class declared with a template, or that class's id. The generator
+looks for the class in the project first, then in the projects it references, as it does for a
+`[TemplateArgument]`. This project declares a class with one of the method's templates, so it is meant to get
+the registration. No project declares a class with the template that the message names:
 
 ```
 A class declared with [Invoice] is needed by 'SubscriptionModelBuilderExtensions.AddSubscriptions' and
@@ -1631,28 +1744,33 @@ A class declared with [Invoice] is needed by 'SubscriptionModelBuilderExtensions
 references declares one; declare one, once
 ```
 
-It is reported once for each missing template, naming every registration that needs it, on the first class
-of the project declared with one of their templates, and no registration is written until the class is
-declared. The call to it then fails to compile too, because the method it names does not exist; this is the
-error to fix. The same code fix as for [DDD00044](#ddd00044) declares the class next to the one the error is
-on. Where a class of the project already says the class is missing, because its parent takes a type from
-it, that [DDD00044](#ddd00044) is the one report: the registrations stand back behind it, rather than say
-the same once more each. Two classes declared with the template are [DDD00045](#ddd00045), and two whose
-registrations would be called the same are reported once, however many registrations they share, on the
-class to fix.
+DDD00049 is reported once for each missing template, on the first class of the project declared with one of the
+methods' templates. It names every registration that needs the template. No registration is written until the
+class is declared. The call to the registration then also fails to compile, because the method does not exist.
+Fix DDD00049, and the call compiles again. The same code fix as for [DDD00044](#ddd00044) declares the class next
+to the class with the error.
 
-A module split into projects by layer declares the classes in its domain project and calls the registration
-in its infrastructure project, which declares none. That project gets the registration too, closed over the
-classes the projects of its module declare, the ones with the same `[assembly: Module]`, and only those.
-When those projects declare a class with one of the method's templates and none with another, this is
-reported on the infrastructure project's `[assembly: Module]` attribute, with no code fix: the class belongs
-in the project that declares the others. [DDD00045](#ddd00045) and [DDD00050](#ddd00050) are reported there
-too, for such a project. Where no file of the project that somebody edits declares the module, they are
-reported at the project file: the build declared the module from `DDD_Module`, or an
-`<AssemblyAttribute>` item wrote the attribute into `obj/`
-([A module named by its folder](modules.md#a-module-named-by-its-folder)). Their severity is then set with
-`<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig`, since a `[*.cs]` section of `.editorconfig` does not
-reach the project file.
+DDD00049 is not reported where another diagnostic reports the same cause:
+
+- A class of the project whose parent takes a type from the missing class reports [DDD00044](#ddd00044). The
+  registrations do not report it again.
+- Two classes declared with the template are [DDD00045](#ddd00045).
+- Two classes whose registrations would get the same name are reported once, as [DDD00045](#ddd00045), however
+  many registrations they share, on the class to fix.
+
+A module split into projects by layer declares its classes in its domain project, and calls the registration in
+its infrastructure project, which declares none. The infrastructure project gets the registration too. It is
+closed over the classes that the projects of its module declare, the projects with the same
+`[assembly: Module]`, and only those. If those projects declare a class with one of the method's templates and
+no class with another, DDD00049 is reported on the infrastructure project's `[assembly: Module]` attribute,
+without a code fix. The missing class belongs in the project that declares the others. [DDD00045](#ddd00045) and
+[DDD00050](#ddd00050) are reported there too, for such a project.
+
+If no file of the project that somebody edits declares the module, these diagnostics are reported at the project
+file. In that case the build declared the module from `DDD_Module`, or an `<AssemblyAttribute>` item wrote the
+attribute into `obj/` ([A module named by its folder](modules.md#a-module-named-by-its-folder)). Set their
+severity with `<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig`. A `[*.cs]` section of `.editorconfig` does
+not reach the project file.
 
 ---
 
@@ -1670,26 +1788,28 @@ public static IServiceCollection AddAudit<
 public sealed partial class ShopSubscription;                         // DDD00050: not IAudited
 ```
 
-A `[TemplateType]` with `Take = TemplateArgumentKind.Type` hands one of your classes to the package's
-method as a type argument. The method may ask more of it than being declared with the template, such as an
-interface. The registration closed over a class without it would be a compile error inside generated code,
-so none is written and the message names what the class is missing. It is judged the way
-[DDD00048](#ddd00048) judges a class a template takes: by the parent the generator derives it from, closed
-over its own id. Give the class what the message names.
+A `[TemplateType]` with `Take = TemplateArgumentKind.Type` passes one of your classes to the package's method as a
+type argument. The method may require more of the class than the template, such as an interface. The
+registration closed over a class without it would be a compile error inside generated code. So no registration
+is written, and the message names what the class is missing. The generator judges the class by the parent it
+derives the class from, closed over the class's own id, as [DDD00048](#ddd00048) judges a class that a template
+takes. Give the class what the message names.
 
-A `[TemplateType]` that takes an id is held to the method's `struct` or `class` constraint the same way:
-an id declared as a `record class` where the method says `where TTenantId : struct` is reported on the
-class declared with the template, rather than failing inside the registration. Its interfaces are not
-judged here: the generator writes them for an entity id, which [DDD00043](#ddd00043) already asks for. The one
-exception is a `Create()`, which the generator writes for a `Guid` alone: where the method asks for
-`ICreatableEntityId<T>`, an id without one is reported here, unless its template says the package makes the ids
-of its classes, `CreatesIds = true`, as Tenancy's do; then [DDD00067](#ddd00067) says it on the class, and the
-registration stands back without a second word.
+A `[TemplateType]` that takes an id is held to the method's `struct` or `class` constraint in the same way. An id
+declared as a `record class`, where the method says `where TTenantId : struct`, is reported on the class declared
+with the template. Without this check, the registration would fail inside generated code. The id's interfaces
+are not checked here. The generator writes them for an entity id, and [DDD00043](#ddd00043) already requires an
+entity id.
+
+`Create()` is the exception. The generator writes `Create()` only for an id over a `Guid`. When the method
+requires `ICreatableEntityId<T>`, an id without `Create()` is reported here. If the template says that its
+package makes the ids of its classes, `CreatesIds = true`, as Tenancy's templates do, [DDD00067](#ddd00067)
+reports it on the class instead, and the registration reports nothing more.
 
 A [later type argument of the template](writing-a-supporting-domain.md#a-template-with-more-than-one-type-argument),
-taken with `Argument = 1` and up, is whatever type you wrote there, and is held to the method's constraints
-the way [DDD00053](#ddd00053) holds it to the parent's: whether it is a struct or a class always, and an
-interface the method asks for when the type is one no generator will still complete.
+taken with `Argument = 1` and up, is whatever type you wrote there. It is held to the method's constraints as
+[DDD00053](#ddd00053) holds it to the parent's. Whether it is a struct or a class is always checked. An interface
+that the method requires is checked only when no generator will still complete the type.
 
 ```csharp
 [TemplateRegistration]
@@ -1706,14 +1826,17 @@ public readonly record struct Initials(string Letters);              // equatabl
 public sealed partial class ShopInvoiceComment;
 ```
 
-Two more things a registration can ask of a later type argument are reported the same way, on the class that
-wrote it. A type argument [whose id the method takes](writing-a-supporting-domain.md#a-registration-named-after-what-it-is-for),
-with `IdOfArgument = true`, is one of your entities or aggregate roots, since its id is read from how it is
-declared: `requires an entity or an aggregate root, whose id it takes`. And a type the registration is named
-after, with `[TemplateRegistration(Name = ...)]`, has a name of its own, which an array has not. Name the
-class the template asks for, such as the aggregate your member class is a member of. A child entity where
-the registration asks for an aggregate is reported too, `requires an aggregate root`: a class of your project
-is judged by what the generator will make of it.
+A registration can require two more things of a later type argument. Both are reported in the same way, on the
+class that wrote the type argument:
+
+- A type argument [whose id the method takes](writing-a-supporting-domain.md#naming-a-registration),
+  with `IdOfArgument = true`, must be one of your entities or aggregate roots, because the generator reads its id
+  from how the class is declared. The message says `requires an entity or an aggregate root, whose id it takes`.
+  Name the class that the template asks for, such as the aggregate your member class is a member of. A child
+  entity where the registration requires an aggregate root is reported too, with `requires an aggregate root`. A
+  class of your project is judged by what the generator will make of it.
+- A type that the registration is named after, with `[TemplateRegistration(Name = ...)]`, must have a name of its
+  own. An array has none.
 
 ```csharp
 public sealed class Note;                                             // no [AggregateRoot<TId>], so no id
@@ -1729,20 +1852,22 @@ public sealed partial class NoteShare;
 **A set-shaped question is asked once per statement, so its arguments do not read the row.**
 
 ```csharp
-public static bool Allows(Ticket ticket, Caller caller)
+public static bool Allows(Ticket ticket, ICurrentUser user)
     => DeskQuestions.TicketsForTeam(ticket.Team!).Contains(ticket.Id);   // DDD00051, on ticket.Team!
 ```
 
-A [set-shaped question](row-level-security.md#set-shaped-questions) becomes
-`"Id" = ANY (ARRAY(SELECT desk.tickets_for_team(...)))` in the policy. Postgres works the set out once,
-before it reads the table, and then finds the rows through the column's index. An argument that reads the
-row, a column of it or a question about it, would make the set different for every row, and Postgres would
-call the function once per row instead, which is what the set-shaped form is there to avoid. The value
-compared with the set, the argument of `Contains`, is the one that reads the row.
+A [set-shaped question](row-level-security.md#set-shaped-access-functions) becomes
+`"Id" = ANY (ARRAY(SELECT desk.tickets_for_team(...)))` in the policy. Postgres works out the set once, before it
+reads the table. It then finds the rows through the column's index. An argument that reads the row, such as a
+column of the row or a question about the row, would make the set different for every row. Postgres would then
+call the function once per row. The set-shaped form exists to avoid that. Only the value compared with the set,
+the argument of `Contains`, reads the row.
 
-Pass the question constants, the caller, or, inside an access function, the function's own parameters.
-To ask about the row itself, ask a question about one row: an access function's `Allows`, or an
-`[AccessScalar]` question, which may take the row's columns and is then asked per row.
+Pass the question constants, the caller, or, inside an access function, the function's own parameters. To ask
+about the row itself, ask a question about one row: an access function's `Allows`, or an `[AccessScalar]`
+question. Such a question may take the row's columns, and the database then asks it once per row. The generator
+generates nothing for the rule until its arguments are constants, the caller, or the parameters of the access
+function that the rule is part of.
 
 ---
 
@@ -1760,16 +1885,21 @@ public static partial class DeskQuestions
 }
 ```
 
-A function name without a schema is [relative to the module](row-level-security.md#names-relative-to-the-module)
-that owns it: `tickets_i_watch` in the Desk module is `desk/tickets_i_watch`, and the export writes it as
-the function of that name in the schema of the context that defines it, whatever the host calls that
-schema. The owner is the module the declaring assembly names with `[assembly: Module]`, or the `Owner` of
-the class's `[AccessFunctions]`, which a package that declares no module uses. With neither there is no
-owner, and a function of the same name in another module could not be told from it.
+A function name without a schema is [relative to the module](row-level-security.md#function-names-relative-to-the-module)
+that owns it. `tickets_i_watch` in the Desk module is `desk/tickets_i_watch`. The export writes it as the function
+of that name in the schema of the context that defines it, whatever the host calls that schema. The owner is one
+of these:
 
-Add `[assembly: Module("Desk")]`, give the class `[AccessFunctions(Owner = "desk")]`, or write the name
-with its schema, `desk.tickets_i_watch`. A question named with its schema is a function you create
-yourself, which rules call as it is.
+- the module that the declaring assembly declares, with `DDD_Module` or `[assembly: Module]`;
+- the `Owner` of the class's `[AccessFunctions]`, for a package that declares no module.
+
+With neither, the name has no owner. A function of the same name in another module could then not be told apart
+from it.
+
+Add `[assembly: Module("Desk")]`, give the class `[AccessFunctions(Owner = "desk")]`, or write the name with its
+schema: `desk.tickets_i_watch`. A question named with its schema is a function that you create yourself. Rules
+call it by that name. The generator generates nothing for the class until it has an owner or the name has its
+schema.
 
 ---
 
@@ -1785,30 +1915,37 @@ public partial record SubscriptionId;                                 // a class
 public sealed partial class ShopSubscription;
 ```
 
-A class declared with a template derives from the package's parent, closed over the type arguments the
-template supplies: the attribute's own, the id first, and the ids a `[TemplateArgument]` takes from other
-classes. The parent may ask more of an id than [DDD00043](#ddd00043) does. Most often it asks for a
-struct, `where TSubscriptionId : struct`, because it holds ids by value. The parent closed over a
-`record class` would be a compile error inside generated code, so nothing is generated for the class, and
-the message names the type, the parent's type parameter and what that parameter requires. Declare the id
-as a struct:
+A class declared with a template derives from the package's parent, closed over the type arguments that the
+template supplies:
+
+- the attribute's own type arguments, the id first;
+- the ids that a `[TemplateArgument]` takes from other classes.
+
+The parent may require more of an id than [DDD00043](#ddd00043) does. Most often it requires a struct,
+`where TSubscriptionId : struct`, because it holds ids by value. The parent closed over a `record class` would be
+a compile error inside generated code. So the generator generates nothing for the class. The message names the
+type, the parent's type parameter, and what that parameter requires. Declare the id as a struct:
 
 ```csharp
 [EntityId<Guid>]
 public readonly partial record struct SubscriptionId;
 ```
 
-A class that takes the id from another class is told so on its own line. An invoice whose parent holds
-the subscription's id by value reports the subscription's id, whatever the subscription's own parent
-takes, so one id of the wrong kind is reported on every class whose parent refuses it, and is fixed once.
+A class that takes the id from another class reports DDD00053 on its own line. An invoice whose parent holds the
+subscription's id by value reports the subscription's id, whatever the subscription's own parent requires. So one
+id of the wrong kind is reported on every class whose parent refuses it, and one fix clears all of them.
 
-Whether the type is a struct or a class is always judged. The parent's other constraints, an interface
-for instance, are judged of a type from a referenced project, such as an id in a contracts project, and
-of a type written out in full. A `partial` type declared in the same project may still be completed by a
-generator, which is how an `[EntityId<T>]` gets `IEntityId<T>`, so an interface it does not show yet is
-left to the compiler. An `[EntityId<T>]` that has an error of its own, [DDD00003](#ddd00003) for
-instance, is not completed: it is reported here as missing `IEntityId`, and fixing its own error clears
-both. A class the template takes is judged by [DDD00048](#ddd00048).
+The generator always checks whether the type is a struct or a class. It checks the parent's other constraints,
+such as an interface, for two kinds of type:
+
+- a type from a referenced project, such as an id in a contracts project;
+- a type written out in full.
+
+A generator may still complete a `partial` type declared in the same project. This is how an `[EntityId<T>]` gets
+`IEntityId<T>`. So DDD00053 leaves an interface that such a type does not show yet to the compiler. An
+`[EntityId<T>]` with an error of its own, such as [DDD00003](#ddd00003), is not completed. DDD00053 reports it as
+missing `IEntityId`, and fixing its own error clears both. [DDD00048](#ddd00048) judges a class that the template
+takes.
 
 ---
 
@@ -1816,22 +1953,25 @@ both. A class the template takes is judged by [DDD00048](#ddd00048).
 
 **A package's row access contribution is made from what the application marks.**
 
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), normally the
-host, about a package it references:
+DDD00054 is reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), normally the
+host, about a package that the project references:
 
 ```csharp
 // The host references DDDToolkit.Supporting.Membership.Postgres, and marks no resource's rules: DDD00054
 services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);
 ```
 
-A package that declares itself a contributor with `[assembly: RowAccessContribution]` writes its
+A package that declares itself a contributor, with `[assembly: RowAccessContribution]`, writes its
 [row level security](row-level-security.md#policies-a-package-ships) into the migrations of every application
-that references it: referencing it is your consent. The build makes the package's class where the export runs,
-before your host exists, so what its SQL depends on that only your application knows, a resource's rules say, is
-a static property or field you mark with the attribute the package names. Where nothing is marked that the
-class cannot do without, the class is not made, and none of its SQL reaches your migrations: the package's tables
-may have no policies at all, and a rule that asks one of its functions fails the export, naming the rule. The
-message names the type of the member and the attribute; mark it:
+that references it. Referencing the package is your consent. The build makes the package's class in the project
+where the export runs, before your host exists. So the class cannot read values from your host. A value that
+only your application knows, such as a resource's rules, comes from a static property or field that you mark
+with the attribute the package names.
+
+If nothing is marked that the class cannot do without, the build does not make the class, and none of its SQL
+reaches your migrations. The package's tables may then have no policies at all. A rule that asks one of the
+package's functions fails the export, and the export names the rule. The message names the type of the member
+and the attribute. Mark the member:
 
 ```csharp
 public static class DocumentMembership
@@ -1841,16 +1981,16 @@ public static class DocumentMembership
 }
 ```
 
-If your application must not have the package's SQL, because you write those policies yourself, say so, and the
-warning is not reported: `[assembly: LeaveOutRowAccessContribution(typeof(MembershipRowAccessContribution<>))]`.
-A value the package can do without, such as Tenancy's catalogue, which is `new ApplicationCatalogue()` when you
-mark none, is never reported.
+If your application must not have the package's SQL, because you write those policies yourself, say so with
+`[assembly: LeaveOutRowAccessContribution(typeof(MembershipRowAccessContribution<>))]`. DDD00054 is then not
+reported. A value that the package can do without is never reported. Tenancy's catalogue is such a value. It is
+`new ApplicationCatalogue()` when you mark none.
 
 ## DDD00055
 
 **A context's migration files are named after its module.**
 
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), normally the
+DDD00055 is reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), normally the
 host, about a marked context, or a marked factory, in a project it references:
 
 ```csharp
@@ -1860,22 +2000,26 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 ```
 
 The export names every file it writes after the module the context belongs to, as in
-`20260922120000_AddOrders.ordering.ddd.sql`, and finds a module's files again by that name. The module is
-the one the assembly of the factory the export makes the context with declares, or else the context's; for a
-marked context those are one assembly. With neither, the name comes from the
-context's class, less its `Context`, and the message says which name that is. It works until somebody
-renames the class: the export then looks for files under the new name and recognizes none of those it
-wrote. Every migration is reported as `VersionTaken`, because the file under the old name holds its
-timestamp, the module's access file is written once more, and the files have to be renamed by hand.
+`20260922120000_AddOrders.ordering.ddd.sql`. It finds a module's files again by that name. The module is the one
+that the assembly of the export's factory for the context declares. If that assembly declares none, it is the one
+that the context's assembly declares. For a marked context, the two are the same assembly. If neither declares a
+module, the name comes from the context's class name, without `Context`. The message says which name that is.
+
+This works until somebody renames the class. The export then looks for files under the new name and recognizes
+none of the files it wrote:
+
+- It reports every migration as `VersionTaken`, because the file under the old name holds its timestamp.
+- It writes the module's access file again.
+- You have to rename the files by hand.
 
 ```xml
 <DDD_Module>Ordering</DDD_Module>
 ```
 
-Declare the module in the project that holds the context, with `DDD_Module` or `[assembly: Module("Ordering")]`,
-and the files keep their name whatever the class is called. Files already written under the context's name,
-`ordering` for `OrderingContext`, stay recognized when the module has that name, Ordering; under another name,
-rename them once.
+Declare the module in the project that holds the context, with `DDD_Module` or `[assembly: Module("Ordering")]`.
+The files then keep their name, whatever the class is called. Files already written under the context's name,
+`ordering` for `OrderingContext`, stay recognized when the module has the same name, Ordering. If the module has
+another name, rename the files once.
 
 ## DDD00056
 
@@ -1889,34 +2033,35 @@ public interface IBillingRequest;                       // DDD00056: does not de
 public interface IBillingRequest<TAnswer> : IRequireAccess;   // DDD00056: has type parameters
 ```
 
-`[AccessRequests]` marks the interface a module's commands and queries implement to say
-[what they require of their caller](access-requirements.md). In a project that uses
-the Mediator library the generator writes a pipeline behavior for it, beside the interface and named after
-it, which asks the module's access checks before every handler. For that the interface has to be one the
-behavior can be written for:
+`[AccessRequests]` marks the interface that a module's commands and queries implement to say
+[what they require of their caller](access-requirements.md). In a project that uses the Mediator library, the
+generator writes a pipeline behavior for the interface. The behavior is declared beside the interface and named
+after it. It asks the module's access checks before every handler. For this, the interface must meet these
+rules:
 
 | It | Because |
 |---|---|
-| derives from `IRequireAccess` | that is where a request's requirement is read from, and what `AccessChecks<TRequests>` is closed over |
+| derives from `IRequireAccess` | the checks read a request's requirement from `IRequireAccess`, and `AccessChecks<TRequests>` is closed over it |
 | has no type parameters | the behavior and the module's set of checks are closed over the interface itself |
-| is not declared inside a type, and is not `file`-local | the behavior is written beside it, in a file of its own, and has to name it |
-| gives a behavior name no other marked interface of its namespace gives | `IBillingRequest` and `IBilling` both give `BillingAccessBehavior` |
+| is not declared inside a type, and is not `file`-local | the generator writes the behavior beside the interface, in a file of its own, and the behavior must name the interface |
+| gives a behavior name that no other marked interface in its namespace gives | `IBillingRequest` and `IBilling` would both give `BillingAccessBehavior` |
 
 ```csharp
 [AccessRequests]
 public partial interface IBillingRequest : IRequireAccess;
 ```
 
-It is an error because no behavior is written for the interface until it has that shape, so nothing asks the
-checks for its requests. The interface is judged the same way in a project that does not use the library,
-where no behavior is written either way: adding the library later then brings no surprise.
+The generator writes no behavior for the interface until it meets these rules, so nothing checks its requests.
+That is why DDD00056 is an error. Fix the interface, or call `AccessChecks<TRequests>.RequireAsync` in front of
+the handlers yourself. The generator checks the interface in the same way in a project that does not use the
+library, where it writes no behavior anyway. So adding the library later brings no new errors.
 
 ## DDD00057
 
 **The Mediator library's pipeline behavior has the shape the generator writes a behavior for.**
 
-Reported on an `[AccessRequests]` interface, about the version of the Mediator library the project
-references:
+DDD00057 is reported on an `[AccessRequests]` interface, about the version of the Mediator library that the
+project references:
 
 ```
 No access behavior is written for 'IBillingRequest': the Mediator library this project references declares
@@ -1924,25 +2069,32 @@ IPipelineBehavior<,> otherwise than the generator knows it, with a Handle that d
 cancellation token and the delegate that runs the next step, each once.
 ```
 
-The generator implements the library's `IPipelineBehavior<TMessage, TResponse>` and reads how from the
-library itself: one method, `Handle`, that takes the message, a cancellation token and the delegate that runs
-the next step, in whatever order the referenced version declares them, and answers a `ValueTask` or a `Task`
-of the response; and a delegate that takes the message and the token and answers the same. So a version that
-moves a parameter is followed without a new release of the toolkit. A version that declares the interface
-otherwise is one the generator does not know, and it writes nothing rather than guess: a behavior that did
-not compile, or one that never asked the checks, would be worse than none.
+The generator implements the library's `IPipelineBehavior<TMessage, TResponse>`. It reads the shape of that
+interface from the library itself:
 
-The same holds for `IStreamPipelineBehavior<TMessage, TResponse>`, the pipeline of the messages that are
-answered with a stream, whose `Handle` answers an `IAsyncEnumerable` of the response: where the library has
-it, the generator writes a second behavior for it, and the message names the interface it could not read.
-Either one unknown stops both, since half of a module's messages held and the other half not would look like
-all of them were.
+- one method, `Handle`, that takes the message, a cancellation token and the delegate that runs the next step, in
+  whatever order the referenced version declares them;
+- `Handle` returns a `ValueTask` or a `Task` of the response;
+- the delegate takes the message and the token, and returns the same.
 
-It is an error because without the behavior the requests of the interface reach their handlers unchecked.
-Write the behavior by hand against the version you use, and take `[AccessRequests]` off the interface, which
-still says which checks a request is held to. Write its `Handle` with `async` and `await`, as below: the request
-is in hand, with the check it passed, in the flow of the method that awaited the checks, for the handler it calls
-next ([the request in hand](access-requirements.md#the-request-in-hand)).
+So the generator follows a version that moves a parameter, without a new release of the toolkit. A version that
+declares the interface in another shape is one that the generator does not know. The generator then writes
+nothing instead of guessing. A behavior that does not compile, or that never asks the checks, would be worse than
+none.
+
+The same holds for `IStreamPipelineBehavior<TMessage, TResponse>`, the pipeline of the messages that are answered
+with a stream. Its `Handle` returns an `IAsyncEnumerable` of the response. If the library has this interface, the
+generator writes a second behavior for it. The message names the interface that the generator could not read. If
+either interface is unknown, the generator writes neither behavior. With one behavior and not the other, half of a
+module's messages would be checked, and the module would look fully checked.
+
+Without the behavior, the requests of the interface reach their handlers unchecked, so DDD00057 is an error.
+Write the behavior by hand against the version you use, and remove `[AccessRequests]` from the interface. The
+interface still names the checks that its requests are held to. Write `Handle` with `async` and `await`, as below.
+`RequireAsync` puts the request in hand for the flow of work that asked. The handler that `Handle` calls next runs
+in that flow and finds the request in hand ([the request in hand](access-requirements.md#the-request-in-hand)). Run
+the next step inside `BeginWork`, in the same method, so the work a check begins reaches the handler, such as the
+operator work of an operator's command. The stream behavior begins no work.
 
 ```csharp
 public sealed class BillingAccessBehavior<TMessage, TResponse>(AccessChecks<IBillingRequest> checks) : IPipelineBehavior<TMessage, TResponse>
@@ -1951,7 +2103,10 @@ public sealed class BillingAccessBehavior<TMessage, TResponse>(AccessChecks<IBil
     public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
     {
         await checks.RequireAsync(message, cancellationToken);
-        return await next(message, cancellationToken);
+        using (checks.BeginWork(message, isQuery: message is IBaseQuery))
+        {
+            return await next(message, cancellationToken);
+        }
     }
 }
 
@@ -1986,18 +2141,18 @@ public sealed record InvoiceClosed(InvoiceId Invoice) : INotification, IBillingR
 }
 ```
 
-The behavior written for an `[AccessRequests]` interface is part of Mediator's pipeline for commands and
-queries, and the second one of its pipeline for the messages that are answered with a stream. Mediator
-publishes a notification to its handlers through neither. So a notification that implements the interface
-declares a requirement nothing ever asks: every handler of it runs for whoever published it, while the
-declaration reads as if it were checked.
+The behavior written for an `[AccessRequests]` interface is part of Mediator's pipeline for commands and queries.
+The second behavior is part of Mediator's pipeline for messages that are answered with a stream. Mediator
+publishes a notification to its handlers through neither pipeline. So a notification that implements the
+interface declares a requirement that nothing checks. Every handler of the notification runs for whoever
+published it, while the declaration looks as if it were checked. That is why DDD00058 is an error.
 
-It is reported on the type where the notification and the interface are first joined, a class, a struct or
-an interface of your own that is both, and not again on what implements or derives from that. A partial
-type is reported once, at the part that lists what it implements. A project that does not use the library
-has no notifications, and reports nothing.
+DDD00058 is reported on the type where the notification and the interface are first joined: a class, a struct or
+an interface of your own that is both. It is not reported again on the types that implement or derive from that
+type. A partial type is reported once, at the part that lists what it implements. A project that does not use the
+library has no notifications, and reports nothing.
 
-What needs a check before it is handled is sent as a command or a query:
+Send what needs a check before it is handled as a command or a query:
 
 ```csharp
 public sealed record CloseInvoice(InvoiceId Invoice) : ICommand, IBillingRequest
@@ -2008,10 +2163,10 @@ public sealed record CloseInvoice(InvoiceId Invoice) : ICommand, IBillingRequest
 public sealed record InvoiceClosed(InvoiceId Invoice) : INotification;   // says what happened, to whoever listens
 ```
 
-A notification says that something happened, and whoever publishes it has passed its own check already.
-Where the handlers of a notification must not run for every publisher, ask the checks before publishing,
-`AccessChecks<IBillingRequest>.RequireAsync(request, cancellationToken)`, with a request of the module's
-that declares the requirement.
+A notification says that something happened. Whoever publishes it has passed its own check already. If the
+handlers of a notification must not run for every publisher, ask the checks before you publish:
+`AccessChecks<IBillingRequest>.RequireAsync(request, cancellationToken)`, with a request of the module that
+declares the requirement.
 
 ## DDD00059
 
@@ -2032,27 +2187,32 @@ public sealed partial class Document                    // DDD00059: no property
 }
 ```
 
-For a class declared with [Membership](membership.md)'s member template, the package's generator writes the
-member list on the resource the template names: a private property `Members`, which the resource's own
-methods change its members through. It writes it from three things the resource declares and the member
-class's own id, and only when each can be told without a guess:
+For a class declared with [Membership](membership/overview.md)'s member template, the package's generator writes
+the member list on the resource that the template names. The member list is a private property `Members`. The
+member manager changes the members through it, and no manager is written without it ([DDD00106](#ddd00106)). The generator writes it from three things the resource
+declares and from the member class's own id. It writes the list only when it can tell each of them without a
+guess:
 
-| The list needs | It is | Not told when |
+| The list needs | Where it comes from | Not written when |
 |---|---|---|
-| the members | the one get-only `partial` property of `IReadOnlyList<TMember>`, `IReadOnlyCollection<TMember>` or `IEnumerable<TMember>`, which the toolkit keeps in a list | there is none, or there are two; a set is kept in a `HashSet` |
-| the owner | the one property marked `[Owner]`, of what a member is known by, the template's second type | none is marked, two are, or the one marked is of another type |
-| a new row's id | the `Create()` of the member class's own id, which the generator writes for an `[EntityId<Guid>]` | the id is over something else, a `long` say, and declares no `Create()` |
-| the codes | the one static property or field of `MembershipCodes` on the resource, or, where it declares none, the ones the generator writes under the resource's [name](membership.md#names) | there are two, or a member called `Codes` that is not one |
+| the members | the one get-only `partial` property of `IReadOnlyList<TMember>`, `IReadOnlyCollection<TMember>` or `IEnumerable<TMember>`, which the toolkit keeps in a list | there is none, or there are two. A set property does not count, because the toolkit keeps a set in a `HashSet` |
+| the owner | the one property marked `[Owner]`, of the type a member is known by, the template's second type argument | no property is marked, two are marked, or the marked one has another type |
+| a new row's id | the `Create()` of the member class's own id, which the generator writes for an `[EntityId<Guid>]` | the id is over another type, such as a `long`, and declares no `Create()` |
+| the codes | the one static property or field of type `MembershipCodes` on the resource. If the resource declares none, the codes that the generator writes under the resource's [name](membership/resources-and-members.md#names) | there are two, or there is a member called `Codes` of another type |
 
-It is also not written when the resource has a member called `Members` already, and when two member classes
-name the same resource and it keeps a collection of both, or of neither, since both lists would be called the
-same. A member class that names no aggregate root, or one that keeps its members as another member class, is
-[DDD00060](#ddd00060), on the member class.
-Nor when a type of the member class is one the generator cannot see: the id of an `[AggregateRoot<Guid>]` is
-written by another generator, and no generator sees what another writes. Declare such an id yourself, with
-`[EntityId<Guid>]`, as the member class's own id is. The message names each thing that stands in the way.
+The generator also does not write the list in these cases:
 
-Say what is missing, and the list is written:
+- The resource already has a member called `Members`.
+- Two member classes name the same resource, and the resource keeps a collection of both, or of neither. Both
+  lists would get the same name.
+- A type of the member class is one that the generator cannot see. The id of an `[AggregateRoot<Guid>]` is written
+  by another generator, and no generator sees what another generator writes. Declare such an id yourself, with
+  `[EntityId<Guid>]`, as the member class's own id is declared.
+
+A member class that names no aggregate root, or that names a resource that keeps its members as another member
+class, is [DDD00060](#ddd00060), on the member class. The message names each thing that stands in the way.
+
+Declare what is missing, and the generator writes the list:
 
 ```csharp
 [AggregateRoot<DocumentId>]
@@ -2066,17 +2226,17 @@ public sealed partial class Document
 }
 ```
 
-Or write it yourself, which is the form for every shape above. A resource that declares a `MemberList` of its
-member class, under whatever name, is left alone and hears nothing:
+Or write the list yourself. This works for every shape above. The generator leaves alone a resource that declares
+a `MemberList` of its member class, under any name, and reports nothing for it:
 
 ```csharp
 private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
     => new(_shares, OwnerId, DocumentRefusals.Membership);
 ```
 
-It is a warning because the resource compiles: it has no member list, so its members cannot be changed, and
-the first method you write over `Members` says only that the name does not exist. A resource that changes its
-members some other way turns the warning off for the project, `<NoWarn>DDD00059</NoWarn>`.
+DDD00059 is a warning, because the resource compiles. It has no member list, so its members cannot be changed. The
+first method you write over `Members` only reports that the name does not exist. A resource that changes its
+members in another way turns the warning off for the project: `<NoWarn>DDD00059</NoWarn>`.
 
 ## DDD00060
 
@@ -2099,19 +2259,25 @@ public sealed partial class DocumentWatcher;                // DDD00060: the doc
 public sealed partial class NoteShare;                      // DDD00060: a share is no aggregate root
 ```
 
-The fourth type of the [member template](membership.md) is the resource the members are of: an aggregate root
-of yours, which keeps them in a collection of the member class and gets the member list over it. A resource
-has one member class. Of two that name it, the one the resource keeps a collection of is its member class, and
-its list is written, so the resource's own methods still compile; the other is reported, on itself, as the
-class to fix: name the resource it is for, or remove it. A member class whose resource is no aggregate root,
-a child entity, the member class itself or a class that is no entity, is reported on itself too: name the
-aggregate root the members belong to.
+The fourth type argument of the [member template](membership/overview.md) is the resource that the members belong
+to. It is an aggregate root of yours. The resource keeps its members in a collection of the member class, and the
+generator writes the member list over that collection.
 
-A project that gets the package's registrations as well, the infrastructure project that holds the context,
-hears the same from them, as the errors [DDD00045](#ddd00045) and [DDD00050](#ddd00050), on the same class,
-and this warning is not reported beside them. Where the resource keeps a collection of both member classes,
-or of neither, there is no telling which is the extra one: that is [DDD00059](#ddd00059), once, on the
+A resource has one member class. If two member classes name one resource, the class that the resource keeps a
+collection of is its member class. The generator writes the list for that class, so the resource's own methods
+still compile. The other class is reported, on itself, as the class to fix. Name the resource it is for, or
+remove it.
+
+A member class whose resource is no aggregate root is also reported on itself. Such a resource is a child entity,
+the member class itself, or a class that is no entity. Name the aggregate root that the members belong to.
+
+A project that also gets the package's registrations, such as the infrastructure project that holds the context,
+reports the same problem as the errors [DDD00045](#ddd00045) and [DDD00050](#ddd00050), on the same class.
+DDD00060 is not reported beside them. If the resource keeps a collection of both member classes, or of neither,
+the generator cannot tell which class is the extra one. That case is [DDD00059](#ddd00059), reported once, on the
 resource.
+
+DDD00060 is a warning. Nothing else is wrong with the member class, and the generator writes nothing for it.
 
 ## DDD00061
 
@@ -2128,17 +2294,24 @@ public sealed class InvoiceReminders(CloseInvoiceHandler handler)
 }
 ```
 
-The behavior written for an `[AccessRequests]` interface asks the module's checks in Mediator's pipeline, which
-a command or a query passes when it is sent. A handler called directly passes no pipeline: it runs with nothing
-having asked what the request declares, and nothing at run time notices. Where the database has
-[policies](row-level-security.md), they are all that stand in the way, and per table they are coarser than what
-one request requires: a policy has to let every caller who may write a project's row write it, to close the
-project or to rename it, so it lets a rename through for one who may only close it. So the call is reported
-where it is written: `Handle` of one of Mediator's handlers, `ICommandHandler`, `IQueryHandler`,
-`IRequestHandler` or one of their stream kinds, or of a class that implements one or derives from one, with a
-message that implements a marked interface. A reference to `Handle` that makes a delegate of it is reported too.
+The behavior written for an `[AccessRequests]` interface asks the module's checks in Mediator's pipeline. A
+command or a query passes the pipeline when it is sent. A handler called directly passes no pipeline. The handler
+then runs without any check of what the request declares, and nothing at run time notices. Where the database has
+[policies](row-level-security.md), only the policies stand in the way. A policy works per table, so it is coarser
+than the requirement of one request. A policy must let every caller who may write a project's row write it,
+whether to close the project or to rename it. So the policy lets a rename through for a caller who may only close
+the project.
 
-Send it instead, and it passes the behavior on its way to the same handler:
+So DDD00061 is reported where the call is written. It reports a call to `Handle` with a message that implements a
+marked interface, on one of these:
+
+- one of Mediator's handler interfaces: `ICommandHandler`, `IQueryHandler`, `IRequestHandler` or one of their
+  stream kinds;
+- a class that implements one of them, or derives from such a class.
+
+A reference to `Handle` that makes a delegate of it is reported too.
+
+Send the request instead. It then passes the behavior on its way to the same handler:
 
 ```csharp
 public sealed class InvoiceReminders(ISender sender)
@@ -2148,27 +2321,28 @@ public sealed class InvoiceReminders(ISender sender)
 }
 ```
 
-A code fix does that where the call can use an `ISender`, or an `IMediator`, in a local, a parameter, a field or a
-property: not a field from a static member, say, nor a local of the method around a static lambda. A query
-answered with a stream is sent with `CreateStream`, and named arguments are put in the order of the handler's
-parameters. Where the call can use none, inject one: the fix does not change a constructor for you.
+A code fix does this when the call can use an `ISender`, or an `IMediator`, held in a local, a parameter, a field
+or a property. It cannot use a field from a static member, or a local of the method from inside a static lambda.
+It sends a query answered with a stream with `CreateStream`, and puts named arguments in the order of the
+handler's parameters. If the call can use no sender, inject one. The fix does not change a constructor for you.
 
-What is not reported, and why:
+DDD00061 does not report these cases:
 
-- **Constructing a handler, and injecting one.** The call is where the check is skipped, and it is reported
-  there, also when it goes through the interface the handler was injected as.
-- **Mediator's own dispatch,** which is generated code and calls every handler after the pipeline.
-- **`base.Handle`** in a handler that overrides it: that hands on the request that passed on its way in.
-- **A decorator,** a handler that wraps another of the same message and hands it the message it was given,
-  unchanged. The request passed the pipeline on its way to the decorator, and sending it again would bring it
-  back round to the decorator. A message the decorator makes itself is reported.
-- **A test project,** one with `IsTestProject` or `IsTestingPlatformApplication` set, as
-  `Microsoft.NET.Test.Sdk` and Microsoft.Testing.Platform set them. A test that calls a handler on purpose
-  tests the handler alone. A test of what a request may do sends it.
-- **A project without Mediator,** where no behavior is written: there you ask the checks yourself,
+- **Constructing a handler, and injecting one.** The call skips the check, so DDD00061 is reported at the call.
+  This includes a call through the interface that the handler was injected as.
+- **Mediator's own dispatch.** It is generated code, and it calls every handler after the pipeline.
+- **`base.Handle`** in a handler that overrides it. It passes on the request that passed the pipeline on its way
+  in.
+- **A decorator**: a handler that wraps another handler of the same message, and passes it the message it was
+  given, unchanged. The request passed the pipeline on its way to the decorator. Sending it again would bring it
+  back to the decorator. A message that the decorator makes itself is reported.
+- **A test project**: a project with `IsTestProject` or `IsTestingPlatformApplication` set, as
+  `Microsoft.NET.Test.Sdk` and Microsoft.Testing.Platform set them. A test that calls a handler on purpose tests
+  the handler alone. A test of what a request may do sends the request.
+- **A project without Mediator.** The generator writes no behavior there. You ask the checks yourself,
   [in front of every handler](access-requirements.md#asking-the-checks-without-mediator).
 
-A call that is meant, outside a test project, is suppressed where it is made, with the reason beside it:
+Outside a test project, suppress a call that you mean, where it is made, with the reason beside it:
 
 ```csharp
 #pragma warning disable DDD00061 // replayed from the outbox after the behavior let it through once
@@ -2176,12 +2350,12 @@ await handler.Handle(replayed, cancellationToken);
 #pragma warning restore DDD00061
 ```
 
-The build cannot see every way round the behavior. A helper that calls `Handle` on a handler of a type parameter
-with no constraint to a marked interface, a dispatcher of a transport's own say, is not reported, and neither is
-the call that hands it a handler: such a dispatcher sends through the sender, or asks the checks itself. A
-module whose behavior is not in the pipeline is stopped when the host starts, by the
-[start-up check](startup-checks.md) `access.behaviors-registered`; see
-[When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks).
+The build cannot see every way around the behavior. It does not report a helper that calls `Handle` on a handler
+of a type parameter that has no constraint to a marked interface, such as a transport's own dispatcher. It does
+not report the call that passes such a helper a handler either. Write such a dispatcher so that it sends through
+the sender, or asks the checks itself. A module whose behavior is not in the pipeline is stopped when the host
+starts, by the [start-up check](startup-checks.md) `access.behaviors-registered`. See
+[When nothing asks the checks](access-requirements.md#handlers-reached-without-the-access-check).
 
 ## DDD00062
 
@@ -2197,31 +2371,37 @@ internal static class SeatsAdminQueries
 }
 ```
 
-A class marked `[GraphQLSchema]` belongs to the schema it names and to no other: the toolkit's generator
-registers its public static methods in the module's `Add{Module}GraphQlRuntimeBindings()`, for a builder of that
-name only. HotChocolate's own generator registers everything it finds in a project in one method, which every
-schema the project is added to calls. A class it finds is therefore in every schema after all: the administration
-field above would be offered to every user as well. So the class carries nothing that generator registers. No
-`[QueryType]`, `[MutationType]`, `[SubscriptionType]`, `[ExtendObjectType]` or `[ObjectType]`, no base class such
-as `ObjectTypeExtension`, and no static method marked `[Query]`, `[Mutation]` or `[Subscription]`: the attribute
-on the class says what its methods are. Remove what the message names.
+A class marked `[GraphQLSchema]` belongs to the schema it names and to no other. The toolkit's generator registers
+its public static methods in the module's `Add{Module}GraphQlRuntimeBindings()`, for a builder of that schema name
+only. HotChocolate's own generator registers everything it finds in a project in one method, and every schema the
+project is added to calls that method. A class that HotChocolate's generator finds is therefore in every schema.
+The administration field above would be offered to every caller as well. So the class must carry nothing that
+HotChocolate's generator registers:
 
-It is reported as well for what would leave a field out without a word:
+- no `[QueryType]`, `[MutationType]`, `[SubscriptionType]`, `[ExtendObjectType]` or `[ObjectType]`;
+- no base class such as `ObjectTypeExtension`;
+- no static method marked `[Query]`, `[Mutation]` or `[Subscription]`.
+
+The attribute on the class says what its methods are. Remove what the message names.
+
+DDD00062 also reports what would leave a field out with no message:
 
 - **An instance method.** Nothing makes an instance of the class, so a field of one schema is a public static
-  method. A former `[QueryType]` class often has instance methods: make them static.
+  method. A former `[QueryType]` class often has instance methods. Make them static.
 - **A class with no field**: no public static method that is not `[GraphQLIgnore]`.
-- **Two methods that are one field** of one schema and operation type, two overloads, or `GetLedger` beside
-  `GetLedgerAsync`. HotChocolate keeps one and drops the other. Give one another name, or another `[GraphQLName]`.
+- **Two methods that are one field** of one schema and operation type: two overloads, or `GetLedger` beside
+  `GetLedgerAsync`. HotChocolate keeps one and drops the other. Give one of them another name, or another
+  `[GraphQLName]`.
 - **A method whose name another public static method has, and that takes a parameter of a type another generator
-  writes**, such as the interface HotChocolate's generator writes for a data loader. A method is found by its name,
-  and only a shared name by the parameter types as well, which this generator cannot name when it does not see
-  the type. Give the method a name of its own.
+  writes**, such as the interface that HotChocolate's generator writes for a data loader. The generator finds a
+  method by its name. For a shared name it also uses the parameter types, and it cannot name a type that it does
+  not see. Give the method a name of its own.
 
-And when the attribute names no schema, and when the class is one the generated registration cannot name: a
-generic class, a `file` class, or a class that is private or protected inside another. It is an error because each
-of these puts a field where it was meant not to be, or leaves it out where it was meant to be, without another
-word. See [A field for one schema only](graphql.md#a-field-for-one-schema-only).
+DDD00062 also reports an attribute that names no schema, and a class that the generated registration cannot name:
+a generic class, a `file` class, or a class that is private or protected inside another class.
+
+Each of these puts a field where it should not be, or leaves a field out where it should be, with no message. So
+DDD00062 is an error. See [A field for one schema only](graphql.md#a-field-for-one-schema-only).
 
 ## DDD00064
 
@@ -2239,12 +2419,15 @@ word. See [A field for one schema only](graphql.md#a-field-for-one-schema-only).
 </ItemGroup>
 ```
 
-`DDD_Module` declares the project's module through a build step: the targets file the `DDDToolkit.Analyzers`
-package carries beside its props file writes the declaration into the project, where every generator of it, and
-of the projects that reference it, reads it. A package reference brings both files. Where the generators arrive
-another way, as an analyzer assembly or a project reference with `OutputItemType="Analyzer"`, and the property
-reaches them through the props file alone or a `CompilerVisibleProperty` you list yourself, as
-[DDD00014](#ddd00014) suggests, the name arrives and the declaration does not:
+`DDD_Module` declares the project's module through a build step. The `DDDToolkit.Analyzers` package carries a
+targets file beside its props file. The targets file writes the module declaration into the project. Every
+generator of the project, and of the projects that reference it, reads the declaration there. A package reference
+brings both files.
+
+The generators can arrive in another way: as an analyzer assembly, or as a project reference with
+`OutputItemType="Analyzer"`. The property then reaches them through the props file alone, or through a
+`CompilerVisibleProperty` that you list yourself, as [DDD00014](#ddd00014) suggests. In that case the name
+arrives and the declaration does not:
 
 ```
 DDD_Module names this project's generated code after 'Ordering' and declares no module, because the build step
@@ -2252,23 +2435,27 @@ of the DDDToolkit.Analyzers package that declares it did not run: the project is
 'Ordering'. Import the package's targets file beside its props file, or declare [assembly: Module("Ordering")].
 ```
 
-The generated code is named after the module, `OrderingEventNames` and `AddOrderingConverters`, and the
-project is no module. Its domain events are stored and published without the module's name, the boundary is
-not checked, and the module's other projects do not take it for one of theirs, so a registration such as
-`modelBuilder.AddTenancy()` is not written into a project of the module that declares none of the classes.
-Without this warning the first sign would be a call that does not compile, or an event stored under a name
-that changes the day the targets arrive.
+The generated code is named after the module, `OrderingEventNames` and `AddOrderingConverters`, and the project
+is no module:
 
-Import `DDDToolkit.Analyzers.targets` as well, from the package's `build` folder or from the source, the way
-you import its props file, or declare the module with `[assembly: Module("Ordering")]`. The targets file tells
-the generators it was imported by handing them `DDD_DeclareModule`, so where it was, a test project and a project
-that sets `DDD_DeclareModule` to false are no module on purpose and are not reported. A test project is not
-reported without it either, where the props file says it is one.
+- Its domain events are stored and published without the module's name.
+- The module boundary is not checked.
+- The module's other projects do not take the project for one of theirs. So a registration such as
+  `modelBuilder.AddTenancy()` is not written into a project of the module that declares none of the classes.
 
-It is reported at the project file, since no line of code is wrong. That is outside every source file, so a
-severity in an `.editorconfig` section for `*.cs` files does not reach it: set it with `<NoWarn>` or
-`<WarningsAsErrors>` in the project file or a `Directory.Build.props`, or in a `.globalconfig` file with
-`is_global = true`.
+Without DDD00064, the first sign would be a call that does not compile, or an event stored under a name that
+changes once the targets file arrives.
+
+Import `DDDToolkit.Analyzers.targets` as well, from the package's `build` folder or from the source, in the same
+way that you import its props file. Or declare the module with `[assembly: Module("Ordering")]`. The targets file
+tells the generators that it was imported, by passing them `DDD_DeclareModule`. Where it was imported, a test
+project and a project that sets `DDD_DeclareModule` to false are no module on purpose, and are not reported. A
+test project is also not reported without the targets file, if the props file says that it is a test project.
+
+DDD00064 is reported at the project file, because no line of code is wrong. The project file is outside every
+source file, so a severity in an `.editorconfig` section for `*.cs` files does not reach it. Set the severity with
+`<NoWarn>` or `<WarningsAsErrors>` in the project file or a `Directory.Build.props`, or in a `.globalconfig` file
+with `is_global = true`.
 
 ## DDD00065
 
@@ -2276,41 +2463,62 @@ severity in an `.editorconfig` section for `*.cs` files does not reach it: set i
 
 ```csharp
 // Shop.Tenants.Domain, [assembly: Module("Tenants")], with no class declared with [SeatAggregate]
-[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'TenancyUseCases' is not written, ...
+[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'SeatManager' is not written, ...
 [OrganizationAggregate<TenantId>] public sealed partial class Organization;
 [OrganizationUnit<OrganizationUnitId>] public sealed partial class OrganizationUnit;
 [RoleAggregate<RoleId>] public sealed partial class Role;
 ```
 
 ```csharp
-// The same project, with all five classes, and a type of the class's name in a namespace of its own
+// The same project, with all the classes, and a type of the class's name in a namespace of its own
 namespace Shop.Tenants.Settings;
 
-public static class TenancyUseCases;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
+public static class SeatManager;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
 ```
 
-Tenancy's use cases are named through a class the toolkit's generator writes into the project that declares
-your classes, named as the package's class is: `TenancyUseCases.SeatCommands`
-([Calling a use case](tenancy.md#calling-a-use-case)). Each of its type parameters is one of your classes or
-ids, so it is written when every template it takes from has one class, in that project or in a project of the
-same module it references. When it is not, the projects above that name a use case only hear that the name does
-not exist, CS0246; the project that registers Tenancy, which would say more, references the application project
-and does not build once that fails. So the project that declares the classes says why, on the first of them:
+A package names its generic classes in `[assembly: TemplateFacade]`. For each, the toolkit's generator writes a class
+into the project that declares your classes. The class derives from the package's class, closed over your classes,
+and has the package's class name without the type parameters. Tenancy names seven: `TenantManager`,
+`OrganizationManager`, `SeatManager`, `RoleManager`, `InvitationManager`, `TenancyAccessManager` and the record
+`TenantToProvision`. So your code takes a `SeatManager` and names `SeatManager.SeatOverview`
+([The managers and the access manager](tenancy/your-module.md#the-managers-and-the-access-manager)). Each type parameter of the package's class is one of
+your classes or ids. So the generator writes a class only when every template it takes from has one class, in that
+project or in a project of the same module that the project references.
+
+If a class is not written, the projects above that name it only get CS0246: the name does not exist. The project that
+registers Tenancy would give more detail. That project references the application project, and does not build once
+the application project fails. So the project that declares the classes reports the cause, on the first of the
+classes, once for each class that is not written:
 
 | What keeps it out | What to do |
 |---|---|
 | no class is declared with one of the templates | declare it, next to the others |
 | several classes are declared with one template | keep one |
-| a class does not meet what the package's class asks of it | give it what the message names |
-| the project declares a type of that name in a namespace, which the class would hide wherever that namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]` |
+| a class does not meet the constraints of the package's class | give it what the message names |
+| the project declares a type of that name in a namespace. The class would hide that type wherever the namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacadeName("SeatManager", "ShopSeatManager")]` |
 
-It is information, not a warning. A module whose classes are split over two projects hears it in the first of
-them, where nothing is wrong, and gets the class in the second, where the classes are complete. A template whose
-class a parent of the project needs is that class's error already, [DDD00044](#ddd00044) or
-[DDD00045](#ddd00045), and one a registration the project can call takes from is the registration's,
-[DDD00049](#ddd00049) or [DDD00045](#ddd00045), so neither is said twice. What you keep in the global namespace
-yourself, an alias of the name at the top of a file, or a type or a namespace of it, is your own way of naming
-the classes, and the class stands back for it without a word.
+DDD00065 has the severity Info. A module whose classes are split over two projects gets DDD00065 in the first
+project, where nothing is wrong. The second project, where the classes are complete, gets the class.
+
+Some causes are reported elsewhere, and not again here:
+
+- A template whose class a parent in the project needs is that class's error already: [DDD00044](#ddd00044) or
+  [DDD00045](#ddd00045).
+- A template that a registration the project can call takes from is reported by the registration:
+  [DDD00049](#ddd00049) or [DDD00045](#ddd00045).
+- A class that cannot be generated has its own diagnostic.
+- A class that the package marks `OnlyWith` a template is written only where that template has a class. A project
+  without one gets no class and no diagnostic. Tenancy's `InvitationManager` is written only where the module declares
+  an invitation class.
+
+A package's interface gets an alias instead of a class, such as Tenancy's `TenancyStore`. The same causes keep the
+alias out of the project that declares the classes. A project above that declares a type of the alias's name in a
+namespace gets DDD00065 on that type, because the alias would hide it wherever the namespace is imported.
+
+A name that you keep in the global namespace yourself is your own way of naming the classes: an alias of the name
+at the top of a file, or a type or a namespace of that name. The generator leaves that name alone and reports
+nothing. A name that you give with `TemplateFacadeName`, and that a type or a namespace in the global namespace
+already has, is [DDD00076](#ddd00076).
 
 ## DDD00066
 
@@ -2331,27 +2539,32 @@ public sealed class Role;
 ```
 
 A package's switch, such as Tenancy's `[assembly: GenerateTenancyClasses]`
-([The shortest start: the switch](tenancy.md#the-shortest-start-the-switch)), has the generator write the
-package's classes your project leaves out, as the package ships them, and their ids: `Tenant`, `TenantId` and
-the rest, public, in the project's root namespace. It writes nothing that would take the place of something you
-have, and where it cannot write a class or an id it says so on the switch:
+([Quick start](tenancy/your-module.md#quick-start)), makes the generator write the package's classes that your
+project leaves out, and their ids. It writes them as the package ships them, for example `Tenant` and
+`TenantId`. They are public, in the project's root namespace. The switch writes nothing that would replace
+something you have. If it cannot write a class or an id, it reports DDD00066 on the switch:
 
 | What is in the way | What to do |
 |---|---|
-| a class of yours of the class's name in the root namespace, not declared with the template | if it is meant to be the package's class, declare it with the template, `[RoleAggregate<RoleId>]`, and it is yours; if not, rename it, or declare the package's class yourself under a name of your own, `[RoleAggregate<RoleId>] public sealed partial class ShopRole` |
-| another type of that name, yours or one a project you reference declares | rename it, or declare the package's class yourself under a name of your own |
-| a namespace of that name, a folder `Organization/` directly under the project, say | declare the package's class yourself under a name of your own, or rename the namespace |
+| a class of yours with the class's name in the root namespace, not declared with the template | if it is meant to be the package's class, declare it with the template, `[RoleAggregate<RoleId>]`. If not, rename it, or declare the package's class yourself under another name: `[RoleAggregate<RoleId>] public sealed partial class ShopRole` |
+| another type of that name, yours or one that a referenced project declares | rename it, or declare the package's class yourself under another name |
+| a namespace of that name, such as a folder `Organization/` directly in the project | declare the package's class yourself under another name, or rename the namespace |
 | a type of the id's name that is no entity id | mark it `[EntityId<Guid>]`, or rename it |
-| an id of that name the generator writes for an `[AggregateRoot<Guid>]` class of yours, a `Tenant` that rents something, say | rename that class, or declare the package's class yourself under a name of your own, with an id of its own |
+| an id of that name that the generator writes for an `[AggregateRoot<Guid>]` class of yours, such as a `Tenant` that rents something | rename that class, or declare the package's class yourself under another name, with its own id |
 | several ids of one name, in the project or in the projects of its module that it references | keep one |
-| your own classes of templates that share an id, such as the tenant and the organization, declared over two different ids | declare them over one |
+| your own classes of templates that share an id, such as the tenant and the organization, declared over two different ids | declare them over one id |
 
-The cause is said once. A class that takes a type from a class the switch cannot write, or shares its id, is not
-written either, and is not reported again: the organization shares the tenant's id and the role and the seat take
-it, so a `TenantId` in the way leaves out the four of them, with one error. No id is written for a class that is
-not, and `AddTenancy()` and the class the use cases are named through stand back for what is left out, rather
-than report it missing ([DDD00049](#ddd00049), [DDD00065](#ddd00065)). A class or an id you declare yourself
-always wins, and is never reported: the switch takes it, or writes the rest around it.
+DDD00066 reports each cause once:
+
+- A class that takes a type from a class the switch cannot write, or that shares its id, is not written either,
+  and is not reported again. The organization shares the tenant's id, and the role and the seat take it. So a
+  `TenantId` in the way leaves out four classes, with one error.
+- No id is written for a class that is not written.
+- `AddTenancy()` and the class that the use cases are named through do not report the left-out classes as
+  missing ([DDD00049](#ddd00049), [DDD00065](#ddd00065)).
+
+A class or an id that you declare yourself always wins, and is never reported. The switch takes it, or writes the
+rest around it.
 
 ## DDD00067
 
@@ -2365,11 +2578,11 @@ public readonly partial record struct TenantId;
 public sealed partial class Tenant;
 ```
 
-An id is made in code before the save, never by the database, so a change and every event of it know the id from
-the start. Tenancy makes the ids of the tenants, units, seats, roles and invitations it creates itself, with the id's
-own `Create()`. The generator writes `Create()` for every `[EntityId<Guid>]`, a time-ordered id as
-`CreateSequential()` makes. An id over a `long`, an `int` or a `string` has none, because there is no telling how a
-new one is made, so it says so in its partial declaration:
+An id is made in code before the save. The database never makes it. So a change and every event of the change
+know the id from the start. Tenancy makes the ids of the tenants, units, seats, roles and invitations that it
+creates itself, with the id's own `Create()`. The generator writes `Create()` for every `[EntityId<Guid>]`. It
+makes a time-ordered id, as `CreateSequential()` does. An id over a `long`, an `int` or a `string` has no
+`Create()`, because the generator cannot know how to make a new one. Write it in the id's partial declaration:
 
 ```csharp
 [EntityId<long>]
@@ -2379,32 +2592,37 @@ public readonly partial record struct TenantId
 }
 ```
 
-A `Create()` of your own wins over the generator's for a `Guid` too. The message says what the id lacks, and what
-to write:
+A `Create()` of your own also wins over the generator's for a `Guid`. The message says what the id lacks, and
+what to write:
 
-- An `[EntityId<T>]` without a `Create()`: one in its partial declaration, as above, with an example of a new
-  value for its key type.
-- An id written by hand, without `[EntityId<T>]`, which no generator completes: the `Create()`, and
-  `ICreatableEntityId<TenantId>` among the interfaces it implements.
-- An id with a fitting `Create()` and without the interface: the interface. For an id of a project that does not
-  target `net10.0`, that project's target instead: only the `net10.0` build of DDDToolkit.Abstractions has
-  `ICreatableEntityId<T>`, and the generator implements it where the project sees it.
-- A `Create()` that is not `public static`, or answers another type: make it one that is.
+- An `[EntityId<T>]` without a `Create()`: write one in its partial declaration, as above. The message gives an
+  example of a new value for the type that the id wraps.
+- An id written by hand, without `[EntityId<T>]`, which no generator completes: write the `Create()`, and add
+  `ICreatableEntityId<TenantId>` to the interfaces it implements.
+- An id with a fitting `Create()` and without the interface: add the interface. For an id of a project that does
+  not target `net10.0`, change that project's target instead. Only the `net10.0` build of DDDToolkit.Abstractions
+  has `ICreatableEntityId<T>`, and the generator implements it where the project sees it.
+- A `Create()` that is not `public static`, or that returns another type: make it `public static`, returning the
+  id.
 
-The error is on the class declared with the template, where it names the id. For a class a package's switch writes,
-which is in no file of yours, it is on the id when the id is declared in the same project, and on the switch,
-`[assembly: GenerateTenancyClasses]`, when the id is another project's, such as the module's contracts project. The
-code fix goes to the id either way, wherever in the solution it is declared, and adds what is missing: a `Create()`
-with a body that throws until you write it, the interface, or both. Where the answer is not in the id's declaration,
-a `Create()` that does not fit or a project's target, it offers nothing. The class itself is generated; the
-package's registrations and the class its use cases are named through, which ask for the same with a constraint,
-stand back for it rather than fail inside generated code.
+The error is on the class declared with the template, and names the id. A class that a package's switch writes is
+in no file of yours. For such a class, the error is on the id when the id is declared in the same project. When
+the id is in another project, such as the module's contracts project, the error is on the switch,
+`[assembly: GenerateTenancyClasses]`.
+
+The code fix goes to the id in every case, wherever in the solution the id is declared. It adds what is missing: a
+`Create()` whose body throws until you write it, the interface, or both. If the fix is not in the id's
+declaration, such as a `Create()` that does not fit or a project's target, the code fix offers nothing.
+
+The class itself is generated. The package's registrations and the class that its use cases are named through
+require the same with a constraint. They do not report the class again, and are not written for it, so they do
+not fail inside generated code.
 
 A package says which of its templates it makes the ids of, on the marker:
 `[AggregateRootTemplate(typeof(SeatAggregate<,,,>), CreatesIds = true)]`
-([A package that makes the ids of its classes](writing-a-supporting-domain.md#a-package-that-makes-the-ids-of-its-classes)).
-Only Tenancy's templates do. Any other id, one the application makes itself, needs no `Create()`, and nothing is
-said about it.
+([A package that makes the ids of its classes](writing-a-supporting-domain.md#ids-the-package-creates)).
+Only Tenancy's templates do this. Any other id, one that the application makes itself, needs no `Create()`, and
+nothing reports it.
 
 ## DDD00068
 
@@ -2421,11 +2639,12 @@ said about it.
 </ItemGroup>
 ```
 
-`DDD_ModuleContracts` set to `true` makes a project its module's contracts: the toolkit's generator writes
-`[assembly: ModuleContracts]` into it, and every public type of it is published to the other modules
-([A contracts project](modules.md#a-contracts-project)). The attribute is declared in `DDDToolkit.Abstractions`, and
-the generator ships in `DDDToolkit.Analyzers`, two packages a contracts project may reference separately. Where the
-project references a `DDDToolkit.Abstractions` older than the attribute, or none, there is nothing to write it with:
+`DDD_ModuleContracts` set to `true` makes a project its module's contracts. The toolkit's generator writes
+`[assembly: ModuleContracts]` into the project, and every public type of the project is published to the other
+modules ([A contracts project](modules.md#a-contracts-project)). The attribute is declared in
+`DDDToolkit.Abstractions`. The generator ships in `DDDToolkit.Analyzers`. A contracts project may reference these
+two packages separately. If the project references a `DDDToolkit.Abstractions` older than the attribute, or none,
+the generator cannot write the attribute:
 
 ```
 DDD_ModuleContracts is true, and the project publishes nothing by it: the toolkit's generator writes
@@ -2434,26 +2653,26 @@ attribute. Reference the DDDToolkit.Abstractions of the same version as DDDToolk
 the other modules may name [ModuleContract].
 ```
 
-The property is the project's explicit choice, and without this warning it would be dropped without a word. The
-first sign would be [DDD00022](#ddd00022) in every module that names one of the project's types, saying the type
-is not published, which points away from the cause.
+The property is the project's explicit choice. Without DDD00068, the build would drop it with no message. The
+first sign would be [DDD00022](#ddd00022) in every module that names one of the project's types. DDD00022 says
+that the type is not published, which points away from the cause.
 
-Reference the `DDDToolkit.Abstractions` of the same version as the analyzers; a project that references the
-`DDDToolkit` package gets both at one version. Where that cannot be done yet, mark each type the other modules may
-name `[ModuleContract]` and drop the property. A project whose property is anything but `true` is not reported, and
-neither is one that declares `[assembly: ModuleContracts]` itself.
+Reference the `DDDToolkit.Abstractions` of the same version as the analyzers. A project that references the
+`DDDToolkit` package gets both at one version. If you cannot do that yet, mark each type the other modules may
+name `[ModuleContract]`, and remove the property. A project whose property is anything but `true` is not
+reported. A project that declares `[assembly: ModuleContracts]` itself is not reported either.
 
-It is reported at the project file, since no line of code is wrong. That is outside every source file, so a
-severity in an `.editorconfig` section for `*.cs` files does not reach it: set it with `<NoWarn>` or
-`<WarningsAsErrors>` in the project file or a `Directory.Build.props`, or in a `.globalconfig` file with
-`is_global = true`.
+DDD00068 is reported at the project file, because no line of code is wrong. The project file is outside every
+source file, so a severity in an `.editorconfig` section for `*.cs` files does not reach it. Set the severity with
+`<NoWarn>` or `<WarningsAsErrors>` in the project file or a `Directory.Build.props`, or in a `.globalconfig` file
+with `is_global = true`.
 
 ## DDD00069
 
 **A module's row access contribution is listed by the project that runs the export.**
 
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), about a module it
-references:
+DDD00069 is reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), about a
+module it references:
 
 ```csharp
 // In the module's infrastructure project
@@ -2464,23 +2683,24 @@ references:
 ```
 
 A module that writes SQL of its own, a trigger or a policy, declares its class with
-`[assembly: RowAccessContribution]` as a package does. Because its assembly declares a module, with
-`DDD_Module` or `[assembly: Module]`, that is an offer rather than a write: it is your application's SQL, so the
-project that runs the export says what your database gets, and the export makes what it lists with `new X()`.
-The offer is what makes a forgotten line heard. Without it nothing would say that a module's trigger never
-reached the migrations, and what it holds the rows to would hold nowhere.
+`[assembly: RowAccessContribution]`, as a package does. The module's assembly declares a module, with
+`DDD_Module` or `[assembly: Module]`. So the declaration is an offer, and the build does not write the SQL by
+itself. The SQL is your application's own. The project that runs the export decides what your database gets, with
+`[assembly: UseRowAccessContribution(typeof(X))]`. The export makes each class it lists with `new X()`. The offer
+makes a forgotten line visible. Without it, nothing would report that a module's trigger never reached the
+migrations, and the trigger's limits on the rows would hold nowhere.
 
-List the class, a class of yours derived from it, or a generic one closed with your types; the message says
-which the offer needs, since the export makes it with a constructor that takes nothing. If this application's
-database must not have the module's SQL, leave the line out and suppress the warning for the project with
-`<NoWarn>`, with the reason beside it. A package, an assembly that declares no module, writes its SQL by itself
-and needs no line.
+List the class, a class of yours derived from it, or a generic one closed with your types. The message says which
+one the offer needs, because the export makes it with a constructor that takes no parameters. If this
+application's database must not have the module's SQL, leave the line out. Suppress the warning for the project
+with `<NoWarn>`, with the reason beside it. A package is an assembly that declares no module. A package writes its
+SQL by itself and needs no line.
 
 ## DDD00070
 
 **A member a library marks for a package's row access contribution is public.**
 
-Reported in the library that declares the member, where it is declared:
+DDD00070 is reported in the library that declares the member, at the member:
 
 ```csharp
 public static class ShopCatalogue
@@ -2490,24 +2710,30 @@ public static class ShopCatalogue
 }
 ```
 
-A package's row access contribution is made in the project that runs the Supabase export, from the members
-you mark: `[TenancyCatalogue]`, `[TenancyOperators]`, `[MembershipRules<TMember>]`, or a mark of another
-package's whose attribute says it is one with `[ApplicationMark]`. That project finds the marks in the
-projects it references, and of a library it sees what is public and nothing else. An internal member, one in
-an internal class, or a property whose getter is not public is not there for it at all: Tenancy's policies
-would be written from the default catalogue rather than yours, or a resource's functions left out, and that
-project could not say why. Make the member public, in public types, with a public getter.
+A package's row access contribution is made in the project that runs the Supabase export, from the members you
+mark:
 
-An application, the program that runs the export or the host, may keep its own marks internal: nothing
-references it for them.
+- `[TenancyCatalogue]`;
+- `[TenancyOperators]`;
+- `[MembershipRules<TMember>]`;
+- the mark of another package, whose attribute says that it is a mark with `[ApplicationMark]`.
+
+The exporting project finds the marks in the projects it references. Of a library, it sees what is public and
+nothing else. It does not see an internal member, a member in an internal class, or a property whose getter is
+not public. The export would then write Tenancy's policies from the default catalogue instead of yours, or leave
+out a resource's functions, and the exporting project could not say why. Make the member public, in public types,
+with a public getter.
+
+An application, the program that runs the export or the host, may keep its own marks internal. No project
+references an application for its marks.
 
 ## DDD00071
 
 **What a package's row access contribution is made from is found once, and is what it takes.**
 
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), about a package it
-references that declares itself a contributor, and at the member you marked where that member is declared in
-the same project:
+DDD00071 is reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), about a
+package it references that declares itself a contributor. It is reported at the member you marked, when that
+member is declared in the same project:
 
 ```csharp
 public static class ShopCatalogue
@@ -2520,35 +2746,40 @@ public static class ShopCatalogue
 }
 ```
 
-A package that declares itself a contributor writes its [row level security](row-level-security.md#policies-a-package-ships)
-into your migrations, made from the static properties and fields you mark with the attributes it names:
-`[TenancyCatalogue]` for Tenancy's catalogue, `[MembershipRules<TMember>]` for a resource's rules. The build
-reads them in the project that runs the export, so a marked member is:
+A package that declares itself a contributor writes its
+[row level security](row-level-security.md#policies-a-package-ships) into your migrations. It makes the SQL from
+the static properties and fields that you mark with the attributes it names: `[TenancyCatalogue]` for Tenancy's
+catalogue, `[MembershipRules<TMember>]` for a resource's rules. The build reads them in the project that runs the
+export, so a marked member must be:
 
 | What | Why |
 |---|---|
-| marked once in all the projects the export sees, or once per type for a generic mark | the build cannot tell which of two your application runs with, and writes neither rather than guess |
-| of a type the package takes: an `ApplicationCatalogue` for `[TenancyCatalogue]`, not the catalogue built from it | the package builds it, from your part and your modules' permissions, as your registration does |
+| marked once in all the projects the export sees, or once per type for a generic mark | the build cannot tell which of two your application runs with, so it writes neither instead of guessing |
+| of a type the package takes: an `ApplicationCatalogue` for `[TenancyCatalogue]`, not the catalogue built from it | the package builds the catalogue itself, from your part and your modules' permissions, as your registration does |
 | static, with a getter, in a type that is not generic | the code the build writes reads it as `Type.Member` |
 | readable from the exporting project | the code the build writes is in that project |
 
-A member another project declares that is not public, or is declared in an internal class, is not reported
-here: the exporting project does not see it at all, so for that project nothing is marked. The project that
-declares it reports it instead, [DDD00070](#ddd00070).
+A member that another project declares, and that is not public or is in an internal class, is not reported here.
+The exporting project does not see it at all, so for that project nothing is marked. The project that declares the
+member reports it instead, as [DDD00070](#ddd00070).
 
-Policies written from another catalogue or other rules than your host runs with would grant other access than
-your application does, so this is an error, and the contribution is not made until it is fixed. The same id
-reports a class the package declares in a way the build cannot make: one whose constructor takes something it
-does not say where to find with `[FromApplication]`, or a generic one nothing you mark closes. The message ends
-with "That is the package's to fix" then; tell the package's authors, or leave its contribution out with
-`[assembly: LeaveOutRowAccessContribution(typeof(X))]` and write those policies yourself.
+Policies written from another catalogue, or from other rules than your host runs with, would grant other access
+than your application grants. So DDD00071 is an error, and the contribution is not made until it is fixed.
+
+DDD00071 also reports a class that the package declares in a way the build cannot make:
+
+- a class whose constructor takes a value without saying where to find it, with `[FromApplication]`;
+- a generic class that nothing you mark closes.
+
+The message then ends with "That is the package's to fix". Tell the package's authors, or leave its contribution
+out with `[assembly: LeaveOutRowAccessContribution(typeof(X))]` and write those policies yourself.
 
 ## DDD00072
 
 **A row access contribution a package writes is not listed again.**
 
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), on the line that lists
-it:
+DDD00072 is reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), on the line
+that lists the contribution:
 
 ```csharp
 // The project that runs the export, as the toolkit once asked for
@@ -2559,10 +2790,11 @@ public sealed class ShopTenancyRowAccess()
 ```
 
 A package that declares itself a contributor writes its row level security into your migrations because the
-project references it, from what you mark. Listing the package's contribution as well, a class derived from it,
-or its closing over a type the package closes it with already, would hand the export the same SQL twice: two
-functions of one name, or two contributions that keep one table to themselves, which the export refuses when it
-runs. Take the line out, and the class with it, and mark what the class handed over:
+project references it. It uses what you mark. An application built against an earlier version may still list the
+package's contribution, because the toolkit once asked for that line. If you list the package's contribution, a
+class derived from it, or a closing of it over a type the package already closes it with, the export gets the same
+SQL twice. The result is two functions of one name, or two contributions that each claim the same tables. The
+export refuses both when it runs. Remove the line and the class, and mark what the class passed in:
 
 ```csharp
 public static class ShopCatalogue
@@ -2572,33 +2804,34 @@ public static class ShopCatalogue
 }
 ```
 
-To write a package's SQL with a class of your own on purpose, leave the package's out and keep listing yours:
-`[assembly: LeaveOutRowAccessContribution(typeof(TenancyRowAccessContribution))]`. A class another project
-declares as a contributor, derived from a package's, is the same SQL a second time, and is reported as well,
-naming the project that declares it.
+To write a package's SQL with a class of your own on purpose, leave the package's contribution out and keep
+listing yours: `[assembly: LeaveOutRowAccessContribution(typeof(TenancyRowAccessContribution))]`. A contributor
+that another referenced project declares, derived from a package's contribution, is the same SQL a second time. It
+is reported too, and the message names the project that declares it.
 
 ## DDD00073
 
 **What `[assembly: LeaveOutRowAccessContribution]` names is a contribution a package writes, and a context.**
 
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), at the line:
+DDD00073 is reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), at the line:
 
 ```csharp
 [assembly: LeaveOutRowAccessContribution(typeof(AuditRowAccess), Context = typeof(string))]   // DDD00073: no context
 [assembly: LeaveOutRowAccessContribution(typeof(UnitChangesWithItsPermissions))]                       // DDD00073: a module's own
 ```
 
-The line keeps a package's SQL out of your migrations, or with `Context` out of one context's access file. It
-names the contribution as the package declares it, open where it is generic, or one closing of it you mark;
-and the context is a class derived from `DbContext`, closed where it is generic. A line that names anything
-else leaves nothing out, while it reads as if it did, so it is reported and nothing is left out for it:
+The line keeps a package's SQL out of your migrations. With `Context`, it keeps the SQL out of one context's
+access file only. The line names the contribution as the package declares it: open where it is generic, or one
+closing of it that you mark. `Context` names a class derived from `DbContext`, closed where it is generic. A line
+that names anything else leaves nothing out, and still looks as if it does. So it is reported, and nothing is
+left out for it:
 
 | The line names | What to do |
 |---|---|
-| a `Context` that is no class derived from `DbContext`, or a generic context left open | name the context whose access file it is kept out of |
-| a class no package this project references declares a contributor | name what the package declares, or take the line out |
-| a closing nothing you mark makes, `MembershipRowAccessContribution<Refund>` with no rules marked for `Refund` | take the line out: nothing of it is written |
-| a module's own contribution | take its `[assembly: UseRowAccessContribution]` line out instead: only that line writes it |
+| a `Context` that is no class derived from `DbContext`, or a generic context left open | name the context whose access file the SQL is kept out of |
+| a class that no referenced package declares as a contributor | name what the package declares, or remove the line |
+| a closing that nothing you mark makes, such as `MembershipRowAccessContribution<Refund>` with no rules marked for `Refund` | remove the line. That closing is never written |
+| a module's own contribution | remove the module's `[assembly: UseRowAccessContribution]` line instead. Only that line writes the module's SQL |
 
 ## DDD00074
 
@@ -2612,116 +2845,147 @@ public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<Orderin
 }
 ```
 
-`UseDDDToolkit` keeps a context's migration history in the context's default schema, beside its tables:
-`ordering."__EFMigrationsHistory"` for a model with `HasDefaultSchema("ordering")`
-([The migration history](entity-framework.md#the-migration-history)). `dotnet ef` and the
-[Supabase export](supabase.md) make the context through its design-time factory instead, before any host exists,
-so the factory says the same with `UseDDDToolkitDesignTime()`. Without it, `dotnet ef database update`, a
-migrations script, a migration bundle and the exported files record every migration in the provider's default
-schema, `public` or `dbo`, while the running application reads its own schema's history: `Migrate()` tries to apply
-the first migration again and fails on a table that is there, and on Supabase the start-up check reports every
-migration missing.
+`UseDDDToolkit` and `UseDDDToolkitCore` keep a context's migration history in the context's default schema,
+beside its tables. For a model with `HasDefaultSchema("ordering")`, the history table is
+`ordering."__EFMigrationsHistory"` ([The migration history](entity-framework.md#the-migration-history)).
+`dotnet ef` and the [Supabase export](supabase.md) make the context through its design-time factory instead,
+before any host exists. So the factory must do the same, with `UseDDDToolkitDesignTime()`.
+
+Without that call, these record every migration in the provider's default schema, `public` or `dbo`:
+`dotnet ef database update`, a migrations script, a migration bundle and the exported files. The running
+application reads the history in the context's own schema. `Migrate()` then tries to apply the first migration
+again, and fails on a table that exists. On Supabase, the start-up check reports every migration as missing.
 
 ```csharp
 public OrderingContext CreateDbContext(string[] args)
     => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 ```
 
-Add the call after the provider; the code fix does it, in front of the options' `.Options`. It is reported in a
-project that references `DDDToolkit.EntityFramework`, at `CreateDbContext` of a factory whose class calls none of
-`UseDDDToolkitDesignTime`, `UseDDDToolkit`, `UseDDDToolkitCore` and `MigrationsHistoryTable`, in `CreateDbContext`
-or in a method, property or field of the class it reads. A factory whose options a helper of another class makes is
-reported too, since the analyzer reads one class at a time: add the call after the helper, which adds nothing the
-options have already. A context the host does not wire with the toolkit, and whose history is where Entity
-Framework keeps it, names the table in the factory's options and the host's alike,
-`MigrationsHistoryTable(HistoryRepository.DefaultTableName)`, or suppresses the warning.
+Add the call after the provider. The code fix adds it, before the options' `.Options`.
 
-A context marked `[SupabaseMigrations]` needs no factory written by hand: the build writes one beside it that calls
-`UseDDDToolkitDesignTime()` wherever the project references `DDDToolkit.EntityFramework`, and the analyzer does not
-read generated code. See [Supabase](supabase.md#exporting-as-part-of-the-build).
+DDD00074 is reported in a project that references `DDDToolkit.EntityFramework`, at `CreateDbContext` of a
+factory. It is reported when the factory's class calls none of `UseDDDToolkitDesignTime`, `UseDDDToolkit`,
+`UseDDDToolkitCore` and `MigrationsHistoryTable`, in `CreateDbContext` or in a method, property or field of the
+class that `CreateDbContext` reads. The analyzer reads one class at a time. So a factory whose options a helper of
+another class makes is reported too. Add the call after the helper. The call adds nothing that the options have
+already.
+
+A context that the host does not wire with the toolkit, and whose history stays where Entity Framework keeps it,
+names the table in the factory's options and in the host's options alike:
+`MigrationsHistoryTable(HistoryRepository.DefaultTableName)`. Or suppress the warning.
+
+A context marked `[SupabaseMigrations]` needs no factory written by hand. The build writes one beside it that
+calls `UseDDDToolkitDesignTime()` wherever the project references `DDDToolkit.EntityFramework`. The analyzer does
+not read generated code. See [Supabase](supabase.md#exporting-as-part-of-the-build).
 
 ## DDD00075
 
 **Every class a package's use cases are named through has a name of its own where a project sees it.**
 
 ```
-Shop.Host.csproj: warning DDD00075: 'TenancyUseCases' is the name of more than one class in this project: it sees
-the one 'Shop.Customers.Domain' has for the module Customers and the one 'Shop.Partners.Domain' has for the module
-Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName("TenancyUseCases",
-"CustomersTenancyUseCases")] in 'Shop.Customers.Domain'.
+Shop.Host.csproj: warning DDD00075: 'SeatManager' is the name of more than one class in this project: it sees the
+one 'Shop.Customers.Domain' has for the module Customers and the one 'Shop.Partners.Domain' has for the module
+Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName("SeatManager",
+"CustomersSeatManager")] in 'Shop.Customers.Domain'.
 ```
 
-Tenancy's use cases are named through a class the toolkit's generator writes into the project that declares your
-Tenancy classes, `TenancyUseCases`, after the package's own class
-([Two modules with the classes](tenancy.md#two-modules-with-the-classes)). An application with two modules that
-each declare Tenancy's classes gets two classes of that name, one in each module's domain project. While neither
-module references the other, neither sees the other's, so neither is told; they meet in every project that
-references both, the host and your tests first, where the first line that names `TenancyUseCases` would be the
-compiler's CS0433, with no word of what to do. So such a project is told, at its project file, since no line of its
-code is wrong.
+The toolkit's generator writes Tenancy's managers, its access manager and `TenantToProvision` into the project that
+declares your Tenancy classes. Each class is named after the package's own class: `SeatManager`, `TenancyAccessManager`
+and so on ([Two modules with the classes](tenancy/your-module.md#two-modules-with-tenancys-classes)). An application
+with two modules that each declare Tenancy's classes gets two classes of each name, one in each module's domain
+project. While neither module references the other, neither project sees the other's class, and neither reports
+anything. The two classes meet in every project that references both modules, first the host and your tests.
+There, the first line that names `SeatManager` gets the compiler's CS0433, with no hint of what to do. So DDD00075 is
+reported in such a project, at its project file, because no line of its code is wrong. It is reported once for each
+name, so a host that sees two modules with Tenancy's classes gets seven warnings for the classes.
 
-What happens depends on where the two classes meet. In every case DDD00075 is a warning, which stops no build
-unless warnings are errors there; what stops the build is the compiler's error on the first line that names the class:
+The stores are aliases, `TenancyStore` and `InvitationStore`, which the generator writes into every project that sees
+the classes. A project that sees two modules' classes would get two aliases of one name. It gets neither, and
+DDD00075 says so at its project file, once for each alias:
+
+```
+Shop.Host.csproj: warning DDD00075: 'TenancyStore' is the name of more than one alias in this project: it sees the
+classes 'Shop.Customers.Domain' declares for the module Customers and the classes 'Shop.Partners.Domain' declares for
+the module Partners, and would get an alias of ITenancyStore for each. Give one of them a name of its own, with
+[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")] in 'Shop.Customers.Domain'.
+```
+
+What happens depends on where the two classes meet. DDD00075 is a warning in every case. It stops no build unless
+warnings are errors there. The compiler's error on the first line that names the class stops the build:
 
 | Where the two classes meet | What the generator writes there | Where DDD00075 is reported | What your code gets while the warning stands |
 |---|---|---|---|
-| a project that references both modules' projects, such as the host or a test project | nothing: the classes are the modules' | at the project file, since no line of it is wrong | code that names neither class builds and runs; the first line that names `TenancyUseCases` is CS0433, an error |
-| a project that declares one module's classes and references another module's project, which has a class of that name | its own class all the same | on the project's first Tenancy class, and not at the project file as well | its own code builds and names its own module's classes: the compiler takes the class of its own source and says so with CS0436, a warning. Every project above it sees both classes, is told at its project file, and gets CS0433 on the first line that names the class |
-| a project that would get two classes of one name itself: two packages' classes of one name, or a name you gave that another of its classes has | neither class, since neither can be told from the other | on the project's first class | code that names neither builds; a line that names the class is the compiler's error that no such type exists |
+| a project that references both modules' projects, such as the host or a test project | nothing. The classes belong to the modules | at the project file, because no line of it is wrong | Code that names neither class builds and runs. The first line that names `SeatManager` gets CS0433, an error |
+| a project that declares one module's classes, and references another module's project that has a class of that name | its own class, as usual | on the project's first Tenancy class, and not also at the project file | The project's own code builds and names its own module's classes. The compiler takes the class from the project's own source and reports CS0436, a warning. Every project above it sees both classes, gets DDD00075 at its project file, and gets CS0433 on the first line that names the class |
+| a project that would get two classes of one name itself: two packages' classes of one name, or a name you gave that another of its classes has | neither class, because the two cannot be told apart | on the project's first class | Code that names neither class builds. A line that names the class gets the compiler's error that no such type exists |
 
-Give one of them a name of its own, with the line the message writes out, in the project it names: the one that
-declares that module's classes. Where you named that class already, the message names the line that names it, to
-give another name there: a second line for one class would change nothing.
+Give one of the classes a name of its own, with the line that the message writes out, in the project it names.
+That is the project that declares that module's classes. If you named that class already, the message names the
+line that names it. Give another name in that line. A second line for one class changes nothing. Name every class
+of the module that the host sees twice, one line each:
 
 ```csharp
 // Shop.Customers.Domain, beside [assembly: Module("Customers")] or Tenancy's switch
 using DDDToolkit.Abstractions.Attributes;
 
-[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]
+[assembly: TemplateFacadeName("TenantManager", "CustomersTenantManager")]
+[assembly: TemplateFacadeName("OrganizationManager", "CustomersOrganizationManager")]
+[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]
+[assembly: TemplateFacadeName("RoleManager", "CustomersRoleManager")]
+[assembly: TemplateFacadeName("InvitationManager", "CustomersInvitationManager")]   // where the module declares an invitation
+[assembly: TemplateFacadeName("TenancyAccessManager", "CustomersTenancyAccessManager")]
+[assembly: TemplateFacadeName("TenantToProvision", "CustomersTenantToProvision")]
+[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")]
+[assembly: TemplateFacadeName("InvitationStore", "CustomersInvitationStore")]                 // where the module declares an invitation
 ```
 
-Every project above it then names Customers' use cases `CustomersTenancyUseCases.SeatCommands`, and Partners keeps
-`TenancyUseCases`. Any name a class can have will do, `CustomersTenancy` as well, as long as no namespace or type of
-yours in the global namespace has it; the message only suggests one.
+Every project above it then takes Customers' managers as `CustomersSeatManager` and the others, and Partners keeps
+`SeatManager`. Any name that a class can have works, `CustomersSeats` too, as long as no namespace or type of yours
+in the global namespace has it. The message only suggests a name.
 
-Where two packages' classes share a name in one project, the line names the one meant with its namespace,
+If two packages' classes share a name in one project, the line names the one it means with its namespace:
 `[assembly: TemplateFacadeName("Acme.Billing.UseCases", "BillingUseCases")]`. A type, a namespace or an alias of
-the name you keep in the global namespace yourself is your own way of naming the classes, and is not this.
+the name that you keep in the global namespace yourself is your own way of naming the classes. DDD00075 does not
+report it.
 
-It is a warning rather than an error in all three cases: a host that names neither class builds and runs, and the
-compiler stops the first line that does. A project that builds with `TreatWarningsAsErrors` stops at DDD00075 itself,
-and in the second case at CS0436 as well. To make it an error everywhere, add it to `<WarningsAsErrors>`. Reported
-at the project file, it is outside every source file, so there its severity is set with `<NoWarn>` or
-`<WarningsAsErrors>`, or in a `.globalconfig` file with `is_global = true`, and not in an `.editorconfig` section for
-`*.cs` files; reported on a class, an `.editorconfig` section reaches it as well.
+DDD00075 is a warning in all three cases. A host that names neither class builds and runs, and the compiler stops
+the first line that names one. A project that builds with `TreatWarningsAsErrors` stops at DDD00075 itself, and in
+the second case also at CS0436. To make DDD00075 an error everywhere, add it to `<WarningsAsErrors>`.
+
+Where DDD00075 is reported at the project file, it is outside every source file. Set its severity there with
+`<NoWarn>` or `<WarningsAsErrors>`, or in a `.globalconfig` file with `is_global = true`. An `.editorconfig`
+section for `*.cs` files does not reach it. Where DDD00075 is reported on a class, an `.editorconfig` section
+works as well.
 
 ## DDD00076
 
 **`[assembly: TemplateFacadeName]` names, once, a class this project gets.**
 
 ```csharp
-[assembly: TemplateFacadeName("TenancyUsecases", "ShopTenancy")]   // DDD00076: ... changes nothing: no package this project
-                                                                   // references asks for a class of that name; it can name 'TenancyUseCases'
+[assembly: TemplateFacadeName("SeatManagers", "ShopSeats")]   // DDD00076: ... changes nothing: no package this project
+                                                              // references asks for a class of that name; it can name
+                                                              // 'InvitationManager', 'OrganizationManager', ... and 'TenantToProvision'
 ```
 
-The line gives the class a package's use cases are named through a name of your own, in the project where the
-generator writes it: the one that declares the classes. A module whose classes are split over two projects may give
-it beside the module in either: the project that writes the class reads it in the projects of its module it takes
-classes from. A line that does not change it reads as if it did, so it is reported at the line, and the class keeps
-its name:
+The line gives your own name to a class that the generator writes for a package's `[TemplateFacade]`. It works in the project
+where the generator writes the class: the project that declares the classes. A module whose classes are split over
+two projects may put the line beside the module declaration in either project. The project that writes the class
+reads the line in the projects of its module that it takes classes from. A line that changes nothing looks as if
+it changed the name. So it is reported at the line, and the class keeps its name:
 
 | The line | What to do |
 |---|---|
-| names no class a package this project references asks for | write the class as the message lists it, the package's class's name without its type parameters |
-| names two classes, two packages' classes of one name | name the one meant with its namespace, `"DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases"` |
-| is in a project that declares none of the classes, such as an application project above the domain project | move it into the project that declares them: the class is written, and named, there |
-| names a class a line before it names already, in this project or in a project of its module it takes classes from | keep one; this project's line stands, then the first other project's by name |
-| gives a name no class can have, a keyword or one with a space | give a name a class can have |
-| gives a name a namespace or a type in the global namespace has, such as the module's root namespace, `Customers` for `Customers.Domain` | give another name: the class cannot have it as well, and the projects above would only hear CS0234 |
+| names no class that a referenced package asks for | write the class name as the message lists it: the package's class name without its type parameters |
+| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DDDToolkit.Supporting.Tenancy.Managers.SeatManager"` |
+| is in a project that declares none of the classes, such as an application project above the domain project | move it into the project that declares the classes. The class is written and named there |
+| names a class that an earlier line names already, in this project or in a project of its module that it takes classes from | keep one line. This project's line wins, then the line of the first other project by name |
+| gives a name that no class can have, such as a keyword or a name with a space | give a name that a class can have |
+| gives a name that a namespace or a type in the global namespace already has, such as the module's root namespace, `Customers` for `Customers.Domain` | give another name. The class cannot have that name too, and the projects above would only get CS0234 |
 
-A line in another project of the module is reported in the project that writes the class, on the line that stands
-there or on its first class, with the project the line is in. An alias of the name at the top of one of the
-project's own files is your own way of naming the classes, and the class stands back for it without a word.
+A line in another project of the module is reported in the project that writes the class, on the line in that
+project or on its first class. The message names the project that the line is in. An alias of the name at the top
+of one of the project's own files is your own way of naming the classes. The generator leaves it alone and reports
+nothing.
 
 ## DDD00077
 
@@ -2734,28 +2998,36 @@ public partial interface IBillingRequest : IRequireAccess;
 public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;   // DDD00077: says nothing of what it requires
 ```
 
-Every command and query says who may send it, and the module's checks hold the caller to that before the handler
-runs: with an attribute, `[SignedIn]` or `[RequiresPermission(permission)]` with a marker of where the permission is held, or by answering
-`RequiredAccess` itself where the requirement is computed
-([What a request declares](access-requirements.md#what-a-request-declares)). Where the module's interface is
-`partial`, the generator implements `RequiredAccess` in it, so the compiler no longer asks a request for the
-property, and a request that says neither is reported here instead: sent, it would be stopped every time with an
-exception that says it declares nothing. A request anyone may send says `[AllowAnonymous]`.
+Every command and query says who may send it. The module's checks hold the caller to that before the handler
+runs. A request says it in one of two ways
+([What a request declares](access-requirements.md#what-a-request-declares)):
+
+- with an attribute: `[SignedIn]`, or `[RequiresPermission(permission)]` with a marker of where the permission is
+  held;
+- by answering `RequiredAccess` itself, where the requirement is computed.
+
+If the module's interface is `partial`, the generator implements `RequiredAccess` in it. The compiler then no
+longer requires a request to implement the property. So a request that does neither is reported here. If such a
+request were sent, the access check would refuse it every time, with an exception that says it declares
+nothing. A
+request that anyone may send says `[AllowAnonymous]`.
 
 ```csharp
 [RequiresPermission(BillingPermissions.Close)]
 public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;
 ```
 
-A request of a project other than its interface's is reported too: the line written into the interface where it is
-declared knows only that project's requests, so this one answers `RequiredAccess` itself. An abstract request is not
-reported; what derives from it is. Where the interface is not `partial`, the compiler's own CS0535 says the same.
+A request in another project than its interface is reported too. The line that the generator writes into the
+interface knows only the requests of the interface's own project. So such a request answers `RequiredAccess`
+itself. An abstract request is not reported. The requests that derive from it are reported. If the interface is
+not `partial`, the compiler's own CS0535 reports the same problem.
 
-A module whose requests nearly all require the same says it once, on its interface: `[AccessRequests, InTenant]`.
-A request of it that states nothing then takes that default, on a line of its own in the generated switch, and is
-not reported; nor is one of another project, which the interface's last arm answers with the default
-([A module's default](access-requirements.md#a-modules-default)). That is the module's choice, and its price: a
-command of it that forgets its `[RequiresPermission]` requires what the default says, and the build says nothing of it.
+A module whose requests nearly all require the same thing says it once, on its interface:
+`[AccessRequests, InTenant]`. A request of that module that states nothing then takes this default, on a line of
+its own in the generated switch, and is not reported. A request of another project is not reported either. The
+interface's last arm answers it with the default ([A module's default](access-requirements.md#a-modules-default)).
+The default is the module's choice, and it has a cost. A command of the module that forgets its
+`[RequiresPermission]` requires what the default says, and the build reports nothing.
 
 ## DDD00078
 
@@ -2769,11 +3041,16 @@ public sealed record MyInvoices : IBillingRequest
 }
 ```
 
-C# takes the request's own property over the line the generator writes from the attribute, so the attribute does
-nothing while a review reads it as the requirement. Keep one: the attribute where the requirement reads no value of
-the request, the property where it computes one from them. The same holds for an interface between the request and
-its module's that gives `RequiredAccess` a default of its own, `interface IPublicBillingRequest : IBillingRequest`
-say: C# takes that default over the module's, so the message says the request answers it through that interface.
+C# takes the request's own property over the line that the generator writes from the attribute. So the attribute
+does nothing, while a review reads it as the requirement. That is why DDD00078 is an error. Keep one of the two:
+
+- the attribute, where the requirement reads no value of the request;
+- the property, where it computes the requirement from the request's values.
+
+The same holds for an interface between the request and its module's interface that gives `RequiredAccess` a
+default of its own, such as `interface IPublicBillingRequest : IBillingRequest`. C# takes that default over the
+module's. The message then says that the request answers `RequiredAccess` through that interface. A request that
+derives from one that answers `RequiredAccess` answers it too, so it carries no requirement attribute of its own.
 
 ## DDD00079
 
@@ -2785,17 +3062,19 @@ public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;
 ```
 
 Requirement attributes stacked on one request all hold, as several `[Authorize]` attributes do in ASP.NET Core
-([Stacked attributes are all](access-requirements.md#stacked-attributes-are-all)). `[AllowAnonymous]` says that
-anyone may send the request, a caller who did not sign in too, so beside a requirement that says who may it
-contradicts it: read one way the door is open, read the other it is closed, and a review cannot tell which was meant.
-It is an error beside any other requirement attribute, `[RequiresPermission]` and `[OwnOnly]` included, and no line is
-written. Keep the one the request requires; a request anyone may send says `[AllowAnonymous]` alone. A request holds
-to the attributes of the requests it derives from as well, theirs first, so `[AllowAnonymous]` on a request that
-derives from one carrying `[SignedIn]` is the same contradiction, and is reported at the derived request, naming the
-base's attribute: a derived request cannot take back what its base requires.
+([Stacked attributes are all](access-requirements.md#stacked-attributes)). `[AllowAnonymous]` says that
+anyone may send the request, including a caller who did not sign in. A requirement beside it limits who may send
+the request. The two contradict each other, and a review cannot tell which one was meant. So DDD00079 is an error
+beside any other requirement attribute, `[RequiresPermission]` and `[OwnOnly]` included, and the generator writes
+no line for the request. Keep the attribute that the request needs. A request that anyone may send carries
+`[AllowAnonymous]` alone.
 
-Two other requirement attributes on one request are no diagnostic: they stack, and both hold. One that its neighbour
-already requires is [DDD00084](#ddd00084), a warning.
+A request also holds to the attributes of the requests it derives from, theirs first. So `[AllowAnonymous]` on a
+request that derives from one with `[SignedIn]` is the same contradiction. DDD00079 reports it at the derived
+request, and names the base's attribute. A derived request cannot take back what its base requires.
+
+Two other requirement attributes on one request are not a mistake. They stack, and both hold. An attribute that
+its neighbour already requires is [DDD00084](#ddd00084), a warning.
 
 ## DDD00080
 
@@ -2809,28 +3088,35 @@ public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequ
 public sealed record MoveLedger([AtUnit] OrganizationUnitId From, [OnResource] LedgerId Ledger) : IBillingRequest;   // DDD00080: two places
 ```
 
-`[RequiresPermission(permission)]` says the permission, and one marker on one of the request's members says where it is held: none for
-the whole tenant, `[AtUnit]` at that unit or above it, `[OnResource]` on that resource through its members, with
-`[ExpectedVersion]` beside `[OnResource]` for the version the caller read
-([Where the permission is held](access-requirements.md#where-the-permission-is-held)). Reported, at the marker or the request:
+`[RequiresPermission(permission)]` names the permission. One marker on one of the request's members says where the
+caller holds it ([Where the permission is held](access-requirements.md#where-the-permission-is-held)):
+
+- no marker: for the whole tenant;
+- `[AtUnit]`: at that unit or above it;
+- `[OnResource]`: on that resource, through its members. `[ExpectedVersion]` beside `[OnResource]` gives the
+  version the caller read.
+
+DDD00080 is reported at the marker or the request:
 
 | It | Because |
 |---|---|
-| marks a member, and requires no permission | a marker says where the permission of `[RequiresPermission]` is held |
-| marks where its permission is held twice, or `[AtUnit]` with `[OnResource]` | a permission is held in one place; one or the other, depending on the request, is computed as `RequiredAccess` |
-| marks `[ExpectedVersion]` and no member `[OnResource]` | the version is of the resource it goes with |
-| marks one argument twice, two `[ExpectedVersion]` | the call takes it once |
-| marks a parameter of a class's primary constructor | it is no member the requirement reads: mark the property; a positional record's parameter is its property, and is fine |
+| marks a member, and requires no permission | a marker says where the permission of `[RequiresPermission]` is held. Without a permission, it marks nothing |
+| marks two places for its permission, or `[AtUnit]` with `[OnResource]` | a permission is held in one place. If the place depends on the request, compute the requirement as `RequiredAccess` |
+| marks `[ExpectedVersion]` and no member `[OnResource]` | the version belongs to the resource it goes with |
+| marks one argument twice, such as two `[ExpectedVersion]` | the call takes each argument once |
+| marks a parameter of a class's primary constructor | the requirement cannot read such a parameter. Mark the property. A positional record's parameter is its property, and is fine |
 | marks a private or protected property | the requirement is read in the module's interface, which needs a public or internal getter |
-| requires a permission and marks nothing, where no package says where such a permission is held | Tenancy says it for the whole tenant, `[assembly: PermissionWithoutMarker]`; a project with Membership alone, or two such packages, asks for a marker |
-| requires two permissions, its own `[RequiresPermission]` and one of a request it derives from | the attributes of a request and of its base all hold, and one marker says where for one permission; two permissions are `AccessRequirement.All` of the two, as `RequiredAccess` |
-| is a module's interface whose default is `[RequiresPermission(permission)]`, where no package says where a permission without a marker is held | a default reads no member of a request, so its permission is one without a marker |
-| marks a member, requires no permission of its own, and its module's default is a permission | the default's permission reads no member of a request: a marker goes with the request's own `[RequiresPermission]` |
+| requires a permission and marks nothing, where no package says where such a permission is held | Tenancy says it with `[assembly: PermissionWithoutMarker]`: for the whole tenant. A project with Membership alone, or with two such packages, needs a marker |
+| requires two permissions: its own `[RequiresPermission]` and one of a request it derives from | the attributes of a request and of its base all hold, and one marker says where for one permission. Write two permissions as `AccessRequirement.All` of the two, in `RequiredAccess` |
+| is a module's interface whose default is `[RequiresPermission(permission)]`, where no package says where a permission without a marker is held | a default reads no member of a request, so its permission has no marker |
+| marks a member, requires no permission of its own, and its module's default is a permission | the default's permission reads no member of a request. A marker goes with the request's own `[RequiresPermission]` |
 
-An abstract request is a shape the requests that derive from it share, a record that carries the unit say, so it is
-not reported for a marker without a permission: each request that derives from it says its permission, and one that does not is
-reported where it is declared, for the marker it inherits. A record's positional parameter is the property a record
-it derives from declares, where that one has it, so `[AtUnit]` goes on the derived record's parameter as well:
+An abstract request is a shape that the requests deriving from it share, such as a record that carries the unit.
+So an abstract request is not reported for a marker without a permission. Each request that derives from it names
+its permission. A derived request that names none is reported where it is declared, for the marker it inherits.
+
+A record's positional parameter is the property that its base record declares, if the base record has it. So
+`[AtUnit]` goes on the derived record's parameter as well:
 
 ```csharp
 public abstract record UnitCommand(OrganizationUnitId Unit) : IBillingRequest;
@@ -2851,15 +3137,22 @@ public sealed record MakePlacement(SeatId Seat, [AtUnit] SeatId Unit) : ITenants
 public sealed record ListLedgers([AtUnit] OrganizationUnitId? Unit) : IBillingRequest;              // DDD00081: may be null
 ```
 
-The call a marker stands for takes any id, so a unit marked on a seat's id compiles and lets nobody through: the
-package's check stops a case over an id it does not decide. `[AtUnit]` marks your unit id, the one your class
-declared with `[OrganizationUnit<TUnitId>]` is declared over, and `[OnResource]` the id of a resource with members,
-the aggregate root a class declared with `[Member<TId, TMemberId, TRoleId, TResource>]` names; the package says which
-with `[PermissionMarker(..., IdOf = ...)]`. It is reported where the project sees such classes, as a module's application
-project sees its domain's; where it sees none, nothing can be told, and the check says so when the request is sent. A
-member that may be null is a requirement computed from whether it is given, written as `RequiredAccess`:
-`Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`. `[ExpectedVersion]` marks
-a member of the type the call takes there, a `long?` or a `long`.
+The call that a marker stands for takes any id. So a unit marker on a seat's id compiles and lets nobody through.
+The package's access check refuses a case over an id that it does not decide. The marked member must have the right
+type:
+
+- `[AtUnit]` marks your unit id: the id that your class declared with `[OrganizationUnit<TUnitId>]` is declared
+  over.
+- `[OnResource]` marks the id of a resource with members: the aggregate root that a class declared with
+  `[Member<TId, TMemberId, TRoleId, TResource>]` names.
+
+The package says which id a marker takes, with `[PermissionMarker(..., IdOf = ...)]`. DDD00081 is reported where
+the project sees such classes, as a module's application project sees its domain's classes. Where the project sees
+none, nothing can be told, and the access check reports the problem when the request is sent.
+
+A member that may be null is a requirement computed from whether the value is given. Write it as
+`RequiredAccess`: `Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`.
+`[ExpectedVersion]` marks a member of the type that the call takes there: a `long?` or a `long`.
 
 ## DDD00082
 
@@ -2870,23 +3163,29 @@ a member of the type the call takes there, a `long?` or a `long`.
 public sealed record ArchiveDocuments : ICommand, IDocumentsRequest;                                // DDD00082
 ```
 
-Membership's `[SeenWith<TResourceId>(permission)]` refuses nobody for want of the permission: it lets a signed-in caller through,
-one that holds nothing too, and says what the query's own statement filters by, which is the check. On a command
-the handler would run unchecked. Tenancy's `[RequiresOperator]` lets through an operator, who holds no seat and no
-permission and changes nothing itself. Their packages declare them for queries only, `[StatesRequirement(..., QueriesOnly
-= true)]`, and a message of the Mediator library that is no query and carries one is reported: a command, `ICommand`
-or `IStreamCommand`, and a plain `IRequest` or `IStreamRequest`, which may change as much as a command does. What
-to do instead:
+Some requirements are for queries only. Their packages say so with `[StatesRequirement(..., QueriesOnly = true)]`.
+Membership's `[SeenWith<TResourceId>(permission)]` is one. It refuses nobody for lack of the permission. It lets every
+signed-in caller through, also one that holds nothing, and says what the query's own statement filters by. That
+filter is the check. On a command, the handler would run unchecked.
+
+DDD00082 reports a message of the Mediator library that is not a query and carries such an attribute:
+
+- a command, `ICommand` or `IStreamCommand`;
+- a plain `IRequest` or `IStreamRequest`, which may change as much as a command does.
+
+What to do instead:
 
 | The request | Instead |
 |---|---|
 | only reads | make it a query, `IQuery` or `IStreamQuery` |
 | changes something, `[SeenWith]` on it | require the permission where it acts, `[RequiresPermission(permission)]` with `[OnResource]` on the resource |
-| carries out what an operator asks, `[RequiresOperator]` on it | let trusted code carry it out as system work that names the operator, `TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own ([Operators](tenancy.md#operators)) |
 
-A request of another dispatcher, which the generator cannot tell for a command or a query, is not reported, and
-neither is the same requirement answered as `RequiredAccess` on a command: a test holds both
-([Holding it with a test](access-requirements.md#holding-it-with-a-test)).
+Tenancy's `[Operator]` is no requirement for queries only. On a command, the pipeline runs the handler as operator work
+([An operator's request](access-requirements.md#an-operators-request)).
+
+A request of another dispatcher is not reported, because the generator cannot tell whether it is a command or a
+query. The same requirement answered as `RequiredAccess` on a command is not reported either. A test covers both
+cases ([Holding it with a test](access-requirements.md#testing-the-requirements)).
 
 ## DDD00083
 
@@ -2900,66 +3199,87 @@ public interface IBillingRequest : IRequireAccess;                  // not parti
 public sealed record MyInvoices : IBillingRequest;
 ```
 
-The generator turns a request's attributes into `RequiredAccess` at compile time, one line per request, in the
-interface marked `[AccessRequests]` that the request implements, declared `partial` in the same project. Without
-that, the attributes are read by nothing, and the request reads as if it said what it requires. Reported, with what
-to change:
+The generator turns a request's attributes into `RequiredAccess` at compile time, one line per request. It writes
+the line into the interface marked `[AccessRequests]` that the request implements, declared `partial` in the same
+project. Without such an interface, nothing reads the attributes, and the request looks as if it declares what it
+requires. DDD00083 reports each case, with what to change:
 
 | The request | Change |
 |---|---|
 | implements an interface that is not `partial` | declare it `public partial interface IBillingRequest : IRequireAccess;` |
 | implements no interface marked `[AccessRequests]` | implement the module's request interface |
 | implements one declared in another project | declare the request in that project, or answer `RequiredAccess` |
-| has type parameters | answer `RequiredAccess`: a line names one type |
-| is nested private in another type | make it internal, or answer `RequiredAccess`: the interface cannot name it |
-| implements two module interfaces that are both `partial` | answer `RequiredAccess`, or implement one of them: each implements the property, and C# takes neither (its CS8705) |
+| has type parameters | answer `RequiredAccess`. A generated line names one closed type |
+| is nested private in another type | make it internal, or answer `RequiredAccess`. The interface cannot name a private nested type |
+| implements two module interfaces that are both `partial` | answer `RequiredAccess`, or implement one of them. Each interface implements the property, so C# takes neither (CS8705) |
 
-A requirement attribute on an interface, the default of a module's requests
-([A module's default](access-requirements.md#a-modules-default)), is read the same way: on the module's interface,
-marked `[AccessRequests]` and `partial`. On one that is not `partial` it is reported at the interface, with the line to
-write. On any other interface, one between the module's and its requests say, nothing reads it either: such an
-interface answers `RequiredAccess` itself where its requests share a requirement, and C# takes that over the module's.
+A requirement attribute on an interface is the default of a module's requests
+([A module's default](access-requirements.md#a-modules-default)). The generator reads it only on the module's
+interface, marked `[AccessRequests]` and `partial`. On a module's interface that is not `partial`, the
+attribute is reported at the interface, with the line to write. On any other interface, such as one between the
+module's interface and its requests, nothing reads the attribute either. Such an interface answers
+`RequiredAccess` itself where its requests share a requirement. C# takes that over the module's default.
 
 ## DDD00084
 
-**A requirement attribute beside another adds what that one does not require already.** A warning.
+**A requirement attribute beside another adds what that one does not require already.**
 
 ```csharp
 [InTenant]                                                          // DDD00084: the permission requires it already
 [RequiresPermission(BillingPermissions.Close)]
 public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
-[SignedIn, RequiresOperator]                                        // DDD00084: an operator is signed in
+[SignedIn, Operator]                                                // DDD00084: an operator is signed in
 public sealed record AllLedgers : IQuery<IReadOnlyList<Ledger>>, IBillingRequest;
 
-[OwnOnly, SignedIn]                                                 // DDD00084: only a signed-in user has an identity
+[OwnOnly, SignedIn]                                                 // DDD00084: only a signed-in caller has an identity
 public sealed record CloseAccount([Own] Guid User) : IAccountsRequest;
 ```
 
-Stacked attributes all hold, so one its neighbour already requires says nothing more: only a seat in the tenant or
-system work there holds a permission of Tenancy's, with or without `[AtUnit]`, and `[RequiresOperator]` lets only a signed-in
-user with an operator's token role through. It checks nothing wrong, and the line is written; a reader takes it for a
-second condition and looks for what it adds, so take it off. What a requirement already requires its package says
-with `Implies` on its mark, `[StatesRequirement]`, `[PermissionMarker]` or `[PermissionWithoutMarker]`, so a module's own
-attribute is held to it the same way. What the caller's own requires, the package of its type says with `Implies` on
-`[assembly: CallersOwn]`: a `Guid` is a signed-in user's identity, `[SignedIn]`, and Tenancy's seat id is a seat in
-the tenant, `[InTenant]` and `[SignedIn]`. Beside `[OwnOnly]` with `[Own]` on such a member, they are reported; beside a
-permission with `[OrOwn]`, only what both the permission and the caller's own require is. An attribute that a request the request
-derives from carries already is reported too, since the base's attributes hold for it as well. So are a request's
-own attributes that say what its module's default says, call for call: without them the request takes the default,
-and requires the same ([A module's default](access-requirements.md#a-modules-default)). Reported and not:
+Stacked requirement attributes all hold. So an attribute that its neighbour already requires adds nothing:
+
+- Only a seat in the tenant, or system work there, holds a permission of Tenancy's, with or without `[AtUnit]`.
+  So `[InTenant]` beside such a permission adds nothing.
+- `[Operator]` lets through only a signed-in caller with an operator's token role. So `[SignedIn]` beside it adds
+  nothing.
+
+The extra attribute changes nothing that is checked, and the generator writes the line. A reader takes it for a
+second condition and looks for what it adds. So DDD00084 is a warning. Remove the attribute.
+
+A package says what its requirement already requires, with `Implies` on its mark: `[StatesRequirement]`,
+`[PermissionMarker]` or `[PermissionWithoutMarker]`. A module's own attribute is held to the same rule. The
+package of a type says what the caller's own of that type requires, with `Implies` on `[assembly: OwnedByCurrentUser]`:
+
+- A `Guid` is a signed-in caller's identity, so it implies `[SignedIn]`.
+- Tenancy's seat id is a seat in the tenant, so it implies `[InTenant]` and `[SignedIn]`.
+
+Beside `[OwnOnly]` with `[Own]` on such a member, these attributes are reported. Beside a permission with
+`[OrOwn]`, only what both the permission and the caller's own require counts.
+
+These are reported too:
+
+- An attribute that a request's base request carries already. The base's attributes hold for the request as
+  well.
+- A request's own attributes that say what its module's default says, call for call. Without them, the request
+  takes the default and requires the same ([A module's default](access-requirements.md#a-modules-default)). They
+  are reported only on a request that nothing derives from, because a request that derives from it holds to those
+  attributes beside its own.
+- On the module's interface, an attribute of the default that another attribute there already requires. It is
+  reported as on a request.
+
+Examples:
 
 | Beside | Reported | Because |
 |---|---|---|
-| `[SignedIn]` beside `[RequiresPermission]` | no | system work holds every permission and is nobody's sign-in, so the two say more than the permission alone |
-| `[InTenant]` beside `[RequiresPermission]` with `[OrOwn]` on the seat id | yes | either way through the caller is in the tenant: its own seat, or a permission of Tenancy's |
-| `[InTenant]` beside `[RequiresPermission]` with `[OrOwn]` on a `Guid` | no | a caller's verified identity is no seat, so the caller's own way says nothing of the tenant |
-| `[SignedIn]` beside `[RequiresPermission]` with `[OrOwn]` on the seat id | no | system work holds the permission and is nobody's sign-in |
-| `[InTenant]` on `CloseTheBooks : Closing`, where `Closing` is `[RequiresPermission(permission)]` | yes | the base's permission holds for it as well |
+| `[SignedIn]` beside `[RequiresPermission]` | no | system work holds every permission and has no sign-in. So the two together require more than the permission alone |
+| `[InTenant]` beside `[RequiresPermission]` with `[OrOwn]` on the seat id | yes | both ways through need a caller in the tenant: the caller's own seat, or a permission of Tenancy's |
+| `[InTenant]` beside `[RequiresPermission]` with `[OrOwn]` on a `Guid` | no | a verified identity is no seat, so the caller's own way through does not require the tenant |
+| `[SignedIn]` beside `[RequiresPermission]` with `[OrOwn]` on the seat id | no | system work holds the permission and has no sign-in |
+| `[InTenant]` on `CloseTheBooks : Closing`, where `Closing` is `[RequiresPermission(permission)]` | yes | the base's permission holds for the derived request too |
 | `[InTenant]` on a sealed request of a module whose default is `[InTenant]` | yes | without it the request takes the default, which is the same |
-| `[SignedIn, InTenant]` on a request of a module whose default is `[InTenant]` | no | it says more than the default: a signed-in user, in the tenant |
-| `[InTenant]` on a request another derives from, in that module | no | the request that derives from it holds to its attribute beside its own, and would require less without it |
-| `[InTenant]` beside `[RequiresPermission(permission)]` on the module's interface | yes | as on a request: the permission of the default requires it already |
+| `[SignedIn, InTenant]` on a request of a module whose default is `[InTenant]` | no | it requires more than the default: a signed-in caller in the tenant |
+| `[InTenant]` on a request another derives from, in that module | no | the derived request holds to this attribute beside its own, and would require less without it |
+| `[InTenant]` beside `[RequiresPermission(permission)]` on the module's interface | yes | as on a request, the default's permission requires it already |
 
 ## DDD00085
 
@@ -2973,25 +3293,31 @@ public sealed record RenameSeat([OrOwn] SeatId Seat) : ITenantsRequest;         
 public sealed record MoveSeat([OrOwn] SeatId Seat, [AtUnit] OrganizationUnitId To) : ITenantsRequest;   // DDD00085: beside [AtUnit]
 ```
 
-A request about the caller's own says it one of two ways ([Yours, or the permission](access-requirements.md#yours-or-the-permission)):
-`[OrOwn]` on the member, beside `[RequiresPermission(permission)]`, for the caller's own or the permission, and `[Own]` on the member, with
-`[OwnOnly]` on the request, for the caller's own alone. Reported, at the marker or the request:
+A request about the caller's own declares it in one of two ways
+([Yours, or the permission](access-requirements.md#the-callers-own-or-a-permission)):
+
+- `[OrOwn]` on the member, beside `[RequiresPermission(permission)]`: the caller's own, or the permission.
+- `[Own]` on the member, with `[OwnOnly]` on the request: the caller's own alone.
+
+DDD00085 is reported at the marker or the request:
 
 | It | Because |
 |---|---|
-| marks `[OrOwn]`, and requires no permission | `[OrOwn]` makes the caller's own the alternative of the permission; for the caller's own alone, `[OwnOnly]` with `[Own]` |
-| marks `[Own]`, and is not `[OwnOnly]` | `[Own]` names the value of a request about the caller's own alone |
-| carries `[OwnOnly]`, and marks no member `[Own]` | it names no value to compare with the caller's |
-| marks one member `[Own]` and `[OrOwn]` | one says the caller's own alone, the other the caller's own or the permission |
-| marks two members `[OrOwn]`, or two `[Own]` | the caller's own is one value; a request about one of two computes its requirement as `RequiredAccess` |
-| marks `[OrOwn]` beside `[AtUnit]` | the unit says where the permission is checked, not what the request acts on: a caller would send a unit where it holds the permission for another person's seat, and a permission held at one unit would act on a seat anywhere |
+| marks `[OrOwn]`, and requires no permission | `[OrOwn]` makes the caller's own an alternative to the permission. For the caller's own alone, use `[OwnOnly]` with `[Own]` |
+| marks `[Own]`, and is not `[OwnOnly]` | `[Own]` names the value for a request about the caller's own alone, which `[OwnOnly]` declares |
+| carries `[OwnOnly]`, and marks no member `[Own]` | the request names no value to compare with the caller's own |
+| marks one member `[Own]` and `[OrOwn]` | `[Own]` means the caller's own alone, and `[OrOwn]` means the caller's own or the permission |
+| marks two members `[OrOwn]`, or two `[Own]` | the caller's own is one value. A request about one of two values computes its requirement as `RequiredAccess` |
+| marks `[OrOwn]` beside `[AtUnit]` | the unit says where the permission is checked, and the request acts on something else. A caller could send a unit where it holds the permission, together with another person's seat. A permission held at one unit would then act on a seat anywhere |
 | marks a parameter of a class's primary constructor, or a private property | the line is written in the module's interface, which reads a property with a public or internal getter |
 
-`[OrOwn]` beside `[OnResource]` is fine: the resource is what the request acts on, as Membership says with
-`OwnAlternative` on its `[PermissionMarker]`, which names the case the caller's own way through still meets there,
-`MemberAccess.Sees`: the caller sees the resource, and the check reads it, compares its version and keeps its hold
-([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)). A package's marker of where
-a permission is checked whatever the request acts on names none, and `[OrOwn]` beside it is reported the same way.
+`[OrOwn]` beside `[OnResource]` is fine, because the resource is what the request acts on. Membership says so with
+`OwnAlternative` on its `[PermissionMarker]`. `OwnAlternative` names the case that the caller's own way through
+still meets on the resource: `MemberAccess.Sees`. The caller sees the resource, and the access check reads the resource,
+compares its version and keeps its hold
+([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)). A package's marker of
+where a permission is checked, whatever the request acts on, names no `OwnAlternative`. `[OrOwn]` beside such a
+marker is reported in the same way as beside `[AtUnit]`.
 
 ## DDD00086
 
@@ -3005,35 +3331,42 @@ public sealed record EditProfile([OrOwn] UserId User) : IProfilesRequest;       
 public sealed record LeaveTenant([Own] SeatId? Seat) : ITenantsRequest;                             // DDD00086: may be null
 ```
 
-The check compares the value the request names with the caller's own value of its type, at the door. What that is,
-whoever knows says, with an `ICallersOwn<TValue>`: the core for a `Guid`, the caller's verified identity; Tenancy
-for your seat id, the caller's seat in the tenant of the request; and you for a kind of your own, with a small
-handle beside your requests, which the host registers:
+The access check compares the value that the request names with the caller's own value of the same type. It does
+this before the handler runs, so the request does not need to know who sends it. An `IOwnedByCurrentUser<TValue>` says what the
+caller's own value of a type is:
+
+- the core's, for a `Guid`: the caller's verified identity, the id that its token names;
+- Tenancy's, for your seat id: the caller's seat in the tenant of the request;
+- yours, for a kind of your own: a small implementation beside your requests, which the host registers.
 
 ```csharp
-public sealed class CallersUser : ICallersOwn<UserId>
+public sealed class CurrentUserId : IOwnedByCurrentUser<UserId>
 {
-    public UserId? Find(Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+    public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
 }
 
-services.AddCallersOwn<UserId, CallersUser>();
+services.AddOwnedByCurrentUser<UserId, CurrentUserId>();
 ```
 
-On a type nothing says that for, the request would be stopped every time it is sent, so it is reported, and no line
-is written. The generator finds a handle in the requests' project, or public in a project it references; a package
-names its types with `[assembly: CallersOwn(...)]`. Where a package names its type by the template an application
-declares its class with, Tenancy's seat id say, and the project sees no class declared with it, nothing can be told,
-and the check says so when the request is sent. A member that may be null names no value where it is left out: a
-requirement computed from whether it is given is written as `RequiredAccess`. And the caller's own is a value
-compared with the caller's, a struct that is `IEquatable` of itself, such as a `Guid` or an id declared with
-`[EntityId]`: a member that is a `string`, a class or an enum has no own whatever the project sees, and is reported
-always, `[OrOwn] string Name` say.
+On a member of a type without such an implementation, the access check would refuse the request every time it is
+sent. So
+DDD00086 reports the member, and the generator writes no line. The generator finds an implementation in the
+requests' project, or a public one in a project that the requests' project references. A package names its types
+with `[assembly: OwnedByCurrentUser(...)]`. A package may name its type by the template that an application declares its
+class with, as Tenancy names its seat id. If the project sees no class declared with that template, nothing can be
+told, and the access check reports the problem when the request is sent.
 
-The id of an aggregate root that marks its owner `[Owner]` is no case of it, though nothing says the caller's own of
-the id: `[Own] BoardId Board` there is about the board's owner, and the line is `AccessRequirement.OwnerOf(request.Board)`
-([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). The id of an aggregate that marks
-none is reported as above, and the message says where the owner would be marked. Where something does say the
-caller's own of the id itself, its own handle wins, and the owner is not read.
+A member that may be null names no value when it is left out. Write a requirement computed from whether the value
+is given as `RequiredAccess`. The caller's own is a value compared with the caller's: a struct that is
+`IEquatable` of itself, such as a `Guid` or an id declared with `[EntityId]`. A member that is a `string`, a class
+or an enum has no own value, whatever the project sees, and is always reported. `[OrOwn] string Name` is an
+example.
+
+The id of an aggregate root that marks its owner with `[Owner]` is an exception, even though nothing says the
+caller's own of the id. `[Own] BoardId Board` is then about the board's owner, and the generated line is
+`AccessRequirement.OwnerOf(request.Board)` ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)).
+The id of an aggregate that marks no owner is reported as above, and the message says where to mark the owner. If
+an `IOwnedByCurrentUser` exists for the id itself, that implementation wins, and the owner is not read.
 
 ## DDD00087
 
@@ -3055,21 +3388,22 @@ public sealed partial class Board
 }
 ```
 
-The aggregate says who owns it, a fact about what it is, and a request about the owner's own names it by its id: the
-check reads the owner's column of the one row the id names, as the caller
-([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). So `[Owner]` goes on an instance
-property of the aggregate root itself, once. Reported where the property is declared:
+The aggregate states who owns it. That is a fact about what the aggregate is. A request about the owner's own
+names the aggregate by its id. The access check reads the owner column of the one row that the id names, as the caller
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). So `[Owner]` goes on one instance
+property of the aggregate root itself. DDD00087 is reported where the property is declared:
 
 | It is on | Because |
 |---|---|
-| an entity inside an aggregate | a request names the root by the root's id, and the check reads the root's row |
-| a type that is no aggregate root | no request names it by an id whose row the check reads |
+| an entity inside an aggregate | a request names the root by the root's id, and the access check reads the root's row |
+| a type that is no aggregate root | no request names it by an id whose row the access check reads |
 | a static property | the owner is a column of each row |
-| a second property of one aggregate | an aggregate has one owner; several owners are members, a resource with members, which [Membership](membership.md) keeps |
+| a second property of one aggregate | an aggregate has one owner. Several owners are the members of a resource with members, which [Membership](membership/overview.md) keeps |
 
-The first of two in the order they are written is the one, and the second is reported. And at a request: an id the
-project sees as the id of two aggregate roots that each mark an owner cannot say which aggregate the request is about,
-so give each aggregate an id of its own.
+Of two `[Owner]` properties, the first in the order they are written is the owner, and the second is reported.
+
+DDD00087 is also reported at a request whose id the project sees as the id of two aggregate roots that each mark an
+owner. The request cannot say which aggregate it is about. Give each aggregate an id of its own.
 
 ## DDD00088
 
@@ -3086,46 +3420,55 @@ public sealed partial class Board
 public sealed record ArchiveBoard([Own] BoardId Board) : IBoardsRequest;     // DDD00088: nothing says what the caller's own UserId is
 ```
 
-The check compares the owner the row holds with the caller's own of the same type, as [DDD00086](#ddd00086) compares
-a value the request names: a `Guid`, the caller's verified identity; your seat id, the caller's seat, of Tenancy's; or
-a kind of your own, with a small `ICallersOwn<TValue>` beside your requests, which the host registers with
-`services.AddCallersOwn<UserId, CallersUser>()`. An owner that may be null is fine: a row whose owner is null is
-nobody's, and nobody comes through as its owner.
+The access check compares the owner that the row holds with the caller's own value of the same type, as
+[DDD00086](#ddd00086) compares a value that the request names. The owner's type must be one of these:
 
-A `string`, a class or an enum can never be compared, whatever a project sees, so it is reported where the property is
-declared. Whether something says the caller's own of the owner's type is told where the requests are, since your
-handle is declared beside them and the domain does not see it: a request that names the aggregate is reported there,
-at its marker, where the project can tell that nothing does, and no line is written for it. Where a package names the
-owner's type by a template whose classes the project does not see, nothing can be told, and the check says so when
-the request is sent.
+- a `Guid`: the caller's verified identity;
+- your seat id: the caller's seat, from Tenancy;
+- a kind of your own, with a small `IOwnedByCurrentUser<TValue>` beside your requests, which the host registers with
+  `services.AddOwnedByCurrentUser<UserId, CurrentUserId>()`.
+
+An owner that may be null is fine. A row whose owner is null belongs to nobody, and nobody comes through as its
+owner.
+
+A `string`, a class or an enum can never be compared, whatever a project sees. So DDD00088 reports such an owner
+where the property is declared.
+
+Whether an `IOwnedByCurrentUser` exists for the owner's type can only be told where the requests are. Your
+`IOwnedByCurrentUser` is declared beside them, and the domain does not see it. So a request that names the aggregate is
+reported there, at its marker, where the project can tell that none exists. The generator writes no line for such
+a request. If a package names the owner's type by a template whose classes the project does not see, nothing can
+be told, and the access check reports the problem when the request is sent.
 
 ## DDD00089
 
 **A module's default requirement is one any of its requests may take.**
 
 ```csharp
-[AccessRequests, AllowAnonymous]                                    // DDD00089: a forgotten requirement would open the door
+[AccessRequests, AllowAnonymous]                                    // DDD00089: a request that forgets its requirement would let anyone in
 public partial interface IBillingRequest : IRequireAccess;
 
-[AccessRequests, RequiresOperator]                                  // DDD00089: a command that says nothing would take it
-public partial interface IOperationsRequest : IRequireAccess;
+[AccessRequests, SeenWith<DocumentId>(DocumentPermissions.View)]     // DDD00089: a command that says nothing would take it
+public partial interface IDocumentsRequest : IRequireAccess;
 ```
 
-A requirement attribute on a module's interface is the default of its requests: one that states nothing of its own
-takes it, on a line of its own in the generated switch ([A module's default](access-requirements.md#a-modules-default)).
-So every request that forgets its requirement takes the default, a command that forgets its permission included, and a
-default is a requirement any of them may take. Reported, at the attribute:
+A requirement attribute on a module's interface is the default of its requests. A request that states nothing of
+its own takes the default, on a line of its own in the generated switch
+([A module's default](access-requirements.md#a-modules-default)). So every request that forgets its requirement
+takes the default, including a command that forgets its permission. A default must therefore be a requirement
+that any of the requests may take. DDD00089 is reported at the attribute:
 
 | On the interface | Because | Instead |
 |---|---|---|
-| `[AllowAnonymous]` | a request that forgot what it requires would let anyone in, and a forgotten requirement never opens a door | `[AllowAnonymous]` on each request anyone may send, where a review reads it |
-| `[RequiresOperator]`, `[SeenWith<TResourceId>(permission)]`, any attribute its package declares for queries only | a command of the module that says nothing would take it, where it holds the caller to nothing the command changes ([DDD00082](#ddd00082)) | the attribute on each query |
+| `[AllowAnonymous]` | a request that forgot its requirement would let anyone in. Without a default, the access check refuses such a request | `[AllowAnonymous]` on each request that anyone may send, where a review sees it |
+| `[SeenWith<TResourceId>(permission)]`, any attribute its package declares for queries only | a command of the module that states nothing would take it, and on a command it checks nothing that the command changes ([DDD00082](#ddd00082)) | the attribute on each query |
 | `[OwnOnly]` | it reads the member of a request marked `[Own]`, and a default reads no member | `[OwnOnly]` on each request about the caller's own |
-| an attribute whose class's `AttributeUsage` leaves out interfaces | it is declared for a request alone, which the compiler says as well (CS0592) | `AttributeTargets.Interface` in its class's `AttributeUsage`, where it may be a default |
+| an attribute whose class's `AttributeUsage` leaves out interfaces, such as Tenancy's `[Operator]` | the attribute is declared for requests only. The compiler reports this as well (CS0592) | for a module's own attribute, add `AttributeTargets.Interface` to its class's `AttributeUsage`, if it may be a default. Put `[Operator]` on each request of the application's staff |
 
-A refused default is no default: the interface's last arm stops a request that states nothing, as without one. The
-attributes a package ships that may be a default allow an interface already: `[SignedIn]`, `[InTenant]`, and
-`[RequiresPermission(permission)]`, whose permission is then held for the whole tenant, since a default reads no member and has no marker.
+A refused default is not used. The interface's last arm then stops a request that states nothing, as it does
+without a default. The attributes that a package ships and that may be a default already allow an interface:
+`[SignedIn]`, `[InTenant]`, and `[RequiresPermission(permission)]`. As a default, the permission is held for the
+whole tenant, because a default reads no member and has no marker.
 
 ## DDD00090
 
@@ -3137,16 +3480,18 @@ warning DDD00090: Membership names changed since the last access file. Gone: boa
 its old name with [Members("...")].
 ```
 
-A resource with members is [named after its class](membership.md#names), and the name is what its codes start with,
-`boards.already-member`, and what its five functions in the database are named after, `boards_i_see`. Renaming the
-class renames both: a client that branches on a code reads another one, and the next access file writes new
-functions and drops the old. The Supabase export the build runs compares the names of the resources it writes with
-those the newest access file of each module recorded, with the class each came from, and says once, in that build,
-which are gone and which are new. It does not guess which became which.
+A resource with members is [named after its class](membership/resources-and-members.md#names). Its refusal codes
+start with that name, `boards.already-member`, and its five functions in the database are named after it,
+`boards_i_see`. Renaming the class renames both. A client that branches on a refusal code then reads another code.
+The next access file writes new functions and drops the old ones.
 
-A class renamed on purpose that should keep its name says so, `[Members("Boards")]`; one that should take the new
-name needs nothing more, and the warning is not given again once the new access file is there. Without the export,
-`SupabaseMigrationsExport` unset, nothing compares the names, and no warning is given.
+The Supabase export that the build runs compares the names of the resources it writes with the names that the
+newest access file of each module recorded, with the class each name came from. In that build, it reports once
+which names are gone and which are new. It does not guess which name became which.
+
+A class renamed on purpose that should keep its name says so: `[Members("Boards")]`. A class that should take the
+new name needs nothing more. The warning is not given again once the new access file exists. Without the export,
+with `SupabaseMigrationsExport` unset, nothing compares the names, and no warning is given.
 
 ## DDD00091
 
@@ -3158,13 +3503,17 @@ name needs nothing more, and the warning is not given again once the new access 
 public sealed partial class Board;
 ```
 
-What `[Members]` says is written in two forms, as a class's name is: in lower case with a dash between words for
-the resource's codes, `crane-boards.already-member`, and with an underscore for its functions, `crane_boards_i_see`.
-It is converted the way a class's name is, PascalCase split into words, and taken as it is, not made plural. Write
-it as a class's name, `CraneBoards`, or as it comes out, `crane-boards`: letters and digits, with `-` or `_`
-between words, starting with a letter. A space, another symbol, a digit or a separator first, or a separator last
-cannot be converted, and nothing of the resource is written: its rules, `MembershipRules.For<Board>`, do not
-compile until the name is put right ([Names](membership.md#names)).
+The name that `[Members]` gives is written in two forms, as a class name is:
+
+- in lower case with a dash between words, for the resource's refusal codes: `crane-boards.already-member`;
+- with an underscore between words, for its functions: `crane_boards_i_see`.
+
+The generator converts the name in the same way as a class name, and splits PascalCase into words. It takes the
+name as it is, and does not make it plural. Write the name as a class name, `CraneBoards`, or as it comes out,
+`crane-boards`. Use letters and digits, with `-` or `_` between words, starting with a letter. A space, another
+symbol, a digit or a separator first, or a separator last cannot be converted. The generator then writes nothing
+for the resource. Its rules, `MembershipRules.For<Board>`, do not compile until the name is fixed
+([Names](membership/resources-and-members.md#names)).
 
 ## DDD00092
 
@@ -3187,20 +3536,26 @@ public static class BoardPermissions
 }
 ```
 
-A module declares its permissions in a static class marked `[Permissions]`: every public `const string` of it is a
-permission, which a request names in `[RequiresPermission]` and a role gives, and each carries its **level**, the
-attribute that says where it is asked: Tenancy's `[AtTenant]` or `[AtUnit]`, or Membership's `[On<TResource>]`
-([The settings of a permission](membership.md#the-settings-of-a-permission),
-[A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). The packages' generators read the class
-and nothing else, so each of these would be read as something it is not, or not at all:
+A module declares its permissions in a static class marked `[Permissions]`. Every public `const string` of the
+class is a permission. A request names it in `[RequiresPermission]`, and a role gives it. Each permission carries
+its **level**: the attribute that says where the permission is asked. The levels are Tenancy's `[AtTenant]` and
+`[AtUnit]`, and Membership's `[On<TResource>]`
+([The settings of a permission](membership/permissions-and-roles.md#the-settings-of-a-permission),
+[A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)). The
+packages' generators read this class and nothing else:
+
+- Tenancy's generator puts every permission into its catalogue.
+- Membership's generator puts every permission on a resource into the rules of that resource.
+
+So each case below would be read as something else, or not at all, and is refused:
 
 | Reported | Because |
 |---|---|
 | a class marked `[Permissions]` that is not static | it holds constants and nothing else |
 | a public `const string` of such a class without a level | nobody could tell where it is asked, so no catalogue and no rules would hold it |
-| a level on a field that is no public `const string` | a request names a permission by its constant, from another module too |
+| a level on a field that is no public `const string` | a request names a permission by its constant, also from another module, so the constant must be public |
 | a level on a constant of a class not marked `[Permissions]` | nothing reads that class |
-| one permission declared twice in one class | a permission is declared once; the second constant is the slip |
+| one permission declared twice in one class | a permission is declared once. The second constant is the mistake |
 
 ## DDD00093
 
@@ -3217,13 +3572,19 @@ public static class BoardPermissions
 }
 ```
 
-`[On<TResource>]` says a permission is asked on one resource with members, and how it is held there. `TResource` is
-the aggregate root a member class names, `[Member<TId, TMemberId, TRoleId, TResource>]`: on another class the
-permission would be asked on something that has no members, and its rules could not be made. Of the permissions on
-one resource, one at most is held by every member (`EveryMember`), since that is also the one that sees the resource
-from above; one at most locks the members (`LocksMembers`) and one at most locks the owner (`LocksOwner`), since
-each is the one permission the database's lock asks for. A permission declared on one resource by two constants is reported as
-well. Each is said where it is declared, among the permissions the project sees.
+`[On<TResource>]` says that a permission is asked on one resource with members, and how members hold it there.
+`TResource` is the aggregate root that a member class names, `[Member<TId, TMemberId, TRoleId, TResource>]`. On
+another class, the permission would be asked on something that has no members, and its rules could not be made.
+
+Of the permissions on one resource:
+
+- At most one is held by every member (`EveryMember`). That permission is also the one that sees the resource
+  from above.
+- At most one manages the members (`ManagesMembers`), and at most one names the owner (`NamesOwner`). The member
+  manager requires each of them, and the database's lock checks each of them, as one permission.
+
+A permission declared on one resource by two constants is reported as well. Each case is reported where the
+permission is declared, among the permissions that the project sees.
 
 ## DDD00094
 
@@ -3234,12 +3595,12 @@ public static MembershipRules Rules { get; } = MembershipRules.For<Board>(   // 
     Roles.Custom());
 ```
 
-`MembershipRules.For<TResource>` makes the rules of a resource from the permissions declared on it: the constants of
-a `[Permissions]` class marked `[On<TResource>]`, in the project that makes the rules or in a project it references,
-which the package's generator hands over when the project is first used. Rules without a permission give the owner
-nothing and every role nothing, and the call would throw when the rules are made, so it is said where they are
-made. Declare the permissions asked on the resource:
-[The settings of a permission](membership.md#the-settings-of-a-permission).
+`MembershipRules.For<TResource>` makes the rules of a resource from the permissions declared on it. These are the
+constants of a `[Permissions]` class marked `[On<TResource>]`, in the project that makes the rules or in a project
+it references. The package's generator passes them in when the project is first used. Rules without a permission
+give the owner nothing and every role nothing, and the call would throw when the rules are made. So DDD00094
+reports the problem where the rules are made. Declare the permissions asked on the resource:
+[The settings of a permission](membership/permissions-and-roles.md#the-settings-of-a-permission).
 
 ## DDD00095
 
@@ -3253,13 +3614,13 @@ public static class OrderingList
 }
 ```
 
-A module declares its permissions once, as the constants of a static class marked `[Permissions]`, each with its
-level and, in its `Description` or its summary, what it lets somebody do. Tenancy's generator writes the module's
-list for the catalogue from that class, under the module `DDD_Module` or `[assembly: Module]` names, marks it
-`[TenancyPermissions]`, and the project that composes the modules collects every such list
-([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). A list a module marks with it by hand
-says the same permissions a second time, apart from the constants a request requires, and is refused. Declare each permission as
-a constant instead:
+A module declares its permissions once, as the constants of a static class marked `[Permissions]`. Each constant
+has its level. Its `Description` or its summary says what it lets somebody do. Tenancy's generator writes the
+module's list for the catalogue from that class, under the module that `DDD_Module` or `[assembly: Module]` names,
+and marks the list `[TenancyPermissions]`. The project that composes the modules collects every such list
+([A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)). A list
+that a module marks with `[TenancyPermissions]` by hand repeats the permissions, apart from the constants that a
+request requires. DDD00095 refuses it. Declare each permission as a constant instead:
 
 ```csharp
 [Permissions]
@@ -3279,13 +3640,19 @@ public static class OrderingPermissions
 public sealed record RenameBoard([OnResource, OrOwn] BoardId Board, string Name) : IBoardsRequest;   // DDD00096
 ```
 
-`[OrOwn]` on a request's member says the request is about the caller's own, or the caller holds the permission of its
-`[RequiresPermission]`. On the id of a resource with members, beside `[OnResource]` on it, the permission is asked on that
-resource, and its owner holds every permission declared `[On<TResource>]` with `Owner = true` by owning it: the owner
-is let through by the permission already, so `[OrOwn]` adds nothing and only makes the request read as if it did. Take it
-off. `[Own]` and `[OrOwn]` stay meant for an aggregate with an `[Owner]` and no members
-([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)), and for a permission the owner does not
-hold, one declared with `Owner = false`. It is a warning because the request does what it would do without it.
+`[OrOwn]` on a request's member lets the caller through when the member names the caller's own, or when the
+caller holds the permission of `[RequiresPermission]`. On the id of a resource with members, beside `[OnResource]`,
+the permission is asked on that resource. The resource's owner holds every permission declared `[On<TResource>]`
+with `Owner = true`, because the owner owns the resource. So the permission already lets the owner through.
+`[OrOwn]` adds nothing, and only makes the request look as if it did. Remove it.
+
+`[Own]` and `[OrOwn]` are meant for two cases:
+
+- an aggregate with an `[Owner]` and no members
+  ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate));
+- a permission that the owner does not hold, declared with `Owner = false`.
+
+DDD00096 is a warning, because the request does the same with or without the attribute.
 
 ## DDD00097
 
@@ -3307,13 +3674,38 @@ public sealed partial class Column
 }
 ```
 
-`[At]` marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs
-to, the bay a crate stands in. A fact of the domain, which the rules of a resource with members read where they let
-it be reached from above: a permission held at that place, or above it, reaches the aggregate
-([Beside an organization](membership.md#beside-an-organization)). So it goes on one instance property of an
-aggregate root, the root itself and never an entity inside it, and that property is never empty: an aggregate that
-hangs nowhere could not be reached from above, which is what `[At]` says. A static property, one on a type that is
-no aggregate root, a second one and a nullable one are each refused, where the property is declared.
+`[At]` marks the property of an aggregate root that says where the aggregate hangs: the unit of an organization that
+a board belongs to, or the bay a crate stands in. This is a fact of the domain. The rules of a resource with members
+read it where they let the resource be reached from above. A permission held at that place, or above it, reaches the
+aggregate ([Beside an organization](membership/beside-an-organization.md#reach-from-above)).
+
+So `[At]` goes on one instance property of an aggregate root, on the root itself and never on an entity inside
+it. That property is never empty. An aggregate that hangs nowhere could not be reached from above, and reaching
+from above is what `[At]` is for. DDD00097 refuses each of these, where the property is declared:
+
+- a static property;
+- a property on a type that is no aggregate root;
+- a second `[At]` property;
+- a nullable property.
+
+Keep one `[At]` property, on the root, of a type that is never empty:
+
+```csharp
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [At] public OrganizationUnitId UnitId { get; private set; }            // the one place, never empty
+
+    public OrganizationUnitId? FormerUnitId { get; private set; }          // a plain property
+}
+```
+
+`[At]` is Membership's marker, in the namespace `DDDToolkit.Supporting.Membership`. It ships in the package
+`Temp.DDDToolkit.Supporting.Membership.Abstractions`, which references `DDDToolkit.Abstractions` alone and no Entity
+Framework, so a domain project references it for the marker. Membership's generator reports DDD00097. That generator
+ships in the package `Temp.DDDToolkit.Supporting.Membership`, which references the markers' package. A project that
+declares the aggregate and references only the markers' package gets no DDD00097. `[Owner]` stays in the core,
+because the core's checks of the owner read it.
 
 ## DDD00098
 
@@ -3325,12 +3717,12 @@ public static MembershipRules Rules { get; } = MembershipRules.For<Board>(    //
     reachFromAbove: true);
 ```
 
-`reachFromAbove` in the rules of a resource with members says that a permission held where the resource hangs, or above it,
-reaches the resource. Where it hangs is a fact of the domain, said on the resource's class with `[At]` on the
-property that holds it, and read from there by the mapping and by the functions in the database. Rules that reach
-from above a resource that marks no such property would be refused when the resource is first asked about, and when
-its functions are written; this says it where the rules are made. Mark the property `[At]`, or leave
-`reachFromAbove` out.
+`reachFromAbove` in the rules of a resource with members says that a permission held where the resource hangs,
+or above it, reaches the resource. Where the resource hangs is a fact of the domain. The resource's class declares
+it with `[At]` on the property that holds it. The mapping and the functions in the database read it from there.
+Rules that reach from above a resource that marks no such property would be refused when the resource is first
+asked about, and when its functions are written. DDD00098 reports the problem earlier, where the rules are made.
+Mark the property `[At]`, or remove `reachFromAbove`.
 
 ## DDD00099
 
@@ -3349,13 +3741,18 @@ public static class BoardPermissions
 }
 ```
 
-The catalogue gives every permission a description, which a screen that puts permissions into roles shows beside
-it. It is said with `Description` on the permission's level, which wins where the constant has a `<summary>` as
-well; where no level says one, the constant's `<summary>` is the description, read from the comment above it whether
-the project writes a documentation file or not. A permission with neither would show as a bare name, so it is a
-warning, on the constant. A description of white space alone is none, and a retired permission, which no screen
-offers, needs none. A translation under the permission's name, in a resx your failure localizer reads, is read on
-top of whichever said it ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)).
+The catalogue gives every permission a description. A screen that puts permissions into roles shows the
+description beside the permission. It says what holding the permission lets somebody do. The description comes
+from one of two places:
+
+- `Description` on the permission's level. This wins when the constant also has a `<summary>`.
+- The constant's `<summary>`, when no level gives a description. The analyzer reads it from the comment above the
+  constant, whether or not the project writes a documentation file.
+
+A permission with neither would show as a bare name, so DDD00099 is a warning, on the constant. A description of
+white space alone counts as none. A retired permission, which no screen offers, needs no description. A
+translation under the permission's name, in a resx that your failure localizer reads, is applied over either
+description ([A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)).
 
 ## DDD00100
 
@@ -3369,39 +3766,191 @@ public static partial class OnlyEmployeesReadTheOrganization { ... }
 public static partial class OnlyEmployeesReadTheTenant { ... }
 ```
 
-A restrictive rule (`Restrictive = true`) is AND-ed with every policy that allows on its aggregate's table, and
-narrows what they allow. On Tenancy's tables it reaches the organization with its units and the closure of its
-tree, the seats with their placements and grants, and the roles: what an application narrows to keep a seat that is
-not an employee out of the organization. A tenant and an invitation are read by Tenancy's own work and by a person
-accepting an invitation, who has no seat yet, so a rule there is refused. Put it on one of the others, or leave
-`Restrictive` out ([Rules that narrow the organization](tenancy.md#rules-that-narrow-the-organization)).
+A restrictive rule (`Restrictive = true`) is AND-ed with every policy that allows rows on its aggregate's table and
+on the tables of the aggregate's entities. It narrows what those policies allow. On Tenancy's tables, a
+restrictive rule can narrow:
+
+- the organization, with its units and the closure of its tree;
+- the seats, with their placements and grants;
+- the roles.
+
+An application narrows these to keep a seat that is not an employee out of the organization. Tenancy reads
+tenants and invitations in its own operations. A person who accepts an invitation reads it before having a seat.
+So a restrictive rule on a tenant or an invitation is refused. Put the rule on one of the other tables, or remove
+`Restrictive` ([Rules that narrow the organization](tenancy/postgres.md#restrictive-rules)).
 
 ## DDD00101
 
-**`TenancyRowAccess.CallerSeat` answers with the application's seat class.**
+**`TenancyRowAccess.CurrentSeat` answers with the application's seat class.**
 
 ```csharp
-TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
-TenancyRowAccess.CallerSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
+TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
+TenancyRowAccess.CurrentSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
 ```
 
-`CallerSeat<TSeat>()` is the calling seat's own row, which a rule reads a field of, asked of a function that
-answers with a row of Tenancy's seats table: so `TSeat` is the class that table is mapped to, the one declared with
-`[SeatAggregate]`. For the seat's id in a rule of a module whose context does not map the seats, ask
-`TenancyRowAccess.CallerSeatId<SeatId>()`.
+`CurrentSeat<TSeat>()` is the calling seat's own row, and a rule reads a field of it. The function behind it answers
+with a row of Tenancy's seats table. So `TSeat` must be the class that this table is mapped to: the class declared
+with `[SeatAggregate]`. In a rule of a module whose context does not map the seats, use
+`TenancyRowAccess.CurrentSeatId<SeatId>()` for the seat's id.
+
+## DDD00102
+
+**A marker of a requirement's argument goes beside the attribute whose call it is.**
+
+```csharp
+[InTenant]
+public sealed record RenameTenant([ForTenant] TenantId Tenant, string Name) : ICommand, ITenancyRequest;               // DDD00102: no [Operator]
+
+[Operator]
+public sealed record MergeTenants([ForTenant] TenantId Tenant, [ForTenant] TenantId Into) : ICommand, ITenancyRequest;  // DDD00102: two members
+```
+
+A package marks an attribute as one more argument of a requirement's call with `[RequirementArgument]`. Tenancy's
+`[ForTenant]` is one. The generator hands the marked member to the call of the attribute it goes with: `[Operator]`
+with `[ForTenant] TenantId Tenant` is `TenancyAccess.Operator(request.Tenant)`
+([An operator's request](access-requirements.md#an-operators-request)). DDD00102 reports a marker that the call cannot
+take:
+
+- **The attribute is not on the request.** The member is handed to nothing, and the request reads as if it said
+  something it does not.
+- **Two members carry one marker.** The call would get two arguments where it takes one.
+- **The module's interface cannot read the member.** The generator writes the call into the module's interface. So
+  the marker goes on a positional parameter of a record, which is its property, or on a property the interface can
+  read. A parameter of a class's primary constructor is no member, and neither is a private or a protected property.
+
+Put the attribute on the request, or take the marker off. Mark one member:
+
+```csharp
+[Operator]
+public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;
+```
+
+A member of another type than the marker names is [DDD00081](#ddd00081): `[ForTenant]` marks the application's
+tenant id.
+
+## DDD00103
+
+**An operator's command takes its tenant from the request or from itself.**
+
+```csharp
+[Operator(Tenant = OperatorTenant.FromRequest)]
+public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;   // DDD00103
+```
+
+`[Operator]` on a command runs its handler as operator work. The work acts in one place:
+
+| The command says | The work acts in |
+|---|---|
+| a `[ForTenant]` member | the tenant the command names |
+| `Tenant = OperatorTenant.FromRequest` | the tenant the request names beside the command, as tenant selection reads it |
+| neither | no tenant, as provisioning needs |
+
+Both at once name two tenants for one piece of work. Keep `[ForTenant]` for a command that names its tenant, or
+`FromRequest` for a command that takes the tenant the request names:
+
+```csharp
+[Operator]
+public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;
+
+[Operator(Tenant = OperatorTenant.FromRequest)]
+public sealed record CloseStaleInvitations : ICommand, ITenancyRequest;
+```
+
+The same requirement written as the property, `TenancyAccess.Operator(Tenant, OperatorTenant.FromRequest)`, throws an
+`ArgumentException` that names DDD00103.
+
+## DDD00104
+
+**`[Operator]` stands beside no requirement an operator cannot meet.**
+
+```csharp
+[Operator, InTenant]                                               // DDD00104
+public sealed record ArchiveUnits : ICommand, ITenancyRequest;
+
+[Operator, RequiresPermission(TenancyPermissions.SeatsManage)]     // DDD00104
+public sealed record TenantSeats : IQuery<IReadOnlyList<SeatRow>>, ITenancyRequest;
+```
+
+Requirement attributes on one request all hold. `[Operator]` lets through only a signed-in user with an operator's
+token role. An operator holds no seat in any tenant and no permission, so `[InTenant]` and
+`[RequiresPermission(permission)]` refuse every operator. A seat is no operator, so `[Operator]` refuses every seat.
+Together they refuse every caller, and the request can never be sent.
+
+Keep `[Operator]` for a request of the application's staff, or the other attribute for a request of a tenant's
+seats. A request that either may send implements `RequiredAccess` itself, with `AccessRequirement.Any`:
+
+```csharp
+public sealed record TenantSeats : IQuery<IReadOnlyList<SeatRow>>, ITenancyRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
+        TenancyAccess.Operator(),
+        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
+}
+```
+
+## DDD00105
+
+**`[Operator]` on a query names no tenant and no scope.**
+
+```csharp
+[Operator(Tenant = OperatorTenant.FromRequest)]            // DDD00105, a warning
+public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;
+```
+
+On a command, `[Operator]` runs the handler as operator work. `Tenant` and `Scope` say where the work acts and in
+which scope. On a query nothing begins. An operator reads across tenants through the database role of its token. So
+`Tenant` and `Scope` on a query say nothing, and a reader takes them for the tenant the query reads in. Take them off:
+
+```csharp
+[Operator]
+public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;
+```
+
+`[ForTenant]` on a query is not reported. It still refuses a request that names another tenant than the query does,
+with `tenancy.tenant-mismatch`.
+
+## DDD00106
+
+**A member or role manager is not written.**
+
+```csharp
+namespace Filing.Sharing;
+
+public sealed class DocumentShareManager;               // DDD00106, information: the generated manager would hide it
+
+[Member<DocumentShareId, UserId, NamedRole, Document>]
+public sealed partial class DocumentShare;
+```
+
+Membership's generator writes the [managers](membership/resources-and-members.md#the-managers) in the global
+namespace. The member manager is named after the member class, `DocumentShareManager` for `DocumentShare`. The role
+manager is named after the role class, `BoardRoleManager` for `BoardRole`. The generator writes a manager only where
+the name is free and the manager can do its work. This information names the manager and says why it is not written:
+
+| Why | Fix |
+|---|---|
+| The project declares a type of that name in a namespace. The manager in the global namespace would hide it in every file that imports the namespace. | Rename your type, or move it to the global namespace if it is your own manager. |
+| Two member classes, or two role classes, have the same name in different namespaces. Their managers would be one class. | Rename one of them. |
+| The resource's owner property has no setter the manager can use when it names another owner. | Give the `[Owner]` property a `private set`. |
+| The resource's id cannot be told. | Declare the resource with `[AggregateRoot<TId>]` over an id the project can see. |
+| The role class's resource is declared in another project. The resource's registration cannot name the manager. | Declare the role class in the resource's project. |
+
+A type of the manager's name in the global namespace is your own manager, and the generator writes none and reports
+nothing. A resource whose member list is not written gets no manager either. [DDD00059](#ddd00059) or
+[DDD00060](#ddd00060) says why.
 
 ## Building the model fails: the owned type must carry the key part
 
-Not a compiler diagnostic, because it depends on how the Entity Framework model is put together, but
-it is reported as early as that allows: when the context builds its model, before the first query.
+This is no compiler diagnostic, because it depends on how the Entity Framework model is built. It is reported as
+early as possible: when the context builds its model, before the first query.
 
 ```
 'Project' is keyed on 'RegionId', so the foreign key of its owned 'Milestone' (through
 'Project.Milestones') must carry it too, but 'Milestone' has no such property. ...
 ```
 
-`Project` has `[KeyPart] RegionId`, so every table it owns carries `RegionId` in its foreign key, and
-`Milestone` has nowhere to keep it. Give the child the property and set it from the parent:
+`Project` has `[KeyPart] RegionId`, so every table it owns carries `RegionId` in its foreign key. `Milestone` has no
+property to keep it in. Give the child the property, and set it from the parent:
 
 ```csharp
 [Entity<MilestoneId>]
@@ -3414,22 +3963,22 @@ public partial class Milestone
 }
 ```
 
-The property must have the same name and the same type as the owner's. If the child really should not
-carry it, configure that ownership's foreign key yourself with `OwnsMany(...).WithOwner().HasForeignKey(...)`;
-the convention leaves explicit configuration alone.
+The property must have the same name and the same type as the owner's property. If the child should not carry
+it, configure the foreign key of that ownership yourself with `OwnsMany(...).WithOwner().HasForeignKey(...)`. The
+convention leaves explicit configuration alone.
 
 ---
 
 ## Nothing was generated and there is no diagnostic
 
-Check, in order:
+Check these, in order:
 
-1. **The generator package is referenced.** `DDDToolkit` brings the core generators; the Entity
-   Framework, FluentValidation and HotChocolate generators come with their own packages.
-2. **The type is `partial`** and the attribute is the generic one, `[EntityId<Guid>]` rather than a
-   hand-written attribute with the same name.
-3. **The build output**, with `EmitCompilerGeneratedFiles` turned on, as described in
-   [Getting started](getting-started.md#see-the-generated-code).
+1. **The generator package is referenced.** `DDDToolkit` brings the core generators. The Entity Framework,
+   FluentValidation and HotChocolate generators come with their own packages.
+2. **The type is `partial`**, and the attribute is the generic one, `[EntityId<Guid>]`, and not a hand-written
+   attribute with the same name.
+3. **The build output**, with `EmitCompilerGeneratedFiles` turned on, as
+   [Getting started](getting-started.md#see-the-generated-code) describes.
 
-If a generator throws, the compiler reports it as CS8785 or CS8784 rather than as a DDD diagnostic.
-That is a bug in the toolkit; please report it with the declaration that triggered it.
+If a generator throws, the compiler reports CS8785 or CS8784. That is a bug in the toolkit. Please report it, with
+the declaration that triggered it.

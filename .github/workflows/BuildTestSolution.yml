@@ -72,6 +72,11 @@ jobs:
       - name: Verify package consumption
         run: ./build/verify-package-consumption.sh 0.0.0-ci
 
+      # The tutorials in docs/ show every file whole, and nothing else compiles that code: a renamed API breaks
+      # them without breaking a test. This builds the files as the pages show them, against the same packages.
+      - name: Verify the docs' tutorials
+        run: ./build/verify-docs-tutorials.sh 0.0.0-ci
+
   # The published packages declare the oldest dependency versions they work with (see
   # Directory.Packages.props), and the job above only ever builds against the newest. This one builds
   # and tests the whole solution against those floors, so a floor that no longer works fails here

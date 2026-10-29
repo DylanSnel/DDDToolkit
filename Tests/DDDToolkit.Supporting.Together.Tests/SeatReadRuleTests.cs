@@ -41,10 +41,10 @@ public abstract class SeatReadRuleTests(CampusPostgresServer postgres)
 
         // Now Owen reads the people placed at Physics and below, and Ned is none of them: refused as no seat is.
         (await FluentActions.Awaiting(() => campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, provider =>
-                provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>().RequireMemberAsync(data.NedSeat, Cancellation).AsTask()))
+                new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes).RequireMemberAsync(data.NedSeat, Cancellation).AsTask()))
             .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(CourseMembership.Codes[MembershipRefusals.MemberNotActive]);
         (await FluentActions.Awaiting(() => campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, provider =>
-                provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireMemberAsync(data.NedSeat, Cancellation).AsTask()))
+                new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes).RequireMemberAsync(data.NedSeat, Cancellation).AsTask()))
             .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(LabMembership.Codes[MembershipRefusals.MemberNotActive]);
 
         // Tom, placed at Physics as well, he still makes a member; Pia, at Arts, makes Ned one; and Ada, who manages
@@ -55,7 +55,7 @@ public abstract class SeatReadRuleTests(CampusPostgresServer postgres)
 
         // Past the application the rule hides Ned's seat from Owen, as a row and through tenant_seats(), which modules
         // and the admission read. That the seat is there it does not hide: the placements keep Tenancy's own read.
-        await using var owen = await CallerSession.BeginAsync(campus.ConnectionString!, data.Owen, data.Alder);
+        await using var owen = await UserSession.BeginAsync(campus.ConnectionString!, data.Owen, data.Alder);
         (await owen.ListAsync<Guid>($"SELECT \"Id\" FROM {Tenancy}.\"Seats\"")).Should().NotContain(data.NedSeat.Value).And.Contain(data.TomSeat.Value);
         (await owen.ListAsync<Guid>($"SELECT \"Id\" FROM {Tenancy}.tenant_seats()")).Should().NotContain(data.NedSeat.Value).And.Contain(data.TomSeat.Value);
         (await owen.ListAsync<Guid>($"SELECT \"SeatId\" FROM {Tenancy}.\"SeatPlacements\"")).Should().Contain(data.NedSeat.Value);
@@ -87,19 +87,19 @@ public abstract class SeatReadRuleTests(CampusPostgresServer postgres)
         }
 
         // Tom tutors Optics: he reads the people on it, and not Ned, who is on no course, nor Ada, who is on none of his.
-        await using (var tom = await CallerSession.BeginAsync(campus.ConnectionString!, data.Tom, data.Alder))
+        await using (var tom = await UserSession.BeginAsync(campus.ConnectionString!, data.Tom, data.Alder))
         {
             (await tom.ListAsync<Guid>($"SELECT \"Id\" FROM {Tenancy}.\"Seats\""))
                 .Should().Contain([data.TomSeat.Value, data.PiaSeat.Value, data.DeeSeat.Value]).And.NotContain([data.NedSeat.Value, data.AdaSeat.Value]);
         }
 
         // Ned works with nobody, and reads his own seat alone; Ada manages the college's seats, and reads them all.
-        await using (var ned = await CallerSession.BeginAsync(campus.ConnectionString!, data.Ned, data.Alder))
+        await using (var ned = await UserSession.BeginAsync(campus.ConnectionString!, data.Ned, data.Alder))
         {
             (await ned.ListAsync<Guid>($"SELECT \"Id\" FROM {Tenancy}.\"Seats\"")).Should().Equal(data.NedSeat.Value);
         }
 
-        await using (var ada = await CallerSession.BeginAsync(campus.ConnectionString!, data.Ada, data.Alder))
+        await using (var ada = await UserSession.BeginAsync(campus.ConnectionString!, data.Ada, data.Alder))
         {
             (await ada.ListAsync<Guid>($"SELECT \"Id\" FROM {Tenancy}.\"Seats\"")).Should().Contain([data.NedSeat.Value, data.TomSeat.Value]);
         }
@@ -115,8 +115,8 @@ public abstract class SeatReadRuleTests(CampusPostgresServer postgres)
     private static async Task AdmitAsync(CampusApp campus, CampusPerson person, SeatId seat)
         => await campus.Services.AsAsync(person, CampusScenario.InAlder, async provider =>
         {
-            await provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>().RequireMemberAsync(seat, Cancellation);
-            await provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireMemberAsync(seat, Cancellation);
+            await new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes).RequireMemberAsync(seat, Cancellation);
+            await new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes).RequireMemberAsync(seat, Cancellation);
         });
 }
 

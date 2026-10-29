@@ -14,7 +14,7 @@ namespace DDDToolkit.Startup;
 /// </summary>
 /// <remarks>
 /// A check is run by the host's one runner (<see cref="StartupCheckServiceCollectionExtensions.RunStartupChecks"/>),
-/// in its stage, as the application itself (<c>Caller.System</c>), before the server binds its port. It is handed
+/// in its stage, as the application itself (<c>CurrentUserSnapshot.System</c>), before the server binds its port. It is handed
 /// the application's root services: what it needs of a scope, a context say, it takes in a scope of its own. It may
 /// run more than once in a host that also calls the method behind it by hand, so it must leave nothing behind
 /// that a second run would trip over.

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Inbox;
@@ -25,9 +26,9 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// </para>
 /// <para>
 /// <b>Who the handlers run as.</b> <see cref="Around"/> begins what each delivery runs under, before the
-/// inbox reads anything and until it committed. Where the host requires explicit callers
-/// (<see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>) a module without one does not
-/// run its handlers at all: the delivery fails with <see cref="NoCallerException"/>, and the outbox or the
+/// inbox reads anything and until it committed. Where the host requires every flow of work to begin its user
+/// (<see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>) a module without one does not
+/// run its handlers at all: the delivery fails with <see cref="NoCurrentUserException"/>, and the outbox or the
 /// transport tries it again.
 /// </para>
 /// </summary>
@@ -106,10 +107,10 @@ public sealed class ModuleIntegrationEvents<TContext> where TContext : DbContext
     /// <summary>
     /// Begins <paramref name="scope"/> around each delivery to this module's handlers: before the inbox is
     /// asked whether the message was applied, and until its transaction committed or the handler failed. A
-    /// caller begun there is the caller of the inbox's read, the handler's work, the save and the inbox row.
+    /// user begun there is the user of the inbox's read, the handler's work, the save and the inbox row.
     /// <code>
-    /// module.Around((services, message, contract) => Callers.Begin(Caller.SystemIn("shipping")));
-    /// module.Around(IntegrationEventScopes.System);   // as the application itself, on purpose
+    /// module.Around((services, message, contract) => services.GetRequiredService&lt;AccessManager&gt;().BeginSystem("shipping"));
+    /// module.Around(IntegrationEventScopes.SystemBypassingRowAccess);   // past every row access rule, on purpose
     /// </code>
     /// May be called more than once, here or in another call for the same context: the scopes nest in the
     /// order they were added, the first outermost, and end in the opposite order. Each handler of the module
@@ -208,10 +209,10 @@ internal sealed class ModuleIntegrationEventConsumer<TContext>(
         List<(string, Exception)>? failures = null;
         DomainEventInbox<TContext>? inbox = null;
 
-        // Where every flow of work has to say who it runs as, the handlers do not inherit the system caller
+        // Where every flow of work has to say who it runs as, the handlers do not inherit the system work
         // the outbox or the transport did its bookkeeping as: they run as what the module's scopes begin.
-        var required = ToolkitCallers.Required(services);
-        using var none = ToolkitCallers.BeginHandler(required);
+        var required = ToolkitWork.Required(services);
+        using var none = ToolkitWork.BeginHandler(required);
 
         foreach (var handler in registration.Handlers)
         {
@@ -226,7 +227,7 @@ internal sealed class ModuleIntegrationEventConsumer<TContext>(
             {
                 // Refused before the inbox is asked anything, and recorded like any failing handler, so the
                 // message is tried again once the module says what its handlers run as.
-                var refusal = new NoCallerException(NoScope(handler.Consumer));
+                var refusal = new NoCurrentUserException(NoScope(handler.Consumer));
                 _logger.LogError(refusal, "Consumer {Consumer} in {Module} did not run message {MessageId} ({Name}): the module says nothing about who its handlers run as.", handler.Consumer, Module, message.MessageId, message.Name);
                 (failures ??= []).Add((handler.Consumer, refusal));
                 continue;
@@ -238,7 +239,7 @@ internal sealed class ModuleIntegrationEventConsumer<TContext>(
             try
             {
                 // Begun before the inbox's read and ended after its commit, so the read, the handler's work,
-                // the save and the inbox row all run as one caller.
+                // the save and the inbox row all run as one user.
                 foreach (var scope in registration.Scopes)
                 {
                     if (scope(services, message, contract) is { } entered)
@@ -289,7 +290,7 @@ internal sealed class ModuleIntegrationEventConsumer<TContext>(
     }
 
     private string NoScope(string consumer)
-        => $"The handlers of {Module} have no caller, and this host requires one (RequireExplicitCallers), so {consumer} did not run. " +
-           "Say what they run as where the module registers them: module.Around((services, message, contract) => Callers.Begin(Caller.SystemIn(\"<module>\"))) " +
-           "for a scoped system caller the policies hold, or module.Around(IntegrationEventScopes.System) to run them as the application itself.";
+        => $"The handlers of {Module} begin no user, and this host requires one (RequireExplicitCurrentUser), so {consumer} did not run. " +
+           "Say what they run as where the module registers them: module.Around((services, message, contract) => services.GetRequiredService<AccessManager>().BeginSystem(\"<module>\")) " +
+           "for scoped system work the policies hold, or module.Around(IntegrationEventScopes.SystemBypassingRowAccess) for system work past every row access rule.";
 }

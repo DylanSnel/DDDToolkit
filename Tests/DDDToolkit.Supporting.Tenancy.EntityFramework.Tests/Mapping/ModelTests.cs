@@ -103,7 +103,7 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
         Column(role, "NormalizedName").GetMaxLength().Should().Be(120);
         Column(role, "NormalizedName").IsNullable.Should().BeFalse("a role saved without it fails rather than escapes the unique index");
         Column(role, "Description").GetMaxLength().Should().Be(1000);
-        Column(role, "FromPack").GetMaxLength().Should().Be(64);
+        Column(role, "FromStarterRole").GetMaxLength().Should().Be(64);
         Named(Column(role, "Status"));
         Column(role, "Permissions").IsPrimitiveCollection.Should().BeTrue("a role's permissions are one column: JSON on SQLite, a text array on Postgres");
         Column(role, "Version").IsConcurrencyToken.Should().BeTrue();
@@ -330,10 +330,10 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
     public void The_generated_services_AddTenancy_registers_what_the_explicit_one_does()
     {
         var generated = TestHostTenancy.Add(new ServiceCollection());
-        var explicitServices = new ServiceCollection().AddTenancy<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, TestTenancyContext>(
+        var explicitServices = new ServiceCollection().AddTenancy<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, TenancyAccessManager, TenantManager, OrganizationManager, SeatManager, HostRoleManager, TestTenancyContext>(
             options => options.Catalogue = HostCatalogue.Application);
-        explicitServices.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, DDDToolkit.Supporting.Tenancy.TestHost.Requests.IHostRequest, TestTenancyContext>();
-        explicitServices.AddTenancyInvitations<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, HostInvitation, InvitationId, TestTenancyContext>();
+        explicitServices.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, DDDToolkit.Supporting.Tenancy.TestHost.Requests.IHostRequest, TestTenancyContext>();
+        explicitServices.AddTenancyInvitations<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, HostInvitation, InvitationId, InvitationManager, TestTenancyContext>();
 
         Registrations(generated).Should().Equal(Registrations(explicitServices));
     }

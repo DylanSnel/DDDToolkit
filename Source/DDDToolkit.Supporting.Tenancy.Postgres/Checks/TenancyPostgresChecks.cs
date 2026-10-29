@@ -21,7 +21,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <summary>
 /// Checks a host runs at start-up, before it serves anything, that the database and the host are set up the way
 /// Tenancy's policies rely on. Each throws <see cref="InvalidOperationException"/> naming what is wrong and how to
-/// put it right, so a host that would run with a hole in its second lock does not start.
+/// put it right, so a host whose row level security has a gap does not start.
 /// <para>
 /// <see cref="TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres"/> registers each of them as a start-up
 /// check, by the names below, which a host runs with <c>services.RunStartupChecks()</c>. The methods stay for a
@@ -29,22 +29,25 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// </para>
 /// <code>
 /// var app = builder.Build();
-/// TenancyPostgresChecks.EnsureExplicitCallers(app.Services);
+/// TenancyPostgresChecks.EnsureExplicitCurrentUser(app.Services);
 /// TenancyPostgresChecks.EnsureSeatedTokenRolesAreSignedInUsers(app.Services);
 /// await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(app.Services, cancellationToken);
 /// await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(app.Services, cancellationToken);
 /// await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(app.Services, cancellationToken);
 /// </code>
 /// The ones that ask the database do so on a context of Tenancy's own, made in a scope of their own, as the
-/// application itself (<see cref="Caller.System"/>, begun around each query and outside any transaction the caller
-/// holds), and read the catalog of Postgres alone: no table of Tenancy's, and no tenant's rows. The one that
+/// system work without a scope (<see cref="CurrentUserSnapshot.System"/>, begun around each query and outside any
+/// transaction the caller holds), and read the catalog of Postgres alone: no table of Tenancy's, and no tenant's rows. The one that
 /// proves the reads across tenants also asks one of their functions, as Tenancy's own scoped system work in no
 /// tenant, the way those reads run.
 /// </summary>
 public static class TenancyPostgresChecks
 {
-    /// <summary>The start-up check that the host still requires explicit callers (<see cref="EnsureExplicitCallers"/>).</summary>
-    public const string ExplicitCallersCheck = "tenancy.explicit-callers";
+    /// <summary>
+    /// The start-up check that the host still requires every flow of work to begin its user
+    /// (<see cref="EnsureExplicitCurrentUser"/>).
+    /// </summary>
+    public const string ExplicitCurrentUserCheck = "tenancy.explicit-current-user";
 
     /// <summary>
     /// The start-up check that every token role Tenancy seats reaches the database as a signed-in user
@@ -86,34 +89,34 @@ public static class TenancyPostgresChecks
     private const string ParentProperty = "ParentId";
 
     /// <summary>
-    /// Proves the host still requires explicit callers, as <see cref="TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres"/>
-    /// registered: the <see cref="CallerOptions"/> the services resolve, and the row level security interceptor the
+    /// Proves the host still requires every flow of work to begin its user, as <see cref="TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres"/>
+    /// registered: the <see cref="CurrentUserOptions"/> the services resolve, and the row level security interceptor the
     /// contexts use, which read them when it was built. A later registration of the options, or an interceptor
     /// made without them, would let work that said nothing about who it runs as run as the application, past
     /// every policy.
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">Either one does not require explicit callers, or row level security is not registered.</exception>
-    public static void EnsureExplicitCallers(IServiceProvider services)
+    /// <exception cref="InvalidOperationException">Either one does not require a begun user, or row level security is not registered.</exception>
+    public static void EnsureExplicitCurrentUser(IServiceProvider services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        if (services.GetService<CallerOptions>() is not { RequireExplicitCallers: true })
+        if (services.GetService<CurrentUserOptions>() is not { RequireExplicitCurrentUser: true })
         {
             throw new InvalidOperationException(
-                "The CallerOptions the services resolve do not require explicit callers, so work that says nothing about who it runs as would run as the application, past every policy. " +
-                "Something registered CallerOptions after AddTenancyPostgres(); call services.RequireExplicitCallers() after it, or leave CallerOptions to AddTenancyPostgres().");
+                "The CurrentUserOptions the services resolve do not require a begun user (RequireExplicitCurrentUser), so work that says nothing about who it runs as would run as system work, past every policy. " +
+                "Something registered CurrentUserOptions after AddTenancyPostgres(); call services.RequireExplicitCurrentUser() after it, or leave CurrentUserOptions to AddTenancyPostgres().");
         }
 
         var interceptor = services.GetService<PostgresRowLevelSecurityInterceptor>()
             ?? throw new InvalidOperationException(
-                "Row level security is not registered, so Tenancy's policies see no caller. Call services.AddSupabaseRowLevelSecurity() or services.AddPostgresRowLevelSecurity() next to AddTenancyPostgres(): UseDDDToolkit then runs every context on Postgres as its caller.");
+                "Row level security is not registered, so Tenancy's policies see no user. Call services.AddSupabaseRowLevelSecurity() or services.AddPostgresRowLevelSecurity() next to AddTenancyPostgres(): UseDDDToolkit then runs every context on Postgres as the current user.");
 
-        if (!interceptor.RequireExplicitCallers)
+        if (!interceptor.RequireExplicitCurrentUser)
         {
             throw new InvalidOperationException(
-                "The row level security interceptor was built without explicit callers, although the options require them: a caller that changes inside a transaction would be logged rather than refused. " +
+                "The row level security interceptor was built without RequireExplicitCurrentUser, although the options require it: a user that changes inside a transaction would be logged rather than refused. " +
                 "Resolve PostgresRowLevelSecurityInterceptor from the services, after AddTenancyPostgres(), rather than making one by hand.");
         }
     }
@@ -165,7 +168,7 @@ public static class TenancyPostgresChecks
     /// <summary>
     /// Proves Tenancy's reads across tenants answer, with nothing running past the policies: the few reads made
     /// before any tenant is known, the permissions stored on every tenant's roles among them
-    /// (<see cref="TenancySystemReads"/>). They run as the scoped system role in no tenant, where the policies show
+    /// and the tenants a round of system work visits. They run as the scoped system role in no tenant, where the policies show
     /// it no row, and ask three functions of the database, which run as their owner:
     /// <see cref="TenancyFunctionNames.RolePermissionsInUse"/>, <see cref="TenancyFunctionNames.TenantsToSweep"/> and
     /// <see cref="TenancyFunctionNames.SeatsOfIdentity"/>. This proves that
@@ -266,11 +269,11 @@ public static class TenancyPostgresChecks
                     FROM found
                     WHERE pg_catalog.to_regrole($5) IS NOT NULL AND NOT pg_catalog.has_function_privilege(pg_catalog.to_regrole($5), found.oid, 'EXECUTE')
                     UNION ALL
-                    SELECT 7, pg_catalog.quote_ident(caller.rolname) || ' may execute ' || found.signature || ', which answers across tenants: REVOKE EXECUTE ON FUNCTION '
-                              || found.signature || ' FROM PUBLIC, ' || pg_catalog.quote_ident(caller.rolname) || ';'
+                    SELECT 7, pg_catalog.quote_ident(grantee.rolname) || ' may execute ' || found.signature || ', which answers across tenants: REVOKE EXECUTE ON FUNCTION '
+                              || found.signature || ' FROM PUBLIC, ' || pg_catalog.quote_ident(grantee.rolname) || ';'
                     FROM found
-                    JOIN pg_catalog.pg_roles caller ON caller.rolname IN ($6, $7)
-                    WHERE pg_catalog.has_function_privilege(caller.oid, found.oid, 'EXECUTE')
+                    JOIN pg_catalog.pg_roles grantee ON grantee.rolname IN ($6, $7)
+                    WHERE pg_catalog.has_function_privilege(grantee.oid, found.oid, 'EXECUTE')
                       AND NOT pg_catalog.has_function_privilege('public', found.oid, 'EXECUTE')
                     UNION ALL
                     SELECT 8, 'every role may execute ' || found.signature || ', which answers across tenants: REVOKE EXECUTE ON FUNCTION ' || found.signature || ' FROM PUBLIC;'
@@ -349,7 +352,7 @@ public static class TenancyPostgresChecks
                 "Row level security is not registered, so there is no scoped system role to check. Call services.AddSupabaseRowLevelSecurity() or services.AddPostgresRowLevelSecurity() next to AddTenancyPostgres().");
         if (options.SystemInRole is not { } role)
         {
-            // Without one, a scoped system caller fails before it connects, and nothing runs as such a role.
+            // Without one, scoped system work fails before it connects, and nothing runs as such a role.
             return Task.CompletedTask;
         }
 
@@ -379,11 +382,11 @@ public static class TenancyPostgresChecks
                     JOIN pg_catalog.pg_roles owner ON owner.oid IN (SELECT c.relowner FROM pg_catalog.pg_class c WHERE c.relkind IN ('r', 'p'))
                     WHERE scoped.rolname = $1 AND pg_catalog.pg_has_role(scoped.oid, owner.oid, 'USAGE')
                     UNION ALL
-                    SELECT 4, pg_catalog.quote_ident(caller.rolname) || ' has its privileges, so its callers would get every policy written for it: REVOKE '
-                              || pg_catalog.quote_ident($1) || ' FROM ' || pg_catalog.quote_ident(caller.rolname) || ';'
-                    FROM pg_catalog.pg_roles caller
-                    WHERE (caller.rolname IN ($2, $3) OR caller.rolname::pg_catalog.text = ANY ($6::pg_catalog.text[]))
-                      AND pg_catalog.to_regrole($1) IS NOT NULL AND pg_catalog.pg_has_role(caller.oid, pg_catalog.to_regrole($1), 'USAGE')
+                    SELECT 4, pg_catalog.quote_ident(grantee.rolname) || ' has its privileges, so its callers would get every policy written for it: REVOKE '
+                              || pg_catalog.quote_ident($1) || ' FROM ' || pg_catalog.quote_ident(grantee.rolname) || ';'
+                    FROM pg_catalog.pg_roles grantee
+                    WHERE (grantee.rolname IN ($2, $3) OR grantee.rolname::pg_catalog.text = ANY ($6::pg_catalog.text[]))
+                      AND pg_catalog.to_regrole($1) IS NOT NULL AND pg_catalog.pg_has_role(grantee.oid, pg_catalog.to_regrole($1), 'USAGE')
                     UNION ALL
                     SELECT 5, pg_catalog.quote_ident(mapped.rolname) || ', the role of a mapped token role, has the privileges of ' || pg_catalog.quote_ident($2)
                               || ', so the holder of such a token, who has no seat, would get every policy and every function written for signed-in users: REVOKE '
@@ -453,7 +456,7 @@ public static class TenancyPostgresChecks
     /// its access history where the context maps one; the units' table has the unique index that keeps a tenant's
     /// organization to a single root; the functions
     /// written from the catalogue, which say which permissions manage access, which of them a seat hands on only where it
-    /// holds them, which permissions a copy of each pack holds and which permissions are live, answer as the catalogue the
+    /// holds them, which permissions a copy of each starter role holds and which permissions are live, answer as the catalogue the
     /// application runs with does, so a database written with containment on for an application that turned it off,
     /// or the other way round, is refused and said to be so; the store leaves the rights to
     /// the database (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>), and the trigger that writes them is
@@ -462,8 +465,8 @@ public static class TenancyPostgresChecks
     /// running as their owner; and the functions a module reads Tenancy through are there, running as
     /// their caller and written for Postgres to fold into the module's queries, each answering exactly the columns
     /// of its row of the read model, in order. A contribution the export was never told to use, or an access file
-    /// written from another catalogue or another version of this package and not yet applied, leaves the second
-    /// lock open or out of date, and nothing else would say so.
+    /// written from another catalogue or another version of this package and not yet applied, leaves RLS
+    /// incomplete or out of date, and no other check reports it.
     /// <para>
     /// The index is the one <c>AddTenancy</c> maps when it is given the context's <c>Database</c>, and on Postgres
     /// it is required. The policies keep a seat from leaving a unit without a parent, and hold neither Tenancy's
@@ -477,7 +480,7 @@ public static class TenancyPostgresChecks
     /// each of their token roles is mapped to a database role of its own
     /// (<see cref="PostgresRowLevelSecurityOptions.TokenRoles"/>), and that role has the policy that lets it read
     /// the tenants. The options name the operators for the application and the contribution names them for the
-    /// database; when only the first does, an operator is answered an empty directory, in silence.
+    /// database; when only the first does, an operator gets an empty list of tenants, and no error says why.
     /// </para>
     /// </summary>
     /// <param name="services">The application's services, with the context that maps Tenancy's tables and the catalogue.</param>
@@ -625,7 +628,7 @@ public static class TenancyPostgresChecks
                     catalogue.ContainAccessManagingPermissions
                         ? "the permissions a seat hands on only where it holds them are those that manage access, " + string.Join(", ", catalogue.AccessManagingPermissions)
                         : "no permission is handed on only where a seat holds it, since ApplicationCatalogue.ContainAccessManagingPermissions is off"),
-                (TenancySql.PackPermissions, TenancySql.PackPermissionsBody(catalogue), "the packs are " + string.Join(", ", catalogue.Packs.Select(pack => pack.Key)) + ", with the permissions the catalogue gives them"),
+                (TenancySql.StarterRolePermissions, TenancySql.StarterRolePermissionsBody(catalogue), "the starter roles are " + string.Join(", ", catalogue.StarterRoles.Select(starterRole => starterRole.Key)) + ", with the permissions the catalogue gives them"),
                 (TenancySql.PermissionIsLive, TenancySql.PermissionIsLiveBody(catalogue), "the live permissions are " + string.Join(", ", catalogue.LivePermissions)),
             ];
 
@@ -691,7 +694,7 @@ public static class TenancyPostgresChecks
             (string[] Names, string What, string Why)[] asOwner =
             [
                 (
-                    [TenancyFunctionNames.TenantAdministrators, TenancyFunctionNames.PermissionsAMoveChanges, TenancyFunctionNames.SeatsHoldingPermissionAt, TenancySql.RewriteTenantRights],
+                    [TenancyFunctionNames.TenantAdministrators, TenancyFunctionNames.PermissionsAUnitMoveChanges, TenancyFunctionNames.SeatsHoldingPermissionAt, TenancySql.RewriteTenantRights],
                     "answer about other seats' rights or write a tenant's rights again",
                     "The store and the questions ask the first three, since a seat reads only its own rights, and Tenancy's own system work runs the last."),
                 (
@@ -735,7 +738,7 @@ public static class TenancyPostgresChecks
             // policies decide them, and with nothing that keeps Postgres from folding it into the module's query.
             string[] read =
             [
-                TenancyFunctionNames.CallerPermissions, TenancyFunctionNames.TenantUnitPaths, TenancyFunctionNames.TenantUnits,
+                TenancyFunctionNames.CurrentPermissions, TenancyFunctionNames.TenantUnitPaths, TenancyFunctionNames.TenantUnits,
                 TenancyFunctionNames.TenantRoles, TenancyFunctionNames.TenantPlacements, TenancyFunctionNames.TenantSeats,
             ];
             var unreadable = await ListAsync(
@@ -801,9 +804,9 @@ public static class TenancyPostgresChecks
     /// </summary>
     internal static void AddStartupChecks(IServiceCollection services)
     {
-        services.AddStartupCheck(new StartupCheck(ExplicitCallersCheck, StartupCheckStage.Services, static (provider, cancellationToken) =>
+        services.AddStartupCheck(new StartupCheck(ExplicitCurrentUserCheck, StartupCheckStage.Services, static (provider, cancellationToken) =>
         {
-            EnsureExplicitCallers(provider);
+            EnsureExplicitCurrentUser(provider);
             return Task.CompletedTask;
         }));
 
@@ -879,14 +882,14 @@ public static class TenancyPostgresChecks
 
     /// <summary>
     /// Runs <paramref name="check"/> on the connection of a context that maps Tenancy's tables, made in a scope of its
-    /// own, as <see cref="Caller.System"/>, begun around it alone and outside any ambient transaction. The caller
-    /// is begun before the context is taken, so a host that makes a context for whoever is calling makes this
-    /// one for the application itself.
+    /// own, as system work without a scope, begun around it alone and outside any ambient transaction. The user is
+    /// begun before the context is taken, so a host that makes a context for whoever is calling makes this one for
+    /// system work.
     /// </summary>
     private static async Task AsSystemAsync(IServiceProvider services, Func<DbConnection, TenancyTables, Task> check, CancellationToken cancellationToken)
     {
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using (Callers.Begin(Caller.System))
+        using (new AccessManager(new CurrentUser()).BeginSystemBypassingRowAccess())
         {
             await using var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var (context, tenancy) = TenancyContextOf(scope.ServiceProvider);
@@ -912,10 +915,10 @@ public static class TenancyPostgresChecks
     /// <exception cref="InvalidOperationException">The database refused the role or the function to the connection.</exception>
     private static async Task<(string Role, long Permissions)> AskedInAsync(IServiceProvider services, string scope, CancellationToken cancellationToken)
     {
-        // The caller first and then the context, as the reads themselves take theirs.
+        // The user first and then the context, as the reads themselves take theirs.
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using (Callers.Begin(Caller.SystemIn(scope)))
-        using (TenancyCallers.BeginNone())
+        using (new AccessManager(new CurrentUser()).BeginSystem(scope))
+        using (TenancyUsers.BeginNone())
         {
             await using var lifetime = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var (context, tenancy) = TenancyContextOf(lifetime.ServiceProvider);

@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
 /// <summary>
@@ -18,18 +20,18 @@ public sealed class MemberHoldUntilTests
         // The owner, for every permission of the resource: it holds no role, and nothing it holds by owning ends.
         foreach (var permission in DocumentMembership.Rules.Permissions.Select(permission => permission.Name))
         {
-            var held = await filing.DocumentsAsync(TestCallers.User(data.Ada), access => access.HoldAsync(data.Minutes, permission, Cancellation));
+            var held = await filing.DocumentsAsync(TestUsers.User(data.Ada), access => access.HoldAsync(data.Minutes, permission, Cancellation));
             (held!.Via, held.Until).Should().Be((MemberVia.Members, null), "Ada owns the minutes, and holds " + permission + " by owning them");
         }
 
         // A keeper, for the permissions no role gives as for the others.
         foreach (var permission in FolderMembership.Rules.Permissions.Select(permission => permission.Name))
         {
-            (await filing.FoldersAsync(TestCallers.Staff(data.Keeper), access => access.HoldAsync(data.Cabinet, permission, Cancellation)))!.Until.Should().BeNull();
+            (await filing.FoldersAsync(TestUsers.Staff(data.Keeper), access => access.HoldAsync(data.Cabinet, permission, Cancellation)))!.Until.Should().BeNull();
         }
 
         // The application's own work.
-        var system = await filing.DocumentsAsync(Caller.System, access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation));
+        var system = await filing.DocumentsAsync(CurrentUserSnapshot.System, access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation));
         (system!.Via, system.Until).Should().Be((MemberVia.System, null));
     }
 
@@ -40,11 +42,11 @@ public sealed class MemberHoldUntilTests
         var data = filing.Scenario;
 
         // Cy's membership ends next week; Dee's has no end.
-        (await filing.DocumentsAsync(TestCallers.User(data.Cy), access => access.HoldAsync(data.Minutes, DocumentPermissions.View, Cancellation)))!.Until.Should().Be(data.Now.AddDays(7));
-        (await filing.DocumentsAsync(TestCallers.User(data.Dee), access => access.HoldAsync(data.Minutes, DocumentPermissions.View, Cancellation)))!.Until.Should().BeNull();
+        (await filing.DocumentsAsync(TestUsers.User(data.Cy), access => access.HoldAsync(data.Minutes, DocumentPermissions.View, Cancellation)))!.Until.Should().Be(data.Now.AddDays(7));
+        (await filing.DocumentsAsync(TestUsers.User(data.Dee), access => access.HoldAsync(data.Minutes, DocumentPermissions.View, Cancellation)))!.Until.Should().BeNull();
 
         // What the questions that refuse hand a handler says the same.
-        (await filing.DocumentsAsync(TestCallers.User(data.Cy), access => access.RequireAsync(data.Minutes, DocumentPermissions.View, Cancellation))).Until.Should().Be(data.Now.AddDays(7));
+        (await filing.DocumentsAsync(TestUsers.User(data.Cy), access => access.RequireAsync(data.Minutes, DocumentPermissions.View, Cancellation))).Until.Should().Be(data.Now.AddDays(7));
     }
 
     [Fact]
@@ -55,7 +57,7 @@ public sealed class MemberHoldUntilTests
         var now = data.Now;
 
         Task<MemberHold<DocumentId>?> AskAsync(UserId user, string permission)
-            => filing.DocumentsAsync(TestCallers.User(user), access => access.HoldAsync(data.Minutes, permission, Cancellation));
+            => filing.DocumentsAsync(TestUsers.User(user), access => access.HoldAsync(data.Minutes, permission, Cancellation));
 
         // A role with no end in a membership with no end: no end.
         (await AskAsync(data.Ben, DocumentPermissions.Edit))!.Until.Should().BeNull();
@@ -98,7 +100,7 @@ public sealed class MemberHoldUntilTests
         });
 
         Task<MemberHold<DocumentId>?> AskAsync()
-            => filing.DocumentsAsync(TestCallers.User(data.Dee), access => access.HoldAsync(data.Minutes, DocumentPermissions.Edit, Cancellation));
+            => filing.DocumentsAsync(TestUsers.User(data.Dee), access => access.HoldAsync(data.Minutes, DocumentPermissions.Edit, Cancellation));
 
         (await AskAsync())!.Until.Should().Be(now.AddHours(2), "the second role has not started, so it gives nothing now and lengthens nothing");
 
@@ -146,7 +148,7 @@ public sealed class MemberHoldUntilTests
             {
                 foreach (var permission in FilingScenario.DocumentPermissionsAsked)
                 {
-                    var held = await filing.DocumentsAsync(TestCallers.User(user), access => access.HoldAsync(data.Minutes, permission, Cancellation));
+                    var held = await filing.DocumentsAsync(TestUsers.User(user), access => access.HoldAsync(data.Minutes, permission, Cancellation));
                     var expected = Read(minutes, user, permission, filing.Clock.Now);
 
                     (held?.Via is not null, held?.Until).Should().Be(expected, "of " + user + " and " + permission + " at " + filing.Clock.Now.ToString("O"));

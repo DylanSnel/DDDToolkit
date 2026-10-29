@@ -1,4 +1,5 @@
 using DDDToolkit.Supporting.Tenancy;
+using DDDToolkit.Supporting.Tenancy.Access;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 
@@ -33,7 +34,7 @@ public sealed class SeatRefusalResults : IAuthorizationMiddlewareResultHandler
             && authorizeResult.AuthorizationFailure?.FailureReasons.Any(reason => reason.Handler is SeatRequirementHandler) == true;
 
         // The caller the handler asked is still the request's: both run inside tenant selection.
-        return forWantOfASeat && SeatRequirement.RefusalFor(TenancyUseCases.CurrentCaller()) is { } refusal
+        return forWantOfASeat && SeatRequirement.RefusalFor(TenancyUsers.Ambient) is { } refusal
             ? throw refusal
             : _otherwise.HandleAsync(next, context, policy, authorizeResult);
     }

@@ -11,7 +11,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// </summary>
 /// <remarks>
 /// The permissions themselves are published in the contracts (<see cref="ProjectPermissionNames"/>), since another module names one
-/// when it asks Projects a question, and the host names them in its role packs; what each one is, is said here.
+/// when it asks Projects a question, and the host names them in its starter roles; what each one is, is said here.
 /// <list type="bullet">
 /// <item>Held by a project's owner by owning it: seeing it, editing it, closing it and managing its crew, the
 /// permissions of a crew lead. Opening a project and naming its owner are not: the first is asked at a unit, where there
@@ -41,9 +41,9 @@ public static class ProjectPermissions
     [On<Project>(Description = "Close or reopen a project.")]
     public const string Close = ProjectPermissionNames.Close;
 
-    [On<Project>(LocksMembers = true, Implies = [ProjectPermissionNames.View], Description = "Add and remove crew members, give and take their project roles.")]
+    [On<Project>(ManagesMembers = true, Implies = [ProjectPermissionNames.View], Description = "Add and remove crew members, give and take their project roles.")]
     public const string ManageCrew = ProjectPermissionNames.ManageCrew;
 
-    [On<Project>(Owner = false, InRoles = false, LocksOwner = true, Description = "Name a project's owner.")]
+    [On<Project>(Owner = false, InRoles = false, NamesOwner = true, Description = "Name a project's owner.")]
     public const string ChangeOwner = ProjectPermissionNames.ChangeOwner;
 }

@@ -38,7 +38,7 @@ public static class StartupCheckServiceCollectionExtensions
     /// <summary>
     /// Runs every start-up check the host's registrations brought, the ones registered after this call included,
     /// before the host starts anything: in their stages (<see cref="StartupCheckStage"/>), as the application itself
-    /// (<c>Caller.System</c>), and before the server binds its port. The first check that fails stops the start
+    /// (<c>CurrentUserSnapshot.System</c>), and before the server binds its port. The first check that fails stops the start
     /// with what it threw, unchanged, so the message is the check's own; the log names the check as well.
     /// <para>
     /// They run in <see cref="IHostedLifecycleService.StartingAsync"/>, which the host calls for every lifecycle

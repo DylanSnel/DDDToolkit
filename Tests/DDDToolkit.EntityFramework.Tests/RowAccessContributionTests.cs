@@ -40,7 +40,7 @@ public sealed class RowAccessContributionTests
         using var desk = DeskContext.Create();
         var watchers = new SpotContribution("watching", context => new(
             [],
-            [new ContributedPolicy(SpotContribution.Of<TicketWatcher>(context), "Watchers see themselves", "SELECT", RowAccessRoles.User, "\"User\" = {caller:uid}", null)],
+            [new ContributedPolicy(SpotContribution.Of<TicketWatcher>(context), "Watchers see themselves", "SELECT", RowAccessRoles.User, "\"User\" = {user:uid}", null)],
             [],
             [SpotContribution.Of<CommentReaction>(context)]));
 
@@ -53,7 +53,7 @@ public sealed class RowAccessContributionTests
             "-- Watchers see themselves (select) for authenticated asks the policy 'Watchers see themselves' of the row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution in ");
         script.Should().Contain(
             "CREATE POLICY \"Watchers see themselves (select) for authenticated\" ON \"desk\".\"TicketWatcher\" FOR SELECT TO authenticated\n" +
-            "    USING (\"User\" = (SELECT \"ddd\".caller_id()));\n" +
+            "    USING (\"User\" = (SELECT \"ddd\".current_user_id()));\n" +
             "COMMENT ON POLICY \"Watchers see themselves (select) for authenticated\" ON \"desk\".\"TicketWatcher\" IS 'DDDToolkit row access rule';",
             "a contributed policy is named like a rule's, and carries the comment the next script drops it by");
     }
@@ -125,7 +125,7 @@ public sealed class RowAccessContributionTests
             "-- Tickets (select) for authenticated asks the rule 'Members read the public tickets' in place of the default 'Members read the open tickets' of the row access contribution " + SpotSource +
             ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
             "CREATE POLICY \"Tickets (select) for authenticated\" ON \"desk\".\"Tickets\" FOR SELECT TO authenticated\n" +
-            "    USING ((\"Owner\" = (SELECT \"ddd\".caller_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));",
+            "    USING ((\"Owner\" = (SELECT \"ddd\".current_user_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));",
             "the rule decides within what the default holds it to, and the owner keeps reading his own tickets whatever it says");
         script.Should().NotContain("\"Status\" = 0", "the default itself is gone");
         Regex.Matches(script, "^CREATE POLICY .* ON \"desk\"\\.\"Tickets\" FOR SELECT TO authenticated$", RegexOptions.Multiline).Should().HaveCount(1);
@@ -167,7 +167,7 @@ public sealed class RowAccessContributionTests
             "-- Tickets (select) for authenticated asks the rule 'Public tickets are everyones' (which names no role, so it is for the roles of the default) in place of the default 'Members read the open tickets' of the row access contribution " + SpotSource +
             ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
             "CREATE POLICY \"Tickets (select) for authenticated\" ON \"desk\".\"Tickets\" FOR SELECT TO authenticated\n" +
-            "    USING ((\"Owner\" = (SELECT \"ddd\".caller_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));");
+            "    USING ((\"Owner\" = (SELECT \"ddd\".current_user_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));");
         Regex.Matches(script, "^CREATE POLICY .* ON \"desk\"\\.\"Tickets\" .* TO anon$", RegexOptions.Multiline)
             .Should().BeEmpty("the contribution has no default for anonymous callers, so the table stays closed to them");
     }
@@ -252,7 +252,7 @@ public sealed class RowAccessContributionTests
     /// whatever it says; and it alone lets them change a ticket, and read the comments. The comments' reactions and
     /// the watchers it keeps closed.
     /// </summary>
-    private static SpotContribution Keeper(string? kept = "\"Owner\" = {caller:uid}", string? within = "\"Team\" IS NOT NULL")
+    private static SpotContribution Keeper(string? kept = "\"Owner\" = {user:uid}", string? within = "\"Team\" IS NOT NULL")
         => new("keeper", context =>
         {
             var tickets = SpotContribution.Of<Ticket>(context);
@@ -495,7 +495,7 @@ public sealed class RowAccessContributionTests
             "-- Written by the row access contribution " + DutyRowAccess.Source + ".\n" +
             "CREATE OR REPLACE FUNCTION \"desk\".on_duty() RETURNS boolean\n" +
             "    LANGUAGE sql STABLE SET search_path = '' AS $function$\n" +
-            "SELECT coalesce(((SELECT \"ddd\".caller_claims()) ->> 'on_duty')::boolean, false)\n" +
+            "SELECT coalesce(((SELECT \"ddd\".current_user_claims()) ->> 'on_duty')::boolean, false)\n" +
             "$function$;\n" +
             "COMMENT ON FUNCTION \"desk\".on_duty() IS 'DDDToolkit access function of DeskContext';\n",
             "a contributed function runs as its caller unless it says otherwise, and carries the context's function comment, so the next script keeps it");
@@ -820,7 +820,7 @@ public sealed class RowAccessContributionTests
     {
         using var parcels = ParcelsContext.Create();
         var watched = RowAccessFunction.For<Parcel>(
-            "parcels/parcels_i_watch", "{exists:Watchers:e1}({col:e1:User} IS NOT DISTINCT FROM {caller:uid}){/exists}", owner: null, shape: AccessFunctionShape.Set);
+            "parcels/parcels_i_watch", "{exists:Watchers:e1}({col:e1:User} IS NOT DISTINCT FROM {user:uid}){/exists}", owner: null, shape: AccessFunctionShape.Set);
 
         var sql = PostgresRowAccess.CreateStatements(parcels, [], [watched], new RowAccessExport());
 
@@ -836,11 +836,11 @@ public sealed class RowAccessContributionTests
 
         var script = PostgresRowAccess.Script(desk, [], [], new RowAccessExport
         {
-            CallerFunctions = new PostgresCallerFunctions("who.id()", "who.role()", "who.claims()"),
+            CurrentUserFunctions = new PostgresCurrentUserFunctions("who.id()", "who.role()", "who.claims()"),
             Contributions = [new DutyRowAccess()],
         });
 
-        script.Should().Contain("SELECT coalesce(((SELECT who.claims()) ->> 'on_duty')::boolean, false)").And.NotContain("\"ddd\".caller_claims()");
+        script.Should().Contain("SELECT coalesce(((SELECT who.claims()) ->> 'on_duty')::boolean, false)").And.NotContain("\"ddd\".current_user_claims()");
     }
 
     [Fact]

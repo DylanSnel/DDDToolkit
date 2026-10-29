@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure;
 
-/// <summary>One command a context sent: its text, and the toolkit's caller and Tenancy's that were current when it ran.</summary>
-public sealed record RecordedCommand(string Text, Caller? Caller, ITenancyCaller? TenancyCaller);
+/// <summary>One command a context sent: its text, and the toolkit's current user and Tenancy's that were current when it ran.</summary>
+public sealed record RecordedCommand(string Text, CurrentUserSnapshot? Caller, ITenancyUser? TenancyUser);
 
 /// <summary>
 /// Records every command the contexts send, with or without await, with who was calling, so a test can see what a
@@ -72,5 +72,5 @@ public sealed class CommandRecorder : DbCommandInterceptor
         return result;
     }
 
-    private void Record(DbCommand command) => _sent.Enqueue(new RecordedCommand(command.CommandText, Callers.Ambient, TenancyCallers.Ambient));
+    private void Record(DbCommand command) => _sent.Enqueue(new RecordedCommand(command.CommandText, BegunUser, TenancyUsers.Ambient));
 }

@@ -49,12 +49,12 @@ public sealed class AccessHistoryFieldScenarios(SampleHosts sample) : IClassFixt
         // Hana gives leo a role, and takes it away again: the two newest rows, both made by her seat.
         using (var given = await hana.PostAsJsonAsync(grant, new { unitId = coast, roleId = observer }, Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var taken = await hana.DeleteAsync($"{grant}/{coast}/{observer}", Cancellation))
         {
-            taken.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            taken.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Three rows, so the page holds what a seat did and what the seeding did.

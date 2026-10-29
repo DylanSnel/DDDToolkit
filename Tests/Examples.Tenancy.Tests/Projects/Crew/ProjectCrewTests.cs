@@ -7,7 +7,8 @@ namespace Examples.Tenancy.Tests.Projects.Crew;
 
 /// <summary>
 /// The crew's rules as the project itself keeps them, with no host and no database: who is on the crew for which
-/// period, which roles each member holds for which period, and what the owner may not lose. The scenarios walk the
+/// period, which roles each member holds for which period, and what the owner may not lose. Each change goes the way the
+/// crew manager makes it, through the project's guard and its hooks (<see cref="ManagedCrew"/>). The scenarios walk the
 /// same rules over HTTP; here are the cases a request cannot easily reach, and the events each change raises.
 /// </summary>
 public sealed class ProjectCrewTests
@@ -44,12 +45,12 @@ public sealed class ProjectCrewTests
         var project = Opened();
         var until = Now.AddDays(30);
 
-        var member = project.AddToCrew(Member, MemberPeriod.Between(Now, until), Now, addedBy: Owner);
+        var member = project.Managed().AddMember(Member, null, MemberPeriod.Between(Now, until), Now, Owner);
         member.Roles.Should().BeEmpty("being on the crew and holding a role on it are two things");
         (member.StartsAt, member.EndsAt, member.AddedBy).Should().Be((Now, until, Owner));
 
-        project.GiveCrewRole(Member, Surveyor, MemberPeriod.Between(Now, Now.AddDays(7)), Now, givenBy: Owner);
-        project.GiveCrewRole(Member, Observer, MemberPeriod.Open(Now), Now, givenBy: Owner);
+        project.Managed().GiveRole(Member, Surveyor, MemberPeriod.Between(Now, Now.AddDays(7)), Now, Owner);
+        project.Managed().GiveRole(Member, Observer, MemberPeriod.Open(Now), Now, Owner);
 
         member.Roles.Select(held => (held.RoleId, held.EndsAt, held.GivenBy)).Should().Equal((Surveyor, Now.AddDays(7), Owner), (Observer, null, Owner));
         Raised(project).Skip(1).Should().Equal(
@@ -69,20 +70,20 @@ public sealed class ProjectCrewTests
     public void A_role_still_held_is_refused_and_one_that_has_ended_is_replaced()
     {
         var project = Opened();
-        project.AddToCrew(Member, MemberPeriod.Open(Now), Now, addedBy: Owner);
-        project.GiveCrewRole(Member, Surveyor, MemberPeriod.Between(Now, Now.AddDays(7)), Now, givenBy: Owner);
+        project.Managed().AddMember(Member, null, MemberPeriod.Open(Now), Now, Owner);
+        project.Managed().GiveRole(Member, Surveyor, MemberPeriod.Between(Now, Now.AddDays(7)), Now, Owner);
 
         // While the first has not ended, at the start of the second: held, whether it applies yet or not.
         foreach (var start in new[] { Now, Now.AddDays(6) })
         {
-            var twice = () => project.GiveCrewRole(Member, Surveyor, MemberPeriod.Open(start), start, givenBy: Owner);
+            var twice = () => project.Managed().GiveRole(Member, Surveyor, MemberPeriod.Open(start), start, Owner);
             var refusal = twice.Should().Throw<RefusalException>().Which;
             refusal.Code.Should().Be(ProjectRefusals.CrewRoleHeld);
             refusal.Arguments.Should().Contain("Seat", Member).And.Contain("Role", Surveyor);
         }
 
         // Once it has ended, the role is given again, and the new grant takes the old one's place.
-        project.GiveCrewRole(Member, Surveyor, MemberPeriod.Open(Now.AddDays(7)), Now.AddDays(7), givenBy: null);
+        project.Managed().GiveRole(Member, Surveyor, MemberPeriod.Open(Now.AddDays(7)), Now.AddDays(7), null);
 
         var held = project.Crew.Single(member => member.MemberId == Member).Roles.Should().ContainSingle().Which;
         (held.RoleId, held.StartsAt, held.EndsAt, held.GivenBy).Should().Be((Surveyor, Now.AddDays(7), null, null));
@@ -93,20 +94,20 @@ public sealed class ProjectCrewTests
     public void Taking_a_role_leaves_the_member_on_the_crew_and_refuses_what_is_not_there()
     {
         var project = Opened();
-        project.AddToCrew(Member, MemberPeriod.Open(Now), Now, addedBy: Owner);
-        project.GiveCrewRole(Member, Surveyor, MemberPeriod.Open(Now), Now, givenBy: Owner);
+        project.Managed().AddMember(Member, null, MemberPeriod.Open(Now), Now, Owner);
+        project.Managed().GiveRole(Member, Surveyor, MemberPeriod.Open(Now), Now, Owner);
         ((DDDToolkit.Interfaces.IHasDomainEvents)project).ClearDomainEvents();
 
-        project.TakeCrewRole(Member, Surveyor);
+        project.Managed().TakeRole(Member, Surveyor);
 
         project.Crew.Single(member => member.MemberId == Member).Roles.Should().BeEmpty();
         Raised(project).Should().Equal(Bare(new CrewRoleTaken(project.Id, Member, Surveyor)));
 
-        var again = () => project.TakeCrewRole(Member, Surveyor);
+        var again = () => project.Managed().TakeRole(Member, Surveyor);
         again.Should().Throw<RefusalException>().Which.Code.Should().Be(ProjectRefusals.CrewRoleNotFound);
-        var stranger = () => project.TakeCrewRole(SeatId.CreateSequential(), Surveyor);
+        var stranger = () => project.Managed().TakeRole(SeatId.CreateSequential(), Surveyor);
         stranger.Should().Throw<RefusalException>().Which.Code.Should().Be(ProjectRefusals.MemberNotFound);
-        var toNobody = () => project.GiveCrewRole(SeatId.CreateSequential(), Surveyor, MemberPeriod.Open(Now), Now, givenBy: Owner);
+        var toNobody = () => project.Managed().GiveRole(SeatId.CreateSequential(), Surveyor, MemberPeriod.Open(Now), Now, Owner);
         toNobody.Should().Throw<RefusalException>().Which.Code.Should().Be(ProjectRefusals.MemberNotFound);
     }
 
@@ -116,10 +117,10 @@ public sealed class ProjectCrewTests
         var project = Opened();
 
         // The owner holds what an owner does by owning the project: a project role would give it more, or nothing.
-        var given = () => project.GiveCrewRole(Owner, Surveyor, MemberPeriod.Open(Now), Now, givenBy: Owner);
+        var given = () => project.Managed().GiveRole(Owner, Surveyor, MemberPeriod.Open(Now), Now, Owner);
         given.Should().Throw<RefusalException>().Which.Code.Should().Be(ProjectRefusals.OwnerProtected);
 
-        var removed = () => project.RemoveFromCrew(Owner);
+        var removed = () => project.Managed().RemoveMember(Owner);
         removed.Should().Throw<RefusalException>().Which.Code.Should().Be(ProjectRefusals.OwnerProtected);
         project.Crew.Single().Roles.Should().BeEmpty();
         RulesBrokenBy(project).Should().BeEmpty();
@@ -129,13 +130,13 @@ public sealed class ProjectCrewTests
     public void Naming_an_owner_who_is_on_the_crew_keeps_their_place_for_good_and_the_old_owner_stays_in_the_role_said()
     {
         var project = Opened();
-        project.AddToCrew(Member, MemberPeriod.Between(Now, Now.AddDays(7)), Now, addedBy: Owner);
-        project.GiveCrewRole(Member, Lead, MemberPeriod.Between(Now, Now.AddDays(7)), Now, givenBy: Owner);
-        project.GiveCrewRole(Member, Observer, MemberPeriod.Open(Now), Now, givenBy: Owner);
+        project.Managed().AddMember(Member, null, MemberPeriod.Between(Now, Now.AddDays(7)), Now, Owner);
+        project.Managed().GiveRole(Member, Lead, MemberPeriod.Between(Now, Now.AddDays(7)), Now, Owner);
+        project.Managed().GiveRole(Member, Observer, MemberPeriod.Open(Now), Now, Owner);
         ((DDDToolkit.Interfaces.IHasDomainEvents)project).ClearDomainEvents();
         var later = Now.AddDays(1);
 
-        project.ChangeOwner(Member, FormerOwner.StaysAs(Surveyor), later);
+        project.Managed().NameOwner(Member, FormerOwner.StaysAs(Surveyor), later);
 
         // The new owner was on the crew for a week: the membership is for good now, and its roles went, since it holds
         // by owning. The old owner stays on the crew in the role the command said.
@@ -153,9 +154,9 @@ public sealed class ProjectCrewTests
         RulesBrokenBy(project).Should().BeEmpty();
 
         // Named again, the seat is the owner already; named back, the first owner's role goes, and the second leaves.
-        var same = () => project.ChangeOwner(Member, FormerOwner.Leaves, later);
+        var same = () => project.Managed().NameOwner(Member, FormerOwner.Leaves, later);
         same.Should().Throw<RefusalException>().Which.Code.Should().Be(ProjectRefusals.AlreadyOwner);
-        project.ChangeOwner(Owner, FormerOwner.Leaves, later);
+        project.Managed().NameOwner(Owner, FormerOwner.Leaves, later);
         project.Crew.Should().ContainSingle().Which.Should().Match<CrewMember>(member => member.MemberId == Owner && member.Roles.Count == 0);
         RulesBrokenBy(project).Should().BeEmpty();
     }
@@ -164,14 +165,14 @@ public sealed class ProjectCrewTests
     public void Naming_an_owner_whose_membership_had_ended_starts_it_anew_with_no_role()
     {
         var project = Opened();
-        project.AddToCrew(Member, MemberPeriod.Between(Now, Now.AddDays(30)), Now, addedBy: Owner);
-        project.GiveCrewRole(Member, Surveyor, MemberPeriod.Open(Now), Now, givenBy: Owner);
+        project.Managed().AddMember(Member, null, MemberPeriod.Between(Now, Now.AddDays(30)), Now, Owner);
+        project.Managed().GiveRole(Member, Surveyor, MemberPeriod.Open(Now), Now, Owner);
         var later = Now.AddDays(90);
         ((DDDToolkit.Interfaces.IHasDomainEvents)project).ClearDomainEvents();
 
         // The membership ran out two months ago, and the surveyor's role, which had no end of its own, with it.
         // Named owner, the seat is on the crew from now on, holding no role.
-        project.ChangeOwner(Member, FormerOwner.StaysAs(Observer), later);
+        project.Managed().NameOwner(Member, FormerOwner.StaysAs(Observer), later);
 
         var member = project.Crew.Single(candidate => candidate.MemberId == Member);
         (member.StartsAt, member.EndsAt, member.Roles.Count).Should().Be((later, null, 0), "the membership does not read as unbroken since it first began");
@@ -190,24 +191,24 @@ public sealed class ProjectCrewTests
     public void A_seat_whose_membership_ended_goes_on_the_crew_again_and_takes_no_role_until_then()
     {
         var project = Opened();
-        project.AddToCrew(Member, MemberPeriod.Between(Now, Now.AddDays(30)), Now, addedBy: Owner);
-        project.GiveCrewRole(Member, Surveyor, MemberPeriod.Open(Now), Now, givenBy: Owner);
+        project.Managed().AddMember(Member, null, MemberPeriod.Between(Now, Now.AddDays(30)), Now, Owner);
+        project.Managed().GiveRole(Member, Surveyor, MemberPeriod.Open(Now), Now, Owner);
         var later = Now.AddDays(90);
 
         // A role counts only while the membership does, so giving one to a seat whose membership ended would give
         // nothing: it is refused, where it used to answer as if it had worked.
-        var given = () => project.GiveCrewRole(Member, Observer, MemberPeriod.Open(later), later, givenBy: Owner);
+        var given = () => project.Managed().GiveRole(Member, Observer, MemberPeriod.Open(later), later, Owner);
         given.Should().Throw<RefusalException>().Which.Code.Should().Be(ProjectRefusals.MemberNotFound);
 
         // Put on the crew again, it has a new membership, without the role of the one that ended.
-        var again = project.AddToCrew(Member, MemberPeriod.Open(later), later, addedBy: Owner);
+        var again = project.Managed().AddMember(Member, null, MemberPeriod.Open(later), later, Owner);
         project.Crew.Where(candidate => candidate.MemberId == Member).Should().ContainSingle().Which.Should().BeSameAs(again);
         (again.StartsAt, again.EndsAt).Should().Be((later, null));
         again.Roles.Should().BeEmpty();
         RulesBrokenBy(project).Should().BeEmpty();
 
         // While a membership runs, or is yet to start, the seat is on the crew already.
-        var twice = () => project.AddToCrew(Member, MemberPeriod.Open(later.AddDays(1)), later, addedBy: Owner);
+        var twice = () => project.Managed().AddMember(Member, null, MemberPeriod.Open(later.AddDays(1)), later, Owner);
         twice.Should().Throw<RefusalException>().Which.Code.Should().Be(ProjectRefusals.AlreadyOnCrew);
     }
 
@@ -217,7 +218,7 @@ public sealed class ProjectCrewTests
         var project = Opened();
         ((DDDToolkit.Interfaces.IHasDomainEvents)project).ClearDomainEvents();
 
-        project.ChangeOwner(Member, FormerOwner.Leaves, Now.AddDays(1));
+        project.Managed().NameOwner(Member, FormerOwner.Leaves, Now.AddDays(1));
 
         project.Crew.Should().ContainSingle().Which.Should().Match<CrewMember>(member => member.MemberId == Member && member.Roles.Count == 0);
         Raised(project).Should().Equal(
@@ -230,17 +231,17 @@ public sealed class ProjectCrewTests
     public void A_closed_project_changes_no_crew()
     {
         var project = Opened();
-        project.AddToCrew(Member, MemberPeriod.Open(Now), Now, addedBy: Owner);
-        project.GiveCrewRole(Member, Surveyor, MemberPeriod.Open(Now), Now, givenBy: Owner);
+        project.Managed().AddMember(Member, null, MemberPeriod.Open(Now), Now, Owner);
+        project.Managed().GiveRole(Member, Surveyor, MemberPeriod.Open(Now), Now, Owner);
         project.Close();
 
         Action[] changes =
         [
-            () => project.AddToCrew(SeatId.CreateSequential(), MemberPeriod.Open(Now), Now, addedBy: Owner),
-            () => project.GiveCrewRole(Member, Observer, MemberPeriod.Open(Now), Now, givenBy: Owner),
-            () => project.TakeCrewRole(Member, Surveyor),
-            () => project.RemoveFromCrew(Member),
-            () => project.ChangeOwner(Member, FormerOwner.Leaves, Now),
+            () => project.Managed().AddMember(SeatId.CreateSequential(), null, MemberPeriod.Open(Now), Now, Owner),
+            () => project.Managed().GiveRole(Member, Observer, MemberPeriod.Open(Now), Now, Owner),
+            () => project.Managed().TakeRole(Member, Surveyor),
+            () => project.Managed().RemoveMember(Member),
+            () => project.Managed().NameOwner(Member, FormerOwner.Leaves, Now),
         ];
 
         foreach (var change in changes)

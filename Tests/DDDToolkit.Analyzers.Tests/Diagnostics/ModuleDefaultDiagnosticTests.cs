@@ -60,7 +60,6 @@ public class ModuleDefaultDiagnosticTests
     }
 
     [Theory]
-    [InlineData("RequiresOperator", "RequiresOperator", "[RequiresOperator]")]
     [InlineData("SeenWith<DocumentId>(\"documents.view\")", "SeenWith<DocumentId>(\"documents.view\")", "[SeenWith<DocumentId>]")]
     public void A_requirement_for_queries_only_as_the_default_is_DDD00089(string defaults, string at, string named)
     {
@@ -70,6 +69,17 @@ public class ModuleDefaultDiagnosticTests
         Message(result, "DDD00089", at: at).Should()
             .Contain("carries " + named + " as the default of its module's requests: its package declares it for queries only, and a command of the module that says nothing would take it too")
             .And.Contain("put " + named + " on each query");
+    }
+
+    [Fact]
+    public void Operator_as_the_default_is_DDD00089_beside_the_compiler_s_CS0592()
+    {
+        // [Operator] goes on a request alone: what its command's work acts in is said per request.
+        var result = Run("Operator", "public sealed record ArchiveAll : Mediator.ICommand, IBillingRequest;", mediator: true);
+
+        result.ShouldHaveExactlyDiagnostics("DDD00089");
+        Message(result, "DDD00089", at: "Operator").Should().Contain("carries [Operator] as the default of its module's requests: the AttributeUsage of its class leaves out interfaces (CS0592)");
+        result.CompilationErrors.Select(error => error.Id).Should().Contain("CS0592");
     }
 
     [Fact]

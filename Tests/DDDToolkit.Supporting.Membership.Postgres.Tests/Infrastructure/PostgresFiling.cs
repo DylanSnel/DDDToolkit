@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Postgres;
 using Npgsql;
@@ -12,7 +13,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres.Tests.Infrastructure;
 /// </summary>
 public sealed class PostgresFiling : IDisposable
 {
-    private PostgresFiling(FilingDatabase database, bool asCaller, Action<IServiceCollection>? configure, bool ownContexts)
+    private PostgresFiling(FilingDatabase database, bool asUser, Action<IServiceCollection>? configure, bool ownContexts)
     {
         Database = database;
         Services = new FilingServices(
@@ -24,7 +25,7 @@ public sealed class PostgresFiling : IDisposable
                 configure?.Invoke(services);
             },
             ownContexts,
-            wiring: asCaller ? null : (options, provider) => options.UseDDDToolkitCore(provider));
+            wiring: asUser ? null : (options, provider) => options.UseDDDToolkitCore(provider));
         Scenario = new FilingScenario(DateTimeOffset.UtcNow);
     }
 
@@ -43,7 +44,7 @@ public sealed class PostgresFiling : IDisposable
     /// </summary>
     /// <param name="server">The run's Postgres.</param>
     /// <param name="template">The template the database is copied from.</param>
-    /// <param name="asCaller">
+    /// <param name="asUser">
     /// Whether the context runs every command as the caller, under the policies, as a host on row level security
     /// does. Without it every command runs as the login role, which owns the tables: what the application's own
     /// check answers by itself.
@@ -57,12 +58,12 @@ public sealed class PostgresFiling : IDisposable
     public static async Task<PostgresFiling> CreateAsync(
         FilingPostgres server,
         FilingPostgres.Template template,
-        bool asCaller = false,
+        bool asUser = false,
         bool seed = true,
         Action<IServiceCollection>? configure = null,
         bool ownContexts = false)
     {
-        var filing = new PostgresFiling(await server.CreateDatabaseAsync(template, TestContext.Current.CancellationToken), asCaller, configure, ownContexts);
+        var filing = new PostgresFiling(await server.CreateDatabaseAsync(template, TestContext.Current.CancellationToken), asUser, configure, ownContexts);
         if (seed)
         {
             await filing.Scenario.SaveAsync(filing.Services);
@@ -77,7 +78,7 @@ public sealed class PostgresFiling : IDisposable
     /// answered. With <paramref name="before"/>, that runs first in the session's transaction, as the login
     /// role, which owns the tables: what a test sets up at the transaction's own moment.
     /// </summary>
-    public Task<CallerSession> SessionAsync(Caller caller, string? role = null, string? before = null) => CallerSession.BeginAsync(Database, caller, role, before);
+    public Task<UserSession> SessionAsync(CurrentUserSnapshot caller, string? role = null, string? before = null) => UserSession.BeginAsync(Database, caller, role, before);
 
     /// <summary>Runs <paramref name="sql"/> as the login role, which owns everything of the application's.</summary>
     public Task ExecuteAsync(string sql) => FilingPostgres.ExecuteAsync(Database.ConnectionString, sql, TestContext.Current.CancellationToken);
@@ -108,12 +109,12 @@ public sealed class PostgresFiling : IDisposable
 /// goes past the application, as its own SQL that forgot a condition would: only the policies, the privileges
 /// and the functions' grants stand in its way. Disposing it rolls it back.
 /// </summary>
-public sealed class CallerSession : IAsyncDisposable
+public sealed class UserSession : IAsyncDisposable
 {
     private readonly NpgsqlConnection _connection;
     private readonly NpgsqlTransaction _transaction;
 
-    private CallerSession(NpgsqlConnection connection, NpgsqlTransaction transaction)
+    private UserSession(NpgsqlConnection connection, NpgsqlTransaction transaction)
     {
         _connection = connection;
         _transaction = transaction;
@@ -131,11 +132,11 @@ public sealed class CallerSession : IAsyncDisposable
     /// caller's. The database's clock stands still in a transaction, so a row set to <c>now()</c> here is at
     /// exactly the moment every later question of the session is asked at.
     /// </param>
-    public static async Task<CallerSession> BeginAsync(FilingDatabase database, Caller caller, string? role = null, string? before = null)
+    public static async Task<UserSession> BeginAsync(FilingDatabase database, CurrentUserSnapshot caller, string? role = null, string? before = null)
     {
         var connection = new NpgsqlConnection(database.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken);
-        var session = new CallerSession(connection, await connection.BeginTransactionAsync(TestContext.Current.CancellationToken));
+        var session = new UserSession(connection, await connection.BeginTransactionAsync(TestContext.Current.CancellationToken));
         if (before is not null)
         {
             await using var prepare = new NpgsqlCommand(before, connection, session._transaction);

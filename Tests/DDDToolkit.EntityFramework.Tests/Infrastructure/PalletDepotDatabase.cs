@@ -11,7 +11,7 @@ namespace DDDToolkit.EntityFramework.Tests.Infrastructure;
 
 /// <summary>
 /// A plain Postgres with the pallet depot on it, set up as an application off Supabase sets itself up: the roles
-/// and the caller functions from <see cref="PostgresRowAccess.SetupScript"/>, the tables from the model, owned by
+/// and the current user functions from <see cref="PostgresRowAccess.SetupScript"/>, the tables from the model, owned by
 /// the login role, and the depot's two rules as policies. Alice and Bob each own a pallet, and both read both.
 /// Alice's pallet carries a stamp, and one policy written by hand lets nobody change a stamp once it is made,
 /// where the rules let a pallet's owner: a table of an aggregate's entities with a policy stricter than its root's.
@@ -27,9 +27,9 @@ public sealed class PalletDepotDatabase : IAsyncLifetime
 
     public static readonly Guid BobId = Guid.Parse("b0b00000-0000-4000-8000-000000000012");
 
-    public static readonly Caller Alice = Callers.FromClaims($$"""{"sub":"{{AliceId}}","role":"authenticated"}""");
+    public static readonly CurrentUserSnapshot Alice = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{AliceId}}","role":"authenticated"}""");
 
-    public static readonly Caller Bob = Callers.FromClaims($$"""{"sub":"{{BobId}}","role":"authenticated"}""");
+    public static readonly CurrentUserSnapshot Bob = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{BobId}}","role":"authenticated"}""");
 
     public static readonly DepotId North = new(1);
 
@@ -85,7 +85,7 @@ public sealed class PalletDepotDatabase : IAsyncLifetime
         }
 
         // As the application itself, which owns the tables: the rules are for callers.
-        await using var seed = CreateContext(Caller.System);
+        await using var seed = CreateContext(CurrentUserSnapshot.System);
         var alices = new Pallet(AlicesPallet, North, 1, "Alice's", AliceId);
         alices.Stamp("Fragile");
         seed.Pallets.AddRange(alices, new Pallet(BobsPallet, North, 2, "Bob's", BobId));
@@ -104,20 +104,20 @@ public sealed class PalletDepotDatabase : IAsyncLifetime
     /// A context as the application logs in, running as <paramref name="caller"/>, with nothing of the toolkit's
     /// but the interceptor that sets the caller: what Entity Framework and Npgsql do on their own.
     /// </summary>
-    public PalletContext CreateContext(Caller caller) => CreateContext(caller, [], logs: null);
+    public PalletContext CreateContext(CurrentUserSnapshot caller) => CreateContext(caller, [], logs: null);
 
     /// <summary>
     /// A context as the application logs in, running as <paramref name="caller"/>, that saves the way
     /// <c>UseDDDToolkit</c> makes a context save: optimistic concurrency, and then what the database refuses.
     /// </summary>
-    public PalletContext CreateSavingContext(Caller caller, ILoggerFactory? logs = null)
+    public PalletContext CreateSavingContext(CurrentUserSnapshot caller, ILoggerFactory? logs = null)
         => CreateContext(caller, [new AggregateVersionInterceptor(), new DatabaseRefusalInterceptor()], logs);
 
     /// <summary>
     /// A context as the application logs in, which asks <paramref name="callers"/> who is calling and gives each
     /// caller the role <paramref name="roles"/> names: a host whose roles are not the defaults.
     /// </summary>
-    public PalletContext CreateContext(ICallerAccessor callers, PostgresRowLevelSecurityOptions roles)
+    public PalletContext CreateContext(ICurrentUser callers, PostgresRowLevelSecurityOptions roles)
         => new(new DbContextOptionsBuilder<PalletContext>()
             .UseNpgsql(ApplicationConnectionString)
             .AddInterceptors(new PostgresRowLevelSecurityInterceptor(callers, roles))
@@ -138,11 +138,11 @@ public sealed class PalletDepotDatabase : IAsyncLifetime
         return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken), System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private PalletContext CreateContext(Caller caller, IInterceptor[] interceptors, ILoggerFactory? logs)
+    private PalletContext CreateContext(CurrentUserSnapshot caller, IInterceptor[] interceptors, ILoggerFactory? logs)
         => new(new DbContextOptionsBuilder<PalletContext>()
             .UseNpgsql(ApplicationConnectionString)
             .UseLoggerFactory(logs)
-            .AddInterceptors([new PostgresRowLevelSecurityInterceptor(new Fixed(caller), new PostgresRowLevelSecurityOptions()), .. interceptors])
+            .AddInterceptors([new PostgresRowLevelSecurityInterceptor(new CurrentUser(source: new Fixed(caller)), new PostgresRowLevelSecurityOptions()), .. interceptors])
             .Options);
 
     /// <summary>How many pallets there are, counted as the superuser.</summary>
@@ -167,7 +167,7 @@ public sealed class PalletDepotDatabase : IAsyncLifetime
 
         // As the application itself, which owns the tables, and without the test's token: one that was cancelled
         // still leaves the depot clean.
-        await using var context = CreateContext(Caller.System);
+        await using var context = CreateContext(CurrentUserSnapshot.System);
         var pallets = await context.Pallets.ToListAsync(CancellationToken.None);
         foreach (var pallet in pallets)
         {
@@ -196,7 +196,7 @@ public sealed class PalletDepotDatabase : IAsyncLifetime
     }
 
     /// <summary>Runs <paramref name="sql"/> as <paramref name="caller"/> and returns the number of rows it affected.</summary>
-    public async Task<int> RunAsAsync(Caller caller, string sql, CancellationToken cancellationToken, params object[] parameters)
+    public async Task<int> RunAsAsync(CurrentUserSnapshot caller, string sql, CancellationToken cancellationToken, params object[] parameters)
     {
         await using var context = CreateContext(caller);
         return await context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
@@ -218,9 +218,9 @@ public sealed class PalletDepotDatabase : IAsyncLifetime
         }
     }
 
-    private sealed class Fixed(Caller caller) : ICallerAccessor
+    private sealed class Fixed(CurrentUserSnapshot caller) : ICurrentUserSource
     {
-        public Caller Current => caller;
+        public CurrentUserSnapshot? Current => caller;
     }
 }
 

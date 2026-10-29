@@ -182,9 +182,9 @@ public sealed class OutboxOptions
     /// you want per-consumer progress.
     /// </para>
     /// <para>
-    /// Where the host requires explicit callers and the outbox's context has row level security, the
-    /// transaction is begun as <c>Caller.System</c>, the processor's bookkeeping, and runs as that one
-    /// caller: an in-process handler that begins a caller of its own works on a context of its own, since a
+    /// Where the host requires an explicit current user and the outbox's context has row level security, the
+    /// transaction is begun as <c>CurrentUserSnapshot.System</c>, the processor's bookkeeping, and runs as that one
+    /// caller: an in-process handler that begins a user of its own works on a context of its own, since a
     /// caller that changes inside the transaction is refused. A transaction the host began on the context
     /// before it called the processor is joined, so it has to be begun as the system too.
     /// </para>

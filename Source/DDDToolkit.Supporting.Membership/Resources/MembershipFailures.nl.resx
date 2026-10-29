@@ -45,6 +45,9 @@
   <data name="membership.invalid-period" xml:space="preserve">
     <value>Het einde van een periode moet na het begin komen.</value>
   </data>
+  <data name="membership.role-not-found" xml:space="preserve">
+    <value>Deze rol bestaat niet of is hier niet zichtbaar.</value>
+  </data>
   <data name="membership.role-archived" xml:space="preserve">
     <value>Die rol is gearchiveerd.</value>
   </data>

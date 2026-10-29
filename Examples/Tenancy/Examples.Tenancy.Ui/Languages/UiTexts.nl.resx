@@ -282,8 +282,8 @@
   <data name="whoami.roles.none" xml:space="preserve">
     <value>Geen organisatierollen. Ploegrollen op projecten staan bij elk project.</value>
   </data>
-  <data name="whoami.from-pack" xml:space="preserve">
-    <value>Uit pakket</value>
+  <data name="whoami.from-starter-role" xml:space="preserve">
+    <value>Uit startrol</value>
   </data>
   <data name="whoami.manages-access" xml:space="preserve">
     <value>Beheert toegang</value>

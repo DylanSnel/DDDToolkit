@@ -36,7 +36,7 @@ public static class TenantsInfrastructure
 
     /// <summary>
     /// Registers how Tenancy is stored. The host says where its tables live and where what it publishes goes (see
-    /// <see cref="ModuleHost"/>), and passes the application's part of the catalogue: the packs a new tenant's
+    /// <see cref="ModuleHost"/>), and passes the application's part of the catalogue: the starter roles a new tenant's
     /// roles are copied from, and the permissions of other modules it marks as managing access. It is the application's
     /// data, so it lives in the composition root, not here; the other modules state their permissions themselves, on the
     /// <c>[Permissions]</c> classes they declare, and the host adds them all with
@@ -72,7 +72,7 @@ public static class TenantsInfrastructure
         host.RequirePostgres().AddContext<TenantsContext>(services, (application, options) => options
             .UseDDDToolkit(application));
 
-        // The tenant of Tenancy's caller on every connection, the rights left to the database, whose trigger
+        // The tenant of Tenancy's user on every connection, the rights left to the database, whose trigger
         // writes them, and every flow of work required to say who it runs as. It brings Tenancy's start-up checks
         // of the database: the scoped system role stays in its tenant, the reads across tenants answer, and the
         // policies, functions and the index on a tenant's root are the ones this catalogue writes. The host runs
@@ -94,10 +94,10 @@ public static class TenantsInfrastructure
             options.OperatorTokenRoles.UnionWith(OperatorTokenRoles);
         });
 
-        // Invitations, generated like AddTenancy and closed over the module's classes: the invitation class and
-        // its id are named. Their use cases, and the store that keeps an invitation apart from its token's digest.
-        // An invitation stays open for the package's seven days.
-        services.AddTenancyInvitations<Invitation, InvitationId, TenantsContext>();
+        // Invitations, generated like AddTenancy and closed over the module's classes, the invitation class among them:
+        // their manager, and the store that keeps an invitation apart from its token's digest. An invitation stays open
+        // for the package's seven days.
+        services.AddTenancyInvitations<TenantsContext>();
 
         // What a request of this module requires of its caller is one of Tenancy's cases, and the package's check
         // decides them: added for the module's request interface, generated like AddTenancy and closed over the
@@ -117,7 +117,7 @@ public static class TenantsInfrastructure
         {
             // What changes who may do what is kept in the access history as well, by the save that stores it in
             // the outbox, and each row says who made the change. A rename changes nobody's access, and is left out.
-            // A role that followed its pack, once the host's SyncRolePacks() found the pack changed, is among what is
+            // A role that followed its starter role, once the host's SyncStarterRoles() found the starter role changed, is among what is
             // kept: it is how the sample tells a tenant's administrators, who read it on the History page, with the
             // permissions that came in and went out. A host that mails them maps the event to a contract of its own.
             // An invitation's own events are stored and kept off the sinks like the rest, and are no part of the
@@ -129,7 +129,7 @@ public static class TenantsInfrastructure
             host.Publish(outbox);
         }));
 
-        // The poller marks each stored event handled. It needs no Tenancy caller: the outbox is not kept to a tenant.
+        // The poller marks each stored event handled. It needs no Tenancy user: the outbox is not kept to a tenant.
         services.AddOutboxBackgroundService<TenantsContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
         return services;

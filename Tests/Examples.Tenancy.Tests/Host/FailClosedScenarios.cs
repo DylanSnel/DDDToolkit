@@ -18,7 +18,7 @@ namespace Examples.Tenancy.Tests.Host;
 
 /// <summary>
 /// Work with no caller is refused, and background work runs as system work inside one tenant: nothing gets into
-/// a tenant without a Tenancy caller that was begun on purpose, and what was begun stays in its tenant.
+/// a tenant without a Tenancy user that was begun on purpose, and what was begun stays in its tenant.
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
@@ -63,10 +63,10 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
     public async Task Work_outside_any_scope_is_refused()
     {
         var host = await sample.SharedAsync();
-        TenancyCallers.Ambient.Should().BeNull("nothing in this test began a Tenancy caller");
+        TenancyUsers.Ambient.Should().BeNull("nothing in this test began a Tenancy user");
 
         await using var scope = host.Services.CreateAsyncScope();
-        var seats = scope.ServiceProvider.GetRequiredService<TenancyUseCases.SeatCommands>();
+        var seats = scope.ServiceProvider.GetRequiredService<SeatManager>();
 
         var suspend = () => seats.SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
 
@@ -82,7 +82,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         // The rows are there: the role that owns the database counts every tenant's.
         (await onPostgres.AsOwnerAsync<long>(EveryProject, Cancellation)).Should().Be(Harbor.Projects.Count + Meadow.Projects.Count);
 
-        using (Callers.Begin(Caller.System))
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
@@ -97,18 +97,18 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             (await RefusedAsync(() => tenancy.Seats.IgnoreQueryFilters().CountAsync(Cancellation))).Should().Be(PostgresErrorCodes.InsufficientPrivilege);
 
             // A Tenancy command refuses it, and so does the save check under a module's own write.
-            var suspend = () => scope.ServiceProvider.GetRequiredService<TenancyUseCases.SeatCommands>().SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
+            var suspend = () => scope.ServiceProvider.GetRequiredService<SeatManager>().SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
             (await suspend.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(TenancyRefusals.NotSeated);
 
             // It finds no project to change, so one is put before it: loaded as harbor's own work, which reads
             // harbor's rows, and changed and saved once that work has ended and the system caller is all there is.
             Project pier;
-            using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+            using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
             {
                 pier = await projects.Projects.AsTracking().SingleAsync(project => project.Id == pierSeven.Id, Cancellation);
             }
 
-            TenancyCallers.Ambient.Should().BeNull("harbor's work has ended");
+            TenancyUsers.Ambient.Should().BeNull("harbor's work has ended");
             pier.Rename("Pier 7, renamed by the application");
             var save = () => projects.SaveChangesAsync(Cancellation);
             (await save.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(TenancyRefusals.NotSeated);
@@ -124,7 +124,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         var host = onPostgres.Host;
         var gardenShed = Meadow.ProjectNamed("Garden shed");
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             // It reads all of harbor, and nothing of meadow.
             await using (var scope = host.Services.CreateAsyncScope())
@@ -145,7 +145,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             {
                 var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
                 Project shed;
-                using (TenancyUseCases.BeginSystemIn(Meadow.Id, Meadow.Administrator.Id))
+                using (SampleAccess.Manager.BeginSystemIn(Meadow.Id, Meadow.Administrator.Id))
                 {
                     shed = await projects.Projects.AsTracking().SingleAsync(project => project.Id == gardenShed.Id, Cancellation);
                 }
@@ -184,7 +184,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
     public async Task An_ambient_caller_leaking_into_a_request_is_replaced()
     {
         var logs = new RecordingLoggerProvider();
-        var recorder = new AmbientCallerRecorder();
+        var recorder = new AmbientUserRecorder();
         await using var host = await sample.StartAsync(services =>
         {
             services.AddSingleton<ILoggerProvider>(logs);
@@ -201,7 +201,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         IReadOnlyList<string> answered;
         JsonElement me;
         JsonElement seats;
-        using (TenancyUseCases.BeginSystemIn(Meadow.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Meadow.Id))
         {
             answered = [.. (await rhea.VisibleProjectsAsync()).Names()];
             me = await rhea.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -210,36 +210,36 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             recorder.Clear();
             seats = await rhea.GetFromJsonAsync<JsonElement>("/me/seats", Cancellation);
 
-            Callers.Ambient!.IsSystemIn.Should().BeTrue("the test's own flow still has the system work that leaked");
+            BegunUser!.Kind.Should().Be(CurrentUserKind.SystemIn, "the test's own flow still has the system work that leaked");
         }
 
         // Rhea's own answer: her projects in harbor, as her seat, not everything in meadow as system work.
         answered.Should().Equal(hers).And.NotContain("Garden shed");
         me.GetProperty("seat").GetProperty("id").GetGuid().Should().Be(Harbor.SeatOf(DemoPeople.Rhea).Value);
 
-        // Her seat was looked up as nobody, with no Tenancy caller at all, not as the system work in meadow that leaked in.
+        // Her seat was looked up as nobody, with no Tenancy user at all, not as the system work in meadow that leaked in.
         recorder.Lookups.Should().NotBeEmpty().And.OnlyContain(
             caller => caller == null,
-            "tenant selection replaced the leaked Tenancy caller with none, which every reader takes for nobody, before it looked the seat up");
+            "tenant selection replaced the leaked Tenancy user with none, which every reader takes for nobody, before it looked the seat up");
 
-        // And the toolkit's caller inside the request was her user, not the scoped system caller that leaked in.
+        // And the toolkit's current user inside the request was her user, not the scoped system caller that leaked in.
         recorder.Seen.Should().NotBeEmpty().And.OnlyContain(
-            caller => caller != null && caller.Kind == CallerKind.User && caller.UserId == DemoPeople.Rhea.Id,
+            caller => caller != null && caller.Kind == CurrentUserKind.User && caller.Id == DemoPeople.Rhea.Id,
             "the request made its own caller current");
-        seats.EnumerateArray().Select(seat => seat.GetProperty("tenant").GetProperty("slug").GetString()).Should().Equal(Harbor.Slug);
+        seats.EnumerateArray().Select(seat => seat.GetProperty("slug").GetString()).Should().Equal(Harbor.Slug);
 
         logs.Entries.Should().Contain(
-            entry => entry.Level == LogLevel.Warning && entry.Message.Contains("Tenancy caller was current", StringComparison.Ordinal),
-            "the leaked Tenancy caller reached the request, and tenant selection replaced it");
+            entry => entry.Level == LogLevel.Warning && entry.Message.Contains("Tenancy user was current", StringComparison.Ordinal),
+            "the leaked Tenancy user reached the request, and tenant selection replaced it");
         logs.Entries.Should().Contain(
-            entry => entry.Level == LogLevel.Warning && entry.Message.Contains("SystemIn caller was current", StringComparison.Ordinal),
-            "and so did the toolkit's caller, which the request replaced with its own");
+            entry => entry.Level == LogLevel.Warning && entry.Message.Contains("SystemIn user was begun", StringComparison.Ordinal),
+            "and so did the toolkit's current user, which the request replaced with its own");
     }
 
     [Fact]
     public async Task The_request_caller_is_current_for_the_request()
     {
-        var recorder = new AmbientCallerRecorder();
+        var recorder = new AmbientUserRecorder();
         await using var host = await sample.StartAsync(recorder.AddTo);
         using var rhea = await host.ClientAsync("rhea", Harbor.Slug);
         using var nobody = host.Client(token: null, tenant: null);
@@ -251,7 +251,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         // who is calling, and so does every connection the request opens, for the role its statements run as:
         // each time, the request's own caller was the one that was current.
         seats.GetArrayLength().Should().BeGreaterThan(0);
-        recorder.Seen.Should().NotBeEmpty().And.OnlyContain(caller => caller != null && caller.Kind == CallerKind.User && caller.UserId == DemoPeople.Rhea.Id);
+        recorder.Seen.Should().NotBeEmpty().And.OnlyContain(caller => caller != null && caller.Kind == CurrentUserKind.User && caller.Id == DemoPeople.Rhea.Id);
 
         // A request without a token is refused by the route, which needs a signed-in person.
         using (var anonymous = await nobody.GetAsync("/me/seats", Cancellation))
@@ -261,13 +261,13 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
 
         // What tenant selection makes current for such a request is the anonymous caller, not the system: run
         // on a request of its own, with no token, in front of a step that reads what is current.
-        Caller? current = null;
-        ITenancyCaller? tenancy = null;
+        CurrentUserSnapshot? current = null;
+        ITenancyUser? tenancy = null;
         var pipeline = new ApplicationBuilder(host.Services);
         pipeline.UseTenantSelection();
         pipeline.Run(_ =>
         {
-            (current, tenancy) = (Callers.Ambient, TenancyCallers.Ambient);
+            (current, tenancy) = (BegunUser, TenancyUsers.Ambient);
             return Task.CompletedTask;
         });
         await using (var scope = host.Services.CreateAsyncScope())
@@ -275,8 +275,8 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             await pipeline.Build()(new DefaultHttpContext { RequestServices = scope.ServiceProvider });
         }
 
-        current.Should().BeSameAs(Caller.Anonymous);
-        tenancy.Should().NotBeNull().And.Match<ITenancyCaller>(caller => caller.Kind == TenancyCallerKind.Nobody);
+        current.Should().BeSameAs(CurrentUserSnapshot.Anonymous);
+        tenancy.Should().NotBeNull().And.Match<ITenancyUser>(caller => caller.Kind == TenancyUserKind.Nobody);
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value },
             Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var renamed = await leo.PutAsJsonAsync($"/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}/name", new { name = "Pier 7 east" }, Cancellation))
@@ -311,7 +311,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             recorded.StatusCode.Should().Be(HttpStatusCode.Created);
         }
 
-        // The pollers run in the background, where no Tenancy caller was ever begun.
+        // The pollers run in the background, where no Tenancy user was ever begun.
         var outboxes = await Outboxes.DrainedAsync(host, Cancellation);
 
         foreach (var (outbox, rows) in outboxes)
@@ -320,7 +320,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             rows.Should().OnlyContain(row => row.ProcessedAt != null, "{0}'s poller marked every row handled", outbox);
         }
 
-        sink.Offered.Should().NotBeEmpty().And.OnlyContain(offered => offered.TenancyCaller == null, "delivery runs with no Tenancy caller");
+        sink.Offered.Should().NotBeEmpty().And.OnlyContain(offered => offered.TenancyUser == null, "delivery runs with no Tenancy user");
     }
 
     [Fact]
@@ -340,7 +340,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value },
             Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var renamed = await leo.PutAsJsonAsync($"/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}/name", new { name = "Pier 7 east" }, Cancellation))

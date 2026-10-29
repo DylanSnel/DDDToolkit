@@ -39,11 +39,12 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         var pierSeven = Harbor.ProjectNamed("Pier 7").Id.Value.ToString();
 
         var me = (await api.WhoAmIAsync(Cancellation)).Value!;
-        me.Tenant.Should().Be(new TenantInfo(Harbor.Id.Value, "harbor", "Harbor Works", "hierarchical", "active"));
+        me.Tenant.Should().Be(new TenantInfo(Harbor.Id.Value, "harbor", "hierarchical", "active"));
+        me.TenantName.Should().Be("Harbor Works");
         me.Seat.DisplayName.Should().Be("Rhea");
-        me.Placements.Should().ContainSingle().Which.Unit.Path.Should().Be("Harbor Works / North");
-        me.Placements[0].Grants.Should().ContainSingle().Which.Should().Match<GrantInfo>(grant => grant.Role == "Area manager" && grant.AppliesNow && grant.EndsAt == null);
-        me.Roles.Should().ContainSingle().Which.FromPack.Should().Be(SampleCatalogue.AreaManager);
+        me.PathOf(me.Placements.Should().ContainSingle().Which.UnitId).Should().Be("Harbor Works / North");
+        me.Placements[0].Grants.Should().ContainSingle().Which.Should().Match<GrantInfo>(grant => me.NameOf(grant.RoleId) == "Area manager" && me.AppliesNow(grant) && grant.EndsAt == null);
+        me.Roles.Should().ContainSingle().Which.FromStarterRole.Should().Be(SampleCatalogue.AreaManager);
         me.Permissions.Single(permission => permission.Permission == ProjectPermissionNames.View).Reaches.Select(unit => unit.Path)
             .Should().BeEquivalentTo(new[] { "Harbor Works / North", "Harbor Works / North / North Coast", "Harbor Works / North / North Inland" });
 
@@ -149,10 +150,12 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         var (api, _) = await SignInAsync("hana");
 
         var roles = (await api.TenantRolesAsync(Cancellation)).Value!;
-        roles.Where(role => role.ManagesAccess).Select(role => role.FromPack)
+        roles.Where(role => role.ManagesAccess).Select(role => role.FromStarterRole)
             .Should().BeEquivalentTo(new[] { SampleCatalogue.AccessAdmin, SampleCatalogue.AreaManager, SampleCatalogue.CrewLead, SampleCatalogue.PeopleOffice });
         var me = (await api.WhoAmIAsync(Cancellation)).Value!;
-        me.Roles.Should().ContainSingle().Which.Should().Match<RoleInfo>(role => role.FromPack == SampleCatalogue.PeopleOffice && role.ManagesAccess);
+        var held = me.Roles.Should().ContainSingle().Which;
+        held.FromStarterRole.Should().Be(SampleCatalogue.PeopleOffice);
+        (await api.RolesByIdAsync([held.Id], Cancellation)).Value.Should().ContainSingle().Which.ManagesAccess.Should().BeTrue("the overview names the role, and the directory says what it is used for");
         var permissions = (await api.PermissionCatalogueAsync(Cancellation)).Value!.Permissions;
         permissions.Single(permission => permission.Name == ProjectPermissionNames.ChangeOwner).ManagesAccess.Should().BeTrue();
         permissions.Single(permission => permission.Name == ProjectPermissionNames.ManageCrew).ManagesAccess.Should().BeTrue();
@@ -219,8 +222,8 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         invited.Value.ToString().Should().NotContain(token);
 
         var listed = (await tove.OpenInvitationsAsync(Cancellation)).Value!.Should().ContainSingle().Subject;
-        listed.Should().Match<InvitationInfo>(invitation => invitation.Id == invited.Value.InvitationId && invitation.Address == DemoPeople.Juno.Email
-            && invitation.UnitId == meadow.Root.Value && invitation.RoleEndsAt == null && invitation.IssuedBy == meadow.Administrator.Id.Value);
+        listed.Should().Match<InvitationInfo>(invitation => invitation.Id == invited.Value.Invitation.Id && invitation.Address == DemoPeople.Juno.Email
+            && invitation.UnitId == meadow.Root.Value && invitation.GrantUntil == null && invitation.IssuedBy == meadow.Administrator.Id.Value);
 
         // Juno accepts with the token and the name she is shown by in meadow, naming no tenant, and the session then
         // works where her new seat is.
@@ -229,16 +232,17 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         accepted.Tenant.Should().BeNull("accepting names no tenant");
         accepted.RawBody.Should().NotContain(token);
         var seats = (await juno.SeatsOfMineAsync(Cancellation)).Value!;
-        var hers = seats.Single(mine => mine.Seat.Id == accepted.Value!.SeatId);
-        junoSession.SeatAdded(hers.Tenant.Slug);
+        var hers = seats.Single(mine => mine.Seat.Id == accepted.Value!.Seat.Id);
+        accepted.Value!.Tenant.Slug.Should().Be(hers.Slug, "the answer names the tenant of the new seat");
+        junoSession.SeatAdded(accepted.Value!.Tenant.Slug);
         (junoSession.Tenant, junoSession.SeatsAdded).Should().Be((meadow.Slug, 1));
         var overview = (await juno.WhoAmIAsync(Cancellation)).Value!;
         overview.Seat.DisplayName.Should().Be("Juno");
-        overview.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.Role.Should().Be("Surveyor");
+        overview.NameOf(overview.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.RoleId).Should().Be("Surveyor");
 
         // A second one is revoked from the list, and the refusal of a token nobody was given reads as a problem.
         var second = await tove.InvitePersonAsync("wren@example.test", meadow.Root.Value.ToString(), meadow.Roles[SampleCatalogue.Observer].Value.ToString(), until: null, Cancellation);
-        (await tove.CancelInvitationAsync(second.Value!.InvitationId, Cancellation)).Succeeded.Should().BeTrue();
+        (await tove.CancelInvitationAsync(second.Value!.Invitation.Id, Cancellation)).Succeeded.Should().BeTrue();
         (await tove.OpenInvitationsAsync(Cancellation)).Value!.Should().BeEmpty();
         (await juno.AcceptInvitationAsync("not-a-token", displayName: null, Cancellation)).Problem!.Code.Should().Be(TenancyRefusals.InvitationNotFound);
     }

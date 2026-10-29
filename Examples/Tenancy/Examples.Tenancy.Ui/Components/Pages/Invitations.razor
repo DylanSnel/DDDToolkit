@@ -39,7 +39,7 @@ else
                             <tr>
                                 <td>@invitation.Address</td>
                                 <td>@_names.OfUnit(invitation.UnitId)</td>
-                                <td>@_names.OfRole(invitation.RoleId) <span class="small text-body-secondary">@(invitation.RoleEndsAt is { } ends ? T["invitations.role-until", UntilDay.Shown(ends)] : T["common.open-ended"])</span></td>
+                                <td>@_names.OfRole(invitation.RoleId) <span class="small text-body-secondary">@(invitation.GrantUntil is { } ends ? T["invitations.role-until", UntilDay.Shown(ends)] : T["common.open-ended"])</span></td>
                                 <td class="small text-nowrap">@Day(invitation.ExpiresAt)</td>
                                 <td>@(invitation.IssuedBy is { } seat ? _names.OfSeat(seat) : "–")</td>
                                 <td><ActionButton Label="@T["invitations.revoke"]" Allowed="true" ShowsAnswer="false" Send="() => Wrap(Api.CancelInvitationAsync(invitation.Id))" Answered="RevokedAsync" /></td>
@@ -85,7 +85,7 @@ else
             @* Shown this once: the token is kept in this page's memory alone, until the page loads anything again. *@
             <div class="alert alert-success mt-3" role="status">
                 <strong>@T["invitations.issued.title"]</strong>
-                <p class="mb-1">@T["invitations.issued.text", Day(_issued.ExpiresAt)]</p>
+                <p class="mb-1">@T["invitations.issued.text", Day(_issued.Invitation.ExpiresAt)]</p>
                 <code class="user-select-all">@Navigation.ToAbsoluteUri("invitations/accept")#@_issued.Token</code>
                 <p class="mb-1 mt-2">@T["invitations.issued.token"]</p>
                 <code class="user-select-all">@_issued.Token</code>

@@ -29,11 +29,11 @@ public static class EveryUseCase
 
         // Roles given and taken away: by a grants manager, a role whose permissions he does not hold, to someone else and to
         // himself; by a holder of a role's permissions that manage access, that role.
-        await As(Hiro, scoped => scoped.Seats().GrantAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, until: null, reason: "Standing in", cancellation));
-        await As(Hiro, scoped => scoped.Seats().RevokeAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, cancellation));
-        await As(Hiro, scoped => scoped.Seats().GrantAsync(Hiro.Seat, North, HarborRoles.Operator, until: null, reason: null, cancellation));
-        await As(Seth, scoped => scoped.Seats().GrantAsync(Oli.Seat, NorthPier, HarborRoles.Supervisor, until: null, reason: null, cancellation));
-        await As(Seth, scoped => scoped.Seats().RevokeAsync(Oli.Seat, NorthPier, HarborRoles.Supervisor, cancellation));
+        await As(Hiro, scoped => scoped.Seats().GrantAsync(Oli.Seat, HarborRoles.Watcher, NorthPier, until: null, reason: "Standing in", cancellation));
+        await As(Hiro, scoped => scoped.Seats().RevokeAsync(Oli.Seat, HarborRoles.Watcher, NorthPier, cancellation));
+        await As(Hiro, scoped => scoped.Seats().GrantAsync(Hiro.Seat, HarborRoles.Operator, North, until: null, reason: null, cancellation));
+        await As(Seth, scoped => scoped.Seats().GrantAsync(Oli.Seat, HarborRoles.Supervisor, NorthPier, until: null, reason: null, cancellation));
+        await As(Seth, scoped => scoped.Seats().RevokeAsync(Oli.Seat, HarborRoles.Supervisor, NorthPier, cancellation));
 
         // Invitations, by the administrator, who alone manages seats for the whole tenant: one cancelled by whoever
         // manages seats at its unit, who lists it first, and one accepted by a person who has no seat, which makes it.
@@ -41,8 +41,8 @@ public static class EveryUseCase
             scoped.Invitations().IssueAsync("lark@example.test", NorthPier, HarborRoles.Watcher, grantUntil: null, lifetime: null, cancellation));
         await As(Seth, async scoped =>
         {
-            (await scoped.Invitations().ListOpenAsync(cancellation)).Should().ContainSingle(invitation => invitation.Id == withdrawn.Id);
-            await scoped.Invitations().CancelAsync(withdrawn.Id, cancellation);
+            (await scoped.Invitations().ListOpenAsync(cancellation)).Should().ContainSingle(invitation => invitation.Id == withdrawn.Invitation.Id);
+            await scoped.Invitations().CancelAsync(withdrawn.Invitation.Id, cancellation);
         });
         var invited = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped =>
             scoped.Invitations().IssueAsync("wren@example.test", North, HarborRoles.Operator, grantUntil: null, lifetime: null, cancellation));
@@ -53,20 +53,20 @@ public static class EveryUseCase
         await As(Seth, scoped => scoped.Seats().PlaceAsync(Eve.Seat, North, primary: false, cancellation));
         await As(Seth, scoped => scoped.Seats().MakePrimaryAsync(Eve.Seat, North, cancellation));
         await As(Seth, scoped => scoped.Seats().PlaceAsync(Oli.Seat, North, primary: false, cancellation));
-        await As(Hiro, scoped => scoped.Seats().GrantAsync(Oli.Seat, North, HarborRoles.Watcher, until: null, reason: null, cancellation));
-        await As(Seth, scoped => scoped.Seats().GrantAsync(Oli.Seat, North, HarborRoles.Supervisor, until: null, reason: null, cancellation));
+        await As(Hiro, scoped => scoped.Seats().GrantAsync(Oli.Seat, HarborRoles.Watcher, North, until: null, reason: null, cancellation));
+        await As(Seth, scoped => scoped.Seats().GrantAsync(Oli.Seat, HarborRoles.Supervisor, North, until: null, reason: null, cancellation));
         await As(Seth, scoped => scoped.Seats().WithdrawAsync(Oli.Seat, North, cancellation));
 
         // A seat takes away its own role that manages access, which leaves it without the permission the next row's policy
         // would ask.
-        await As(Hiro, scoped => scoped.Seats().RevokeAsync(Hiro.Seat, North, GrantsDesk, cancellation));
+        await As(Hiro, scoped => scoped.Seats().RevokeAsync(Hiro.Seat, GrantsDesk, North, cancellation));
 
         // Seats: added, renamed, by a manager and by the seat itself, and stopped and started again, by a manager and
         // by a seats manager for the whole tenant itself, which suspends and deactivates itself.
-        var pat = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().AddSeatAsync(Pat, cancellation, configure: seat => seat.Rename("Pat")));
-        var seatsDesk = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().CreateAsync("Seats desk", "Keeps the seats", [TenancyPermissions.SeatsManage], cancellation));
+        var pat = (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().AddAsync(Pat, cancellation, configure: seat => seat.Rename("Pat")))).Id;
+        var seatsDesk = (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().CreateAsync("Seats desk", "Keeps the seats", [TenancyPermissions.SeatsManage], cancellation))).Id;
         await As(Ada, scoped => scoped.Seats().PlaceAsync(pat, HarborRoot, primary: true, cancellation));
-        await As(Ada, scoped => scoped.Seats().GrantAsync(pat, HarborRoot, seatsDesk, until: null, reason: null, cancellation));
+        await As(Ada, scoped => scoped.Seats().GrantAsync(pat, seatsDesk, HarborRoot, until: null, reason: null, cancellation));
         await As(Ada, scoped => scoped.RenameSeatAsync(Hiro.Seat, "Hiro B.", cancellation));
         await As(Oli, scoped => scoped.RenameSeatAsync(Oli.Seat, "Oliver", cancellation));
         await As(Ada, scoped => scoped.Seats().SuspendAsync(Oli.Seat, cancellation));
@@ -88,38 +88,38 @@ public static class EveryUseCase
         await As(Seth, scoped => scoped.Seats().WithdrawAsync(Seth.Seat, North, cancellation));
 
         // Roles, by the administrator: made, renamed, their permissions changed, those of a role that manages access too, and archived.
-        var clerk = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().CreateAsync("Clerk", "Keeps records", [HostCatalogue.WidgetRead], cancellation));
+        var clerk = (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().CreateAsync("Clerk", "Keeps records", [HostCatalogue.WidgetRead], cancellation))).Id;
         await As(Ada, scoped => scoped.Roles().RenameAsync(clerk, "Clerks", "Keeps the records", cancellation));
         await As(Ada, scoped => scoped.Roles().SetPermissionsAsync(HarborRoles.Operator, [HostCatalogue.WidgetRead], cancellation));
         await As(Ada, scoped => scoped.Roles().SetPermissionsAsync(HarborRoles.Supervisor, [TenancyPermissions.UnitsManage, TenancyPermissions.SeatsManage, HostCatalogue.WidgetChange], cancellation));
         await As(Ada, scoped => scoped.Roles().ArchiveAsync(HarborRoles.Watcher, cancellation));
 
-        // The roles follow their packs, by system work in the tenant, once the application ships a catalogue whose
-        // supervisor's pack also reads the history: Harbor's Supervisor gains that permission, and keeps out what Ada took out.
+        // The roles follow their starter roles, by system work in the tenant, once the application ships a catalogue whose
+        // supervisor's starter role also reads the history: Harbor's Supervisor gains that permission, and keeps out what Ada took out.
         var later = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.SupervisorPack ? pack with { Permissions = [.. pack.Permissions, TenancyPermissions.HistoryView] } : pack)],
+                StarterRoles = [.. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole.Key == HostCatalogue.SupervisorStarterRole ? starterRole with { Permissions = [.. starterRole.Permissions, TenancyPermissions.HistoryView] } : starterRole)],
             },
             []);
-        await services.BySystemIn(Harbor, scoped => new HostTenancy.RoleCommands(
-                scoped.GetRequiredService<HostTenancy.IStore>(),
+        await services.BySystemIn(Harbor, scoped => new HostRoleManager(
+                scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>(),
                 later,
                 scoped.GetRequiredService<TimeProvider>())
-            .FollowPacksAsync(cancellation));
+            .FollowStarterRolesAsync(cancellation));
 
         // The tenant: renamed by the administrator; suspended and started again by system work, which alone may.
-        await As(Ada, scoped => scoped.Tenants().RenameOrganizationAsync("Harbor Group", cancellation));
+        await As(Ada, scoped => scoped.Organization().RenameAsync("Harbor Group", cancellation));
         await services.BySystemIn(Harbor, scoped => scoped.Tenants().SuspendAsync("A pause", cancellation));
         await services.BySystemIn(Harbor, scoped => scoped.Tenants().ReactivateAsync(cancellation));
 
         // A flat tenant, provisioned, made hierarchical by its administrator, and closed.
         var dan = Guid.NewGuid();
-        HostTenancy.ProvisionedTenant provisioned;
+        ProvisionedTenant provisioned;
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("estuary", "Estuary Works", TenantShape.Flat, "Estuary", dan, TenantId: Estuary),
+            provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionWithIdsAsync(scoped.GetRequiredService<TenancyCatalogue>(),
+                new TenantToProvision("estuary", "Estuary Works", TenantShape.Flat, "Estuary", dan, TenantId: Estuary),
                 cancellation));
         }
 

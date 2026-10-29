@@ -1,6 +1,6 @@
 using Examples.Tenancy.Tenants.Application.Invitations.Commands;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 using HotChocolate;
-using HotChocolate.Types;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Api.Invitations.GraphQL;
@@ -22,7 +22,7 @@ internal static class InvitationsMutations
     /// invitation's token, and it says nothing of whether the address had an account.
     /// </summary>
     [Mutation]
-    public static async Task<TenancyUseCases.IssuedInvitation<InvitationId>> PersonInviteAsync(
+    public static async Task<InvitationManager.IssuedInvitation> PersonInviteAsync(
         string address,
         OrganizationUnitId unitId,
         RoleId roleId,
@@ -32,26 +32,21 @@ internal static class InvitationsMutations
         => await sender.Send(new InvitePerson(address, unitId, roleId, until), cancellationToken);
 
     /// <summary>
-    /// Cancels an open invitation: its token no longer works. The answer is the id that was asked, since a
-    /// cancelled invitation is not among the open ones to read.
+    /// Cancels an open invitation: its token no longer works. The answer is the invitation, cancelled, with the
+    /// address it was for forgotten.
     /// </summary>
     [Mutation]
-    [UseMutationConvention(PayloadFieldName = "invitationId")]
-    public static async Task<InvitationId> InvitationCancelAsync(InvitationId id, [Service] ISender sender, CancellationToken cancellationToken)
-    {
-        await sender.Send(new CancelInvitation(id), cancellationToken);
-        return id;
-    }
+    public static async Task<Invitation> InvitationCancelAsync(InvitationId id, [Service] ISender sender, CancellationToken cancellationToken)
+        => await sender.Send(new CancelInvitation(id), cancellationToken);
 
     /// <summary>
     /// Accepts the invitation a token is for, as the signed-in person who sends it. Like <c>seatsOfMine</c> it
     /// needs no seat and no <c>Tenant</c> header: whoever accepts has no seat there yet, and the token says which
     /// tenant. <paramref name="displayName"/> is the name they are shown by there: this application's field on its
-    /// seat, which its rule requires. The answer is the id of the seat they now have, as the route's is;
-    /// <c>seatsOfMine</c> then lists it with its tenant.
+    /// seat, which its rule requires. The answer is the invitation manager's record, as the route's is: the tenant,
+    /// whose slug the next request names, and the seat they now have.
     /// </summary>
     [Mutation]
-    [UseMutationConvention(PayloadFieldName = "seatId")]
-    public static async Task<SeatId> InvitationAcceptAsync(string token, string displayName, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<InvitationManager.AcceptedInvitation> InvitationAcceptAsync(string token, string displayName, [Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new AcceptInvitation(token, displayName), cancellationToken);
 }

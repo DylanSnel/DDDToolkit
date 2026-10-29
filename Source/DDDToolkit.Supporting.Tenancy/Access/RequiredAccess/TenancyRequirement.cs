@@ -23,11 +23,11 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// declare. What is about who is calling and nothing else is the core's: anyone
 /// (<see cref="AccessRequirement.AllowAnonymous"/>) and a signed-in user who need not have a seat yet
 /// (<see cref="AccessRequirement.SignedIn"/>). The application's own work is no case: it is a scope trusted code
-/// begins around the work, <c>TenancyUseCases.BeginSystem()</c> and its kin, and what only it may do the package's
-/// use cases refuse everyone else, with <c>access.system-only</c>.
+/// begins around the work, <c>access.BeginSystem()</c> and its kin, and what only it may do the package's
+/// managers refuse everyone else, with <c>access.system-only</c>.
 /// <para>
-/// A case says the first thing a request requires, the one the request itself can name. What Tenancy's own use
-/// cases ask beyond it, such as who may give a role that manages access, or whether a unit may move with what
+/// A case says the first thing a request requires, the one the request itself can name. What Tenancy's own
+/// managers ask beyond it, such as who may give a role that manages access, or whether a unit may move with what
 /// hangs below it, they ask themselves, whoever calls them, and the database's policies ask again: those rules
 /// are the package's, and a request does not spell them.
 /// </para>

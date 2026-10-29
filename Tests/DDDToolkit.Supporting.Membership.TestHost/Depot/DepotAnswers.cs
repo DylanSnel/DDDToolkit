@@ -5,7 +5,7 @@ using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Membership.TestHost.Crates;
 using DDDToolkit.Supporting.Membership.TestHost.Pallets;
 using DDDToolkit.Supporting.Membership.TestHost.Persistence;
-using DDDToolkit.Supporting.Membership.UseCases;
+using DDDToolkit.Supporting.Membership.Managers;
 using Microsoft.EntityFrameworkCore;
 
 namespace DDDToolkit.Supporting.Membership.TestHost.Depot;
@@ -23,7 +23,7 @@ public static class DepotFunctions
     public const string Owner = "depot";
 
     /// <summary>Answers the calling porter, or <c>NULL</c> for a caller the depot does not count.</summary>
-    public static DatabaseFunction CallerPorter { get; } = new(Owner, "caller_porter");
+    public static DatabaseFunction CurrentPorter { get; } = new(Owner, "current_porter");
 
     /// <summary>Answers, for a permission, the depot's roles in use that give it.</summary>
     public static DatabaseFunction RolesWithPermission { get; } = new(Owner, "roles_with_permission");
@@ -45,11 +45,11 @@ public sealed class DepotDesk
     public void TakeOn(Porter porter) => _porters[porter.UserId] = (porter.Id, porter.Active);
 
     /// <summary>The porter <paramref name="caller"/> is, when the depot counts it.</summary>
-    public PorterId? ActivePorterOf(Caller caller)
-        => caller.UserId is { } user && _porters.TryGetValue(user, out var known) && known.Active ? known.Porter : null;
+    public PorterId? ActivePorterOf(CurrentUserSnapshot caller)
+        => caller.Id is { } user && _porters.TryGetValue(user, out var known) && known.Active ? known.Porter : null;
 
     /// <summary>Whether the depot knows <paramref name="caller"/> at all, counting or not.</summary>
-    public bool HasTakenOn(Caller caller) => caller.UserId is { } user && _porters.ContainsKey(user);
+    public bool HasTakenOn(CurrentUserSnapshot caller) => caller.Id is { } user && _porters.ContainsKey(user);
 }
 
 /// <summary>
@@ -58,10 +58,10 @@ public sealed class DepotDesk
 /// </summary>
 /// <param name="desk">Who the depot knows its callers as.</param>
 /// <param name="context">The depot's rows.</param>
-public sealed class PalletsInTheDepot(DepotDesk desk, DepotContext context) : ICallerMember<PalletId, PorterId>, IMemberDirectory<PalletId, PorterId>
+public sealed class PalletsInTheDepot(DepotDesk desk, DepotContext context) : ICurrentMember<PalletId, PorterId>, IMemberDirectory<PalletId, PorterId>
 {
     /// <inheritdoc />
-    public PorterId? Find(Caller caller) => desk.ActivePorterOf(caller);
+    public PorterId? Find(CurrentUserSnapshot caller) => desk.ActivePorterOf(caller);
 
     /// <inheritdoc />
     public async ValueTask<bool> IsActiveAsync(PorterId member, CancellationToken cancellationToken)
@@ -75,7 +75,7 @@ public sealed class PalletsInTheDepot(DepotDesk desk, DepotContext context) : IC
 /// <param name="desk">Who the depot knows its callers as.</param>
 /// <param name="context">The depot's rows, for what is asked outside a statement.</param>
 public sealed class CratesInTheDepot(DepotDesk desk, DepotContext context)
-    : ICallerMember<CrateId, PorterId>,
+    : ICurrentMember<CrateId, PorterId>,
       IMemberDirectory<CrateId, PorterId>,
       IMemberRoles<CrateId, DepotRoleId>,
       IRolesWithPermission<CrateId, DepotRoleId>,
@@ -85,11 +85,11 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext context)
     public const string NotOfTheDepot = "depot.not-a-porter";
 
     /// <inheritdoc />
-    public PorterId? Find(Caller caller) => desk.ActivePorterOf(caller);
+    public PorterId? Find(CurrentUserSnapshot caller) => desk.ActivePorterOf(caller);
 
     /// <inheritdoc />
     /// <remarks>Somebody the depot never took on is nobody its crates can be asked about, and is told so.</remarks>
-    public void Require(Caller caller)
+    public void Require(CurrentUserSnapshot caller)
     {
         if (!desk.HasTakenOn(caller))
         {
@@ -107,7 +107,7 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext context)
 
     /// <inheritdoc />
     /// <remarks>Over the context the statement runs on, which is not always this request's own.</remarks>
-    public IQueryable<DepotRoleId> RolesWith(DbContext context, Caller caller, string permission)
+    public IQueryable<DepotRoleId> RolesWith(DbContext context, CurrentUserSnapshot caller, string permission)
         => from given in context.Set<DepotRolePermission>()
            where given.Permission == permission
            join kept in context.Set<DepotRole>() on given.RoleId equals kept.Id
@@ -115,9 +115,9 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext context)
            select given.RoleId;
 
     /// <inheritdoc />
-    public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission)
+    public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission)
     {
-        var user = caller.UserId;
+        var user = caller.Id;
         return from porter in context.Set<Porter>()
                where porter.UserId == user && porter.Active
                join hold in context.Set<BayHold>() on porter.Id equals hold.PorterId

@@ -65,11 +65,47 @@ public partial class Order { }
 | [Modules](docs/modules.md) | `DDD_Module`, `[assembly: Module]` and the boundary the analyzer checks |
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
 | [Access requirements](docs/access-requirements.md) | What a command or a query requires of its caller, the checks that hold it to that before the handler, and the behavior written for Mediator |
-| [How a request is checked](docs/how-a-request-is-checked.md) | One request followed from the attribute on it to the rows it touches: the generated requirement, the module's checks, the statement at the door, the caller on the connection and the policies, with a walk-through to click through |
+| [How a request is checked](docs/how-a-request-is-checked.md) | One request followed from the attribute on it to the rows it touches: the generated requirement, the module's checks, the statement the access check sends, the caller on the connection and the policies, with a walk-through to click through |
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
-| [Tenancy](docs/tenancy.md) | The first supporting domain: tenants, the organization tree, seats and roles, and who may do what where |
-| [Membership](docs/membership.md) | The second supporting domain: access to a resource through its members, their roles and its owner, for as many kinds of resource as an application has |
+| [Tenancy](docs/tenancy/overview.md) | The first supporting domain: what it is for, what it does and does not do, and how its pieces connect |
+| [Tenancy: the tutorial](docs/tenancy/tutorial.md) | Tenancy built into an application step by step: why each step, the whole files, and what they do |
+| [Tenancy: your module](docs/tenancy/your-module.md) | The module that holds Tenancy: its packages, the model, your own classes and ids, the context and the registration, and calling its managers |
+| [Tenancy: roles and permissions](docs/tenancy/roles-and-permissions.md) | The permission catalogue, the starter roles a new tenant gets and how they follow your changes, who may give a role, and containment |
+| [Tenancy: who may do what](docs/tenancy/who-may-do-what.md) | Who acts and Tenancy's queries about the caller, what a request requires of its caller, and what a module reads of Tenancy |
+| [Tenancy: keeping tenants apart](docs/tenancy/keeping-tenants-apart.md) | The query filter and the save check that keep every read and save in the caller's tenant, and system work |
+| [Tenancy: names and languages](docs/tenancy/names-and-languages.md) | Turning the ids a module answers into names, how a seat is shown, and refusals and role names in the reader's language |
+| [Tenancy: invitations](docs/tenancy/invitations.md) | Inviting a person without an account yet into a tenant, with a unit and a role waiting |
+| [Tenancy: operators and history](docs/tenancy/operators-and-history.md) | The application's operators across tenants, who wrote and changed each row, and the access history |
+| [Tenancy on Postgres](docs/tenancy/postgres.md) | Tenancy's rules as row level security policies and functions in Postgres, how to set them up, and what they stop |
+| [Tenancy: the sample](docs/tenancy/the-sample.md) | The Tenancy sample: what is in it, the people and units of its seed, and its parts |
+| [Tenancy sample: who may do what](docs/tenancy/sample/who-may-do-what.md) | The sample's modules in layers, a request from route to save, what each request declares, roles and crews, paging, operators and invitations |
+| [Tenancy sample: GraphQL](docs/tenancy/sample/graphql.md) | One schema over the sample's three modules, what a query costs, the rules each module's schema keeps, and the administration's gateway |
+| [Tenancy sample: try it](docs/tenancy/sample/try-it.md) | Running the sample, its UI, one call followed to its refusal, and the presets that each break one rule |
+| [Tenancy sample: design choices](docs/tenancy/sample/design-choices.md) | Every Tenancy design choice with its code, something to try in the sample, and the test that holds it |
+| [Tenancy: design and limits](docs/tenancy/design.md) | Why Tenancy is shaped the way it is, what it does not do, and upgrading from key to permission |
+| [Tenancy API: aggregates and entities](docs/tenancy/reference/aggregates.md) | Generated from the code: the templates of tenant, organization, unit, seat, role and invitation, with their value objects, invariants and events |
+| [Tenancy API: managers](docs/tenancy/reference/managers.md) | Generated from the code: `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager` and `InvitationManager`, the stores a storage package implements, and the registration a host calls |
+| [Tenancy API: catalogue and starter roles](docs/tenancy/reference/catalogue.md) | Generated from the code: permissions, the catalogue, starter roles and their sync |
+| [Tenancy API: access manager and users](docs/tenancy/reference/access.md) | Generated from the code: `TenancyAccessManager`, the Tenancy user, actors, tenant selection and the requirement attributes, `[Operator]` among them |
+| [Tenancy API: queries and row access](docs/tenancy/reference/queries.md) | Generated from the code: `db.Tenancy()` and its queries, the read model, the projection and the row access rules |
+| [Tenancy API: refusals](docs/tenancy/reference/refusals.md) | Generated from the code: every refusal code and what it means |
+| [Tenancy API: Entity Framework](docs/tenancy/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package, with `[OfTenant]` and the mapping of a context |
+| [Tenancy API: Postgres](docs/tenancy/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
+| [Membership](docs/membership/overview.md) | The second supporting domain: access to one thing through the people on it, what it does and does not do, how its pieces connect, and what the application decides |
+| [Membership: the tutorial](docs/membership/tutorial.md) | Membership built into the Harbor application step by step: a board with its members, owner and roles, its database rules, and reach from above |
+| [Membership: resources and members](docs/membership/resources-and-members.md) | The packages, a whole resource with members and no Tenancy, the member list written for you, names, what the member list keeps, and several kinds of resource |
+| [Membership: permissions and roles](docs/membership/permissions-and-roles.md) | The settings of a permission, who holds one, who may give a role, and roles a customer makes: starter roles, changing a role, whose a role is |
+| [Membership: from the check to the save](docs/membership/checks-and-saves.md) | Requirements that combine, what holds a change from the check to the save, `MembershipAccessManager` and the queries inside your own statements, system work, and the expert hold |
+| [Membership on Postgres](docs/membership/postgres.md) | The functions your row access rules ask, who may ask them, the start-up check, and the lock on the member rows and the owner |
+| [Membership: beside an organization](docs/membership/beside-an-organization.md) | Who a member is, where the roles come from and reach from above, with Tenancy or an organization of your own |
+| [Membership: design and limits](docs/membership/design.md) | Why each piece of a resource with members is yours to write, and what the package does not do |
+| [Membership API: resource and members](docs/membership/reference/resource-and-members.md) | Generated from the code: the member template and its member list, periods and roles held, what the resource's class says, and the custom role template |
+| [Membership API: rules and permissions](docs/membership/reference/rules.md) | Generated from the code: `MembershipRules`, where the roles come from, the permissions on a resource and their settings, reach from above, and who a member is |
+| [Membership API: managers and access](docs/membership/reference/managers.md) | Generated from the code: the member manager, the role manager, who may be a member, `MembershipAccessManager`, the requirements and the resource access contracts |
+| [Membership API: refusals](docs/membership/reference/refusals.md) | Generated from the code: every refusal code, the codes of one resource, and their texts |
+| [Membership API: Entity Framework](docs/membership/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
+| [Membership API: Postgres](docs/membership/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
 | [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |
 | [FluentValidation](docs/fluent-validation.md) | A value object's rules as a FluentValidation validator, and value objects inside a request validator |
@@ -116,36 +152,38 @@ front of its name. The nuget.org account that owns the `DDDToolkit.*` ids cannot
 so `DDDToolkit` there is still 2.0.22. Only the package id is different. The assemblies and namespaces
 are the ones this page names, so `using DDDToolkit;` stays as it is.
 
-**3.2.0 is in preview.** This page and the docs describe it: 3.2.0-preview.5 as they are written. Until
+**3.2.0 is in preview.** This page and the docs describe it: 3.2.0-preview.6 as they are written. Until
 3.2.0 is released, add every `Temp.DDDToolkit.*` package with `--prerelease`, or with
-`--version 3.2.0-preview.5`, and keep them all at the same version. A package of this release next to 3.1.0
+`--version 3.2.0-preview.6`, and keep them all at the same version. A package of this release next to 3.1.0
 of another fails restore with NU1605, a package downgrade, or fails at run time with a `MissingMethodException`.
 
 | Package | Use it for |
 |---|---|
 | `DDDToolkit` | Base types and the core generators. Start here. |
-| `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DDDToolkit.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#ddd_module-and-the-package-that-brings-it) wants. |
+| `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DDDToolkit.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#the-module-name-in-generated-code) wants. |
 | `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
 | `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
 | `DDDToolkit.Messaging.Wolverine` | [Wolverine](https://wolverinefx.net/) as the transport between one process's outbox and another's inbox. |
 | `DDDToolkit.Messaging.MassTransit` | [MassTransit](https://masstransit.io/) 8 as that transport, for those already on it. |
-| `DDDToolkit.EntityFramework.Postgres` | Row level security on any Postgres: each connection a context opens runs as the caller, as PostgREST's do, and `[RowAccess]` rules written in C# become the policies. |
+| `DDDToolkit.EntityFramework.Postgres` | Row level security on any Postgres: each connection a context opens runs as the current user (`ICurrentUser`), as PostgREST's do, and `[RowAccess]` rules written in C# become the policies. |
 | `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations and row access rules written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
-| `DDDToolkit.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes or its JWT secret, and turned into the caller row level security runs your queries as. No Entity Framework needed. For server code, a client for Auth's admin API: invite an address, make a user under an id of your own, and find or delete one by id. |
-| `DDDToolkit.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the caller. |
-| `DDDToolkit.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the caller. |
+| `DDDToolkit.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes or its JWT secret, and turned into the current user row level security runs your queries as. No Entity Framework needed. For server code, a client for Auth's admin API: invite an address, make a user under an id of your own, and find or delete one by id. |
+| `DDDToolkit.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the current user. |
+| `DDDToolkit.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the current user. |
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
 | `DDDToolkit.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |
 | `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.9 or later. |
 | `DDDToolkit.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.9 or later. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
-| `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, and the access questions. No database in it. |
-| `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with the access questions as Entity Framework queries, on every provider. |
-| `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's questions as SQL functions, its row level security policies, and the start-up checks. |
-| `DDDToolkit.Supporting.Membership` | [Membership](docs/membership.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
-| `DDDToolkit.Supporting.Membership.EntityFramework` | A resource's members in a context of your own, a registration named after each resource, and the access questions inside your own statements. Its generator joins a resource to Tenancy where an application has both. |
-| `DDDToolkit.Supporting.Membership.Postgres` | A resource's access questions as SQL functions for your row access rules, and a start-up check. |
+| `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, a manager per aggregate, and the access manager. No database in it. |
+| `DDDToolkit.Supporting.Tenancy.Abstractions` | Tenancy's markers for domain classes, `[OfTenant]` on the property that says which tenant a row belongs to, for a module's domain project that sees only Tenancy's ids. Tenancy's package references it. |
+| `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with its queries as Entity Framework queries (`db.Tenancy()`), on every provider, and the convention that maps `[OfTenant]`. |
+| `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's queries as SQL functions, its row level security policies, and the start-up checks. |
+| `DDDToolkit.Supporting.Membership` | [Membership](docs/membership/overview.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
+| `DDDToolkit.Supporting.Membership.Abstractions` | Membership's markers for domain classes, `[At]` on the property that says where a resource hangs. Membership's package references it. |
+| `DDDToolkit.Supporting.Membership.EntityFramework` | A resource's members in a context of your own, mapped by convention, a registration named after each resource, and queries inside your own statements (`db.Boards.WhereIHold(permission)`). Its generator joins a resource to Tenancy where an application has both. |
+| `DDDToolkit.Supporting.Membership.Postgres` | A resource's access queries as SQL functions for your row access rules, and a start-up check. |
 | `DDDToolkit.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |
 
 ```bash
@@ -165,7 +203,7 @@ The core has no mediator dependency and does not need one: in-process event deli
 write, and `DDDToolkit.Mediator` only saves you writing it. The examples publish through Mediator
 rather than MediatR because MediatR is commercially licensed from version 13, and this repository
 prefers dependencies its users can take for free. MediatR still works perfectly well with the toolkit;
-[Delivering domain events](docs/event-delivery.md#the-delegate) shows the delegate to write for it.
+[Delivering domain events](docs/event-delivery.md#the-dispatch-delegate) shows the delegate to write for it.
 
 ## What the generators produce
 

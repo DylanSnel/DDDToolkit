@@ -1,4 +1,5 @@
 using System.Data.Common;
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -122,7 +123,7 @@ public sealed class PostgresPools : IAsyncDisposable
         services.AddSingleton(application =>
         {
             var pools = application.GetRequiredService<PostgresPools>();
-            return new ContextsByPurpose<TContext>(Options(application, pools.Requests), Options(application, pools.Background));
+            return new ContextsByPurpose<TContext>(application.GetRequiredService<ICurrentUser>(), Options(application, pools.Requests), Options(application, pools.Background));
         });
         services.AddSingleton<IDbContextFactory<TContext>>(application => application.GetRequiredService<ContextsByPurpose<TContext>>());
 

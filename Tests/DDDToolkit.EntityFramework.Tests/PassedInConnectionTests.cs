@@ -22,10 +22,10 @@ namespace DDDToolkit.EntityFramework.Tests;
 public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLifetime
 {
     private const string SetsTheRole = "set_config('role'";
-    private const string Calls = "CALL \"ddd\".use_caller";
-    private const string AsksForTheMark = "current_setting('ddd.caller_mark'";
+    private const string Calls = "CALL \"ddd\".use_current_user";
+    private const string AsksForTheMark = "current_setting('ddd.current_user_mark'";
 
-    private readonly CallerOfTheTest _caller = new();
+    private readonly UserOfTheTest _user = new();
     private readonly TenantSetting _tenant = new() { Current = "north" };
     private readonly SentStatements _sent = new();
     private readonly string _pool = "passed-" + Guid.NewGuid().ToString("N")[..12];
@@ -58,7 +58,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
         await using var connection = await dataSource.OpenConnectionAsync(Cancellation);
         (await RawAsync(connection)).Should().Be(LoginRole, "nothing set a caller on a connection opened by hand");
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Over(connection, Interceptor(scope));
 
         var state = await BackendState.OfAsync(context, Cancellation);
@@ -84,7 +84,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Connection);
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var first = new NotesContext(new DbContextOptionsBuilder<NotesContext>().UseNpgsql(dataSource).AddInterceptors(Interceptor(RowLevelSecurityScope.Connection)).Options);
         await first.Database.OpenConnectionAsync(Cancellation);
         (await TextsAsync(first)).Should().Equal("Alice's");
@@ -95,7 +95,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
         (await TextsAsync(second)).Should().Equal("Alice's");
         _sent.Count(SetsTheRole).Should().Be(1, "what the first context's interceptor set is known to the second's, which sends nothing");
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Bob));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
         (await TextsAsync(second)).Should().Equal(["Bob's"], "a caller that changed is set by whichever context runs the next command");
         _sent.Count(SetsTheRole).Should().Be(2);
 
@@ -110,12 +110,12 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(scope);
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new AmbientCallerAccessor(required), scope, [_tenant], required);
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new CurrentUser(required), scope, [_tenant], required);
 
         await using var first = new NotesContext(new DbContextOptionsBuilder<NotesContext>().UseNpgsql(dataSource).AddInterceptors(Strict()).Options);
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using var transaction = await first.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(first)).Should().Equal("Alice's");
@@ -128,11 +128,11 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
             (await TextsAsync(second)).Should().Equal(["Alice's"], "it runs as the caller the transaction began with");
             _sent.Count(SetsTheRole).Should().Be(sentByTheFirst, "and sets nothing of its own");
 
-            using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 var asBob = () => TextsAsync(second);
                 (await asBob.Should().ThrowAsync<InvalidOperationException>("a transaction runs as one caller, whichever context the command comes from"))
-                    .WithMessage($"The caller changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*");
+                    .WithMessage($"The current user changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*");
 
                 // And a third, joining as somebody else: refused when it joins where the settings are the
                 // transaction's own, and at its first command where they are the session's.
@@ -142,7 +142,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
                     await third.Database.UseTransactionAsync(transaction.GetDbTransaction(), Cancellation);
                     return await TextsAsync(third);
                 };
-                (await join.Should().ThrowAsync<InvalidOperationException>()).WithMessage($"The caller changed from authenticated {Alice} to authenticated {Bob}*");
+                (await join.Should().ThrowAsync<InvalidOperationException>()).WithMessage($"The current user changed from authenticated {Alice} to authenticated {Bob}*");
             }
 
             (await TextsAsync(first)).Should().Equal(["Alice's"], "the transaction goes on as Alice");
@@ -156,13 +156,13 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Connection);
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        var interceptor = PoolerFixture.Interceptor(new AmbientCallerAccessor(required), RowLevelSecurityScope.Connection, [_tenant], required);
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        var interceptor = PoolerFixture.Interceptor(new CurrentUser(required), RowLevelSecurityScope.Connection, [_tenant], required);
         const string refusal =
-            "This connection was opened outside Entity Framework and carries no caller, and a transaction is open on it, so the caller cannot be set safely. " +
-            "Open the connection through a context, begin the transaction after a context opened it, or use CallerConnections.";
+            "This connection was opened outside Entity Framework and carries no user, and a transaction is open on it, so the user cannot be set safely. " +
+            "Open the connection through a context, begin the transaction after a context opened it, or use CurrentUserConnections.";
 
-        using var alice = Callers.Begin(Callers.FromClaims(ClaimsOf(Alice)));
+        using var alice = TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
 
         // A transaction begun on the connection itself, and handed to the context.
         await using (var connection = await dataSource.OpenConnectionAsync(Cancellation))
@@ -204,8 +204,8 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Connection);
         var logger = new KeptLogger<PostgresRowLevelSecurityInterceptor>();
-        var interceptor = PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Connection, [_tenant], logger: logger);
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        var interceptor = PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Connection, [_tenant], logger: logger);
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         await using var connection = await dataSource.OpenConnectionAsync(Cancellation);
         await using var context = Over(connection, interceptor);
@@ -225,7 +225,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
         }
 
         logger.Entries.Where(entry => entry.Level == LogLevel.Warning).Should().ContainSingle("it is logged once per connection")
-            .Which.Message.Should().StartWith("This connection was opened outside Entity Framework and carries no caller, and a transaction is open on it, so the caller cannot be set safely.")
+            .Which.Message.Should().StartWith("This connection was opened outside Entity Framework and carries no user, and a transaction is open on it, so the user cannot be set safely.")
             .And.Contain($"not as authenticated {Alice}");
         _sent.Count(SetsTheRole).Should().Be(0);
 
@@ -237,7 +237,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Transaction);
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         int backend;
         await using (var connection = await dataSource.OpenConnectionAsync(Cancellation))
@@ -267,10 +267,10 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Transaction);
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new AmbientCallerAccessor(required), RowLevelSecurityScope.Transaction, [_tenant], required);
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new CurrentUser(required), RowLevelSecurityScope.Transaction, [_tenant], required);
 
-        using var alice = Callers.Begin(Callers.FromClaims(ClaimsOf(Alice)));
+        using var alice = TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
         await using var first = new NotesContext(new DbContextOptionsBuilder<NotesContext>().UseNpgsql(dataSource).AddInterceptors(Strict()).Options);
         var transaction = await first.Database.BeginTransactionAsync(Cancellation);
         (await TextsAsync(first)).Should().Equal("Alice's");
@@ -301,7 +301,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Transaction);
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         int backend;
         await using (var connection = await dataSource.OpenConnectionAsync(Cancellation))
@@ -321,7 +321,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
             (await RawAsync(connection, transaction)).Should().Be("authenticated", "the call was made inside the open transaction, so the rest of it runs as that caller");
 
             // The next caller's command carries its own call, which takes the place of the first.
-            _caller.Current = Callers.FromClaims(ClaimsOf(Bob));
+            _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
             (await TextsAsync(context)).Should().Equal("Bob's");
             _sent.Count(Calls).Should().Be(2);
             _sent.Count(SetsTheRole).Should().Be(0);
@@ -339,12 +339,12 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Transaction);
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new AmbientCallerAccessor(required), RowLevelSecurityScope.Transaction, [_tenant], required);
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new CurrentUser(required), RowLevelSecurityScope.Transaction, [_tenant], required);
 
         await using var first = new NotesContext(new DbContextOptionsBuilder<NotesContext>().UseNpgsql(dataSource).AddInterceptors(Strict()).Options);
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using (var transaction = await first.Database.BeginTransactionAsync(Cancellation))
             {
@@ -359,11 +359,11 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
                 _sent.Count(Calls).Should().Be(0, "no call is written in front of a command inside a transaction");
                 _sent.Count(AsksForTheMark).Should().Be(1, "it cost one question to the server, which handing the transaction over would have saved on every command but the first");
 
-                using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+                using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
                 {
                     var asBob = () => TextsAsync(second);
                     (await asBob.Should().ThrowAsync<InvalidOperationException>("a transaction runs as one caller, also for a context that was not told of it"))
-                        .WithMessage($"The caller changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*");
+                        .WithMessage($"The current user changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*");
                 }
 
                 // The transaction is given up without a word to either context.
@@ -381,7 +381,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Transaction);
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         await using var connection = await dataSource.OpenConnectionAsync(Cancellation);
         await using var transaction = await connection.BeginTransactionAsync(Cancellation);
@@ -415,7 +415,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         using var dataSource = DataSource(RowLevelSecurityScope.Transaction);
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         using var connection = dataSource.OpenConnection();
         using var transaction = connection.BeginTransaction();
@@ -451,14 +451,14 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Transaction);
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        var interceptor = PoolerFixture.Interceptor(new AmbientCallerAccessor(required), RowLevelSecurityScope.Transaction, [_tenant], required);
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        var interceptor = PoolerFixture.Interceptor(new CurrentUser(required), RowLevelSecurityScope.Transaction, [_tenant], required);
 
         await using var connection = await dataSource.OpenConnectionAsync(Cancellation);
         await using var context = Over(connection, interceptor);
         DbTransaction earlier;
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Alice))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             earlier = await connection.BeginTransactionAsync(Cancellation);
             await context.Database.UseTransactionAsync(earlier, Cancellation);
@@ -470,7 +470,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
             await earlier.DisposeAsync();
         }
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             await using var later = await connection.BeginTransactionAsync(Cancellation);
             TestContext.Current.TestOutputHelper?.WriteLine(
@@ -490,7 +490,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     {
         database.Require();
         await using var dataSource = DataSource(RowLevelSecurityScope.Connection);
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         await using var connection = await dataSource.OpenConnectionAsync(Cancellation);
         await using var context = Over(connection, Interceptor(RowLevelSecurityScope.Connection));
@@ -513,7 +513,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
         await using var dataSource = _sent.DataSource(database.Direct(_pool));
         await using var connection = await dataSource.OpenConnectionAsync(Cancellation);
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Over(connection, Interceptor(RowLevelSecurityScope.Connection));
         var read = () => TextsAsync(context);
 
@@ -526,7 +526,7 @@ public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLife
     private NpgsqlDataSource DataSource(RowLevelSecurityScope scope)
         => _sent.DataSource(new NpgsqlConnectionStringBuilder(database.Direct(_pool)) { NoResetOnClose = scope == RowLevelSecurityScope.Transaction }.ConnectionString);
 
-    private PostgresRowLevelSecurityInterceptor Interceptor(RowLevelSecurityScope scope) => PoolerFixture.Interceptor(_caller, scope, [_tenant]);
+    private PostgresRowLevelSecurityInterceptor Interceptor(RowLevelSecurityScope scope) => PoolerFixture.Interceptor(_user, scope, [_tenant]);
 
     /// <summary>A context on a connection somebody else opened.</summary>
     private static NotesContext Over(DbConnection connection, PostgresRowLevelSecurityInterceptor interceptor)

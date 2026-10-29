@@ -10,17 +10,17 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <para>
 /// A refusal says which name it is about with a stable token in its <c>What</c> argument, never with a word,
 /// so its message reads the same in every language. Next to it, the <c>Field</c> argument names the input the
-/// text belongs under, in the word the use cases call it by: <c>name</c> for the name of a tenant, a unit or a
+/// text belongs under, in the word the managers call it by: <c>name</c> for the name of a tenant, a unit or a
 /// role, since each is the one name its command takes, and <c>description</c> or <c>reason</c> for the others.
 /// A seat has no name here: what it is shown by is the application's, with the application's own rule.
 /// </para>
 /// </summary>
 internal static class TenancyNames
 {
-    /// <summary>The longest role name, shared by the role and the catalogue's packs, which roles are made from.</summary>
+    /// <summary>The longest role name, shared by the role and the catalogue's starter roles, which roles are made from.</summary>
     public const int MaxRoleNameLength = 120;
 
-    /// <summary>The longest role description, shared by the role and the catalogue's packs.</summary>
+    /// <summary>The longest role description, shared by the role and the catalogue's starter roles.</summary>
     public const int MaxRoleDescriptionLength = 1000;
 
     /// <summary>
@@ -29,8 +29,8 @@ internal static class TenancyNames
     /// </summary>
     public const int MaxPermissionLength = 128;
 
-    /// <summary>The longest pack key, which a role made from the pack keeps in a column of this length.</summary>
-    public const int MaxPackKeyLength = 64;
+    /// <summary>The longest starter role key, which a role made from the starter role keeps in a column of this length.</summary>
+    public const int MaxStarterRoleKeyLength = 64;
 
     /// <summary>The token for a tenant's name, which is its organization's.</summary>
     public const string TenantNameToken = "tenant-name";
@@ -86,7 +86,7 @@ internal static class TenancyNames
     private static (string Name, object? Value)[] Arguments(string what, int min, int max)
         => [("What", what), ("Min", min), ("Max", max), (RefusalException.FieldArgument, FieldOf(what))];
 
-    /// <summary>The input a name's refusal is about, as the use cases call it.</summary>
+    /// <summary>The input a name's refusal is about, as the managers call it.</summary>
     private static string FieldOf(string what)
         => what switch
         {

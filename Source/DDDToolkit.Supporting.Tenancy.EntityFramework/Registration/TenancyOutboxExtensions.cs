@@ -77,7 +77,7 @@ public static class TenancyOutboxExtensions
         Register<RoleRenamed<TTenantId, TRoleId, TSeatId>>(outbox);
         Register<RolePermissionsChanged<TTenantId, TRoleId, TSeatId>>(outbox);
         Register<RoleArchived<TTenantId, TRoleId, TSeatId>>(outbox);
-        Register<RoleFollowedItsPack<TTenantId, TRoleId, TSeatId>>(outbox);
+        Register<RoleFollowedItsStarterRole<TTenantId, TRoleId, TSeatId>>(outbox);
 
         return outbox;
     }

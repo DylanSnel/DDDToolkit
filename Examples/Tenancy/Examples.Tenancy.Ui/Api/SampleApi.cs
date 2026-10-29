@@ -52,9 +52,9 @@ public sealed class SampleApi(HttpClient http, UiSession session)
     public Task<ApiOutcome<IReadOnlyList<SeatOfMine>>> SeatsOfMineAsync(CancellationToken cancellationToken = default)
         => SeatsOfMineAsync(CallAs.Session, cancellationToken);
 
-    /// <summary><c>GET /me/seats</c> as <paramref name="caller"/>, such as a person who is signing in.</summary>
-    public Task<ApiOutcome<IReadOnlyList<SeatOfMine>>> SeatsOfMineAsync(CallAs caller, CancellationToken cancellationToken = default)
-        => SendAsync<IReadOnlyList<SeatOfMine>>(HttpMethod.Get, "/me/seats", null, caller, TenantChoice.None, cancellationToken);
+    /// <summary><c>GET /me/seats</c> as <paramref name="callAs"/>, such as a person who is signing in.</summary>
+    public Task<ApiOutcome<IReadOnlyList<SeatOfMine>>> SeatsOfMineAsync(CallAs callAs, CancellationToken cancellationToken = default)
+        => SendAsync<IReadOnlyList<SeatOfMine>>(HttpMethod.Get, "/me/seats", null, callAs, TenantChoice.None, cancellationToken);
 
     // Reads in the session's tenant.
 
@@ -296,36 +296,36 @@ public sealed class SampleApi(HttpClient http, UiSession session)
     /// The body: a <see cref="JsonElement"/> is sent as it is, any other object is serialised, and
     /// <see langword="null"/> or a JSON null sends none.
     /// </param>
-    /// <param name="caller">Whose token to send.</param>
+    /// <param name="callAs">Whose token to send.</param>
     /// <param name="tenant">Which <c>Tenant</c> header to send.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     public Task<ApiOutcome<T>> SendAsync<T>(
         HttpMethod method,
         string path,
         object? body,
-        CallAs caller,
+        CallAs callAs,
         TenantChoice tenant,
         CancellationToken cancellationToken = default)
-        => ExchangeAsync<T>(method, path, body, caller, tenant, record: true, cancellationToken);
+        => ExchangeAsync<T>(method, path, body, callAs, tenant, record: true, cancellationToken);
 
     /// <summary>Sends one call, and records its answer as the session's last one when <paramref name="record"/> is set.</summary>
     private async Task<ApiOutcome<T>> ExchangeAsync<T>(
         HttpMethod method,
         string path,
         object? body,
-        CallAs caller,
+        CallAs callAs,
         TenantChoice tenant,
         bool record,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(callAs);
         ArgumentNullException.ThrowIfNull(tenant);
 
-        var token = caller.IsSession ? session.AccessToken : caller.AccessToken;
+        var token = callAs.IsSession ? session.AccessToken : callAs.AccessToken;
         var slug = tenant.FromSession ? session.Tenant : tenant.Slug;
-        var who = token is null ? "anonymous" : caller.IsSession ? session.Person ?? "session" : caller.PersonKey ?? "someone";
+        var who = token is null ? "anonymous" : callAs.IsSession ? session.Person ?? "session" : callAs.PersonKey ?? "someone";
 
         using var request = new HttpRequestMessage(method, path);
         if (token is not null)
@@ -351,7 +351,7 @@ public sealed class SampleApi(HttpClient http, UiSession session)
             var raw = await response.Content.ReadAsStringAsync(cancellationToken);
             outcome = Read<T>(method.Method, path, who, slug, (int)response.StatusCode, raw, clock.Elapsed, session.Language);
 
-            if (response.StatusCode == HttpStatusCode.Unauthorized && caller.IsSession && token is not null && token == session.AccessToken)
+            if (response.StatusCode == HttpStatusCode.Unauthorized && callAs.IsSession && token is not null && token == session.AccessToken)
             {
                 // Signing out forgets the session's answers, so the answer that ended it is recorded after, and is
                 // what the login page shows.

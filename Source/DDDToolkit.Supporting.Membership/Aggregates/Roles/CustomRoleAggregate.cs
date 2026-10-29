@@ -12,9 +12,12 @@ namespace DDDToolkit.Supporting.Membership;
 /// roles (<see cref="Access.Roles.Custom"/>): roles a customer makes for itself, where fixed roles are the same for
 /// everybody.
 /// <para>
-/// A role is made, renamed, given permissions and archived, and each of those says what happened, so the
-/// application raises its own events: the role raises none. Who may do any of it is the application's to
-/// decide, command by command, as it decides who may give a role.
+/// A role is made, renamed, given permissions and archived, and the role says each change that changed something
+/// to a hook of the application's class: the partial methods <c>OnRenamed()</c>, <c>OnPermissionsSet(set)</c> and
+/// <c>OnArchived()</c>, which the package's generator declares on the class. The application raises its own events
+/// there, under its own names: the role raises none. The role manager the generator writes for the class,
+/// <c>BoardRoleManager</c>, makes each change, and asks first whether the caller may: the permission the rules name for
+/// it (<see cref="Access.Roles.ManagedWith"/>).
 /// </para>
 /// <para>
 /// Its permissions are held to the resource's rules: a role gives only permissions the rules let a member's role give
@@ -116,7 +119,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
         return Status == CustomRoleStatus.Active && Permissions.Contains(permission, StringComparer.Ordinal) && rules.RolePermissions.Allows(permission);
     }
 
-    /// <summary>Renames the role and says again what it is for.</summary>
+    /// <summary>Renames the role and says again what it is for, and calls the class's <c>OnRenamed()</c> when that changed anything.</summary>
     /// <param name="name">Its new name; white space around it is dropped.</param>
     /// <param name="description">What it is for, or nothing.</param>
     /// <param name="rules">The rules of the resource the role is of.</param>
@@ -137,12 +140,14 @@ public abstract partial class CustomRoleAggregate<TRoleId>
 
         Name = validName;
         Description = validDescription;
+        (this as ICustomRoleHooks)?.Renamed();
         return true;
     }
 
     /// <summary>
     /// Sets the permissions the role gives, for every member that holds it. Every permission is one the resource's rules
     /// let a member's role give; white space around a permission is dropped, and a permission said twice is one permission.
+    /// The class's <c>OnPermissionsSet(set)</c> is called when that changed anything.
     /// </summary>
     /// <param name="permissions">Every permission the role gives from now on.</param>
     /// <param name="rules">The rules of the resource the role is of.</param>
@@ -165,6 +170,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
         if (set.Changed)
         {
             Permissions = next;
+            (this as ICustomRoleHooks)?.PermissionsSet(set);
         }
 
         return set;
@@ -172,7 +178,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
 
     /// <summary>
     /// Archives the role: it stays, on every member that holds it, gives nothing from now on, and is not
-    /// given again.
+    /// given again. The class's <c>OnArchived()</c> is called after.
     /// </summary>
     /// <param name="rules">The rules of the resource the role is of.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rules"/> is null.</exception>
@@ -183,6 +189,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
         RequireInUse(codes);
 
         Status = CustomRoleStatus.Archived;
+        (this as ICustomRoleHooks)?.Archived();
     }
 
     /// <summary>The codes of rules whose roles a customer makes: the only rules a role is made and changed under.</summary>
@@ -250,7 +257,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
             ? madeFrom
             : throw new ArgumentException(
                 "The draft says the role is made from the starter role '" + madeFrom + "', and the rules '" + rules.Name + "' declare no role of that name. "
-                + "Make the starter roles from the drafts StarterRoles.Missing answers, and leave MadeFrom out of a draft for a role a customer makes.",
+                + "Make the starter roles with the role manager's CreateStarterRolesAsync, and leave MadeFrom out of a draft for a role a customer makes.",
                 "draft");
     }
 }

@@ -5,7 +5,7 @@ using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using FluentAssertions;
 using GreenDonut.Data;
 using Mediator;
@@ -71,7 +71,8 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new RemoveCrewMember(TheProject, SeatId.CreateSequential()), MemberAccess.On(ProjectPermissionNames.ManageCrew, TheProject)),
         (new AllCrewMembers(TheProject), MemberAccess.SeenWith<ProjectId>(ProjectPermissionNames.View)),
         (new ChangeProjectOwner(TheProject, SeatId.CreateSequential(), FormerOwnerRole: null), MemberAccess.On(ProjectPermissionNames.ChangeOwner, TheProject)),
-        (new TenantProjects(TheTenant), TenancyAccess.RequiresOperator()),
+        (new TenantProjects(TheTenant), TenancyAccess.Operator()),
+        (new RenameTenantProject(TheTenant, TheProject, "Quay wall, as support renamed it"), TenancyAccess.Operator(TheTenant, scope: "projects")),
         (new TenantProjectRoles(), TenancyAccess.InTenant()),
         (new ProjectRolesById([ProjectRoleId.CreateSequential()]), TenancyAccess.InTenant()),
         (new MakeProjectRole("Rigger", "Rigs the hoists", [ProjectPermissionNames.View]), TenancyAccess.AtTenant(TenancyPermissions.RolesManage)),
@@ -111,14 +112,14 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new OpenInvitations(), TenancyAccess.InTenant()),
         (new CancelInvitation(InvitationId.CreateSequential()), TenancyAccess.InTenant()),
         (new AcceptInvitation("a-token-nobody-was-given", DisplayName: null), AccessRequirement.SignedIn()),
-        (new AllTenants(), TenancyAccess.RequiresOperator()),
-        (new TenantAccessHistory(TheTenant, new PagingArguments(first: 10)), TenancyAccess.RequiresOperator()),
+        (new AllTenants(), TenancyAccess.Operator()),
+        (new TenantAccessHistory(TheTenant, new PagingArguments(first: 10)), TenancyAccess.Operator()),
         (new ProjectInspections(TheProject), new InspectionsRequirement.OnProject(ProjectPermissionNames.View, TheProject)),
         (new InspectionDetail(TheProject, InspectionId.CreateSequential()), new InspectionsRequirement.OnProject(ProjectPermissionNames.View, TheProject)),
         (new InspectionsOfProjects(TheProjects, new PagingArguments(first: 5)), new InspectionsRequirement.OnProjectsInReach(ProjectPermissionNames.View, TheProjects)),
         (new ProjectsOpenToRecording(TheProjects), new InspectionsRequirement.OnProjectsInReach(InspectionPermissionNames.Record, TheProjects)),
         (new RecordInspection(TheProject, "Loose railing"), new InspectionsRequirement.OnOpenProject(InspectionPermissionNames.Record, TheProject, BySeat: true)),
-        (new TenantProjectInspections(TheTenant, TheProject), TenancyAccess.RequiresOperator()),
+        (new TenantProjectInspections(TheTenant, TheProject), TenancyAccess.Operator()),
     ];
 
     private static IReadOnlyList<HandledRequest> Requests => HostRegistrations.Requests;
@@ -307,7 +308,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         OfTheModuleOrTwoPermissions(AccessRequirement.Any(AccessRequirement.Own(TheSeat), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeFalse("[RequiresPermission(permission)] with [OrOwn] says it");
         OfTheModuleOrTwoPermissions(TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)).Should().BeFalse("[RequiresPermission(permission)] says it");
 
-        OfTheModuleOrTwoPermissions(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeTrue("one caller or another is no stack");
+        OfTheModuleOrTwoPermissions(AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeTrue("one caller or another is no stack");
         OfTheModuleOrTwoPermissions(AccessRequirement.All(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, TheUnit), TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, TheOtherUnit))).Should().BeTrue("two permissions at once");
         OfTheModuleOrTwoPermissions(AccessRequirement.All(TenancyAccess.InTenant(), new ProjectsRequirement.AtUnit(ProjectPermissionNames.Open, TheUnit))).Should().BeTrue("the module's own case, in a combination too");
     }
@@ -410,8 +411,8 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // A reach is what a reading filters by: what the projects' rules say the caller the request runs as
         // reaches. Only the Membership package makes one, from the rules and the caller, so an adapter, a route or
         // a test is never the one that decides what a reading shows.
-        typeof(MemberReach<ProjectId>).GetConstructors().Should().BeEmpty("a reach has no public constructor");
-        typeof(MemberReach<ProjectId>).GetProperties().Should().OnlyContain(property => property.SetMethod == null, "and nothing of it can be changed afterwards");
+        typeof(MemberReach<Project>).GetConstructors().Should().BeEmpty("a reach has no public constructor");
+        typeof(MemberReach<Project>).GetProperties().Should().OnlyContain(property => property.SetMethod == null, "and nothing of it can be changed afterwards");
         SampleLayout.Projects.Select(project => project.Anchor.Assembly).Append(typeof(Program).Assembly)
             .SelectMany(TypeScan.TypesOf)
             .Where(type => IsReach(type.BaseType))
@@ -453,20 +454,20 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
                 "the Tenants module has no case of its own, and so no check of its own");
         Requests.Select(request => request.Module).Distinct().Should().BeEquivalentTo(SampleLayout.Modules, "every module's requests are held to it");
 
-        // A handler that hands its request to the package's commands belongs to a request that requires a caller in
-        // the tenant, a permission there, or a signed-in user: what the use case asks first, so a caller it would refuse
+        // A handler that hands its request to the package's managers belongs to a request that requires a caller in
+        // the tenant, a permission there, or a signed-in user: what the manager asks first, so a caller it would refuse
         // before anything else is refused at the door already, with the same code. Which code each gets is
         // RequestPipelineTests' to prove, past the door and in front of it.
         var handedOn = Requests
-            .Where(request => request.Handler.GetConstructors().Single().GetParameters().Any(parameter => IsPackageCommands(parameter.ParameterType)))
+            .Where(request => request.Handler.GetConstructors().Single().GetParameters().Any(parameter => IsPackageManager(parameter.ParameterType)))
             .ToList();
-        handedOn.Should().Contain(request => request.Type == typeof(MakeGrant), "the package's commands are found by their type, or this proves nothing");
+        handedOn.Should().Contain(request => request.Type == typeof(MakeGrant), "the package's managers are found by their type, or this proves nothing");
 
         foreach (var request in handedOn)
         {
             var declares = DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request);
             (declares is TenancyRequirement.InTenant or TenancyRequirement.AtTenant or TenancyRequirement.AtUnit<OrganizationUnitId> or AccessRequirement.SignedInUser)
-                .Should().BeTrue("{0} is handed to the package's use case, which asks first for a caller of the tenant, a permission there, or a signed-in user", request.Type.Name);
+                .Should().BeTrue("{0} is handed to the package's manager, which asks first for a caller of the tenant, a permission there, or a signed-in user", request.Type.Name);
         }
     }
 
@@ -543,12 +544,12 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         foreach (var query in queries)
         {
             TypeScan.From(TypeScan.WithNested(query.Handler)).Uses
-                .Where(use => IsWritePort(use.Type) || IsPackageCommands(use.Type))
+                .Where(use => IsWritePort(use.Type))
                 .Select(use => use.ToString())
                 .Should().BeEmpty("{0} reads: it names nothing that loads to change, or saves", query.Handler.Name);
         }
 
-        IsWritePort(typeof(TenancyUseCases.IStore)).Should().BeTrue("the package's store saves");
+        IsWritePort(typeof(TenancyStore)).Should().BeTrue("the package's store saves");
         IsWritePort(typeof(IProjectStore)).Should().BeTrue("Projects' store saves");
         IsWritePort(typeof(ITenancyReads)).Should().BeFalse("a read port does not");
         IsWritePort(typeof(IProjectReads)).Should().BeFalse("nor does Projects'");
@@ -560,12 +561,14 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     [Fact]
     public void A_query_answers_with_data_only()
     {
-        // What a query answers with outlives the context it was read on, and crosses to whoever asked: no entity
-        // that could be changed, no query that still has to run, no service.
+        // What a query answers with outlives the context it was read on, and crosses to whoever asked: no query that
+        // still has to run, no service, and no entity of a module's own. The entities a query answers are Tenancy's
+        // classes, as one of the package's managers read them for the question: tracked by nobody, so nothing done to
+        // them is saved, and read in a scope that ended with the question.
         foreach (var query in Requests.Where(request => request.IsQuery))
         {
             GraphOf(query.Response, [])
-                .Where(type => typeof(IEntity).IsAssignableFrom(type)
+                .Where(type => (typeof(IEntity).IsAssignableFrom(type) && !IsTenancysClass(type))
                     || typeof(IQueryable).IsAssignableFrom(type)
                     || SampleLayout.IsPort(type)
                     || HostRegistrations.Services.Contains(type.IsGenericType ? type.GetGenericTypeDefinition() : type))
@@ -573,6 +576,8 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         }
 
         GraphOf(typeof(IReadOnlyList<Seat>), []).Should().Contain(type => typeof(IEntity).IsAssignableFrom(type), "an aggregate in a list would be found");
+        GraphOf(typeof(IReadOnlyList<Project>), []).Should().Contain(type => typeof(IEntity).IsAssignableFrom(type) && !IsTenancysClass(type), "and one of a module's own is no class of Tenancy's");
+        GraphOf(typeof(SeatManager.SeatOverview), []).Should().Contain([typeof(Seat), typeof(Tenant)], "a manager's record holds Tenancy's classes, and they are looked into");
         GraphOf(typeof(HeldUnits), []).Should().Contain(typeof(OrganizationUnitId), "what a response's properties carry is looked into");
         GraphOf(typeof(IReadOnlyDictionary<ProjectId, ProjectCrew>), []).Should().Contain([typeof(CrewOverview), typeof(CrewRoleOverview)], "to the end");
         GraphOf(typeof(Page<ProjectOverview>), []).Should().Contain([typeof(ProjectOverview), typeof(DateRange)], "through a page too");
@@ -581,18 +586,30 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     }
 
     [Fact]
-    public void A_command_answers_with_an_id_or_with_nothing()
+    public void A_command_of_Tenants_answers_what_its_manager_made_or_changed_and_any_other_an_id_or_nothing()
     {
-        // A command changes something, and says at most which thing it made: its id, for whoever sent the command
-        // to ask about with a query. It hands back no entity, and nothing it read on the way. One answers more:
-        // inviting answers the invitation's token, which is kept nowhere, so no query could answer it afterwards.
-        var commands = Requests.Where(request => !request.IsQuery && request.Type != typeof(InvitePerson)).ToList();
-        Requests.Single(request => request.Type == typeof(InvitePerson)).Response.Should().Be(typeof(TenancyUseCases.IssuedInvitation<InvitationId>));
-
-        commands.Where(command => command.Response != typeof(Unit) && !typeof(IEntityId).IsAssignableFrom(command.Response))
+        // A command of Tenants answers what Tenancy's manager answered it: the new object, or the aggregate it changed,
+        // one of Tenancy's classes, or the manager's record that holds them. Its mutation and its route answer that,
+        // with nothing read again. Inviting answers the invitation beside its token, which is kept nowhere, and
+        // accepting the tenant beside the new seat, since the person names no tenant yet.
+        var commands = Requests.Where(request => !request.IsQuery).ToList();
+        var tenants = commands.Where(command => command.Type.Assembly == typeof(InvitePerson).Assembly).ToList();
+        tenants.Where(command => !IsTenancysClass(command.Response))
             .Select(command => $"{command.Type.Name} answers with {command.Response}")
-            .Should().BeEmpty("what a caller wants to know of what a command changed, a query answers");
-        commands.Select(command => command.Response).Should()
+            .Should().BeEmpty("a command of Tenants answers what Tenancy's manager answered it");
+        tenants.Single(command => command.Type == typeof(InvitePerson)).Response.Should().Be(typeof(InvitationManager.IssuedInvitation));
+        tenants.Single(command => command.Type == typeof(AcceptInvitation)).Response.Should().Be(typeof(InvitationManager.AcceptedInvitation));
+        tenants.Select(command => command.Response).Should()
+            .Contain([typeof(Seat), typeof(Examples.Tenancy.Tenants.Domain.Role), typeof(OrganizationUnit), typeof(Tenant), typeof(Examples.Tenancy.Tenants.Domain.Aggregates.Invitations.Invitation)], "each of Tenancy's classes is answered by a command that changes it");
+
+        // A command of another module changes the module's own aggregate, and says at most which thing it made: its id,
+        // for whoever sent the command to ask about with a query. What a caller may do with a project is read beside it,
+        // so a mutation asks the query for the project after its command.
+        var others = commands.Except(tenants).ToList();
+        others.Where(command => command.Response != typeof(Unit) && !typeof(IEntityId).IsAssignableFrom(command.Response))
+            .Select(command => $"{command.Type.Name} answers with {command.Response}")
+            .Should().BeEmpty("what a caller wants to know of what such a command changed, a query answers");
+        others.Select(command => command.Response).Should()
             .Contain(typeof(Unit), "some answer nothing")
             .And.Contain(typeof(ProjectId), "and some the id of what they made, or this proves nothing");
     }
@@ -666,22 +683,31 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     };
 
     /// <summary>
-    /// A use-case class of the Tenancy package that changes something: its tenant, organization, seat, role and
-    /// invitation commands. The last has type parameters of its own, which its name counts after a backtick.
+    /// One of the Tenancy package's managers, as the generator closed it over the Tenants module's classes: the tenant,
+    /// organization, seat, role and invitation managers. A manager both reads and changes, and checks its caller itself
+    /// either way, so a query handler may take one to read: which of its methods a handler calls is no type a scan sees.
     /// </summary>
-    private static bool IsPackageCommands(Type type)
-        => type.IsGenericType
-            && type.DeclaringType == typeof(TenancyUseCases<,,,,,,,,>)
-            && type.Name.Split('`')[0].EndsWith("Commands", StringComparison.Ordinal);
+    private static bool IsPackageManager(Type type)
+        => type.BaseType is { IsGenericType: true } parent
+            && parent.GetGenericTypeDefinition().Namespace == typeof(SeatManager<,,,,,,,,>).Namespace
+            && parent.Name.Split('`')[0].EndsWith("Manager", StringComparison.Ordinal);
 
     /// <summary>A port that saves: one of an application project's, or the Tenancy package's store.</summary>
     private static bool IsWritePort(Type type)
         => SampleLayout.IsPort(type) && type.GetMethods().Any(method => method.Name == "SaveAsync");
 
     /// <summary>
+    /// Whether <paramref name="type"/> is one of Tenancy's classes: declared in the Tenants module's domain project, or
+    /// an entity of the package's own, such as a seat's placement.
+    /// </summary>
+    private static bool IsTenancysClass(Type type)
+        => type.Assembly == typeof(Seat).Assembly || type.Assembly == typeof(TenancyRefusals).Assembly;
+
+    /// <summary>
     /// Every type an answer is made of: the type, what a collection holds, and the types of its public properties,
     /// to the end. The type arguments of a class the answer is nested in are not part of it: the Tenancy package
-    /// nests its DTOs in a class that is generic over the application's aggregates, and carries none of them.
+    /// nests its records in a manager that is generic over the application's classes, and a record carries those
+    /// it holds as properties, which are looked into.
     /// </summary>
     private static IEnumerable<Type> GraphOf(Type type, HashSet<Type> seen)
     {

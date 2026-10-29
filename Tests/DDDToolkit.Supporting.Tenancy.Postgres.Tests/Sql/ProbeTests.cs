@@ -41,9 +41,9 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         var catalogue = TenancyPostgres.Catalogue;
         foreach (var permission in catalogue.LivePermissions)
         {
-            var expected = catalogue.PacksFor(TenantShape.Hierarchical).Count(pack => pack.Permissions.Contains(permission));
+            var expected = catalogue.StarterRolesFor(TenantShape.Hierarchical).Count(starterRole => starterRole.Permissions.Contains(permission));
             (await ScalarAsync<long>(connection, "SELECT count(*) FROM tenancy.\"Roles\" WHERE $1 = ANY (\"Permissions\")", permission))
-                .Should().Be(expected, "{0} is held by the roles of the packs that hold it", permission);
+                .Should().Be(expected, "{0} is held by the roles of the starter roles that hold it", permission);
         }
 
         (await ScalarAsync<long>(connection, "SELECT count(*) FROM tenancy.\"Roles\" WHERE 'widget.unknown' = ANY (\"Permissions\")")).Should().Be(0);
@@ -52,8 +52,8 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database, rowLevelSecurity: false, databaseKeepsRights: false);
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(TenancySeed.Harbor))
         {
-            var stored = await services.InScopeAsync(scoped => scoped.Tenancy().Set<HostRole>().ToDictionaryAsync(role => role.FromPack!, role => role.Permissions, Cancellation));
-            stored.Should().BeEquivalentTo(catalogue.PacksFor(TenantShape.Hierarchical).ToDictionary(pack => pack.Key, pack => pack.Permissions), options => options.WithStrictOrdering());
+            var stored = await services.InScopeAsync(scoped => scoped.TenancyContext().Set<HostRole>().ToDictionaryAsync(role => role.FromStarterRole!, role => role.Permissions, Cancellation));
+            stored.Should().BeEquivalentTo(catalogue.StarterRolesFor(TenantShape.Hierarchical).ToDictionary(starterRole => starterRole.Key, starterRole => starterRole.Permissions), options => options.WithStrictOrdering());
         }
     }
 
@@ -78,12 +78,12 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         // A grant that runs from two days ago to two days ahead, and one that ended yesterday, by the database's clock.
         var (from, until) = (now.AddDays(-2), now.AddDays(2));
         await using var services = new TenancyServices(database, rowLevelSecurity: false, databaseKeepsRights: false);
-        await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().AddSeatAsync(TenancySeed.Oli.Identity, Cancellation, TenancySeed.Oli.Seat, configure: seat => seat.Rename("Oli")));
+        await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().AddAsync(TenancySeed.Oli.Identity, Cancellation, TenancySeed.Oli.Seat, configure: seat => seat.Rename("Oli")));
         await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().PlaceAsync(TenancySeed.Oli.Seat, TenancySeed.HarborRoot, primary: true, Cancellation));
         await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().GrantAsync(
-            TenancySeed.Oli.Seat, TenancySeed.HarborRoot, TenancySeed.HarborRoles.Watcher, until, reason: null, Cancellation, from));
+            TenancySeed.Oli.Seat, TenancySeed.HarborRoles.Watcher, TenancySeed.HarborRoot, until, reason: null, Cancellation, from));
         await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().GrantAsync(
-            TenancySeed.Oli.Seat, TenancySeed.HarborRoot, TenancySeed.HarborRoles.Operator, now.AddDays(-1), reason: null, Cancellation, now.AddDays(-3)));
+            TenancySeed.Oli.Seat, TenancySeed.HarborRoles.Operator, TenancySeed.HarborRoot, now.AddDays(-1), reason: null, Cancellation, now.AddDays(-3)));
 
         await using var connection = await OpenAsync(database);
         await using (var command = new NpgsqlCommand(
@@ -112,7 +112,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         // Entity Framework reads them back as the same instants, at offset zero.
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(TenancySeed.Harbor))
         {
-            var seat = await services.InScopeAsync(scoped => scoped.Tenancy().Set<HostSeat>().SingleAsync(row => row.Id == TenancySeed.Oli.Seat, Cancellation));
+            var seat = await services.InScopeAsync(scoped => scoped.TenancyContext().Set<HostSeat>().SingleAsync(row => row.Id == TenancySeed.Oli.Seat, Cancellation));
             var grant = seat.Placements.Single().Grants.Single(each => each.RoleId == TenancySeed.HarborRoles.Watcher);
             grant.StartsAt.Should().Be(from);
             grant.StartsAt.Offset.Should().Be(TimeSpan.Zero);
@@ -127,7 +127,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         {
             var rights = model.Model.GetEntityTypes().Single(entity => entity.GetTableName() == "SeatRights");
             rights.FindProperty("Permission")!.GetColumnType().Should().Be($"character varying({Permission.MaxNameLength})");
-            model.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.FromPack))!.GetColumnType().Should().Be($"character varying({RolePack.MaxKeyLength})");
+            model.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.FromStarterRole))!.GetColumnType().Should().Be($"character varying({StarterRole.MaxKeyLength})");
         }
 
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation);
@@ -145,15 +145,15 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             await command.ExecuteNonQueryAsync(Cancellation);
         }
 
-        async Task InsertRoleAsync(string pack)
+        async Task InsertRoleAsync(string starterRole)
         {
             await using var command = new NpgsqlCommand(
                 """
-                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromPack", "Status", "Permissions")
+                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromStarterRole", "Status", "Permissions")
                 VALUES (gen_random_uuid(), gen_random_uuid()::text, 1, 1, 'Packed', '', $1, 'Active', ARRAY['widget.read'])
                 """,
                 connection);
-            command.Parameters.Add(new NpgsqlParameter { Value = pack });
+            command.Parameters.Add(new NpgsqlParameter { Value = starterRole });
             await command.ExecuteNonQueryAsync(Cancellation);
         }
 
@@ -162,8 +162,8 @@ public sealed class ProbeTests(TenancyPostgres postgres)
                 .Should().ThrowAsync<PostgresException>())
             .Which.SqlState.Should().Be(PostgresErrorCodes.StringDataRightTruncation, "a permission one character too long is refused, not stored cut short");
 
-        await InsertRoleAsync(new string('p', RolePack.MaxKeyLength));
-        (await FluentActions.Awaiting(() => InsertRoleAsync(new string('p', RolePack.MaxKeyLength + 1)))
+        await InsertRoleAsync(new string('p', StarterRole.MaxKeyLength));
+        (await FluentActions.Awaiting(() => InsertRoleAsync(new string('p', StarterRole.MaxKeyLength + 1)))
                 .Should().ThrowAsync<PostgresException>())
             .Which.SqlState.Should().Be(PostgresErrorCodes.StringDataRightTruncation);
     }
@@ -183,14 +183,14 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             INSERT INTO widgets.slips VALUES (1, '{mine}', 'mine'), (2, '{theirs}', 'theirs');
             GRANT SELECT, INSERT, UPDATE, DELETE ON widgets.slips TO authenticated;
             ALTER TABLE widgets.slips ENABLE ROW LEVEL SECURITY;
-            CREATE POLICY "Holders read their slips" ON widgets.slips FOR SELECT TO authenticated USING (holder = (SELECT ddd.caller_id()));
+            CREATE POLICY "Holders read their slips" ON widgets.slips FOR SELECT TO authenticated USING (holder = (SELECT ddd.current_user_id()));
             CREATE POLICY "Anyone adds a slip" ON widgets.slips FOR INSERT TO authenticated WITH CHECK (true);
             CREATE POLICY "Anyone changes a slip" ON widgets.slips FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
             CREATE POLICY "Anyone removes a slip" ON widgets.slips FOR DELETE TO authenticated USING (true);
             """,
             Cancellation);
 
-        await using (var caller = await AsCaller.PersonAsync(database, mine, tenant: null, Cancellation))
+        await using (var caller = await AsUser.PersonAsync(database, mine, tenant: null, Cancellation))
         {
             (await caller.ListAsync<int>("SELECT id FROM widgets.slips", Cancellation)).Should().Equal(1);
 
@@ -379,7 +379,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             ANALYZE folding.reaches;
             GRANT USAGE ON SCHEMA folding TO authenticated;
             GRANT SELECT ON ALL TABLES IN SCHEMA folding TO authenticated;
-            CREATE POLICY "Holders read their own" ON folding.holdings FOR SELECT TO authenticated USING ("HolderId" = (SELECT ddd.caller_id()));
+            CREATE POLICY "Holders read their own" ON folding.holdings FOR SELECT TO authenticated USING ("HolderId" = (SELECT ddd.current_user_id()));
             ALTER TABLE folding.holdings ENABLE ROW LEVEL SECURITY;
             CREATE FUNCTION folding.held() {Held} STABLE {Holdings};
             CREATE FUNCTION folding.held_with_a_path() {Held} STABLE SET search_path = '' {Holdings};
@@ -399,7 +399,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
                 WHERE h."HolderId" = '{me}' AND h."Permission" = 'permission.3'
                 """;
 
-        await using var caller = await AsCaller.PersonAsync(database, me, tenant: null, Cancellation);
+        await using var caller = await AsUser.PersonAsync(database, me, tenant: null, Cancellation);
 
         // Written plainly, the functions are gone from the plan: Postgres reads the tables, the holdings through the
         // index on the holder and the permission, with the policy on them applied to the caller.
@@ -410,7 +410,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             .Should().ContainSingle("the holdings are found by the holder and the permission")
             .Which.Index.Should().Be("holdings_of_a_holder_by_permission");
         folded.Should().Contain(node => node.Relation == "reaches");
-        QueryPlans.InitPlansCalling(asked, "ddd.caller_id(").Should().NotBeEmpty("the policy on the holdings is still asked who is calling, once for the statement");
+        QueryPlans.InitPlansCalling(asked, "ddd.current_user_id(").Should().NotBeEmpty("the policy on the holdings is still asked who is calling, once for the statement");
         (await caller.ListAsync<Guid>(Reached("held"), Cancellation)).Should().HaveCount(104, "a hundred places held, each reaching itself and the four after it");
 
         // Any of the four keeps the function a step of its own, which answers every row it may before the query
@@ -437,7 +437,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision(
+                new TenantToProvision(
                     "harbor",
                     "Harbor Works",
                     TenantShape.Hierarchical,
@@ -446,7 +446,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
                     TenantId: TenancySeed.Harbor,
                     RootId: TenancySeed.HarborRoot,
                     AdminSeatId: TenancySeed.Ada.Seat,
-                    RoleIds: TenancySeed.HarborRoles.ByPack,
+                    RoleIds: TenancySeed.HarborRoles.ByStarterRole,
                     ConfigureFirstSeat: seat => seat.Rename(TenancySeed.Ada.Name)),
                 Cancellation));
         }

@@ -3,6 +3,7 @@ using Acme.Press.Manuscripts;
 using Acme.Press.Tenants;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Microsoft.EntityFrameworkCore;
@@ -59,18 +60,9 @@ public sealed class PressContext(DbContextOptions<PressContext> options) : DbCon
     {
         modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>(TenancyContext.Schema);
 
-        modelBuilder.Entity<Manuscript>(manuscript =>
-        {
-            manuscript.ScopeToTenant(row => row.TenantId);
-            manuscript.HasMembers(row => row.Editors);
-        });
-
-        modelBuilder.Entity<ManuscriptRole>(role =>
-        {
-            role.IsCustomRole();
-            role.ScopeToTenant(row => row.TenantId);
-            role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
-        });
+        // Nothing for the manuscripts and their roles. Both mark their house [OfTenant], and AddDDDToolkitConventions()
+        // keeps both to the caller's. Membership's convention maps a manuscript's editors and the roles of manuscripts,
+        // and gives a role's name and starter role once per house.
     }
 
     /// <inheritdoc />
@@ -80,4 +72,54 @@ public sealed class PressContext(DbContextOptions<PressContext> options) : DbCon
         configurationBuilder.AddPressConverters();
         configurationBuilder.StoreDateTimeOffsetsAsUtc();
     }
+}
+
+/// <summary>
+/// What the press reads of its manuscripts for the caller, as Membership answers it: the manuscripts it may read, asked
+/// of their own set, and how it holds a permission on one, asked of the access manager by the id a request carries.
+/// </summary>
+/// <param name="db">The manuscripts' context.</param>
+/// <param name="access">Membership's access manager of manuscripts.</param>
+public sealed class ManuscriptReads(PressContext db, MembershipAccessManager<Manuscript> access)
+{
+    /// <summary>The titles of the manuscripts the caller may read, and the permissions it holds on each of them that it may edit or retract.</summary>
+    /// <param name="cancellationToken">Cancels the query.</param>
+    public async Task<(IReadOnlyList<string> Titles, IReadOnlyList<(ManuscriptId Manuscript, string Permission)> Held)> ReadableAsync(CancellationToken cancellationToken)
+    {
+        var titles = await db.Manuscripts.WhereIHold(ManuscriptPermissions.Read).OrderBy(manuscript => manuscript.Title).Select(manuscript => manuscript.Title).ToListAsync(cancellationToken);
+        var held = await db.Manuscripts.WhereIHold([ManuscriptPermissions.Edit, ManuscriptPermissions.Retract])
+            .Select(pair => new { pair.Resource.Id, pair.Permission })
+            .ToListAsync(cancellationToken);
+
+        return (titles, [.. held.Select(pair => (pair.Id, pair.Permission))]);
+    }
+
+    /// <summary>How the caller holds the permission to edit <paramref name="manuscript"/>, or <see langword="null"/> where it does not.</summary>
+    /// <param name="manuscript">The manuscript, by the id a request carries.</param>
+    /// <param name="cancellationToken">Cancels the query.</param>
+    public Task<MemberVia?> EditsAsync(ManuscriptId manuscript, CancellationToken cancellationToken)
+        => access.ViaAsync(manuscript, ManuscriptPermissions.Edit, cancellationToken);
+}
+
+/// <summary>
+/// What the press changes of its manuscripts' editors and of the roles it keeps for them, through the managers Membership's
+/// generator writes into the domain project for the editor class and the role class: one call each.
+/// </summary>
+/// <param name="editors">The manager of a manuscript's editors.</param>
+/// <param name="roles">The manager of the roles of manuscripts.</param>
+public sealed class ManuscriptDesk(ManuscriptEditorManager editors, ManuscriptRoleManager roles)
+{
+    /// <summary>Takes a seat on to a manuscript in a role, from now on, and answers the manuscript as it was saved.</summary>
+    /// <param name="manuscript">The manuscript, by the id a request carries.</param>
+    /// <param name="seat">The seat.</param>
+    /// <param name="role">The role.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    public Task<Manuscript> TakeOnAsync(ManuscriptId manuscript, SeatId seat, ManuscriptRoleId role, CancellationToken cancellationToken)
+        => editors.AddAsync(manuscript, seat, role, until: null, cancellationToken);
+
+    /// <summary>Makes the starter roles of manuscripts a house does not have yet.</summary>
+    /// <param name="house">The house the roles are of.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    public Task<IReadOnlyList<ManuscriptRole>> SetUpAsync(TenantId house, CancellationToken cancellationToken)
+        => roles.CreateStarterRolesAsync(draft => new ManuscriptRole(ManuscriptRoleId.Create(), house, draft), cancellationToken);
 }

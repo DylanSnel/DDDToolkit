@@ -45,6 +45,9 @@
   <data name="membership.invalid-period" xml:space="preserve">
     <value>A period's end must come after its start.</value>
   </data>
+  <data name="membership.role-not-found" xml:space="preserve">
+    <value>That role was not found, or it is not one you can see.</value>
+  </data>
   <data name="membership.role-archived" xml:space="preserve">
     <value>That role is archived.</value>
   </data>

@@ -124,10 +124,16 @@ public static class ShedMembership
     /// <summary>The starter role that keeps a shed.</summary>
     public const string Keeper = "keeper";
 
+    /// <summary>
+    /// The permission that changes the sheds' roles, held for the whole of what they are kept for: asked of what the host
+    /// registers for it, where it registers anything.
+    /// </summary>
+    public const string ManageRoles = "sheds.roles.manage";
+
     /// <summary>The codes a shed refuses under.</summary>
     public static MembershipCodes Codes { get; } = MembershipCodes.Under("sheds");
 
     /// <summary>The rules.</summary>
     public static MembershipRules Rules { get; } = MembershipRules.For<Shed>(
-        Roles.Custom(starters: [new(Keeper, [ShedPermissions.Open, ShedPermissions.Stock])], otherPermissions: OtherPermissions.All));
+        Roles.Custom(starters: [new(Keeper, [ShedPermissions.Open, ShedPermissions.Stock])], otherPermissions: OtherPermissions.All, managedWith: ManageRoles));
 }

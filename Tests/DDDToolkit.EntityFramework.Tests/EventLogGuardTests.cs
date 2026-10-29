@@ -15,7 +15,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// the table keeps it, whoever asks: the table's owner, a superuser and a session in replication mode included,
 /// which a privilege or a policy would not hold back. The apiary keeps its log for thirty days.
 /// </summary>
-public sealed class EventLogGuardTests(ExplicitCallersPostgres postgres)
+public sealed class EventLogGuardTests(ExplicitCurrentUserPostgres postgres)
 {
     private const string Log = "\"ddd\".\"EventLog\"";
 

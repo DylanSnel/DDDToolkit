@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.EntityFramework;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
@@ -72,9 +73,9 @@ public sealed class DepotServices : IDisposable
     public ServiceProvider Provider { get; }
 
     /// <summary>Asks something as <paramref name="caller"/>, in a scope of its own.</summary>
-    public async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+    public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
     {
-        using (Callers.Begin(caller))
+        using (TestAccess.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             return await ask(scope.ServiceProvider);
@@ -82,9 +83,9 @@ public sealed class DepotServices : IDisposable
     }
 
     /// <summary>Does something as <paramref name="caller"/>, in a scope of its own.</summary>
-    public async Task AsAsync(Caller caller, Func<IServiceProvider, Task> work)
+    public async Task AsAsync(CurrentUserSnapshot caller, Func<IServiceProvider, Task> work)
     {
-        using (Callers.Begin(caller))
+        using (TestAccess.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             await work(scope.ServiceProvider);
@@ -92,16 +93,16 @@ public sealed class DepotServices : IDisposable
     }
 
     /// <summary>The access questions about pallets, asked as <paramref name="person"/>.</summary>
-    public Task<T> PalletsAsync<T>(DepotPerson person, Func<IMemberQuestions<PalletId>, Task<T>> ask)
-        => AsAsync(person.Caller, provider => ask(provider.GetRequiredService<IMemberQuestions<PalletId>>()));
+    public Task<T> PalletsAsync<T>(DepotPerson person, Func<MembershipAccessManager<Pallet>, Task<T>> ask)
+        => AsAsync(person.Caller, provider => ask(provider.GetRequiredService<MembershipAccessManager<Pallet>>()));
 
     /// <summary>The access questions about crates, asked as <paramref name="person"/>.</summary>
-    public Task<T> CratesAsync<T>(DepotPerson person, Func<IMemberQuestions<CrateId>, Task<T>> ask)
-        => AsAsync(person.Caller, provider => ask(provider.GetRequiredService<IMemberQuestions<CrateId>>()));
+    public Task<T> CratesAsync<T>(DepotPerson person, Func<MembershipAccessManager<Crate>, Task<T>> ask)
+        => AsAsync(person.Caller, provider => ask(provider.GetRequiredService<MembershipAccessManager<Crate>>()));
 
     /// <summary>Changes the depot's own rows, or its resources, as the application's own work, and saves.</summary>
     public Task ChangeAsync(Func<DepotContext, DepotDesk, Task> change)
-        => AsAsync(Caller.System, async provider =>
+        => AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<DepotContext>();
             await change(context, provider.GetRequiredService<DepotDesk>());

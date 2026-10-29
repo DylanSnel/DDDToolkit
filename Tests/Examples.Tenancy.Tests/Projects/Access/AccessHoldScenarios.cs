@@ -121,7 +121,8 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
         using var renamed = await RenameAsync(renamer, "Renamed after the check", ifMatch);
 
         between.Ran.Should().BeTrue("the change came between the check and the handler");
-        between.Answer.Should().Be(HttpStatusCode.NoContent, "the change in between was made");
+        // A project's route answers a change with 204; Tenancy's grant route answers the seat it changed, with 200.
+        between.Answer.Should().Be(race == "grant-revoked" ? HttpStatusCode.OK : HttpStatusCode.NoContent, "the change in between was made");
         var problem = await renamed.ProblemAsync();
         renamed.StatusCode.Should().Be(status, "the answer was {0}", problem.Body.GetRawText());
         problem.Code.Should().Be(code);
@@ -174,8 +175,8 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
         var lead = Harbor.ProjectRoles[SampleCatalogue.CrewLead];
 
         // Vic is an observer on Pier 7 and manages no crew. Reached around their checks, the handlers that give up a
-        // seat's own place save as Vic, not as the application: on the default path the database refuses his write,
-        // and under the hold a change no check let through is refused before anything is written.
+        // seat's own place call the crew manager, which finds no request in hand that its check let through. So the
+        // manager asks Vic's permission itself and refuses him before anything is written, with the hold and without.
         Exception?[] refused =
         [
             await DirectAsync(onPostgres, DemoPeople.Vic, provider => ActivatorUtilities.CreateInstance<TakeCrewRoleHandler>(provider)
@@ -183,17 +184,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
             await DirectAsync(onPostgres, DemoPeople.Vic, provider => ActivatorUtilities.CreateInstance<RemoveCrewMemberHandler>(provider)
                 .Handle(new RemoveCrewMember(PierSeven.Id, vic), Cancellation)),
         ];
-        foreach (var thrown in refused)
-        {
-            if (holds)
-            {
-                thrown.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Contain("was changed with no request in hand");
-            }
-            else
-            {
-                thrown.Should().BeOfType<RefusalException>().Which.Code.Should().Be(ToolkitRefusals.Refused);
-            }
-        }
+        refused.Should().AllSatisfy(thrown => thrown.Should().BeOfType<RefusalException>().Which.Code.Should().Be(ProjectRefusals.NotPermitted));
 
         using var leo = await onPostgres.Host.ClientAsync("leo", Harbor.Slug);
         (await RolesOnTheCrewAsync(leo, vic)).Should().Equal([observer.Value], "Vic is on the crew still, with his role");
@@ -211,7 +202,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
     {
         await using var onPostgres = await sample.StartOnPostgresAsync(services => services.HoldProjectSaves());
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             await new ChangeProjectNameHandler(scope.ServiceProvider.GetRequiredService<IProjectStore>())
@@ -293,7 +284,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
     /// </summary>
     private static async Task<Exception?> DirectAsync(SampleOnPostgres onPostgres, DemoPerson person, Func<IServiceProvider, ValueTask<Unit>> handle)
     {
-        using (SampleCallers.BeginSeatOf(person, Harbor))
+        using (SampleUsers.BeginSeatOf(person, Harbor))
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             try

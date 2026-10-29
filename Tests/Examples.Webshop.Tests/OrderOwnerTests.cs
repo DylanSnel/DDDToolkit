@@ -67,12 +67,12 @@ public sealed class OrderOwnerTests : IAsyncLifetime
     [Fact]
     public async Task Only_the_customer_who_placed_an_order_sends_it_elsewhere()
     {
-        await AskAsync(Caller.User(Alice), _alices.Id);
+        await AskAsync(CurrentUserSnapshot.User(Alice), _alices.Id);
 
-        (await RefusedAsync(Caller.User(Alice), _bobs.Id)).Code.Should().Be(ToolkitRefusals.NotOwn, "Bob placed it");
-        (await RefusedAsync(Caller.User(Alice), _guests.Id)).Code.Should().Be(ToolkitRefusals.NotOwn, "a guest's order is nobody's");
-        (await RefusedAsync(Caller.Anonymous, _guests.Id)).Code.Should().Be(ToolkitRefusals.NotOwn, "not even for a guest, who is no customer");
-        (await RefusedAsync(Caller.User(Alice), OrderId.CreateSequential())).Code.Should().Be(ToolkitRefusals.NotFound);
+        (await RefusedAsync(CurrentUserSnapshot.User(Alice), _bobs.Id)).Code.Should().Be(ToolkitRefusals.NotOwn, "Bob placed it");
+        (await RefusedAsync(CurrentUserSnapshot.User(Alice), _guests.Id)).Code.Should().Be(ToolkitRefusals.NotOwn, "a guest's order is nobody's");
+        (await RefusedAsync(CurrentUserSnapshot.Anonymous, _guests.Id)).Code.Should().Be(ToolkitRefusals.NotOwn, "not even for a guest, who is no customer");
+        (await RefusedAsync(CurrentUserSnapshot.User(Alice), OrderId.CreateSequential())).Code.Should().Be(ToolkitRefusals.NotFound);
     }
 
     [Fact]
@@ -124,15 +124,15 @@ public sealed class OrderOwnerTests : IAsyncLifetime
         }
     }
 
-    private async Task AskAsync(Caller caller, OrderId order)
+    private async Task AskAsync(CurrentUserSnapshot caller, OrderId order)
     {
         await using var scope = _host.CreateAsyncScope();
-        using var running = Callers.Begin(caller);
+        using var running = TestAccess.BeginAs(caller);
         await scope.ServiceProvider.GetRequiredService<AccessChecks<IOrderingRequest>>()
             .RequireAsync(new ShipElsewhere(order, "Neude 11", "Utrecht", "3512 AE"), Cancellation);
     }
 
-    private async Task<RefusalException> RefusedAsync(Caller caller, OrderId order)
+    private async Task<RefusalException> RefusedAsync(CurrentUserSnapshot caller, OrderId order)
         => (await FluentActions.Awaiting(() => AskAsync(caller, order)).Should().ThrowAsync<RefusalException>()).Which;
 
     private static Order PlacedBy(Guid? customer)

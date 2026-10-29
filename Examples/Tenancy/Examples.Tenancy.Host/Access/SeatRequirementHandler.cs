@@ -1,9 +1,10 @@
+using DDDToolkit.Supporting.Tenancy.Access;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Examples.Tenancy.Host.Access;
 
 /// <summary>
-/// Decides <see cref="SeatRequirement"/> from the request's Tenancy caller, which tenant selection began before
+/// Decides <see cref="SeatRequirement"/> from the request's Tenancy user, which tenant selection began before
 /// authorization runs, asked through the class the Tenants module's use cases are named through, closed over its ids.
 /// It fails with the code of the refusal the caller resolved to as its reason.
 /// </summary>
@@ -14,7 +15,7 @@ public sealed class SeatRequirementHandler : AuthorizationHandler<SeatRequiremen
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (SeatRequirement.RefusalFor(TenancyUseCases.CurrentCaller()) is { } refusal)
+        if (SeatRequirement.RefusalFor(TenancyUsers.Ambient) is { } refusal)
         {
             context.Fail(new AuthorizationFailureReason(this, refusal.Code));
         }

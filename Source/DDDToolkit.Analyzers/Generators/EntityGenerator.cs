@@ -29,7 +29,6 @@ public sealed class EntityGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(context.TemplateAttributeProblems(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
         context.RegisterSourceOutput(context.MisplacedKeyParts(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
         context.RegisterSourceOutput(context.MisplacedOwners(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
-        context.RegisterSourceOutput(context.MisplacedPlaces(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
     }
 
     private static void Execute(SourceProductionContext context, EntityDefinition definition)

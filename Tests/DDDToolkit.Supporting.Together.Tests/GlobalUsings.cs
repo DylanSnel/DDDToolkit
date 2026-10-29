@@ -11,7 +11,7 @@ global using DDDToolkit.Supporting.Membership;
 global using DDDToolkit.Supporting.Membership.Access;
 global using DDDToolkit.Supporting.Membership.EntityFramework;
 global using DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
-global using DDDToolkit.Supporting.Membership.UseCases;
+global using DDDToolkit.Supporting.Membership.Managers;
 global using DDDToolkit.Supporting.Tenancy;
 global using DDDToolkit.Supporting.Tenancy.Access;
 global using DDDToolkit.Supporting.Tenancy.Catalogue;
@@ -22,6 +22,6 @@ global using Microsoft.EntityFrameworkCore;
 global using Microsoft.Extensions.DependencyInjection;
 global using Xunit;
 
-// The caller closed over the application's ids, once, as an application does. The use cases are TenancyUseCases,
-// which the toolkit's generator writes into the test host that declares the classes, under the package's name.
-global using CampusCaller = DDDToolkit.Supporting.Tenancy.Access.TenancyCaller<Campus.Tenants.TenantId, Campus.Tenants.SeatId>;
+// The caller closed over the application's ids, once, as an application does. The managers are SeatManager and the
+// others, which the toolkit's generator writes into the test host that declares the classes, under the package's names.
+global using CampusUser = DDDToolkit.Supporting.Tenancy.Access.TenancyUser<Campus.Tenants.TenantId, Campus.Tenants.SeatId>;

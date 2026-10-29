@@ -9,7 +9,6 @@ using DDDToolkit.Exceptions;
 using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
-using DDDToolkit.Supporting.Membership.UseCases;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
@@ -29,7 +28,7 @@ namespace Examples.Tenancy.Tests.Host;
 /// </summary>
 /// <remarks>
 /// The requests are sent the way anything but a route sends them: from a scope of the host's services, as the
-/// callers the test begins, which are the two a request has (<see cref="SampleCallers"/>). What the routes answer
+/// callers the test begins, which are the two a request has (<see cref="SampleUsers"/>). What the routes answer
 /// is the scenario tests' to prove.
 /// </remarks>
 [Trait("Category", "Samples")]
@@ -67,7 +66,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         // Nobody, a caller who did not sign in: the access check refuses before the handler sees the permission, which it would
         // have refused. The host requires every flow to say who it runs as, so the test says so too.
         RefusalException asNobody;
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             asNobody = await RefusalOfAsync(host, notAPermission);
         }
@@ -226,11 +225,11 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         // A host without the demonstration: one tenant, provisioned here, which nobody has marked.
         await using var host = await sample.StartAsync(settings: new Dictionary<string, string> { [DemoSeeder.Setting] = "false" }, seeded: false);
 
-        using (TenancyUseCases.BeginSystem())
+        using (SampleAccess.Manager.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
-                new TenancyUseCases.TenantToProvision(
+            await scope.ServiceProvider.GetRequiredService<TenantManager>().ProvisionAsync(
+                new TenantToProvision(
                     Harbor.Slug,
                     Harbor.Name,
                     Harbor.Shape,
@@ -252,7 +251,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             refused.Kind.Should().Be(RefusalKind.NotPermitted);
         }
 
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(TenancyRefusals.NotSeated, "a caller who did not sign in works in no tenant, so the door refuses it");
         }
@@ -262,7 +261,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         await using (var unasked = host.Services.CreateAsyncScope())
         {
             var send = async () => await unasked.ServiceProvider.GetRequiredService<ISender>().Send(new MarkTenantAsDemo(), Cancellation);
-            await send.Should().ThrowAsync<NoCallerException>();
+            await send.Should().ThrowAsync<NoCurrentUserException>();
         }
 
         // No use case of the package stands between this command and the tenant, so its handler asks again, and
@@ -271,8 +270,8 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         {
             await using var scope = host.Services.CreateAsyncScope();
             var handler = new MarkTenantAsDemoHandler(
-                scope.ServiceProvider.GetRequiredService<TenancyUseCases.IStore>(),
-                scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>());
+                scope.ServiceProvider.GetRequiredService<TenancyStore>(),
+                scope.ServiceProvider.GetRequiredService<TenancyAccessManager>());
 
             var handle = async () => await handler.Handle(new MarkTenantAsDemo(), Cancellation);
             (await handle.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.SystemOnly);
@@ -280,7 +279,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         (await IsDemoAsync(host)).Should().BeFalse("a refused command changes nothing");
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(new MarkTenantAsDemo(), Cancellation);
@@ -345,9 +344,9 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         var observer = Harbor.ProjectRoles[SampleCatalogue.Observer];
         var archive = new ArchiveProjectRole(observer);
 
-        // Nothing of a package's stands between this command and the role, so its handler asks again what the
-        // command declared. Leo owns a project and manages no roles: handed the command directly, past the check, the
-        // handler refuses him as the check does, naming the permission.
+        // The project role manager asks again who may change the roles: the permission the projects' rules name for them,
+        // held for the whole tenant. Leo owns a project and manages no roles: handed the command directly, past the check,
+        // the handler refuses him as the check does, naming the permission.
         using (AsSeatOf(DemoPeople.Leo))
         {
             await using var scope = host.Services.CreateAsyncScope();
@@ -359,7 +358,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         }
 
         // Nobody, a caller who did not sign in, is refused as nobody, before anything is read.
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var handle = async () => await ArchiveHandlerOf(scope).Handle(archive, Cancellation);
@@ -730,13 +729,13 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         const string Blank = "   ";
 
         // Nobody, a caller who did not sign in, whatever the project and the title.
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestAccess.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             (await RefusalOfAsync(host, new RecordInspection(outOfSight, Blank))).Code.Should().Be(TenancyRefusals.NotSeated);
         }
 
         // System work that acts for no seat is a mistake in the calling code, found before the project is asked about.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RecordInspection(outOfSight, Blank), Cancellation);
@@ -908,13 +907,10 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         public async ValueTask<Unit> Handle(ChangeProjectName message, MessageHandlerDelegate<ChangeProjectName, Unit> next, CancellationToken cancellationToken)
         {
-            using (SampleCallers.BeginSeatOf(DemoPeople.Leo, DemoData.Harbor))
+            using (SampleUsers.BeginSeatOf(DemoPeople.Leo, DemoData.Harbor))
             {
                 await using var scope = scopes.CreateAsyncScope();
-                var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
-                var project = await projects.Projects.AsTracking().SingleAsync(candidate => candidate.Id == message.Id, cancellationToken);
-                project.TakeCrewRole(From, Role);
-                await projects.SaveChangesAsync(cancellationToken);
+                await scope.ServiceProvider.GetRequiredService<CrewMemberManager>().TakeRoleAsync(message.Id, From, Role, cancellationToken);
             }
 
             return await next(message, cancellationToken);
@@ -972,7 +968,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         public async ValueTask<Unit> Handle(ChangeProjectName message, MessageHandlerDelegate<ChangeProjectName, Unit> next, CancellationToken cancellationToken)
         {
-            using (SampleCallers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
+            using (SampleUsers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<ISender>().Send(new SetProjectRolePermissions(Role, [ProjectPermissionNames.View]), cancellationToken);
@@ -1100,7 +1096,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     {
         public async ValueTask<InspectionId> Handle(RecordInspection message, MessageHandlerDelegate<RecordInspection, InspectionId> next, CancellationToken cancellationToken)
         {
-            using (SampleCallers.BeginSeatOf(DemoPeople.Rhea, DemoData.Harbor))
+            using (SampleUsers.BeginSeatOf(DemoPeople.Rhea, DemoData.Harbor))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<ISender>().Send(new CloseProject(message.Project), cancellationToken);
@@ -1171,9 +1167,9 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     public async Task A_host_that_leaves_a_module_s_access_check_out_changes_no_project_under_the_hold()
     {
         // The same host, on the demonstration, with the expert hold on Projects' context. No request's checks were
-        // asked, so no request is in hand, and no project is saved, whoever sends what: here Ada, who may send all of
-        // it, and Vic, who manages no crew, giving up his own place on one, which is saved as the application's work
-        // only for a command its check let through.
+        // asked, so no request is in hand, and no project is saved, whoever sends what. Ada may send all of it, and the
+        // hold refuses each save. Vic manages no crew and gives up his own place on one. With no request in hand the
+        // crew manager asks his permission itself and refuses him before the save.
         Type[] checks = [typeof(ProjectsAccessBehavior<,>), typeof(InspectionsAccessBehavior<,>), typeof(TenantsAccessBehavior<,>)];
         await using var host = await sample.StartAsync(services =>
         {
@@ -1191,9 +1187,8 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (DemoPeople.Ada, new CloseProject(pier.Id)),
             (DemoPeople.Ada, new AddCrewMember(pier.Id, Harbor.SeatOf(DemoPeople.Tove), Role: null, Until: null)),
             (DemoPeople.Ada, new ChangeProjectOwner(pier.Id, Harbor.SeatOf(DemoPeople.Juno), FormerOwnerRole: null)),
-            (DemoPeople.Vic, new TakeCrewRole(pier.Id, vic, observer)),
-            (DemoPeople.Vic, new RemoveCrewMember(pier.Id, vic)),
         ];
+        IMessage[] ofVic = [new TakeCrewRole(pier.Id, vic, observer), new RemoveCrewMember(pier.Id, vic)];
 
         foreach (var (sender, request) in changes)
         {
@@ -1202,6 +1197,16 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 await using var scope = host.Services.CreateAsyncScope();
                 var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, Cancellation);
                 (await send.Should().ThrowAsync<InvalidOperationException>(request.GetType().Name)).WithMessage("*was changed with no request in hand*");
+            }
+        }
+
+        foreach (var request in ofVic)
+        {
+            using (AsSeatOf(DemoPeople.Vic))
+            {
+                await using var scope = host.Services.CreateAsyncScope();
+                var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, Cancellation);
+                (await send.Should().ThrowAsync<RefusalException>(request.GetType().Name)).Which.Code.Should().Be(ProjectRefusals.NotPermitted);
             }
         }
 
@@ -1284,9 +1289,9 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     {
         var host = await sample.SharedAsync();
 
-        async Task<IReadOnlyList<SeatOfMine>> OwnSeatsAsync(string claims)
+        async Task<IReadOnlyList<SeatInTenant<Seat>>> OwnSeatsAsync(string claims)
         {
-            using (Callers.Begin(Callers.FromClaims(claims)))
+            using (TestAccess.BeginAs(CurrentUserSnapshot.FromClaims(claims)))
             {
                 await using var scope = host.Services.CreateAsyncScope();
                 return await scope.ServiceProvider.GetRequiredService<ISender>().Send(new SeatsOfMine(), Cancellation);
@@ -1319,7 +1324,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (await send.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*Only system work chooses a project's id*");
         }
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
         {
             await using (var before = host.Services.CreateAsyncScope())
             {
@@ -1389,7 +1394,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     /// <summary>Whether harbor is marked as a demonstration, read as system work there.</summary>
     private static async Task<bool> IsDemoAsync(SampleFactory host)
     {
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<TenantsContext>().Tenants
@@ -1401,15 +1406,12 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
     /// <summary>The handler of <see cref="ArchiveProjectRole"/> over the services of <paramref name="scope"/>, as the mediator makes it, to be called past the mediator.</summary>
     private static ArchiveProjectRoleHandler ArchiveHandlerOf(AsyncServiceScope scope)
-        => new(
-            scope.ServiceProvider.GetRequiredService<IProjectStore>(),
-            scope.ServiceProvider.GetRequiredService<ProjectMembership>(),
-            scope.ServiceProvider.GetRequiredService<AccessChecks<IProjectsRequest>>());
+        => new(scope.ServiceProvider.GetRequiredService<ProjectRoleManager>());
 
     /// <summary>Whether harbor's project role <paramref name="role"/> is in use, read as system work there.</summary>
     private static async Task<CustomRoleStatus> StatusOfAsync(SampleFactory host, ProjectRoleId role)
     {
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ProjectsContext>().ProjectRoles
@@ -1420,5 +1422,5 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     }
 
     /// <summary>Begins the callers of a request of <paramref name="person"/> in harbor: the signed-in user, and their seat there.</summary>
-    private static IDisposable AsSeatOf(DemoPerson person) => SampleCallers.BeginSeatOf(person, Harbor);
+    private static IDisposable AsSeatOf(DemoPerson person) => SampleUsers.BeginSeatOf(person, Harbor);
 }

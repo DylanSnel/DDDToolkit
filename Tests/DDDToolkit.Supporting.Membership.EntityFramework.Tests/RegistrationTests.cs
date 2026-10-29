@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Reflection;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.BaseTypes;
@@ -79,7 +80,7 @@ public sealed class RegistrationTests
 
         services.Count.Should().Be(registered);
         services.Count(descriptor => descriptor.ServiceType == typeof(MembershipRegistration)).Should().Be(2);
-        services.Count(descriptor => descriptor.ServiceType == typeof(IMemberQuestions<DocumentId>)).Should().Be(1);
+        services.Count(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<Document>)).Should().Be(1);
     }
 
     [Fact]
@@ -123,7 +124,7 @@ public sealed class RegistrationTests
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<DocumentShare, DocumentShareId, UserId, NamedRole, FilingContext, Document, DocumentId>(resolved))
             .Should().Throw<ArgumentException>().WithParameterName("rules")
             .WithMessage("The rules 'yards' have the application resolve who a caller is as a member (MemberSource.Resolved), and nothing answers that for Document: "
-                + "no ICallerMember<DocumentId, UserId> is registered. Register one before the resource, services.AddScoped<ICallerMember<DocumentId, UserId>, YourClass>(), "
+                + "no ICurrentMember<DocumentId, UserId> is registered. Register one before the resource, services.AddScoped<ICurrentMember<DocumentId, UserId>, YourClass>(), "
                 + "or hand the class that answers to the resource's registration: services.AddDocumentMembership<TContext, YourClass>(rules).*");
 
         // Where the roles come from: which of them give a permission, and which there are.
@@ -147,12 +148,12 @@ public sealed class RegistrationTests
 
         // Registered before the resource, each is what the rules need, and nothing more is asked.
         var answered = new ServiceCollection();
-        answered.AddScoped<ICallerMember<CrateId, PorterId>, CratesInTheDepot>();
+        answered.AddScoped<ICurrentMember<CrateId, PorterId>, CratesInTheDepot>();
         answered.AddScoped<IRolesWithPermission<CrateId, DepotRoleId>, CratesInTheDepot>();
         answered.AddScoped<IMemberRoles<CrateId, DepotRoleId>, CratesInTheDepot>();
         answered.AddScoped<IPlacesReached<CrateId, BayId>, CratesInTheDepot>();
         answered.AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(CrateMembership.Rules);
-        answered.Should().Contain(descriptor => descriptor.ServiceType == typeof(IMemberQuestions<CrateId>));
+        answered.Should().Contain(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<Crate>));
     }
 
     [Fact]
@@ -166,7 +167,7 @@ public sealed class RegistrationTests
         services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(CratesInTheDepot)).Which.Lifetime.Should().Be(ServiceLifetime.Scoped);
         Type[] ports =
         [
-            typeof(ICallerMember<CrateId, PorterId>), typeof(IRolesWithPermission<CrateId, DepotRoleId>), typeof(IMemberRoles<CrateId, DepotRoleId>),
+            typeof(ICurrentMember<CrateId, PorterId>), typeof(IRolesWithPermission<CrateId, DepotRoleId>), typeof(IMemberRoles<CrateId, DepotRoleId>),
             typeof(IMemberDirectory<CrateId, PorterId>), typeof(IPlacesReached<CrateId, BayId>),
         ];
         foreach (var port in ports)
@@ -176,7 +177,7 @@ public sealed class RegistrationTests
 
         // What the class does not answer is not registered for it, and no port of another resource is.
         services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IMemberRolePolicy<CrateId, DepotRoleId>));
-        services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(ICallerMember<PalletId, PorterId>));
+        services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(ICurrentMember<PalletId, PorterId>));
         services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IMemberRoles<CrateId, NamedRole>));
 
         // Said again, it changes nothing.
@@ -186,7 +187,7 @@ public sealed class RegistrationTests
 
         // A class that answers nothing of the resource is a mistake, and said so: a pallet's class is not a crate's.
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId, PalletsInTheDepot>(CrateMembership.Rules))
-            .Should().Throw<ArgumentException>().WithMessage("PalletsInTheDepot answers nothing of Crate: it implements none of ICallerMember<CrateId, PorterId>*");
+            .Should().Throw<ArgumentException>().WithMessage("PalletsInTheDepot answers nothing of Crate: it implements none of ICurrentMember<CrateId, PorterId>*");
 
         // And a class that answers less than the rules need leaves the rest to be refused as ever.
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId, OnlyWhoCalls>(CrateMembership.Rules))
@@ -200,7 +201,7 @@ public sealed class RegistrationTests
         // before, that answer is the one asked, and the class answers the rest.
         using var depot = await SqliteDepot.SeededAsync(services => services.AddSingleton<IMemberDirectory<CrateId, PorterId>>(new NobodyNew()));
 
-        await depot.Services.AsAsync(Caller.System, async provider =>
+        await depot.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             provider.GetRequiredService<IMemberDirectory<CrateId, PorterId>>().Should().BeOfType<NobodyNew>();
             provider.GetRequiredService<IMemberRoles<CrateId, DepotRoleId>>().Should().BeOfType<CratesInTheDepot>();
@@ -209,7 +210,7 @@ public sealed class RegistrationTests
             await Refused.WithCodeAsync(
                 CrateMembership.Codes,
                 MembershipRefusals.MemberNotActive,
-                () => provider.GetRequiredService<MemberAdmission<CrateId, PorterId, DepotRoleId>>().RequireMemberAsync(depot.Scenario.Eli.Porter!.Value, Cancellation).AsTask());
+                () => provider.GetRequiredService<CratePorterManager>().AddAsync(depot.Scenario.Rice, depot.Scenario.Eli.Porter!.Value, null, null, Cancellation));
         });
     }
 
@@ -225,15 +226,15 @@ public sealed class RegistrationTests
             MembershipRules.Declare(typeof(Document), "papers", [new("papers.read")], Roles.Fixed([new("reader", ["papers.read"])]), members: MemberSource.Resolved()));
 
         services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(WhoCallsAnywhere)).Which.Lifetime.Should().Be(ServiceLifetime.Scoped);
-        services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(ICallerMember<PalletId, PorterId>));
-        services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(ICallerMember<DocumentId, UserId>));
+        services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(ICurrentMember<PalletId, PorterId>));
+        services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(ICurrentMember<DocumentId, UserId>));
 
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         await using var scope = provider.CreateAsyncScope();
         await using var other = provider.CreateAsyncScope();
-        var pallets = scope.ServiceProvider.GetRequiredService<ICallerMember<PalletId, PorterId>>();
-        pallets.Should().BeSameAs(scope.ServiceProvider.GetRequiredService<ICallerMember<DocumentId, UserId>>(), "one instance for a scope answers for both");
-        pallets.Should().NotBeSameAs(other.ServiceProvider.GetRequiredService<ICallerMember<PalletId, PorterId>>(), "and each scope has its own");
+        var pallets = scope.ServiceProvider.GetRequiredService<ICurrentMember<PalletId, PorterId>>();
+        pallets.Should().BeSameAs(scope.ServiceProvider.GetRequiredService<ICurrentMember<DocumentId, UserId>>(), "one instance for a scope answers for both");
+        pallets.Should().NotBeSameAs(other.ServiceProvider.GetRequiredService<ICurrentMember<PalletId, PorterId>>(), "and each scope has its own");
     }
 
     [Fact]
@@ -242,13 +243,13 @@ public sealed class RegistrationTests
         // Members that are users, by their own id, with roles kept elsewhere and reach from above; members the
         // host resolves, with roles declared in the rules and nothing above. Whatever the rules say of one,
         // only what they say needs an answer.
-        var usersWithKeptRoles = MembershipRules.Declare(typeof(Crate), "yards", [new("yards.view", EveryMember: true)], Roles.External(), members: MemberSource.CallerId, reachFromAbove: true);
+        var usersWithKeptRoles = MembershipRules.Declare(typeof(Crate), "yards", [new("yards.view", EveryMember: true)], Roles.External(), members: MemberSource.CurrentUserId, reachFromAbove: true);
         var users = new ServiceCollection();
         users.AddScoped<IRolesWithPermission<CrateId, DepotRoleId>, CratesInTheDepot>();
         users.AddScoped<IMemberRoles<CrateId, DepotRoleId>, CratesInTheDepot>();
         users.AddScoped<IPlacesReached<CrateId, BayId>, CratesInTheDepot>();
         users.AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(usersWithKeptRoles);
-        users.Should().NotContain(descriptor => descriptor.ServiceType == typeof(ICallerMember<CrateId, PorterId>), "the caller's own id is who it is as a member");
+        users.Should().NotContain(descriptor => descriptor.ServiceType == typeof(ICurrentMember<CrateId, PorterId>), "the caller's own id is who it is as a member");
 
         var claimWithReach = MembershipRules.Declare(
             typeof(Folder), "lots", [new("lots.view", EveryMember: true)], Roles.Fixed([new("hand", ["lots.view"])]), members: MemberSource.Claim("app_metadata.staff"), reachFromAbove: true);
@@ -260,7 +261,8 @@ public sealed class RegistrationTests
         var resolved = new ServiceCollection();
         resolved.AddSingleton<DepotDesk>();
         resolved.AddMembership<PalletPorter, PalletPorterId, PorterId, NamedRole, DepotContext, Pallet, PalletId, PalletsInTheDepot>(resolvedAlone);
-        resolved.Should().Contain(descriptor => descriptor.ServiceType == typeof(IMemberRoles<PalletId, NamedRole>), "roles the rules declare are answered from the rules");
+        resolved.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IMemberRoles<PalletId, NamedRole>), "roles the rules declare are answered from the rules, by the member manager itself");
+        resolved.Should().Contain(descriptor => descriptor.ServiceType == typeof(PalletPorterManager), "the member manager the generator wrote for the pallets, which the pallet names");
 
         // Roles the host keeps may be known by name as well: what a role is known by is not what says where it is kept.
         var namedAndKept = MembershipRules.Declare(typeof(Document), "papers", [new("papers.read")], Roles.External(otherPermissions: OtherPermissions.All));
@@ -287,9 +289,9 @@ public sealed class RegistrationTests
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
-        using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
+        using (TestAccess.BeginAs(TestUsers.User(UserId.CreateSequential())))
         {
-            FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<IMemberQuestions<PalletId>>().Reach("pens.view"))
+            FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Pallet>>().Reach("pens.view"))
                 .Should().Throw<InvalidOperationException>()
                 .WithMessage("The rules 'pens' let Pallet be reached from above, and DepotContext does not say where it sits: Pallet marks no property [At]*HasMembers(resource => resource.Members).");
         }
@@ -302,14 +304,14 @@ public sealed class RegistrationTests
         misplaced.AddScoped<IPlacesReached<CrateId, PorterId>, CratesAtPorters>();
         misplaced.AddScoped<IRolesWithPermission<CrateId, DepotRoleId>, CratesInTheDepot>();
         misplaced.AddScoped<IMemberRoles<CrateId, DepotRoleId>, CratesInTheDepot>();
-        misplaced.AddScoped<ICallerMember<CrateId, PorterId>, CratesInTheDepot>();
+        misplaced.AddScoped<ICurrentMember<CrateId, PorterId>, CratesInTheDepot>();
         misplaced.AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(CrateMembership.Rules);
 
         await using var other = misplaced.BuildServiceProvider();
         await using var asking = other.CreateAsyncScope();
-        using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
+        using (TestAccess.BeginAs(TestUsers.User(UserId.CreateSequential())))
         {
-            FluentActions.Invoking(() => asking.ServiceProvider.GetRequiredService<IMemberQuestions<CrateId>>().Reach(CratePermissions.Pack))
+            FluentActions.Invoking(() => asking.ServiceProvider.GetRequiredService<MembershipAccessManager<Crate>>().Reach(CratePermissions.Pack))
                 .Should().Throw<InvalidOperationException>()
                 .WithMessage("Crate sits at a BayId, and nothing answers where a caller holds a permission among those: no IPlacesReached<CrateId, BayId> is registered.*");
         }
@@ -339,7 +341,7 @@ public sealed class RegistrationTests
         await using var provider = services.BuildServiceProvider();
 
         var data = new DepotScenario(clock.Now);
-        using (Callers.Begin(Caller.System))
+        using (TestAccess.BeginSystemBypassingRowAccess())
         {
             await using var seeding = provider.CreateAsyncScope();
             var context = seeding.ServiceProvider.GetRequiredService<DepotContext>();
@@ -361,10 +363,10 @@ public sealed class RegistrationTests
 
         async Task<MemberHold<CrateId>?> HoldAsync(DepotPerson person, CrateId crate, string permission)
         {
-            using (Callers.Begin(person.Caller))
+            using (TestAccess.BeginAs(person.Caller))
             {
                 await using var scope = provider.CreateAsyncScope();
-                return await scope.ServiceProvider.GetRequiredService<IMemberQuestions<CrateId>>().HoldAsync(crate, permission, Cancellation);
+                return await scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Crate>>().HoldAsync(crate, permission, Cancellation);
             }
         }
 
@@ -382,14 +384,14 @@ public sealed class RegistrationTests
     public void A_member_is_known_by_what_its_source_answers()
     {
         // The caller's user id is a Guid, and a folder's staff are known by a text.
-        FluentActions.Invoking(() => new ServiceCollection().AddMembership<FolderMember, FolderMemberId, StaffCode, NamedRole, FilingContext, Folder, FolderId>(OtherRules("shelves", MemberSource.CallerId)))
+        FluentActions.Invoking(() => new ServiceCollection().AddMembership<FolderMember, FolderMemberId, StaffCode, NamedRole, FilingContext, Folder, FolderId>(OtherRules("shelves", MemberSource.CurrentUserId)))
             .Should().Throw<ArgumentException>()
-            .WithMessage("The rules 'shelves' take the caller's member id from MemberSource.CallerId*known by StaffCode, which is not an id over a Guid*");
+            .WithMessage("The rules 'shelves' take the caller's member id from MemberSource.CurrentUserId*known by StaffCode, which is not an id over a Guid*");
 
         // Said by nothing, who a member is follows from what it is known by: a text answers nobody, and the registration says what would.
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<FolderMember, FolderMemberId, StaffCode, NamedRole, FilingContext, Folder, FolderId>(OtherRules("shelves")))
             .Should().Throw<ArgumentException>()
-            .WithMessage("Who a caller is as a member of Folder follows from what a member is known by, StaffCode, and that is no id over a Guid*no ICallerMember<FolderId, StaffCode> is registered*MemberSource.Claim(path)*");
+            .WithMessage("Who a caller is as a member of Folder follows from what a member is known by, StaffCode, and that is no id over a Guid*no ICurrentMember<FolderId, StaffCode> is registered*MemberSource.Claim(path)*");
 
         // A claim is a text, and a document's members are known by a Guid.
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<DocumentShare, DocumentShareId, UserId, NamedRole, FilingContext, Document, DocumentId>(OtherRules("papers", MemberSource.Claim("app_metadata.badge"))))
@@ -415,9 +417,9 @@ public sealed class RegistrationTests
             register(services);
             await using var provider = services.BuildServiceProvider();
             await using var scope = provider.CreateAsyncScope();
-            using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
+            using (TestAccess.BeginAs(TestUsers.User(UserId.CreateSequential())))
             {
-                return FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentPermissions.View))
+                return FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View))
                     .Should().Throw<InvalidOperationException>().Which;
             }
         }
@@ -442,21 +444,23 @@ public sealed class RegistrationTests
         });
         var stranger = UserId.CreateSequential();
 
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
-            var documents = provider.GetRequiredService<MemberAdmission<DocumentId, UserId, NamedRole>>();
-            var folders = provider.GetRequiredService<MemberAdmission<FolderId, StaffCode, NamedRole>>();
+            var documents = provider.GetRequiredService<DocumentShareManager>();
+            var folders = provider.GetRequiredService<FolderMemberManager>();
+            var data = filing.Scenario;
 
-            // The directory is the documents': a folder has none, and admits everybody.
-            (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.MemberNotActive, () => documents.RequireMemberAsync(stranger, Cancellation).AsTask()))
+            // The directory is the documents': a folder has none, and admits everybody. An admitted member is refused
+            // next for its period, which ends before it starts, so nothing changes.
+            (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.MemberNotActive, () => documents.AddAsync(data.Minutes, stranger, null, null, Cancellation)))
                 .Arguments.Should().Contain("Member", stranger);
-            await documents.RequireMemberAsync(OnlyKnown.Known, Cancellation);
-            await folders.RequireMemberAsync(new StaffCode("N-777"), Cancellation);
+            await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.InvalidPeriod, () => documents.AddAsync(data.Minutes, OnlyKnown.Known, null, DateTimeOffset.MinValue, Cancellation));
+            await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.InvalidPeriod, () => folders.AddAsync(data.Cabinet, new StaffCode("N-777"), null, DateTimeOffset.MinValue, Cancellation));
 
             // The policy is the folders': a document's roles all go to a member.
-            await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => folders.RequireRoleAsync(FolderMembership.Visitor, Cancellation).AsTask());
-            await folders.RequireRoleAsync(FolderMembership.Clerk, Cancellation);
-            await documents.RequireRoleAsync(DocumentMembership.Onlooker, Cancellation);
+            await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => folders.AddAsync(data.Cabinet, new StaffCode("N-777"), FolderMembership.Visitor, null, Cancellation));
+            await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.InvalidPeriod, () => folders.AddAsync(data.Cabinet, new StaffCode("N-777"), FolderMembership.Clerk, DateTimeOffset.MinValue, Cancellation));
+            await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.InvalidPeriod, () => documents.AddAsync(data.Minutes, OnlyKnown.Known, DocumentMembership.Onlooker, DateTimeOffset.MinValue, Cancellation));
         });
     }
 
@@ -466,11 +470,14 @@ public sealed class RegistrationTests
         // The roles there are for a document's members, as the host says them: registered before, they are the ones asked.
         using var filing = await SqliteFiling.SeededAsync(services => services.AddSingleton<IMemberRoles<DocumentId, NamedRole>>(new NoRoles()));
 
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             provider.GetRequiredService<IMemberRoles<DocumentId, NamedRole>>().Should().BeOfType<NoRoles>();
-            await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => provider.GetRequiredService<MemberAdmission<DocumentId, UserId, NamedRole>>().RequireRoleAsync(DocumentMembership.Onlooker, Cancellation).AsTask());
-            provider.GetRequiredService<IMemberRoles<FolderId, NamedRole>>().Should().BeOfType<NamedRoles<FolderId>>();
+            await Refused.WithCodeAsync(
+                DocumentRefusals.Membership,
+                MembershipRefusals.RoleNotForMembers,
+                () => provider.GetRequiredService<DocumentShareManager>().AddAsync(filing.Scenario.Minutes, UserId.CreateSequential(), DocumentMembership.Onlooker, null, Cancellation));
+            provider.GetService<IMemberRoles<FolderId, NamedRole>>().Should().BeNull("a folder's roles are the ones its rules declare, which the member manager asks of the rules");
             provider.GetRequiredService<TimeProvider>().Should().BeSameAs(filing.Clock, "a clock registered before is the one the questions ask");
         });
     }
@@ -514,17 +521,17 @@ public sealed class RegistrationTests
     }
 
     /// <summary>A class that answers who calls, and nothing else the crates' rules need.</summary>
-    private sealed class OnlyWhoCalls : ICallerMember<CrateId, PorterId>
+    private sealed class OnlyWhoCalls : ICurrentMember<CrateId, PorterId>
     {
-        public PorterId? Find(Caller caller) => null;
+        public PorterId? Find(CurrentUserSnapshot caller) => null;
     }
 
     /// <summary>One class that says who a caller is for two kinds of resource, whose members are known by different ids.</summary>
-    private sealed class WhoCallsAnywhere : ICallerMember<PalletId, PorterId>, ICallerMember<DocumentId, UserId>
+    private sealed class WhoCallsAnywhere : ICurrentMember<PalletId, PorterId>, ICurrentMember<DocumentId, UserId>
     {
-        PorterId? ICallerMember<PalletId, PorterId>.Find(Caller caller) => null;
+        PorterId? ICurrentMember<PalletId, PorterId>.Find(CurrentUserSnapshot caller) => null;
 
-        UserId? ICallerMember<DocumentId, UserId>.Find(Caller caller) => null;
+        UserId? ICurrentMember<DocumentId, UserId>.Find(CurrentUserSnapshot caller) => null;
     }
 
     /// <summary>A directory that admits nobody.</summary>
@@ -536,25 +543,25 @@ public sealed class RegistrationTests
     /// <summary>Where a caller holds a permission, for folders that would sit at bays.</summary>
     private sealed class FoldersAtBays : IPlacesReached<FolderId, BayId>
     {
-        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
+        public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
     }
 
     /// <summary>Where a caller holds a permission, for pallets that would sit at bays.</summary>
     private sealed class PalletsAtBays : IPlacesReached<PalletId, BayId>
     {
-        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
+        public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
     }
 
     /// <summary>An answer about the wrong kind of place: crates sit at bays, and this says at which porters a permission is held.</summary>
     private sealed class CratesAtPorters : IPlacesReached<CrateId, PorterId>
     {
-        public IQueryable<PorterId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<Porter>().Where(porter => false).Select(porter => porter.Id);
+        public IQueryable<PorterId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission) => context.Set<Porter>().Where(porter => false).Select(porter => porter.Id);
     }
 
     /// <summary>Roles the host keeps, known by name, none of which gives anything.</summary>
     private sealed class NoRolesGive : IRolesWithPermission<DocumentId, NamedRole>
     {
-        public IQueryable<NamedRole> RolesWith(DbContext context, Caller caller, string permission) => Array.Empty<NamedRole>().AsQueryable();
+        public IQueryable<NamedRole> RolesWith(DbContext context, CurrentUserSnapshot caller, string permission) => Array.Empty<NamedRole>().AsQueryable();
     }
 
     private sealed class NoRoles : IMemberRoles<DocumentId, NamedRole>

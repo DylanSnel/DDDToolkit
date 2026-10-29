@@ -138,7 +138,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
         // package's directory as his seat, which asks no permission and reads under the policies: they give him the seat and
         // where it is placed, and nobody's roles but his own.
         var host = await sample.SharedAsync();
-        using (SampleCallers.BeginSeatOf(DemoPeople.Leo, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Leo, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var handler = new SeatGrantsHandler(scope.ServiceProvider.GetRequiredService<ITenancyReads>());
@@ -148,7 +148,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
         }
 
         // The same read as Maud answers: what Leo was given is nothing, not a read that does not work.
-        using (SampleCallers.BeginSeatOf(DemoPeople.Maud, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Maud, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             (await new SeatGrantsHandler(scope.ServiceProvider.GetRequiredService<ITenancyReads>()).Handle(new SeatGrants(Harbor.SeatOf(DemoPeople.Rhea)), Cancellation))
@@ -164,7 +164,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
         // line of its own, wider than the request's, a permission reading only where it applies: Vic's role at North Inland,
         // below North, and nothing of Maud's at the root, or Seth's at South Bay.
         var host = await sample.SharedAsync();
-        using (SampleCallers.BeginSeatOf(DemoPeople.Rhea, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Rhea, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var reads = scope.ServiceProvider.GetRequiredService<ITenancyReads>();
@@ -177,10 +177,10 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
 
             // The package's overview the handler selects from: Maud holds every permission of Tenancy at the root, and what
             // Rhea reads of her holds none, since the grant that gives them is above North. Her own is whole.
-            var maud = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(Harbor.SeatOf(DemoPeople.Maud), Cancellation));
+            var maud = await reads.AskAsync((SeatManager seats) => seats.OverviewAsync(Harbor.SeatOf(DemoPeople.Maud), Cancellation));
             maud.Units.Should().ContainSingle().Which.Id.Should().Be(Harbor.Root, "where a seat is placed every member reads");
             maud.Permissions.Should().BeEmpty();
-            var own = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(Harbor.SeatOf(DemoPeople.Rhea), Cancellation));
+            var own = await reads.AskAsync((SeatManager seats) => seats.OverviewAsync(Harbor.SeatOf(DemoPeople.Rhea), Cancellation));
             own.Permissions.Select(permission => permission.Permission).Should().Contain(SeatGrants.RequiredPermission);
         }
     }
@@ -198,9 +198,9 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
 
         // What a seat reads of its own roles is at /graphql: its overview.
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
-        var own = (await rhea.GraphQLDataAsync("{ overviewOfMine { placements { unit { id } grants { roleId appliesNow } } } }"))
+        var own = (await rhea.GraphQLDataAsync("{ overviewOfMine { placements { unitId grants { roleId startsAt endsAt } } } }"))
             .GetProperty("overviewOfMine").GetProperty("placements").EnumerateArray().Should().ContainSingle().Subject;
-        own.GetProperty("unit").GetProperty("id").GetGuid().Should().Be(Harbor.UnitNamed("North").Value);
+        own.GetProperty("unitId").GetGuid().Should().Be(Harbor.UnitNamed("North").Value);
         own.GetProperty("grants").EnumerateArray().Should().ContainSingle()
             .Which.GetProperty("roleId").GetGuid().Should().Be(Harbor.Roles[SampleCatalogue.AreaManager].Value);
     }

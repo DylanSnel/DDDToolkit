@@ -79,26 +79,28 @@ public sealed class CampusScenario
             (Tom, InBirch, Birch, TomInBirch, true),
         ];
 
-        var pack = CampusCatalogue.Built.Packs.ToDictionary(each => each.Key, each => each.Permissions);
+        var starterRole = CampusCatalogue.Built.StarterRoles.ToDictionary(each => each.Key, each => each.Permissions);
         var everyPermission = CampusCatalogue.Built.LivePermissions;
         _heldInTheOrganization =
         [
             (AdaSeat, AlderRoot, everyPermission),
-            (DeeSeat, Science, pack[CampusCatalogue.DeanPack]),
-            (SueSeat, Science, pack[CampusCatalogue.DeanPack]),
+            (DeeSeat, Science, starterRole[CampusCatalogue.DeanStarterRole]),
+            (SueSeat, Science, starterRole[CampusCatalogue.DeanStarterRole]),
             (BeaSeat, BirchRoot, everyPermission),
         ];
 
         _tenantRolePermissions = new()
         {
-            [AlderDean] = pack[CampusCatalogue.DeanPack],
-            [AlderLabChief] = pack[CampusCatalogue.LabChiefPack],
-            [AlderDemonstrator] = pack[CampusCatalogue.LabDemonstratorPack],
-            [BirchLabChief] = pack[CampusCatalogue.LabChiefPack],
+            [AlderDean] = starterRole[CampusCatalogue.DeanStarterRole],
+            [AlderLabChief] = starterRole[CampusCatalogue.LabChiefStarterRole],
+            [AlderDemonstrator] = starterRole[CampusCatalogue.LabDemonstratorStarterRole],
+            [BirchLabChief] = starterRole[CampusCatalogue.LabChiefStarterRole],
         };
 
         // The roles of courses of each college: the starter roles the rules declare, made as the application makes them.
-        var starters = StarterRoles.Missing<CourseRoleId>(CourseMembership.Rules, []);
+        var starters = CourseMembership.Rules.Roles.Declared
+            .Select(starter => new CustomRoleDraft(starter.Name, null, CourseMembership.Rules.PermissionsOf(new NamedRole(starter.Name)), starter.Name))
+            .ToList();
         CourseRoles =
         [
             .. starters.Select(draft => new CourseRole(AlderCourseRoles[draft.MadeFrom!], Alder, draft)),
@@ -192,7 +194,7 @@ public sealed class CampusScenario
     /// <summary>Tom's seat in Birch: the same person, another seat.</summary>
     public SeatId TomInBirch { get; } = SeatId.CreateSequential();
 
-    /// <summary>Alder's role made from the dean's pack.</summary>
+    /// <summary>Alder's role made from the dean's starter role.</summary>
     public RoleId AlderDean { get; } = RoleId.CreateSequential();
 
     /// <summary>Alder's role for a lab's chief: what an owner of a lab holds.</summary>
@@ -250,25 +252,25 @@ public sealed class CampusScenario
         var cancellation = TestContext.Current.CancellationToken;
 
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
-            new TenancyUseCases.TenantToProvision(
+            new TenantToProvision(
                 InAlder, "Alder College", TenantShape.Hierarchical, "Alder College", Ada.Identity,
                 TenantId: Alder,
                 RootId: AlderRoot,
                 AdminSeatId: AdaSeat,
                 RoleIds: new Dictionary<string, RoleId>
                 {
-                    [CampusCatalogue.DeanPack] = AlderDean,
-                    [CampusCatalogue.LabChiefPack] = AlderLabChief,
-                    [CampusCatalogue.LabDemonstratorPack] = AlderDemonstrator,
+                    [CampusCatalogue.DeanStarterRole] = AlderDean,
+                    [CampusCatalogue.LabChiefStarterRole] = AlderLabChief,
+                    [CampusCatalogue.LabDemonstratorStarterRole] = AlderDemonstrator,
                 }),
             cancellation));
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
-            new TenancyUseCases.TenantToProvision(
+            new TenantToProvision(
                 InBirch, "Birch College", TenantShape.Flat, "Birch College", Bea.Identity,
                 TenantId: Birch,
                 RootId: BirchRoot,
                 AdminSeatId: BeaSeat,
-                RoleIds: new Dictionary<string, RoleId> { [CampusCatalogue.LabChiefPack] = BirchLabChief }),
+                RoleIds: new Dictionary<string, RoleId> { [CampusCatalogue.LabChiefStarterRole] = BirchLabChief }),
             cancellation));
 
         await services.BySystemInAsync(Alder, provider => provider.Organization().AddUnitAsync(AlderRoot, "Science", cancellation, Science));
@@ -410,11 +412,11 @@ public sealed class CampusScenario
     private static async Task GiveASeatAsync(CampusServices services, TenantId college, CampusPerson person, SeatId seat, OrganizationUnitId unit, params RoleId[] roles)
     {
         var cancellation = TestContext.Current.CancellationToken;
-        await services.BySystemInAsync(college, provider => provider.Seats().AddSeatAsync(person.Identity, cancellation, seat));
+        await services.BySystemInAsync(college, provider => provider.Seats().AddAsync(person.Identity, cancellation, seat));
         await services.BySystemInAsync(college, provider => provider.Seats().PlaceAsync(seat, unit, primary: true, cancellation));
         foreach (var role in roles)
         {
-            await services.BySystemInAsync(college, provider => provider.Seats().GrantAsync(seat, unit, role, until: null, reason: null, cancellation));
+            await services.BySystemInAsync(college, provider => provider.Seats().GrantAsync(seat, role, unit, until: null, reason: null, cancellation));
         }
     }
 

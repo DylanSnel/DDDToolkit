@@ -45,7 +45,7 @@ public abstract class TenantFilterTests(TestDatabases databases) : IAsyncLifetim
 
         counts.Should().Equal(2, 1, 2, 1);
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(orchard.Tenant, orchard.AdminSeat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(orchard.Tenant, orchard.AdminSeat)))
         {
             (await context.Set<HostTenant>().Select(tenant => tenant.Id).ToListAsync(TestContext.Current.CancellationToken))
                 .Should().Equal([orchard.Tenant], "a seat reads its own tenant, like system work in it");
@@ -78,10 +78,10 @@ public abstract class TenantFilterTests(TestDatabases databases) : IAsyncLifetim
             (await CountEveryScopedSetAsync(tenancy, widgets)).Should().OnlyContain(count => count.Value == 0, "system work outside any tenant reads nothing inside one");
         }
 
-        TenancyCallers.Ambient.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
         (await CountEveryScopedSetAsync(tenancy, widgets)).Should().OnlyContain(count => count.Value == 0, "without a caller there is nobody");
 
-        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.TenantInactive)))
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.TenantInactive)))
         {
             (await CountEveryScopedSetAsync(tenancy, widgets)).Should().OnlyContain(count => count.Value == 0, "nobody is nobody, whatever the reason");
         }
@@ -133,13 +133,13 @@ public abstract class TenantFilterTests(TestDatabases databases) : IAsyncLifetim
         var directory = scope.ServiceProvider.GetRequiredService<ISeatDirectory<TenantId, SeatId>>();
 
         // Nobody is calling yet: finding the caller's seat is what selects a tenant.
-        TenancyCallers.Ambient.Should().BeNull();
+        TenancyUsers.Ambient.Should().BeNull();
 
         var all = await directory.AllOfAsync<HostSeat>(person, TestContext.Current.CancellationToken);
         all.Select(seat => (seat.Slug, seat.Seat.Id)).Should().BeEquivalentTo([("harbor", harbor.AdminSeat), ("orchard", inOrchard)]);
 
         var found = await directory.FindAsync(person, "orchard", TestContext.Current.CancellationToken);
-        found.Should().Be(new SeatOfCaller<TenantId, SeatId>(
+        found.Should().Be(new SeatOfUser<TenantId, SeatId>(
             orchard.Tenant, "orchard", "Orchard Works", TenantStatus.Active, inOrchard, SeatStatus.Active));
 
         (await directory.FindAsync(person, "quarry", TestContext.Current.CancellationToken)).Should().BeNull("there is no such tenant");
@@ -172,7 +172,7 @@ public abstract class TenantFilterTests(TestDatabases databases) : IAsyncLifetim
         _services.Commands.Count.Should().Be(1, "the seats are read with the tenants they are found in");
 
         mine[0].Seat.Rename("changed by the application");
-        scope.ServiceProvider.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("nothing done to a seat it answered is saved");
+        scope.ServiceProvider.TenancyContext().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("nothing done to a seat it answered is saved");
 
         // A class the seats derive from is a seat as well; a class they are not is refused before anything is read.
         (await directory.AllOfAsync<SeatAggregate<SeatId, TenantId, OrganizationUnitId, RoleId>>(person, TestContext.Current.CancellationToken))

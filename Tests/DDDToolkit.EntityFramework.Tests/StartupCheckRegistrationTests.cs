@@ -42,7 +42,7 @@ public sealed class StartupCheckRegistrationTests : IDisposable
             (EntityFrameworkChecks.OwnersMappedCheck, StartupCheckStage.Services),
             (PostgresRowAccessChecks.RowLevelSecurityWiredCheck, StartupCheckStage.Services),
             (SupabaseRowAccessChecks.RolesMatchAccessFilesCheck, StartupCheckStage.Login),
-            (PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck, StartupCheckStage.Login),
+            (PostgresRowAccessChecks.LoginRoleMaySwitchToUserRolesCheck, StartupCheckStage.Login),
             (SupabaseMigrations.AppliedCheck, StartupCheckStage.Migrations),
             (PostgresRowAccessChecks.LoginRoleOwnsNothingCheck, StartupCheckStage.Database),
             (PostgresRowAccessChecks.DefinerOwnersBypassCheck, StartupCheckStage.Database));

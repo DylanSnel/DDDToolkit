@@ -216,9 +216,21 @@ public static class MembershipEntityTypeBuilderExtensions
     /// It leaves a mark on the role's entity type (<see cref="MembershipModel"/>) that names the resource the
     /// roles are of, as the class's template names it. That is how the access questions registered for the
     /// resource, and a package that writes database functions, find the roles of this resource and of no
-    /// other: nothing else has to be registered for them. A uniqueness the application wants, a name used
-    /// once among one customer's roles, is an index it declares with its own columns, as above; the package
-    /// knows of no such column.
+    /// other: nothing else has to be registered for them.
+    /// </para>
+    /// <para>
+    /// A class that marks the organization its rows are of, with the marker the organization's package gives a domain
+    /// class for it, gets two unique indexes over that property from this mapping. A name is used once in an
+    /// organization, and an organization has each starter role once, which also keeps two set-ups of one organization
+    /// at the same moment apart. Entity Framework names them, <c>IX_{table}_{property}_Name</c> and
+    /// <c>IX_{table}_{property}_MadeFrom</c>. A context that wants a refusal of its own for a name used twice says it on
+    /// the same index: <c>role.HasIndex(row =&gt; new { row.OrganizationId, row.Name }).RefusesAs(...)</c>. A customer of
+    /// another kind, a garden say, is a column the package knows nothing of, and its indexes are the application's to
+    /// declare, as above.
+    /// </para>
+    /// <para>
+    /// A context that calls <c>AddDDDToolkitConventions()</c> needs no call of this: the role template names
+    /// Membership's convention, which maps the class the same way. Call it for a class the context maps otherwise.
     /// </para>
     /// </summary>
     /// <param name="role">The builder of the role class's entity type.</param>
@@ -279,6 +291,9 @@ public static class MembershipEntityTypeBuilderExtensions
         // One column: an array where the database has arrays, a JSON text where it has none. Read inside a
         // statement either way, which is what lets "the roles that give this permission" stay a subquery.
         role.PrimitiveCollection(row => row.Permissions);
+
+        // A role of a class that marks the organization its rows are of: a name once there, and each starter role once there.
+        OrganizationRoleIndexes.Add<TRole, TRoleId>(role);
     }
 
     /// <summary>The package's role, closed over the id <paramref name="roleClass"/> was declared with, or <see langword="null"/>.</summary>

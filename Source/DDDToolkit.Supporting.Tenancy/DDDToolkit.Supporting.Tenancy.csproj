@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+    <!-- The markers for domain classes, [OfTenant] among them, so a project with Tenancy has them without a second reference. -->
+    <ProjectReference Include="..\DDDToolkit.Supporting.Tenancy.Abstractions\DDDToolkit.Supporting.Tenancy.Abstractions.csproj" />
   </ItemGroup>
 
   <!--

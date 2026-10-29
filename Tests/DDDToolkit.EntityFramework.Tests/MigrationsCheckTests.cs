@@ -13,7 +13,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// runs the module's context under row level security: it reads the migration history as the application
 /// itself, whatever the host requires of other work.
 /// </summary>
-public sealed class MigrationsCheckTests(ExplicitCallersPostgres postgres)
+public sealed class MigrationsCheckTests(ExplicitCurrentUserPostgres postgres)
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -28,7 +28,7 @@ public sealed class MigrationsCheckTests(ExplicitCallersPostgres postgres)
 
         await using var host = new ServiceCollection()
             .AddPostgresRowLevelSecurity()
-            .RequireExplicitCallers()
+            .RequireExplicitCurrentUser()
             .AddDbContext<SupabaseShelfContext>((provider, options) => options
                 .UseNpgsql(connectionString)
                 .UsePostgresRowLevelSecurity(provider))
@@ -38,7 +38,7 @@ public sealed class MigrationsCheckTests(ExplicitCallersPostgres postgres)
         await using (var scope = host.CreateAsyncScope())
         {
             var ask = () => scope.ServiceProvider.GetRequiredService<SupabaseShelfContext>().Database.GetPendingMigrationsAsync(Cancellation);
-            await ask.Should().ThrowAsync<NoCallerException>("asked by anybody else's code, the history is that code's to say who reads it");
+            await ask.Should().ThrowAsync<NoCurrentUserException>("asked by anybody else's code, the history is that code's to say who reads it");
         }
 
         var check = () => host.EnsureSupabaseMigrationsAppliedAsync(Cancellation);

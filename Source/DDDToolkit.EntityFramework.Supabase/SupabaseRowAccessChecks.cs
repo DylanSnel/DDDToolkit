@@ -50,11 +50,11 @@ public static class SupabaseRowAccessChecks
     /// <summary>
     /// Throws unless the roles <paramref name="context"/> switches to, as its row level security interceptor has them,
     /// are the ones the access files in its database were written for: the user's, the anonymous caller's, the scoped
-    /// system role, the system caller's and the role of every mapped token role. It passes where the database holds no
+    /// system role, the system role's and the role of every mapped token role. It passes where the database holds no
     /// record, a database the Supabase export wrote no access file for, or one applied by a version that recorded none.
     /// <para>
-    /// The scoped system role is compared where the options have one. The system caller's role is compared with the
-    /// bookkeeping role the files made; where they made none, a system caller that runs as the login role, or as one of
+    /// The scoped system role is compared where the options have one. The system role is compared with the
+    /// bookkeeping role the files made; where they made none, system work that runs as the login role, or as one of
     /// Postgres's or Supabase's own roles such as <c>service_role</c>, is what the files expect.
     /// </para>
     /// <para>
@@ -76,7 +76,7 @@ public static class SupabaseRowAccessChecks
         ArgumentNullException.ThrowIfNull(context);
 
         var options = InterceptorOf(context)?.Options ?? throw NotWired(context);
-        if (SupabaseCallerRoles.ReadRecord(await RecordAsync(context, cancellationToken).ConfigureAwait(false)) is not { } recorded)
+        if (SupabaseUserRoles.ReadRecord(await RecordAsync(context, cancellationToken).ConfigureAwait(false)) is not { } recorded)
         {
             return;
         }
@@ -108,7 +108,7 @@ public static class SupabaseRowAccessChecks
     internal static void AddStartupChecks(IServiceCollection services)
         => services.AddStartupCheck(new StartupCheck(RolesMatchAccessFilesCheck, StartupCheckStage.Login, EachContextAsync)
         {
-            RunsBefore = [PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck],
+            RunsBefore = [PostgresRowAccessChecks.LoginRoleMaySwitchToUserRolesCheck],
         });
 
     /// <summary>
@@ -116,7 +116,7 @@ public static class SupabaseRowAccessChecks
     /// line of the message: what differs, and the fixes. The host's side is said first in its project file, where the
     /// roles are said once, and then in code; the exporter's side last.
     /// </summary>
-    private static List<string> Differences(SupabaseCallerRoles.RecordedRoles recorded, PostgresRowLevelSecurityOptions options)
+    private static List<string> Differences(SupabaseUserRoles.RecordedRoles recorded, PostgresRowLevelSecurityOptions options)
     {
         var differences = new List<string>();
         if (!string.Equals(recorded.User, options.UserRole, StringComparison.Ordinal))
@@ -155,7 +155,7 @@ public static class SupabaseRowAccessChecks
                 continue;
             }
 
-            var key = SupabaseCallerRoles.TokenKey + tokenRole;
+            var key = SupabaseUserRoles.TokenKey + tokenRole;
             differences.Add((written, runs) switch
             {
                 (not null, null) =>
@@ -174,9 +174,9 @@ public static class SupabaseRowAccessChecks
     }
 
     /// <summary>
-    /// What differs about the system caller, or <see langword="null"/>: the files gave the toolkit's bookkeeping to
-    /// <paramref name="written"/>, or to no role of the application's own, and the host's system caller runs as
-    /// <paramref name="runs"/>, or as the role it logs in as. Where the files made no bookkeeping role, a system caller
+    /// What differs about system work, or <see langword="null"/>: the files gave the toolkit's bookkeeping to
+    /// <paramref name="written"/>, or to no role of the application's own, and the host's system work runs as
+    /// <paramref name="runs"/>, or as the role it logs in as. Where the files made no bookkeeping role, system work
     /// that runs as the login role or as one of the platform's roles is what they expect.
     /// </summary>
     private static string? SystemDifference(string? written, string? runs)
@@ -190,14 +190,14 @@ public static class SupabaseRowAccessChecks
             ? "the files make no bookkeeping role (system=none)"
             : $"the files give the outbox, the inbox and the migration history to {written}";
         var host = runs is null
-            ? "this host's system caller runs as the role it logs in as"
-            : $"this host's system caller runs as {runs}";
+            ? "this host's system work runs as the role it logs in as"
+            : $"this host's system work runs as {runs}";
         var inHost = InThisHost(
-            $"system={written ?? SupabaseCallerRoles.LoginRole}",
+            $"system={written ?? SupabaseUserRoles.LoginRole}",
             written is null ? "options.SystemRole = null" : $"options.SystemRole = \"{written}\"");
-        var inExporter = InTheExporter($"system={runs ?? SupabaseCallerRoles.LoginRole}");
+        var inExporter = InTheExporter($"system={runs ?? SupabaseUserRoles.LoginRole}");
 
-        return $"the system caller: {files}, and {host}. Fix: {inHost}; or {inExporter}.";
+        return $"system work: {files}, and {host}. Fix: {inHost}; or {inExporter}.";
     }
 
     /// <summary>The fix on the host's side: <paramref name="pair"/> in its own project file, where the roles are said once, or <paramref name="code"/>.</summary>

@@ -1,4 +1,5 @@
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
@@ -7,7 +8,7 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// Takes a role away from a seat at a unit.
 /// </summary>
 /// <remarks>
-/// It requires <c>tenancy.grants.manage</c> at the unit, which the request names. The package's use case asks for
+/// It requires <c>tenancy.grants.manage</c> at the unit, which the request names. The package's manager asks for
 /// that permission again, and then for what only it can read: for a role that manages access, that the caller holds its
 /// permissions that do, there and until the grant's end; and it keeps the tenant an administrator.
 /// </remarks>
@@ -15,17 +16,15 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// <param name="Unit">The unit the role is held at.</param>
 /// <param name="Role">The role.</param>
 [RequiresPermission(TenancyPermissions.GrantsManage)]
-public sealed record RevokeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role) : ICommand, ITenantsRequest;
+public sealed record RevokeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role) : ICommand<Seat>, ITenantsRequest;
 
-/// <summary>Handles <see cref="RevokeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
-/// <param name="seats">The package's use cases that change a seat.</param>
-public sealed class RevokeGrantHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<RevokeGrant>
+/// <summary>Handles <see cref="RevokeGrant"/> with the Tenancy package's manager, which checks the caller, decides and saves.</summary>
+/// <param name="seats">The package's seat manager.</param>
+public sealed class RevokeGrantHandler(SeatManager seats) : ICommandHandler<RevokeGrant, Seat>
 {
     /// <inheritdoc />
-    /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
-    public async ValueTask<Unit> Handle(RevokeGrant command, CancellationToken cancellationToken)
-    {
-        await seats.RevokeAsync(command.Seat, command.Unit, command.Role, cancellationToken);
-        return Unit.Value;
-    }
+    /// <returns>The seat, with the grant revoked.</returns>
+    /// <exception cref="Exceptions.RefusalException">What the package's manager refuses, with its code.</exception>
+    public async ValueTask<Seat> Handle(RevokeGrant command, CancellationToken cancellationToken)
+        => await seats.RevokeAsync(command.Seat, command.Role, command.Unit, cancellationToken);
 }

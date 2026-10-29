@@ -28,7 +28,7 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
     /// Where a statement reads what a seat holds in the organization: the function Tenancy gives another module
     /// to ask, in place of its tables.
     /// </summary>
-    private const string SeatRights = """tenancy\.caller_permissions\(\)""";
+    private const string SeatRights = """tenancy\.current_permissions\(\)""";
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -116,18 +116,18 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
         ProjectId[] projects = [.. Harbor.Projects.Select(project => project.Id)];
 
         // Rhea holds permissions both ways. What the application does: it asks Tenancy's questions for all the permissions at
-        // once, packs the answers, still sets and not lists, and the port sends them with the projects as one
+        // once, starter roles the answers, still sets and not lists, and the port sends them with the projects as one
         // statement: the organization's permissions, the crew's and the permission that sees, put together where it runs. Asked
         // as a request asks: as the person, in her seat.
-        using (Callers.Begin(Caller.User(DemoPeople.Rhea.Id)))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Rhea))))
+        using (TestAccess.BeginAs(DemoPeople.Rhea.Id))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Rhea))))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var access = scope.ServiceProvider.GetRequiredService<ProjectAccess>();
 
             counter.WatchThisFlow();
             await using var reading = scope.ServiceProvider.GetRequiredService<IProjectReads>().Open();
-            var held = await reading.PermissionsOnAsync(projects, access.PermissionsReachFor([ProjectPermissionNames.View, ProjectPermissionNames.Edit, ProjectPermissionNames.ChangeOwner]), Cancellation);
+            var held = await reading.PermissionsOnAsync(projects, access.KnownPermissions([ProjectPermissionNames.View, ProjectPermissionNames.Edit, ProjectPermissionNames.ChangeOwner]), Cancellation);
 
             var statement = counter.Commands.Should().ContainSingle("the permissions of every project asked about come in one statement").Which;
             statement.Should().MatchRegex(SeatRights, "the organization's permissions are Tenancy's answer, inside it")
@@ -137,14 +137,14 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
         }
 
         // The projects' own system work in the tenant holds every permission on every project of it, and asks Tenancy nothing.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var access = scope.ServiceProvider.GetRequiredService<ProjectAccess>();
 
             counter.WatchThisFlow();
             await using var reading = scope.ServiceProvider.GetRequiredService<IProjectReads>().Open();
-            var held = await reading.PermissionsOnAsync([.. projects, DemoData.Meadow.ProjectNamed("Garden shed").Id], access.PermissionsReachFor([ProjectPermissionNames.View, ProjectPermissionNames.ChangeOwner]), Cancellation);
+            var held = await reading.PermissionsOnAsync([.. projects, DemoData.Meadow.ProjectNamed("Garden shed").Id], access.KnownPermissions([ProjectPermissionNames.View, ProjectPermissionNames.ChangeOwner]), Cancellation);
 
             counter.Commands.Should().ContainSingle().Which.Should().NotMatchRegex(SeatRights);
             held.Keys.Should().BeEquivalentTo(projects, "a project of another tenant is not there");

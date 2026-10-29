@@ -4,7 +4,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
 /// Finds a person's seats by their verified identity: the one lookup that looks across tenants, and only
-/// ever for the identity asking. Tenancy's storage implements it.
+/// ever for the identity asking. It also finds the tenant an operator names. Tenancy's storage implements it.
 /// </summary>
 public interface ISeatDirectory<TTenantId, TSeatId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
@@ -17,7 +17,15 @@ public interface ISeatDirectory<TTenantId, TSeatId>
     /// <param name="identity">The verified identity, the subject of the caller's token.</param>
     /// <param name="tenantSlug">The tenant's slug, trimmed and lowercased.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    Task<SeatOfCaller<TTenantId, TSeatId>?> FindAsync(Guid identity, string tenantSlug, CancellationToken cancellationToken);
+    Task<SeatOfUser<TTenantId, TSeatId>?> FindAsync(Guid identity, string tenantSlug, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The tenant with this slug, in any status, or <see langword="null"/> when there is none. Tenant selection asks it for
+    /// an operator alone, who reads every tenant, and never for a person who may hold a seat.
+    /// </summary>
+    /// <param name="tenantSlug">The tenant's slug, trimmed and lowercased.</param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    Task<TTenantId?> FindTenantAsync(string tenantSlug, CancellationToken cancellationToken);
 
     /// <summary>
     /// Every seat the identity has, in every tenant and in any status, for a tenant picker: the application's own

@@ -221,8 +221,8 @@ public sealed class ProjectListScenarios(SampleHosts sample) : IClassFixture<Sam
         await using var host = await sample.StartAsync(services => services.ConfigureDbContext<ProjectsContext>(options => options.AddInterceptors(counter)));
 
         // Asked as a request asks: as the person, in her seat.
-        using (Callers.Begin(Caller.User(Harbor.Administrator.Person.Id)))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.Administrator.Id)))
+        using (TestAccess.BeginAs(Harbor.Administrator.Person.Id))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.Administrator.Id)))
         {
             string? after = null;
             foreach (var size in new[] { 1, 3 })

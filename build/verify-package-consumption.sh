@@ -25,18 +25,19 @@
 #      told that it is no module, and none that imports the targets file is.
 #   5. The supporting domains: an application with Tenancy and Membership, in a domain project on their
 #      domain packages, an infrastructure project on their Postgres packages and a host, builds with
-#      everything it needs arriving as a dependency, Membership's two generators among it, which ship
+#      everything it needs arriving as a dependency, the markers its domain classes carry among it, from the
+#      two domains' Abstractions packages, and Membership's two generators, which ship
 #      inside Membership's packages and write nothing in the host; Tenancy's generator, which ships inside
 #      Tenancy's package and writes the module's list of permissions where its [Permissions] class is, and
 #      the modules' lists into the host, and nothing into the infrastructure project; the toolkit's, which
-#      writes Tenancy's use cases closed over the classes, TenancyUseCases, into the domain project alone, for
-#      the host to name them through; and the packages carry their Dutch texts. Its module is declared by
+#      writes Tenancy's managers closed over the classes, SeatManager and the others, into the domain project
+#      alone, for the host to name them by; and the packages carry their Dutch texts. Its module is declared by
 #      DDD_Module, from a Directory.Build.props, and not by a file in either project: the package's targets
 #      declare it, and its generator writes the attribute.
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
-#      The application declares no administrators' pack, and the access file has Tenancy's default one. Tenancy's
+#      The application declares no administrators' starter role, and the access file has Tenancy's default one. Tenancy's
 #      and Membership's SQL is written because the infrastructure project references their Postgres packages,
 #      made in the host from the catalogue and the rules the domain project marks, with no line of the host's.
 #
@@ -406,11 +407,13 @@ expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
 expect_module ContractsOnly ""
 
 # ---------------------------------------------------------------------------------------------------
-# The supporting domains, Tenancy and Membership, three packages each.
+# The supporting domains, Tenancy and Membership, four packages each: the markers for domain classes, the
+# domain package, Entity Framework and Postgres.
 #
 # SupportingDomains is an application with both, in the layers an application has. Its domain project
 # declares Tenancy's classes with the package's templates, and a resource with members and a role it
-# keeps for that resource with Membership's, and references the two domain packages alone. Its
+# keeps for that resource with Membership's, and references the two domain packages alone. The markers
+# its classes carry, [OfTenant] and [At], arrive with those as a dependency, from the Abstractions packages. Its
 # infrastructure project maps and registers them and references only the two Postgres packages of the
 # supporting domains, beside the Supabase export and the provider it needs, so the Entity Framework
 # packages, the toolkit's own and every generator it needs have to arrive as a dependency, at the version
@@ -463,6 +466,17 @@ expect_no_missing_properties_warning SupportingDomains
 expect_generators_wrote SupportingDomains/Domain \
   "DDDToolkit.Analyzers" \
   "DDDToolkit.Supporting.Membership.Analyzers"
+
+# Membership's generator writes the managers into the domain project, beside the member list: one named after the
+# member class and one after the role class, in the global namespace. The infrastructure project calls both.
+for manager in ManuscriptEditorManager ManuscriptRoleManager; do
+  if [ -z "$(find "$work/package-consumers/SupportingDomains/Domain/obj" -path '*generated*' -name "$manager.g.cs" | head -n 1)" ]; then
+    echo "FAILED: SupportingDomains/Domain: Membership's generator wrote no $manager." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Domain: the editors' and the roles' managers"
 
 expect_generators_wrote SupportingDomains/Infrastructure \
   "DDDToolkit.Analyzers" \
@@ -520,24 +534,30 @@ expect_module SupportingDomains/Domain Press
 expect_module SupportingDomains/Infrastructure Press
 expect_module SupportingDomains/Host ""
 
-# Tenancy's use cases closed over the classes, TenancyUseCases, are written by the toolkit's generator into the domain
-# project that declares the classes, and into no project above it: those see that one, and PressSeats in the host
-# names the directory through it, so the host does not compile without it.
-tenancy_use_cases() {
-  find "$work/package-consumers/SupportingDomains/$1/obj" -path '*generated*' -name 'TenancyUseCases.TemplateFacade.g.cs'
+# Tenancy's managers closed over the classes, SeatManager and the others, are written by the toolkit's generator into
+# the domain project that declares the classes, and into no project above it: those see that one, and PressSeats in
+# the host takes the SeatManager, so the host does not compile without it.
+tenancy_seat_manager() {
+  find "$work/package-consumers/SupportingDomains/$1/obj" -path '*generated*' -name 'SeatManager.TemplateFacade.g.cs'
 }
-if [ -z "$(tenancy_use_cases Domain)" ]; then
-  echo "FAILED: SupportingDomains/Domain: the toolkit's generator wrote no TenancyUseCases, which the host names Tenancy's use cases through." >&2
+if [ -z "$(tenancy_seat_manager Domain)" ]; then
+  echo "FAILED: SupportingDomains/Domain: the toolkit's generator wrote no SeatManager, which the host takes." >&2
   exit 1
 fi
 for project in Infrastructure Host; do
-  if [ -n "$(tenancy_use_cases "$project")" ]; then
-    echo "FAILED: SupportingDomains/$project: TenancyUseCases was written again above the domain project, which already has it." >&2
+  if [ -n "$(tenancy_seat_manager "$project")" ]; then
+    echo "FAILED: SupportingDomains/$project: SeatManager was written again above the domain project, which already has it." >&2
     exit 1
   fi
 done
 
-echo "    SupportingDomains/Domain: TenancyUseCases, which the host names Tenancy's use cases through"
+echo "    SupportingDomains/Domain: SeatManager and Tenancy's other managers, which the host takes"
+
+# The markers the domain project's classes carry, which arrived as a dependency of the two domain packages: the
+# build above compiled only because they did, and this names the package when one did not.
+expect_in_package "${prefix}DDDToolkit.Supporting.Tenancy.Abstractions" lib/net10.0/DDDToolkit.Supporting.Tenancy.Abstractions.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership.Abstractions" lib/net10.0/DDDToolkit.Supporting.Membership.Abstractions.dll
+echo "    SupportingDomains/Domain: the markers of both domains, from their Abstractions packages"
 
 # Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll
@@ -651,15 +671,15 @@ if [ "$(find "$supabase_migrations" -name '*_access.press.ddd.sql' | wc -l | tr 
   exit 1
 fi
 
-# The house declares no administrators' pack, so the packaged catalogue adds Tenancy's own, and pack_permissions in
+# The house declares no administrators' starter role, so the packaged catalogue adds Tenancy's own, and starter_role_permissions in
 # the access file the export wrote from that catalogue answers its permissions: every live one, the manuscripts' included,
 # which the house never listed for it.
 if ! grep -qE "WHEN 'administrator' THEN ARRAY\[[^]]*'manuscripts\.edit'" "$supabase_migrations"/*_access.press.ddd.sql; then
-  echo "FAILED: the access files in $supabase_migrations have no pack_permissions answer for the default administrators' pack, 'administrator', holding the manuscripts' permissions." >&2
+  echo "FAILED: the access files in $supabase_migrations have no starter_role_permissions answer for the default administrators' starter role, 'administrator', holding the manuscripts' permissions." >&2
   exit 1
 fi
 
-echo "    SupportingDomains/Host: pack_permissions answers the default administrators' pack"
+echo "    SupportingDomains/Host: starter_role_permissions answers the default administrators' starter role"
 
 # The packages' contributions were made where the export runs, in the file named for them, from what the domain
 # project marks: Tenancy's from the catalogue, and one of Membership's for the manuscripts, closed over their editors.

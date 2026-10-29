@@ -89,18 +89,18 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
 
         // Who the request is, asked while the system is the ambient caller: the request's own caller does not
         // change with it, what the accessor answers does.
-        _app.MapGet("/who-under-the-system", (HttpContext context, ICallerAccessor callers) =>
+        _app.MapGet("/who-under-the-system", (HttpContext context, ICurrentUser callers) =>
         {
-            using (Callers.Begin(Caller.System))
+            using (TestAccess.BeginSystemBypassingRowAccess())
             {
-                return Results.Text($"{context.GetSupabaseCaller()}|{callers.Current}");
+                return Results.Text($"{context.GetSupabaseUser()}|{callers.Snapshot}");
             }
         });
 
         // A step a request takes on the application's behalf, on purpose: a caller begun in code wins.
         _app.MapGet("/notes/count-as-the-system", async (NotesContext notes, CancellationToken cancellationToken) =>
         {
-            using (Callers.Begin(Caller.System))
+            using (TestAccess.BeginSystemBypassingRowAccess())
             {
                 return Results.Ok(await notes.Notes.CountAsync(cancellationToken));
             }

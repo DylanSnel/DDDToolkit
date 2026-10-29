@@ -1,15 +1,23 @@
 # Getting started
 
-This page builds one module of a small shop, step by step: an identifier, a value object, an aggregate
-with its rules, a test, a database, an HTTP endpoint, and finally a second module that reacts to the
-first. Each step adds one thing, and says what the generator writes for it.
+This page builds one module of a small shop, step by step. Each step adds one thing and shows what the generator
+writes for it:
 
-Every snippet comes from a project that builds and runs,
-[`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase), shortened to what the
-step is about. The shop has five modules, `Catalog`, `Ordering`, `Inventory`, `Payments` and
-`Shipping`, run in one host. This page follows `Ordering` and the module that reacts to it last,
-`Shipping`; the others use the same pieces. The path under each snippet points at the real file, so
-you can go and look at the rest of it.
+1. an identifier;
+2. a value object;
+3. an aggregate with its rules;
+4. a test;
+5. a database;
+6. an HTTP endpoint;
+7. a second module that reacts to the first.
+
+Every snippet comes from [`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase), a project
+that builds and runs. Each snippet is shortened to the point of its step. The bold path above a snippet links to the
+full file.
+
+The shop has five modules: `Catalog`, `Ordering`, `Inventory`, `Payments` and `Shipping`. One host runs all five.
+This page follows `Ordering`, and at the end `Shipping`, which reacts to `Ordering`. The other modules use the same
+pieces.
 
 ## Install
 
@@ -17,39 +25,46 @@ you can go and look at the rest of it.
 dotnet add package Temp.DDDToolkit --prerelease
 ```
 
-For now 3.x is published under `Temp.` package ids; `DDDToolkit` on nuget.org is still 2.0.22,
-which these pages do not describe. The namespaces are `DDDToolkit` either way. See
-[Packages](../README.md#packages).
+Version 3.x is published under `Temp.` package ids for now. The package `DDDToolkit` on nuget.org is still 2.0.22,
+and these pages do not describe it. The namespaces are `DDDToolkit` in both. See [Packages](../README.md#packages).
 
-These pages describe 3.2.0, which is in preview: 3.2.0-preview.5 as they are written. Until 3.2.0 is
-released, add every `Temp.DDDToolkit.*` package with `--prerelease`, or with `--version 3.2.0-preview.5`,
-and keep them all at the same version. A package of this release next to 3.1.0 of another fails restore with
-NU1605, a package downgrade, or fails at run time with a `MissingMethodException`.
+These pages describe 3.2.0, which is in preview. The current preview is 3.2.0-preview.6. Until 3.2.0 is released,
+add every `Temp.DDDToolkit.*` package with `--prerelease` or with `--version 3.2.0-preview.6`. Keep all the packages
+at the same version. A package of this release next to a 3.1.0 package fails in one of two ways:
 
-`DDDToolkit` brings the base types and the core generators. That is all the first steps need. Each
-integration comes with a package of its own, added in the step that uses it: Entity Framework when the
-aggregate is stored, the testing kit when it is tested.
+- Restore fails with NU1605, a package downgrade.
+- The application fails at run time with a `MissingMethodException`.
 
-The libraries target .NET 10. The generators target `netstandard2.0` and reference nothing at run
-time, so they load in any recent SDK without version conflicts.
+`DDDToolkit` brings the base types and the core generators. The first steps need nothing else. Each integration has
+a package of its own. The step that first uses an integration adds its package: Entity Framework when the aggregate
+is stored, the testing kit when the aggregate is tested.
+
+The libraries target .NET 10. The generators target `netstandard2.0` and reference nothing at run time, so they load
+in any recent SDK without version conflicts.
 
 ## Declare an identifier
 
-An order needs an id. A `Guid` would do, until somebody passes a customer's `Guid` where an order's was
-meant and the compiler cannot tell. An identifier type makes that a compile error:
+An order needs an id. With a plain `Guid`, code can pass a customer's `Guid` where an order's `Guid` belongs, and the
+compiler cannot see the mistake. An identifier type turns that mistake into a compile error:
+
+**[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)**
 
 ```csharp
 [EntityId<Guid>("ORD")]
 public readonly partial record struct OrderId;
 ```
 
-*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
+The declaration follows two rules:
 
-Two rules: the type must be `partial` so the generator can add to it, and it must be a record. Use
-`readonly partial record struct` unless you have a reason not to; it costs no allocation. The generator
-writes the rest:
+- It is `partial`, so the generator can add to it.
+- It is a record.
 
-```csharp title="OrderId.g.cs, shortened"
+Use `readonly partial record struct` unless you have a reason to use a class. A struct id costs no allocation. The
+generator writes the rest:
+
+**OrderId.g.cs, shortened**
+
+```csharp
 [JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
 public readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, IParsable<OrderId>, ICreatableEntityId<OrderId>
 {
@@ -61,7 +76,7 @@ public readonly partial record struct OrderId : IEntityId<Guid>, IComparable<Ord
 
     public static OrderId CreateUnique() => new(Guid.NewGuid());
     public static OrderId CreateSequential() => new(Guid.CreateVersion7());
-    public static OrderId Create() => CreateSequential();   // how a new one is made, in code before the save
+    public static OrderId Create() => CreateSequential();   // a new id, made in code before the save
 
     public override string ToString() => /* "ORD_" followed by the Guid */;
 
@@ -72,25 +87,26 @@ public readonly partial record struct OrderId : IEntityId<Guid>, IComparable<Ord
 }
 ```
 
-Most identifiers do not need a declaration at all. Name the raw value on the entity and the toolkit
-generates the identifier with it:
+Most identifiers need no declaration of their own. Name the raw value type on the entity, and the toolkit generates
+the identifier together with the entity:
+
+**[`Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs)**
 
 ```csharp
 [Entity<Guid>("LINE")]
 public partial class OrderLine    // also generates OrderLineId
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs)*
-
-Use the short form for the identifier nobody outside the aggregate mentions, and the explicit form for
-the identifier everybody does. `OrderId` is written out because it is stored, parsed from URLs and sent
-to other modules, so it deserves a file to navigate to. See [Identifiers](identifiers.md).
+Use this short form for an identifier that only its own aggregate uses. Use the explicit form for an identifier that
+other code uses. `OrderId` has an explicit declaration because it is stored, parsed from URLs and sent to other
+modules. A reader needs a file to navigate to. See [Identifiers](identifiers.md).
 
 ## Declare a value object
 
-An order is shipped to an address. An address has no identity of its own: two addresses with the same
-street, city and postal code are the same address. That makes it a value object, and it carries its own
-rules:
+An order is shipped to an address. An address has no identity. Two addresses with the same street, city and postal
+code are the same address. So an address is a value object, and its rules are part of its type:
+
+**[`Ordering/Domain/ValueObjects/Address.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/ValueObjects/Address.cs)**
 
 ```csharp
 [ValueObject]
@@ -114,13 +130,13 @@ public partial record Address
 }
 ```
 
-*[`Ordering/Domain/ValueObjects/Address.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/ValueObjects/Address.cs)*
+The setters are `protected init`. Code sets the properties of an address when it creates the address, and nothing
+changes them afterwards ([DDD00010](diagnostics.md#ddd00010), [DDD00011](diagnostics.md#ddd00011)). The generator
+writes the equality and an always-valid twin:
 
-Setters are `protected init`: an address is set when it is made and never changed afterwards
-([DDD00010](diagnostics.md#ddd00010), [DDD00011](diagnostics.md#ddd00011)). The generator writes the
-equality and an always-valid twin:
+**Address.g.cs, shortened**
 
-```csharp title="Address.g.cs, shortened"
+```csharp
 partial record Address : ValueObject, IValidatable<ValidAddress>
 {
     protected override IEnumerable<object?> GetEqualityComponents()
@@ -146,17 +162,20 @@ public partial record ValidAddress : Address, IAlwaysValid
 }
 ```
 
-An `Address` may be invalid; it is what a form handed you. A `ValidAddress` cannot be: its only
-constructor validates. That lets a method say in its signature that it wants a checked address, and the
-aggregate in the next step does exactly that. See [Value objects](value-objects.md).
+An `Address` can be invalid, for example when it comes straight from a form. A `ValidAddress` is always valid,
+because its only constructor validates. So a method can ask for a checked address in its signature. The aggregate in
+the next step does this. See [Value objects](value-objects.md).
 
-The rules here are a hand-written `Validate` override. If your team writes rules with FluentValidation,
-a value object's rules can be a FluentValidation validator instead; see [FluentValidation](fluent-validation.md).
+This `Address` states its rules in a hand-written `Validate` override. If your team writes rules with
+FluentValidation, a value object's rules can be a FluentValidation validator instead. See
+[FluentValidation](fluent-validation.md).
 
 ## Declare an aggregate
 
-The order itself. It has an identity, it holds its lines, and it is the one place that decides what
-may happen to them:
+The order is an aggregate. It has an identity, and it holds its lines. Code outside the order changes the lines only
+through the order's methods, and those methods apply the order's rules:
+
+**[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)**
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -194,17 +213,16 @@ public partial class Order
 }
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)*
+The constructor takes a `ValidAddress`, so the order does not validate the address again. `Money` is a value object
+like `Address`. It comes from the shop's shared kernel.
 
-The constructor takes a `ValidAddress`, so the order never re-validates an address. `Money` is a value
-object like `Address`, from the shop's shared kernel.
+`Lines` is declared `partial` and get-only. You declare the property, and the generator writes the field behind it.
+Code inside `Order` adds lines to the field `_lines`. Code outside `Order` can read `Lines` and cannot change the
+list. A setter on `Lines` is an error ([DDD00020](diagnostics.md#ddd00020)).
 
-`Lines` is declared `partial` and get-only. That is the contract: you describe the property you want,
-and the generator writes the field behind it. Inside `Order` you add to `_lines`; outside it, callers
-can read `Lines` but cannot change it. Declaring a setter is an error
-([DDD00020](diagnostics.md#ddd00020)).
+**Order.g.cs, shortened**
 
-```csharp title="Order.g.cs, shortened"
+```csharp
 partial class Order : AggregateRoot<OrderId>
 {
     protected Order() { }   // for Entity Framework and serializers
@@ -214,18 +232,25 @@ partial class Order : AggregateRoot<OrderId>
     [BackingField(nameof(_lines))]
     public partial IReadOnlyList<OrderLine> Lines => __linesView ??= _lines.AsReadOnly();
 
-    // and the invariant checks of the next step
+    // the invariant checks of the next step
 }
 ```
 
-The base class brings the `Id`, a `Version` for optimistic concurrency, and `RaiseDomainEvent`, which
-is protected, so nothing outside the aggregate can put an event into it. See
-[Entities and aggregates](entities-and-aggregates.md) and [Domain events](domain-events.md).
+The base class brings three members:
+
+- `Id`;
+- `Version`, for optimistic concurrency;
+- `RaiseDomainEvent`, which is protected, so only code inside the aggregate can raise an event.
+
+See [Entities and aggregates](entities-and-aggregates.md) and [Domain events](domain-events.md).
 
 ## State an invariant
 
-An invariant is a rule about a whole aggregate that must hold every time anyone can look at it. A
-one-liner goes in the generated seam:
+An invariant is a rule about a whole aggregate that must be true whenever code can read the aggregate. The generator
+declares a partial method `CheckInvariants()` on every entity. The docs call this method the **seam**. A one-line
+rule goes in the seam:
+
+**[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)**
 
 ```csharp
 partial void CheckInvariants()
@@ -237,10 +262,10 @@ partial void CheckInvariants()
 }
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)*
+A rule that needs a name, or a code that a caller can branch on, becomes a class of its own. Nest the class inside
+the entity it checks. A nested class can read the entity's private state, and the generator finds it there:
 
-A rule that deserves a name, or a code a caller can branch on, becomes a type of its own, nested
-inside the entity it is about so that it can read private state and so the generator can find it:
+**[`Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs)**
 
 ```csharp
 public partial class Order
@@ -255,12 +280,12 @@ public partial class Order
 }
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs)*
+The generator finds the nested rules and writes the check. The check runs the rules first, then the seam, and then
+the check of every line:
 
-The generator finds the nested rules and writes the check that runs them all, then the seam, then
-asks every line:
+**Order.g.cs, shortened**
 
-```csharp title="Order.g.cs, shortened"
+```csharp
 private static readonly IInvariant<Order>[] __invariants =
 [
     new Order.MustHaveLines(),
@@ -269,20 +294,25 @@ private static readonly IInvariant<Order>[] __invariants =
 
 public override IReadOnlyList<InvariantViolation> GetInvariantViolations() { /* rules, seam, then each line */ }
 
-public override void EnsureInvariants() { /* the same, and throws when something is broken */ }
+public override void EnsureInvariants() { /* the same, and throws when a rule is broken */ }
 ```
 
-`GetInvariantViolations()` asks without throwing, for the moment where "not consistent yet" is an
-answer you want to handle. `EnsureInvariants()` throws. Asking the root answers for the whole
-aggregate: its own rules and every line's, each violation naming the entity that reported it. Once the
-aggregate is stored with Entity Framework, every save runs the check too, so the rules are a guarantee
-rather than a check somebody remembered to call. An entity that states nothing pays nothing: the
-compiler erases an unimplemented `partial void` and every call to it. See [Invariants](invariants.md).
+The generated code has two methods:
+
+- `GetInvariantViolations()` returns the broken rules as a list and does not throw. Call it before the save, when
+  "not consistent yet" is an answer you want to handle.
+- `EnsureInvariants()` throws when a rule is broken.
+
+Called on the root, both methods check the whole aggregate: the order's rules and the rules of every line. Each
+violation names the entity that reported it. Once the aggregate is stored with Entity Framework, every save runs the
+check as well. So the rules hold at every save, and no code has to remember to call the check. An entity without
+rules costs nothing. The compiler removes an unimplemented `partial void` method and every call to it. See
+[Invariants](invariants.md).
 
 ## Test the aggregate
 
-Nothing so far needs a database, and neither does testing it. `DDDToolkit.Testing` acts on an
-aggregate and asserts on the domain events it raised:
+The aggregate needs no database, and neither does its test. `DDDToolkit.Testing` runs an action on an aggregate and
+asserts on the domain events that the action raised:
 
 ```bash
 dotnet add package Temp.DDDToolkit.Testing --prerelease
@@ -296,13 +326,15 @@ scenario.When(order => order.Cancel("No stock.")).RaisedExactly<OrderCancelled>(
 scenario.When(order => order.Cancel("Changed my mind.")).RaisedNothing();
 ```
 
-Each `When` is judged on what it raised itself, so the second line says what matters about a second
-cancellation: nothing happens. `WhenThrows` is the same for a call that must fail, and asserts both
-halves: the exception came out, and nothing was raised on the way out.
+Each `When` is judged only on the events its own action raised. So the second line asserts that a second
+cancellation raises nothing. `WhenThrows` does the same for an action that must fail. It asserts two things: the
+action threw the exception, and the action raised no event.
 
-The aggregate is what calls `new OrderPlaced(...)`, so a test cannot pass an initialiser for the
-timestamp. `DomainEventClock` replaces the clock the event reads, for the current asynchronous flow
-only:
+The aggregate calls `new OrderPlaced(...)` itself, so a test cannot set the event's timestamp with an initializer.
+`DomainEventClock.Use` replaces the clock that new events read, for the current asynchronous flow only. `FixedClock`
+is a `TimeProvider` that the test project declares:
+
+**[`Tests/Examples.Webshop.Tests/OrderTests.cs`](../Tests/Examples.Webshop.Tests/OrderTests.cs)**
 
 ```csharp
 var moment = new DateTimeOffset(2026, 9, 14, 9, 30, 0, TimeSpan.Zero);
@@ -313,27 +345,31 @@ var order = Place();
 order.PendingEvents().Should().OnlyContain(raised => raised.OccurredAt == moment);
 ```
 
-*[`Tests/Examples.Webshop.Tests/OrderTests.cs`](../Tests/Examples.Webshop.Tests/OrderTests.cs)*
-
 See [Testing](testing.md).
 
-## Store it with Entity Framework
+## Store the aggregate with Entity Framework
 
 ```bash
 dotnet add package Temp.DDDToolkit.EntityFramework --prerelease
 ```
 
-A project whose provider asks for an older Entity Framework than one of its tools brings, such as
+Some projects reference a provider and a tool that ask for different Entity Framework versions. An example is
 `Npgsql.EntityFrameworkCore.PostgreSQL` next to a newer `Microsoft.EntityFrameworkCore.Design` with
-`PrivateAssets="all"`, leaves the projects above it on the older one, and they fail with CS1705: name the
-version once, `<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />`,
-the one this repository builds with.
+`PrivateAssets="all"`. The projects that reference such a project get the provider's older version, and they fail
+with CS1705. To prevent this, name the version once in the project file. Use the version this repository builds
+with:
 
-The Entity Framework package brings a generator of its own. It writes a value converter for every
-identifier, so an `OrderId` is stored as a plain `uuid` column, and one method per project that
-registers them all:
+```xml
+<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+```
 
-```csharp title="ConverterExtensions.g.cs, shortened"
+The Entity Framework package brings its own generator. The generator writes a value converter for every identifier,
+so an `OrderId` is stored as a plain `uuid` column. It also writes one method per project that registers all the
+converters:
+
+**ConverterExtensions.g.cs, shortened**
+
+```csharp
 public static ModelConfigurationBuilder AddOrderingConverters(this ModelConfigurationBuilder modelConfigurationBuilder)
 {
     modelConfigurationBuilder.Properties<OrderLineId>().HaveConversion<OrderLineId.OrderLineIdConverter>();
@@ -343,8 +379,8 @@ public static ModelConfigurationBuilder AddOrderingConverters(this ModelConfigur
 }
 ```
 
-The method is named after the project. Set `DDD_Module` in the project file to choose the name; without
-it the generators use the assembly name with the dots removed, which works but reads poorly:
+The method is named after the project. Set `DDD_Module` in the project file to choose the name. Without
+`DDD_Module`, the generators use the assembly name with the dots removed. That name works, but it is hard to read:
 
 ```xml
 <PropertyGroup>
@@ -352,12 +388,14 @@ it the generators use the assembly name with the dots removed, which works but r
 </PropertyGroup>
 ```
 
-It is more than a name: the property says the project is the *module* Ordering, and its domain events
-are stored under the module's name, as `ordering.order-placed`. While it is the only module, no boundary
-is checked yet; what a module is, a boundary something checks, comes up
-[further down](#draw-the-module-boundary).
+`DDD_Module` also declares the project as the *module* Ordering. The module's domain events are stored under the
+module's name, such as `ordering.order-placed`. While Ordering is the only module, the toolkit checks no boundary.
+[Declare the module boundary](#declare-the-module-boundary), further down, explains what a module boundary is and
+what checks it.
 
-The context calls that method and the conventions every context shares:
+The context calls the generated method and the conventions that every context shares:
+
+**[`Ordering/Infrastructure/Persistence/OrderingContext.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Infrastructure/Persistence/OrderingContext.cs)**
 
 ```csharp
 public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
@@ -372,14 +410,16 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 }
 ```
 
-*[`Ordering/Infrastructure/Persistence/OrderingContext.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Infrastructure/Persistence/OrderingContext.cs)*
+The domain model needs no configuration of its own:
 
-There is no configuration for the domain model itself. `OrderLine` is owned because `[Entity]`
-generated `[Owned]`, `Lines` is discovered through the generated backing field, `Address` is stored
-inline because `[ValueObject]` generated `[ComplexType]`, and `Version` is a concurrency token. The
-example's context has a few more lines; they belong to the modules and the outbox, further down.
+- `OrderLine` is owned, because `[Entity]` generated `[Owned]`.
+- Entity Framework finds `Lines` through the generated backing field.
+- `Address` is stored in the order's table, because `[ValueObject]` generated `[ComplexType]`.
+- `Version` is a concurrency token.
 
-Register the toolkit and add it to the context:
+The example's context has a few more lines. They belong to the modules and the outbox, which come later on this page.
+
+Register the toolkit, and add it to the context:
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
@@ -389,38 +429,42 @@ builder.Services.AddDbContext<OrderingContext>((services, options) => options
     .UseDDDToolkit(services));
 ```
 
-`UseDDDToolkit` adds the interceptors that deliver domain events, run the invariants and raise the
-version when the context saves. It stays the one call when the application grows: what a package you register
-later brings to a context, [row level security](row-level-security.md) on Postgres or
-[Tenancy](tenancy.md)'s save check, it adds as well, each in its place, so the context's options do not change
-([`UseDDDToolkit`](entity-framework.md#usedddtoolkit) says how). The argument to
-`AddDDDToolkitEntityFramework` says how the events are delivered. The example hands them to [Mediator](https://github.com/martinothamar/Mediator) handlers in
-the same process, which is what `DDDToolkit.Mediator` adds; the outbox, further down, is the other
-way. An aggregate that raised events refuses to save until one of the two is configured, rather than
-dropping them. See [Domain event delivery](event-delivery.md).
+`UseDDDToolkit` adds the interceptors that run when the context saves. They deliver the domain events, run the
+invariants and raise the version. Packages you register later bring more parts for a context, such as
+[row level security](row-level-security.md) on Postgres or [Tenancy](tenancy/overview.md)'s save check. The same
+`UseDDDToolkit` call adds those parts too, each in its place, so the context's options do not change.
+[`UseDDDToolkit`](entity-framework.md#usedddtoolkit) has the details.
 
-Pass the provider the `AddDbContext` callback gives you, not one you built or kept yourself: it belongs to
-the same scope as the context, so a handler that injects `OrderingContext` receives the very instance that is
-saving. A [context pool](entity-framework.md#contexts-from-a-pool) hands its callback the application's root
-provider, and takes the same call: there the scope is the one that rents the context. See
-[Entity Framework](entity-framework.md).
+The argument of `AddDDDToolkitEntityFramework` says how domain events are delivered. The example hands them to
+[Mediator](https://github.com/martinothamar/Mediator) handlers in the same process, with `DispatchWithMediator()`
+from `DDDToolkit.Mediator`. The other way is the outbox, later on this page. An aggregate that raised events cannot
+be saved until one of the two is configured, so no event is dropped. See [Domain event delivery](event-delivery.md).
 
-A context that forgot `UseDDDToolkit` would save all the same, and check nothing. The registration brings a check
-for that, which the host runs before it serves anything, with the checks every other registration brings: that
-the database has every migration, say, once the module is on Supabase. One line asks for them:
+Pass `UseDDDToolkit` the service provider that the `AddDbContext` callback gives you. Do not pass a provider you
+built or stored yourself. The callback's provider belongs to the same scope as the context, so a handler that
+injects `OrderingContext` receives the instance that saves. A [context pool](entity-framework.md#contexts-from-a-pool)
+gives its callback the application's root provider. Make the same call there. The scope is then the scope that rents
+the context. See [Entity Framework](entity-framework.md).
+
+A context without `UseDDDToolkit` still saves, and it checks nothing. So the registration adds a start-up check that
+finds such a context. The host runs this check before it serves anything, together with the checks of the other
+registrations. One example is the check that the database has every migration, once the module runs on Supabase.
+One line runs all the checks:
 
 ```csharp
 builder.Services.RunStartupChecks();
 ```
 
-The first that finds something wrong stops the start, and says what puts it right. See
+The first check that fails stops the start. Its message says how to fix the problem. See
 [Start-up checks](startup-checks.md).
 
 ## Refuse bad input without throwing
 
-An endpoint turns a request into an order. The address in the body came from outside and may be junk.
-`ToValid()` throws, which is right when an invalid value is a bug; at an API boundary it is an ordinary
-answer to an ordinary request, so use `TryToValid` and hand back the failures:
+An endpoint turns a request into an order. The address in the request body comes from outside, so it may be invalid.
+`ToValid()` throws, which suits a case where an invalid value is a bug. At an API boundary, invalid input is a normal
+case that needs a normal answer. So use `TryToValid`, and return the failures:
+
+**[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs)**
 
 ```csharp
 app.MapPost("/orders", async (PlaceOrder body, OrderingContext orders, CancellationToken cancellationToken) =>
@@ -440,16 +484,16 @@ app.MapPost("/orders", async (PlaceOrder body, OrderingContext orders, Cancellat
 });
 ```
 
-*[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs)*
-
-The caller gets a 400 it can read field by field, with `shipTo.Street` and `shipTo.PostalCode` naming
-the fields they filled in. Nothing was thrown, and `shipTo` is the `ValidAddress` the order's
-constructor asks for. See [Failure handling](value-objects.md#failure-handling).
+The caller gets a 400 response that lists the failures per field, such as `shipTo.Street` and `shipTo.PostalCode`.
+These names point at the fields the caller filled in. Nothing is thrown, and `shipTo` is the `ValidAddress` that the
+order's constructor asks for. See [Failure handling](value-objects.md#failure-handling).
 
 ## Handle a concurrency conflict
 
-`Version` is incremented on every save that touches the aggregate and checked in the `WHERE` clause, so
-a stale write becomes a `ConcurrencyConflictException` naming the aggregate:
+Every save that touches the aggregate increments `Version`, and the `WHERE` clause of the update checks the old value.
+So a write from an old copy of the aggregate fails with a `ConcurrencyConflictException` that names the aggregate:
+
+**[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs)**
 
 ```csharp
 try
@@ -462,40 +506,41 @@ catch (ConcurrencyConflictException conflict)
 }
 ```
 
-*[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs)*
+The toolkit does not retry, because no retry is safe in every case. In the example, the conflict is real. A customer
+cancels an order at the same moment Payments reports that the money was taken. The second save is refused.
 
-There is no safe generic answer for that catch block, which is why the toolkit does not retry for you.
-In the example the conflict is a real one: a customer cancelling an order at the same moment Payments
-reports the money taken. Whoever saves second is refused.
+## Declare the module boundary
 
-## Draw the module boundary
+So far there is one module. The shop has five. Separate modules are only useful while code keeps them separate. If
+Shipping uses Ordering's aggregates and tables, the two are one module with two names. The toolkit lets you declare
+where the boundary is, and it checks the boundary.
 
-So far there is one module. The shop has five, and they are only worth having apart if they stay
-apart: if Shipping may reach into Ordering's aggregates and tables, the two are one module with two
-names. The toolkit lets you say where the boundary is, and checks it.
+One assembly is one module. The `DDD_Module` in the project file already declares the module. The build writes it
+into the compiled assembly as `[assembly: Module("Ordering")]`. The projects of other modules read this attribute to
+know which module the assembly belongs to. The example writes the attribute in a file of the project instead, with
+the same effect:
 
-One assembly, one module, and the `DDD_Module` in the project file already declares it: the build writes it
-into the compiled assembly as `[assembly: Module("Ordering")]`, which is how the other modules' projects know
-it. The example writes the attribute in a file of the project instead, which says the same:
+**[`Ordering/Module.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Module.cs)**
 
 ```csharp
 [assembly: Module("Ordering")]
 ```
 
-*[`Ordering/Module.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Module.cs)*
+A module can have several projects, for example one per layer. Put a `Directory.Build.props` that sets `DDD_Module`
+in the module's folder. It declares the module for every project below that folder, so no project needs its own file
+for it ([A module named by its folder](modules.md#a-module-named-by-its-folder)).
 
-A module of several projects, one per layer, says it once for all of them: a `Directory.Build.props` in the
-module's folder that sets `DDD_Module` declares the module for every project below it, and no project needs a
-file of its own for it ([A module named by its folder](modules.md#a-module-named-by-its-folder)).
+The toolkit checks the boundary once a second assembly declares a module. From then on, everything an assembly
+declares is private to its module, unless the module publishes it. The analyzer reports two things:
 
-Nothing happens until a second assembly says it is a module too. From then on, everything an assembly
-declares is its own business unless it publishes it, and the analyzer reports another module naming an
-unpublished type ([DDD00022](diagnostics.md#ddd00022)) or storing another module's entity
-([DDD00023](diagnostics.md#ddd00023)).
+- code in another module that names a type this module did not publish ([DDD00022](diagnostics.md#ddd00022));
+- another module that stores this module's entity ([DDD00023](diagnostics.md#ddd00023)).
 
-What Ordering publishes is small: its identifier, so the others can point at an order, and the
-integration events of the next step. The example keeps them in a contracts project of their own, which
-is the only Ordering project the other modules reference:
+Ordering publishes two things. It publishes its identifier, so other modules can refer to an order. It also
+publishes the integration events of the next step. The example keeps both in a separate contracts project. The
+other modules reference only this contracts project of Ordering:
+
+**[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)**
 
 ```csharp
 [ModuleContract]
@@ -503,12 +548,10 @@ is the only Ordering project the other modules reference:
 public readonly partial record struct OrderId;
 ```
 
-*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
-
-`[ModuleContract]` is what publishes it. The contracts project gets converters of its own, under the
-same name, because it declares `[assembly: Module("Ordering")]` too, and Ordering's method calls the
-contracts' one, so its context still makes one call. Shipping, which references only the contracts, makes
-one call as well: its own method also registers the ids the modules it references publish.
+`[ModuleContract]` publishes the type. The contracts project declares `[assembly: Module("Ordering")]` too, so it
+gets its own converter method with the same name. Ordering's method calls the contracts' method, so Ordering's
+context still makes one call. Shipping references only Ordering's contracts. Shipping's context also makes one call,
+because Shipping's method also registers the ids that the referenced modules publish:
 
 ```csharp
 // Ordering's context: its own identifiers, and OrderId from the contracts
@@ -518,26 +561,28 @@ configurationBuilder.AddOrderingConverters();
 configurationBuilder.AddShippingConverters();
 ```
 
-Why a module publishes anything at all, what belongs in a contract and why it gets a project of its
-own is explained in [Module contracts](module-contracts.md).
+[Module contracts](module-contracts.md) explains why a module publishes types, what belongs in a contract, and why
+the contracts get a project of their own.
 
-Both rules are warnings, so that a codebase adopting modules can see the list before it has to fix it.
-Once the list is empty, hold it:
+DDD00022 and DDD00023 are warnings, so a codebase that adopts modules sees the full list before it must fix
+anything. When the list is empty, make the two rules errors:
+
+**[`Examples.Webshop.Shipping.csproj`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Examples.Webshop.Shipping.csproj)**
 
 ```xml
 <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
 ```
 
-*[`Examples.Webshop.Shipping.csproj`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Examples.Webshop.Shipping.csproj)*
-
 See [Modules](modules.md).
 
-## Tell another module something happened
+## Publish an integration event
 
-When an order is confirmed, Shipping has to book a van. Ordering cannot call Shipping, which would put
-the boundary back, and it should not have to know that Shipping exists at all. It publishes an
-integration event instead: a contract, separate from the domain event, so the two can change at
-different speeds:
+When an order is confirmed, Shipping must book a van. Ordering cannot call Shipping, because the call would cross the
+boundary. Ordering should not need to know that Shipping exists. So Ordering publishes an **integration event**. An
+integration event is a contract between modules. It is a separate class from the domain event, so the two can
+change at different times:
+
+**[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)**
 
 ```csharp
 [IntegrationEvent]
@@ -548,14 +593,14 @@ public sealed record OrderPlacedV1(
 public sealed record OrderConfirmedV1(OrderId OrderId, string City, string PostalCode);
 ```
 
-*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
+You give the events no name. The toolkit publishes them as `ordering.order-placed` and `ordering.order-confirmed`,
+from the module name and the class name in kebab case. The `V1` is the version. The build also writes the names as
+constants, such as `OrderingEventNames.OrderPlaced`. See [Stable names](domain-events.md#stable-names).
 
-Nothing names them: they are published as `ordering.order-placed` and `ordering.order-confirmed`, the
-module and the class name in kebab case, and the `V1` is their version. The build also writes those names
-as constants, `OrderingEventNames.OrderPlaced`. See [Stable names](domain-events.md#stable-names).
+For each event, one small class turns the domain event into the integration event. The class lives next to the
+aggregate it publishes for:
 
-One small class per event says how the one becomes the other. It lives next to the aggregate it
-publishes for:
+**[`Ordering/Application/Orders/IntegrationEvents/Outbound/`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/IntegrationEvents/Outbound/)**
 
 ```csharp
 public sealed class PublishOrderConfirmed : IOutboundIntegrationEvent<OrderConfirmed, OrderConfirmedV1>
@@ -565,19 +610,19 @@ public sealed class PublishOrderConfirmed : IOutboundIntegrationEvent<OrderConfi
 }
 ```
 
-*[`Ordering/Application/Orders/IntegrationEvents/Outbound/`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/IntegrationEvents/Outbound/)*
-
-The message must not be lost if the process stops right after the order is saved, and it must not be
-sent for an order whose save failed. So it goes through an outbox: a table in Ordering's own database,
-written in the same transaction as the order. The context maps it:
+The message must not be lost when the process stops right after the order is saved. It must not be sent for an order
+whose save failed. So the message goes through an **outbox**. The outbox is a table in Ordering's database. The save
+writes the message to the outbox in the same transaction as the order. The context maps the outbox table:
 
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
     => modelBuilder.AddDomainEventOutbox(Database, schema: Schema);
 ```
 
-and Ordering's registration picks up the publishing classes and says that what they make goes to the
-other modules. It does not say which modules those are:
+Ordering's registration adds the publishing classes and sends what they make to the other modules. The registration
+does not name those modules:
+
+**[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs)**
 
 ```csharp
 services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
@@ -590,23 +635,24 @@ services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingConte
 services.AddOutboxBackgroundService<OrderingContext>(pollingInterval: TimeSpan.FromSeconds(1));
 ```
 
-*[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs)*
+The file itself calls `host.Publish(outbox)`, so the host can choose the transport between the modules. In one
+process, that call is `outbox.SendToModules()`.
 
-`AddOrderingIntegrationEvents()` is generated: it registers every domain event of the module under the
-name the outbox stores it as, and every publishing class with the contract it makes, so nothing is
+`AddOrderingIntegrationEvents()` is generated. It registers every domain event of the module under the name that the
+outbox stores it as. It also registers every publishing class with the contract the class makes. So nothing is
 scanned at start-up.
 
-`SaveChanges` now writes the order and one outbox row in one transaction. The background service reads
-the row afterwards, converts it, and hands it to the other modules. Ordering has already committed by
-then, which is why a failing consumer cannot refuse an order, and why a concurrency conflict in a
-consumer is simply retried.
+`SaveChanges` now writes the order and one outbox row in one transaction. Afterwards, the background service reads
+the row, converts it and hands it to the other modules. Ordering has committed by then. So a consumer that fails
+cannot undo the order, and a consumer that hits a concurrency conflict retries.
 
-In the example, Inventory and Payments pick up `OrderPlacedV1`, answer with contracts of their own, and
-Ordering confirms the order once both have said yes, or cancels it when either says no. That is the
-same mechanism in the other direction; `Shipping` waits for `OrderConfirmedV1`.
+In the example, Inventory and Payments handle `OrderPlacedV1` and answer with contracts of their own. Ordering
+confirms the order when both have answered yes. Ordering cancels the order when either answers no. This is the same
+mechanism in the other direction. Shipping waits for `OrderConfirmedV1`.
 
-The whole checkout, as the modules tell each other. Every contract goes to every module that handles
-it; the diagram shows where it matters:
+The diagram shows the checkout as messages between the modules. Every contract goes to every module that handles it.
+The diagram shows only the modules that act on a contract. The green band ends with a confirmed order, and the red
+bands end with a cancelled order:
 
 ```mermaid
 sequenceDiagram
@@ -617,34 +663,42 @@ sequenceDiagram
 
     Ordering->>Inventory: OrderPlacedV1
     Ordering->>Payments: OrderPlacedV1
-    Note over Payments: a pending payment
-    alt there is stock
+    Note over Payments: opens a pending payment
+    alt enough stock
         Inventory->>Ordering: StockReservedV1
         Inventory->>Payments: StockReservedV1
         alt the provider takes the money
-            Payments->>Ordering: PaymentSucceededV1
-            Note over Ordering: stock and money, so confirmed
-            Ordering->>Shipping: OrderConfirmedV1
-            Note over Shipping: a shipment is booked
+            rect rgba(31, 138, 91, 0.14)
+                Payments->>Ordering: PaymentSucceededV1
+                Note over Ordering: stock and money: confirmed
+                Ordering->>Shipping: OrderConfirmedV1
+                Note over Shipping: books a shipment
+            end
         else the provider refuses
-            Payments->>Ordering: PaymentFailedV1
-            Note over Ordering: cancelled
-            Ordering->>Inventory: OrderCancelledV1
-            Note over Inventory: the stock is released
+            rect rgba(201, 60, 60, 0.12)
+                Payments->>Ordering: PaymentFailedV1
+                Note over Ordering: cancelled
+                Ordering->>Inventory: OrderCancelledV1
+                Note over Inventory: releases the stock
+            end
         end
-    else there is not enough stock
-        Inventory->>Ordering: StockReservationFailedV1
-        Note over Ordering: cancelled
-        Ordering->>Payments: OrderCancelledV1
-        Note over Payments: the pending payment is voided
+    else not enough stock
+        rect rgba(201, 60, 60, 0.12)
+            Inventory->>Ordering: StockReservationFailedV1
+            Note over Ordering: cancelled
+            Ordering->>Payments: OrderCancelledV1
+            Note over Payments: voids the pending payment
+        end
     end
 ```
 
 <details>
 <summary>Show the code: Ordering's side of the checkout</summary>
 
-One small class per contract Ordering reacts to. It loads the order and tells it what happened; the
-order decides what that means:
+Ordering has one small class for each contract it handles. The class loads the order and calls the order's method
+for the event. The order decides what the event changes:
+
+**[`Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs)**
 
 ```csharp
 [IntegrationEventConsumer("ordering.checkout.stock-reserved")]
@@ -662,45 +716,51 @@ public sealed class CancelWithoutPayment(OrderingContext context) : IIntegration
 }
 ```
 
-*[`Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs)*
+None of these classes calls `SaveChanges`. The inbox saves the order together with the row that marks the message as
+applied. The same save writes the events the order raised, such as `OrderConfirmed`, to Ordering's outbox, in the
+same transaction. Ordering registers its handlers in its module registration, with methods the generator writes:
 
-None of them calls `SaveChanges`. The inbox saves the order together with the row that says the message
-was applied, and that save writes whatever the order raised, `OrderConfirmed` for instance, into
-Ordering's outbox in the same transaction. Ordering signs its handlers up in its module registration,
-with methods the generator writes:
+**[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs)**
 
 ```csharp
 services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(contracts => contracts.AddOrderingIntegrationEvents()));
 services.AddModuleIntegrationEvents<OrderingContext>(module => module.AddOrderingIntegrationEvents());
 ```
 
-*[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs)*
-
 </details>
 
-No module calls another, and none waits for an answer: each reacts to what it hears and publishes what
-happened. The order is where the answers meet. It confirms itself when it has both the stock and the
-money, in whichever order they arrive.
+No module calls another module, and no module waits for an answer. Each module handles the events it receives and
+publishes what happened. The order collects the answers. It confirms itself when it has both the stock and the
+money, in either order.
 
-The order's side of the checkout is a small state machine. It does not care in which order the answers
-arrive, and an answer that comes too late changes nothing:
+The order's side of the checkout is a small state machine. The answers can arrive in any order. An answer that arrives
+after the order is confirmed or cancelled changes nothing. In the diagram, purple is the state an order starts in,
+green is confirmed and red is cancelled:
 
 ```mermaid
 stateDiagram-v2
     [*] --> Placed: new Order(...)
-    Placed --> Placed: RecordStockReserved, or RecordPayment, the first of the two
+    Placed --> Placed: the first of RecordStockReserved and RecordPayment
     Placed --> Confirmed: the second of the two
     Placed --> Cancelled: Cancel(reason)
     Confirmed --> [*]
     Cancelled --> [*]
     note right of Confirmed
         Cancel() here breaks MustNotCancelAConfirmedOrder,
-        so the order cannot be saved that way
+        so the save fails
     end note
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class Placed strong
+    class Confirmed good
+    class Cancelled bad
 ```
 
 <details>
 <summary>Show the code: the order's methods</summary>
+
+**[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)**
 
 ```csharp
 public void RecordStockReserved(DateTimeOffset at)
@@ -738,28 +798,31 @@ private void ConfirmWhenReady(DateTimeOffset at)
 }
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)*
-
 </details>
 
-The host only switches the modules on, says how domain events that stay inside a module are published, and
-asks for the start-up checks the registrations brought.
+The host registers the modules, says how domain events that stay inside one module are delivered, and runs the
+start-up checks that the registrations added. `host` holds the host's two choices: the database, and the transport
+between the modules.
+
+**[`Host/Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs)**
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
-builder.Services.AddCatalogModule(supabase);
-builder.Services.AddOrderingModule(supabase);
-builder.Services.AddInventoryModule(supabase);
-builder.Services.AddPaymentsModule(supabase);
-builder.Services.AddShippingModule(supabase);
+builder.Services.AddCatalogModule(host);
+builder.Services.AddOrderingModule(host);
+builder.Services.AddInventoryModule(host);
+builder.Services.AddPaymentsModule(host);
+builder.Services.AddShippingModule(host);
 
 builder.Services.RunStartupChecks();
 ```
 
-*[`Host/Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs)*
+## Consume an integration event once
 
-## Consume it once
+Shipping books a shipment when it receives `OrderConfirmedV1`:
+
+**[`Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs)**
 
 ```csharp
 [IntegrationEventConsumer("shipping.booker")]
@@ -775,46 +838,46 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
 }
 ```
 
-*[`Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs)*
+Three details of this handler matter:
 
-Three things there are the point. It is typed on the contract, never on Ordering's domain event, which
-is what keeps Shipping free of a reference to Ordering's domain. It does not call `SaveChanges`: the
-sink runs it inside the inbox, so the shipment and the row that says this consumer applied this message
-are written by one save in one transaction. And the consumer name is what the inbox keys on, so
-delivery twice does the work once.
+- The handler is typed on the contract, `OrderConfirmedV1`, and never on Ordering's domain event. So Shipping needs no
+  reference to Ordering's domain.
+- The handler does not call `SaveChanges`. The inbox runs the handler and saves afterwards. One save, in one
+  transaction, writes the shipment and the row that records that this consumer applied this message.
+- The inbox keys on the consumer name, `shipping.booker`. So a message delivered twice is handled once.
 
-Shipping signs itself up as a consumer, with the contracts it reads and the handlers that run under its
-inbox:
+Shipping registers itself as a consumer. It registers the contracts it reads and the handlers that run in its inbox.
+The generator writes both methods when Shipping compiles, from the handlers it finds:
+
+**[`Shipping/ShippingModule.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/ShippingModule.cs)**
 
 ```csharp
 services.AddDDDToolkitEntityFramework(options =>
-    options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderConfirmedV1>()));
+    options.MapIntegrationEvents(contracts => contracts.AddShippingIntegrationEvents()));
 
-services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<OrderConfirmedV1, BookShipment>());
+services.AddModuleIntegrationEvents<ShippingContext>(module => module.AddShippingIntegrationEvents());
 ```
 
-*[`Shipping/ShippingModule.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/ShippingModule.cs)*
+Shipping's context maps the inbox table:
 
-and maps the inbox table in its context:
+**[`Shipping/Infrastructure/Persistence/ShippingContext.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Infrastructure/Persistence/ShippingContext.cs)**
 
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
     => modelBuilder.AddDomainEventInbox(Database, schema: Schema);
 ```
 
-*[`Shipping/Infrastructure/Persistence/ShippingContext.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Infrastructure/Persistence/ShippingContext.cs)*
-
-`schema: Schema` puts the table in the module's own schema instead of the toolkit's default `ddd`. It
-matters as soon as modules share a database, as they do on one Supabase project: every module that
-consumes needs an inbox and every module that publishes an outbox, and in one shared `ddd` schema they
-would all be the same two tables.
+`schema: Schema` puts the table in the module's schema instead of the toolkit's default schema, `ddd`. This matters
+when modules share a database, as they do on one Supabase project. Every module that consumes events needs an inbox,
+and every module that publishes events needs an outbox. In one shared `ddd` schema, all modules would write to the
+same two tables.
 
 See [Integration events](integration-events.md).
 
 ## See the generated code
 
-Nothing here is magic, and reading the output is the fastest way to understand it. Go to definition on
-a generated member opens the file it is in, or have the files written to disk:
+The generated code is ordinary C#, and reading it is the fastest way to understand the toolkit. Go to definition on a
+generated member opens the file that holds it. To have the files written to disk, add this to the project file:
 
 ```xml
 <PropertyGroup>
@@ -824,19 +887,18 @@ a generated member opens the file it is in, or have the files written to disk:
 ```
 
 Build, then look in `Generated/`. Add that folder to `.gitignore`. [What the generator writes](generated-code.md)
-walks through that output for a small aggregate, file by file.
+goes through the output for a small aggregate, file by file.
 
-Each file is named after the type it belongs to, the generator that wrote it and a short hash that
-keeps two types of the same name apart, such as `Order.2c9e41f0.g.cs` for the entity itself and
-`Order.EntityFramework.5b17d3aa.g.cs` for its Entity Framework part (the hash depends on the
-namespace). The namespace itself is left out of the name on purpose. It is already in the folder,
-and Visual Studio has to fit `Generated\{generator assembly}\{generator}\{file}` under your
-project folder into 260 characters.
+A generated file is named after its type, with a suffix for some parts and a short hash at the end. Examples are
+`Order.2c9e41f0.g.cs` for the entity and `Order.EntityFramework.5b17d3aa.g.cs` for its Entity Framework part. The hash
+comes from the type's full name, so two types with the same name in different namespaces get different files. The
+file name leaves out the namespace on purpose. The project's folder path usually spells the namespace already, and
+Visual Studio must fit `{project}\Generated\{generator assembly}\{generator}\{file}` into 260 characters.
 
-## When something does not generate
+## When a type generates nothing
 
-Every misuse reports an error with an identifier starting `DDD`. If a type you annotated produced no
-code, check the build output first: the generator tells you what is wrong and which line to fix. See
+Every misuse reports a diagnostic with an id that starts with `DDD`. If a type with a toolkit attribute produced no
+code, check the build output first. The diagnostic says what is wrong and which line to fix. See
 [Diagnostics](diagnostics.md) for the full list.
 
 ## Run the example
@@ -847,5 +909,5 @@ dotnet run --project Examples/ModularMonolith.Supabase/Examples.Webshop.Host
 
 Then work through
 [`Examples.Webshop.Host.http`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Examples.Webshop.Host.http)
-from the top. [`Examples/README.md`](../Examples/README.md) is the map of the folder and says which
-file shows what, and how to run the same host on a local Supabase instead of SQLite.
+from the top. [`Examples/README.md`](../Examples/README.md) is the map of the folder. It says which file shows what,
+and how to run the same host on a local Supabase instead of SQLite.

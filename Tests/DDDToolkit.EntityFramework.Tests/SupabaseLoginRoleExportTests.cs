@@ -23,7 +23,7 @@ public sealed class SupabaseLoginRoleExportTests : IDisposable
     private static readonly SupabaseMigrationSource Shelves = SupabaseMigrationSource.For(() => SupabaseShelfContext.Create());
 
     private static readonly RowAccessRule ShelvesByName = RowAccessRule.For<SupabaseShelf>(
-        "Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {caller:claim:shelf})", RowAccessRoles.User, RowAccessRoles.SystemIn);
+        "Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {user:claim:shelf})", RowAccessRoles.User, RowAccessRoles.SystemIn);
 
     /// <summary>
     /// The whole file for <see cref="Roles"/> and <c>sample_api</c>, the first one written for the role: what the
@@ -150,7 +150,7 @@ public sealed class SupabaseLoginRoleExportTests : IDisposable
     private (int ExitCode, string Output) Build(string mode, string? loginRole, string? roles = Roles, params RowAccessRule[] rules)
     {
         using var output = new StringWriter();
-        var exitCode = SupabaseMigrationBuild.Run(mode, [Shelves], rules, [], [], _directory, start: null, roles, callerFunctions: null, grants: null, force: null, loginRole, output);
+        var exitCode = SupabaseMigrationBuild.Run(mode, [Shelves], rules, [], [], _directory, start: null, roles, currentUserFunctions: null, grants: null, force: null, loginRole, output);
         return (exitCode, output.ToString());
     }
 
@@ -356,7 +356,7 @@ public sealed class SupabaseLoginRoleExportTests : IDisposable
         // the same, and no login role file.
         using (var before = new StringWriter())
         {
-            SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, Roles, callerFunctions: null, grants: null, force: null, before)
+            SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, Roles, currentUserFunctions: null, grants: null, force: null, before)
                 .Should().Be(0, before.ToString());
         }
 
@@ -367,7 +367,7 @@ public sealed class SupabaseLoginRoleExportTests : IDisposable
         foreach (var unset in (string?[])[null, "", "  "])
         {
             using var output = new StringWriter();
-            SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, Roles, callerFunctions: null, grants: null, force: null, loginRole: unset, output)
+            SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, Roles, currentUserFunctions: null, grants: null, force: null, loginRole: unset, output)
                 .Should().Be(0, output.ToString());
 
             Files().Select(VersionLess).Should().Equal(files.Select(VersionLess), "the same files, the access file's version being the moment it was written");

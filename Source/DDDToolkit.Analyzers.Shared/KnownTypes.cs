@@ -1,3 +1,4 @@
+
 namespace DDDToolkit.Analyzers.Common;
 
 /// <summary>
@@ -33,9 +34,6 @@ internal static class KnownTypes
     /// <summary>The property of an aggregate root that names its owner: <c>[Owner]</c>.</summary>
     public const string OwnerAttribute = AttributesNamespace + ".OwnerAttribute";
 
-    /// <summary>The property of an aggregate root that says where it hangs: <c>[At]</c>.</summary>
-    public const string AtAttribute = AttributesNamespace + ".AtAttribute";
-
     /// <summary>An abstract generic parent a package ships for aggregate roots declared elsewhere: <c>[AggregateRootBase]</c>.</summary>
     public const string AggregateRootBaseAttribute = AttributesNamespace + ".AggregateRootBaseAttribute";
 
@@ -68,6 +66,9 @@ internal static class KnownTypes
 
     /// <summary>Marks a package's assembly attribute as the switch that has the generator write the classes of the templates it names, and their ids, where a project leaves them out.</summary>
     public const string TemplateDefaultsAttribute = AttributesNamespace + ".TemplateDefaultsAttribute";
+
+    /// <summary>Marks a package's generic assembly attribute as the line that says which of a project's ids are the ids of the package's classes.</summary>
+    public const string TemplateIdsAttribute = AttributesNamespace + ".TemplateIdsAttribute";
 
     /// <summary>Assembly attribute that declares the assembly a module.</summary>
     public const string ModuleAttribute = AttributesNamespace + ".ModuleAttribute";
@@ -112,7 +113,7 @@ internal static class KnownTypes
     public const string AccessSet = "DDDToolkit.Abstractions.Access.AccessSet`1";
 
     /// <summary>Who is asking, as a row access rule sees them.</summary>
-    public const string Caller = "DDDToolkit.Abstractions.Access.Caller";
+    public const string CurrentUser = "DDDToolkit.Abstractions.Access.ICurrentUser";
 
     /// <summary>SQL written into a row access rule as it is: <c>Sql.Call</c> and <c>Sql.Raw</c>.</summary>
     public const string SqlEscape = "DDDToolkit.Abstractions.Access.Sql";
@@ -158,6 +159,9 @@ internal static class KnownTypes
     /// <summary>On an attribute a package ships: it marks one more argument of a key marker's call, such as the version read.</summary>
     public const string PermissionMarkerArgumentAttribute = "DDDToolkit.Access.PermissionMarkerArgumentAttribute";
 
+    /// <summary>On an attribute a package ships: it marks one more argument of a requirement attribute's call, such as the tenant an operator's command acts in.</summary>
+    public const string RequirementArgumentAttribute = "DDDToolkit.Access.RequirementArgumentAttribute";
+
     /// <summary>On a package's assembly: what <c>[RequiresPermission]</c> means on a request that marks no member.</summary>
     public const string PermissionWithoutMarkerAttribute = "DDDToolkit.Access.PermissionWithoutMarkerAttribute";
 
@@ -174,10 +178,10 @@ internal static class KnownTypes
     public const string OrOwnAttribute = "DDDToolkit.Access.OrOwnAttribute";
 
     /// <summary>On a package's assembly: a type its handle says the caller's own of, or a template whose classes' ids it is.</summary>
-    public const string CallersOwnAttribute = "DDDToolkit.Access.CallersOwnAttribute";
+    public const string OwnedByCurrentUserAttribute = "DDDToolkit.Access.OwnedByCurrentUserAttribute";
 
     /// <summary>What says the caller's own value of a type: an application's handle is found by it.</summary>
-    public const string CallersOwnInterface = "DDDToolkit.Access.ICallersOwn`1";
+    public const string OwnedByCurrentUserInterface = "DDDToolkit.Access.IOwnedByCurrentUser`1";
 
     /// <summary>The core's requirement, whose static methods combine cases and make the caller's own.</summary>
     public const string AccessRequirementUsage = "global::DDDToolkit.Access.AccessRequirement";

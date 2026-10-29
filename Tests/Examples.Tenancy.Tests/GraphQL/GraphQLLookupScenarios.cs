@@ -85,7 +85,7 @@ public sealed class GraphQLLookupScenarios(SampleHosts sample) : IClassFixture<S
         await using var host = await sample.StartAsync();
         var stray = Meadow.Administrator.Id;
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();

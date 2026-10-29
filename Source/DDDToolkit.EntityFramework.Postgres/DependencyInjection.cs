@@ -29,12 +29,13 @@ public static class DependencyInjection
     /// the role the application logged in as, while the others run as their caller, is configured with
     /// <c>UseDDDToolkitCore</c>.
     /// <para>
-    /// Who is calling is whatever a host registered: in ASP.NET Core, the request's user, once
-    /// <c>AddSupabaseJwtBearer</c> from <c>DDDToolkit.Auth.Supabase.AspNetCore</c> is there. Without one,
-    /// it is the caller <see cref="Callers.Begin"/> made current, or <see cref="Caller.System"/> outside any
-    /// (<see cref="AmbientCallerAccessor"/>), which is what an Azure Function, a worker service or a test wants.
-    /// With <see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>, outside any it is nobody,
-    /// and the context's first command fails instead of running as the system.
+    /// Who is calling is what <see cref="ICurrentUser"/> answers, which this registers as <see cref="CurrentUser"/>
+    /// unless one is registered already. A user that code began wins. Otherwise the host's
+    /// <see cref="ICurrentUserSource"/> answers: in ASP.NET Core, the request's user, once <c>AddSupabaseJwtBearer</c>
+    /// from <c>DDDToolkit.Auth.Supabase.AspNetCore</c> is there. Without either, it is system work,
+    /// <see cref="CurrentUserSnapshot.System"/>, which is what an Azure Function, a worker service or a test wants.
+    /// With <see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>, it is nobody then, and the
+    /// context's first command fails instead of running as system work.
     /// </para>
     /// <para>
     /// It brings the start-up checks of <see cref="PostgresRowAccessChecks"/>, over every registered context on
@@ -43,8 +44,8 @@ public static class DependencyInjection
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <param name="configure">
-    /// Changes the roles each kind of caller gets, the defaults being PostgREST's; how long the settings last,
-    /// <see cref="PostgresRowLevelSecurityOptions.Scope"/>; and the statement timeout of each kind of caller.
+    /// Changes the roles each kind of user gets, the defaults being PostgREST's; how long the settings last,
+    /// <see cref="PostgresRowLevelSecurityOptions.Scope"/>; and the statement timeout of each kind of user.
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     /// <exception cref="ArgumentException">A role left empty by <paramref name="configure"/>.</exception>
@@ -52,29 +53,30 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // TryAdd: a host that knows its callers better, ASP.NET Core with its requests, keeps its own.
-        services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
+        // TryAdd: a host says who its requests run as with an ICurrentUserSource, which the current user asks.
+        services.AddCurrentUser();
         return services.AddInterceptor(configure);
     }
 
     /// <summary>
-    /// Registers <see cref="PostgresRowLevelSecurityInterceptor"/>, asking <typeparamref name="TAccessor"/>
-    /// who is calling, whatever else was registered before.
+    /// Registers <see cref="PostgresRowLevelSecurityInterceptor"/>, with <typeparamref name="TSource"/> as the
+    /// host's answer to who is calling, whatever source was registered before.
     /// </summary>
-    /// <typeparam name="TAccessor">
-    /// Says who is calling. Registered as a singleton and asked every time a context opens a connection,
-    /// so it has to answer for the current request or flow of work.
+    /// <typeparam name="TSource">
+    /// Says who the current request runs as. Registered as a singleton and asked every time a context opens a
+    /// connection where no user was begun, so it has to answer for the current request or flow of work.
     /// </typeparam>
     /// <param name="services">The application's services.</param>
-    /// <param name="configure">Changes the roles each kind of caller gets; the defaults are PostgREST's.</param>
+    /// <param name="configure">Changes the roles each kind of user gets; the defaults are PostgREST's.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     /// <exception cref="ArgumentException">A role left empty by <paramref name="configure"/>.</exception>
-    public static IServiceCollection AddPostgresRowLevelSecurity<TAccessor>(this IServiceCollection services, Action<PostgresRowLevelSecurityOptions>? configure = null)
-        where TAccessor : class, ICallerAccessor
+    public static IServiceCollection AddPostgresRowLevelSecurity<TSource>(this IServiceCollection services, Action<PostgresRowLevelSecurityOptions>? configure = null)
+        where TSource : class, ICurrentUserSource
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.Replace(ServiceDescriptor.Singleton<ICallerAccessor, TAccessor>());
+        services.Replace(ServiceDescriptor.Singleton<ICurrentUserSource, TSource>());
+        services.AddCurrentUser();
         return services.AddInterceptor(configure);
     }
 
@@ -100,26 +102,26 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Registers <see cref="CallerConnections"/> over the data source <paramref name="dataSource"/> gives, such
+    /// Registers <see cref="CurrentUserConnections"/> over the data source <paramref name="dataSource"/> gives, such
     /// as the one the host's contexts connect through: connections for SQL a module sends outside Entity
     /// Framework, with the caller set as a context's connections have it. Registering twice means the second
     /// data source. Needs <see cref="AddPostgresRowLevelSecurity(IServiceCollection, Action{PostgresRowLevelSecurityOptions}?)"/>.
     /// <code>
     /// services.AddPostgresRowLevelSecurity();
-    /// services.AddCallerConnections(provider => provider.GetRequiredService&lt;NpgsqlDataSource&gt;());
+    /// services.AddCurrentUserConnections(provider => provider.GetRequiredService&lt;NpgsqlDataSource&gt;());
     /// </code>
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <param name="dataSource">The data source the connections come from; asked once, when the first is wanted.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    public static IServiceCollection AddCallerConnections(this IServiceCollection services, Func<IServiceProvider, DbDataSource> dataSource)
+    public static IServiceCollection AddCurrentUserConnections(this IServiceCollection services, Func<IServiceProvider, DbDataSource> dataSource)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(dataSource);
 
         // A singleton, as the interceptor is: who is calling is asked every time a connection is opened.
-        services.Replace(ServiceDescriptor.Singleton(provider => new CallerConnections(
-            dataSource(provider) ?? throw new InvalidOperationException($"The data source given to {nameof(AddCallerConnections)} is null."),
+        services.Replace(ServiceDescriptor.Singleton(provider => new CurrentUserConnections(
+            dataSource(provider) ?? throw new InvalidOperationException($"The data source given to {nameof(AddCurrentUserConnections)} is null."),
             provider.GetService<PostgresRowLevelSecurityInterceptor>()
                 ?? throw new InvalidOperationException("Row level security is not registered. Call services.AddPostgresRowLevelSecurity() first."))));
 

@@ -182,7 +182,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             {
                 var held = await campus.Services.AsAsync(asking.Person, asking.College, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Course>>().Reach(permission);
                     return await provider.Campus().Courses.Within(reach).Select(course => course.Id).ToListAsync(Cancellation);
                 });
                 held.Should().BeEquivalentTo(data.CoursesHeldBy(asking, permission), "of the courses {0} holds {1} on", asking, permission);
@@ -192,7 +192,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             {
                 var held = await campus.Services.AsAsync(asking.Person, asking.College, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<LabId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Lab>>().Reach(permission);
                     return await provider.Campus().Labs.Within(reach).Select(lab => lab.Id).ToListAsync(Cancellation);
                 });
                 held.Should().BeEquivalentTo(data.LabsHeldBy(asking, permission), "of the labs {0} holds {1} on", asking, permission);
@@ -221,7 +221,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         await campus.Services.AsAsync(data.Dee, CampusScenario.InAlder, async provider =>
         {
             commands.Reset();
-            grade = await provider.GetRequiredService<IMemberQuestions<CourseId>>().HoldAsync(data.Optics, CoursePermissions.Grade, Cancellation);
+            grade = await provider.GetRequiredService<MembershipAccessManager<Course>>().HoldAsync(data.Optics, CoursePermissions.Grade, Cancellation);
             commands.Count.Should().Be(1, "how the permission is held, until when, and the course's version are one statement");
             commands.Commands[0].Should().Contain("CourseTutors").And.Contain("CourseRoles").And.Contain(campus.ReadModel, "where the dean holds the permission is a subquery of the statement");
         });
@@ -231,7 +231,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         await campus.Services.AsAsync(data.Tom, CampusScenario.InAlder, async provider =>
         {
             commands.Reset();
-            var equip = await provider.GetRequiredService<IMemberQuestions<LabId>>().HoldAsync(data.Laser, LabPermissions.Equip, Cancellation);
+            var equip = await provider.GetRequiredService<MembershipAccessManager<Lab>>().HoldAsync(data.Laser, LabPermissions.Equip, Cancellation);
             commands.Count.Should().Be(1);
             commands.Commands[0].Should().Contain("LabTechnicianRoles");
             equip!.Via.Should().Be(MemberVia.Members);
@@ -241,7 +241,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         await campus.Services.AsAsync(data.Ada, CampusScenario.InAlder, async provider =>
         {
             commands.Reset();
-            var permissions = await provider.GetRequiredService<IMemberQuestions<CourseId>>().PermissionsOnAsync([data.Optics, data.Poetry, data.Latin], CampusScenario.CoursePermissionsAsked, Cancellation);
+            var permissions = await provider.GetRequiredService<MembershipAccessManager<Course>>().PermissionsOnAsync([data.Optics, data.Poetry, data.Latin], CampusScenario.CoursePermissionsAsked, Cancellation);
             commands.Count.Should().Be(1);
             permissions.Keys.Should().BeEquivalentTo([data.Optics, data.Poetry], "Latin is another college's");
 
@@ -250,7 +250,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             permissions.Values.Should().OnlyContain(held => held.SetEquals(new[] { CoursePermissions.See, CoursePermissions.Grade, CoursePermissions.Outline, LabPermissions.Equip, TenancyPermissions.HistoryView }));
 
             commands.Reset();
-            var seen = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(CoursePermissions.See);
+            var seen = provider.GetRequiredService<MembershipAccessManager<Course>>().Reach(CoursePermissions.See);
             var titles = await provider.Campus().Courses.Within(seen).OrderBy(course => course.Title).Select(course => course.Title).ToListAsync(Cancellation);
             titles.Should().Equal("Optics", "Poetry");
             commands.Count.Should().Be(1);
@@ -269,7 +269,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         {
             var requests = provider.Campus();
             campus.Commands.Reset();
-            var grade = await provider.GetRequiredService<IMemberQuestions<CourseId>>().HoldAsync(data.Optics, CoursePermissions.Grade, Cancellation);
+            var grade = await provider.GetRequiredService<MembershipAccessManager<Course>>().HoldAsync(data.Optics, CoursePermissions.Grade, Cancellation);
 
             grade!.Via.Should().Be(MemberVia.Above);
             campus.Commands.Sent.Should().ContainSingle().Which.Context.Should().NotBeSameAs(requests);
@@ -294,8 +294,8 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
 
             // What the admission asks of the organization is asked outside a statement of the resource's: whether a seat
             // is active, which of the college's roles there are, and which is the owner's.
-            var courses = provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>();
-            var labs = provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>();
+            var courses = new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes);
+            var labs = new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes);
 
             await courses.RequireMemberAsync(data.NedSeat, Cancellation);
             (await FluentActions.Awaiting(() => labs.RequireMemberAsync(data.SueSeat, Cancellation).AsTask()).Should().ThrowAsync<RefusalException>())
@@ -320,8 +320,8 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
 
         await campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, async provider =>
         {
-            var courses = provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>();
-            var labs = provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>();
+            var courses = new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes);
+            var labs = new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes);
 
             // A member is a seat, so whether somebody can be made one is whether that seat is active in this college.
             await courses.RequireMemberAsync(data.NedSeat, Cancellation);
@@ -349,7 +349,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         // A role of the college's that it archived is given no more, and gives nothing where it is still held.
         await campus.Services.BySystemInAsync(data.Alder, provider => provider.Roles().ArchiveAsync(data.AlderDemonstrator, Cancellation));
         await campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, async provider =>
-            (await FluentActions.Awaiting(() => provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireRoleAsync(data.AlderDemonstrator, Cancellation).AsTask())
+            (await FluentActions.Awaiting(() => new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes).RequireRoleAsync(data.AlderDemonstrator, Cancellation).AsTask())
                 .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(LabMembership.Codes[MembershipRefusals.RoleNotForMembers]));
         var tom = new Asking(data.Tom, CampusScenario.InAlder);
         (await HoldInAsync(campus, tom, data.Laser, LabPermissions.Equip))!.Via.Should().BeNull("the demonstrator's role is archived");
@@ -366,7 +366,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         // The college archives its role for a lab's chief: it gives nothing from then on, and goes to nobody.
         await campus.Services.BySystemInAsync(data.Alder, provider => provider.Roles().ArchiveAsync(data.AlderLabChief, Cancellation));
         await campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, async provider =>
-            (await FluentActions.Awaiting(() => provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireRoleAsync(data.AlderLabChief, Cancellation).AsTask())
+            (await FluentActions.Awaiting(() => new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes).RequireRoleAsync(data.AlderLabChief, Cancellation).AsTask())
                 .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(LabMembership.Codes[MembershipRefusals.RoleNotForMembers]));
 
         // The owner held nothing through it: what an owner holds, the lab's permissions say, by owning it.
@@ -387,7 +387,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             data.Alder,
             async provider =>
             {
-                var courses = provider.GetRequiredService<IMemberQuestions<CourseId>>();
+                var courses = provider.GetRequiredService<MembershipAccessManager<Course>>();
                 (await courses.HoldAsync(data.Optics, CoursePermissions.Dissolve, Cancellation))!.Via.Should().Be(MemberVia.System);
                 (await courses.HoldAsync(data.Latin, CoursePermissions.See, Cancellation)).Should().BeNull("Tenancy keeps the application's own work in a college to that college");
                 (await provider.Campus().Courses.Within(courses.Reach(CoursePermissions.Grade)).Select(course => course.Id).ToListAsync(Cancellation))
@@ -395,7 +395,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
 
                 // A lab's rules let no scope through, []: the same work is nobody's member there and nothing above the
                 // rules. It holds nothing on a lab, of its own college or another.
-                var labs = provider.GetRequiredService<IMemberQuestions<LabId>>();
+                var labs = provider.GetRequiredService<MembershipAccessManager<Lab>>();
                 (await labs.HoldAsync(data.Laser, LabPermissions.See, Cancellation)).Should().BeNull();
                 labs.Reach(LabPermissions.Equip).Everything.Should().BeFalse();
                 (await provider.Campus().Labs.Within(labs.Reach(LabPermissions.See)).CountAsync(Cancellation)).Should().Be(0);
@@ -407,7 +407,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             data.Alder,
             async provider =>
             {
-                var courses = provider.GetRequiredService<IMemberQuestions<CourseId>>();
+                var courses = provider.GetRequiredService<MembershipAccessManager<Course>>();
                 (await courses.HoldAsync(data.Optics, CoursePermissions.See, Cancellation)).Should().BeNull();
                 courses.Reach(CoursePermissions.Grade).Everything.Should().BeFalse();
             });
@@ -422,16 +422,54 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
     private static Task<List<CourseId>> SeenCoursesAsync(CampusApp campus, Asking asking)
         => campus.Services.AsAsync(asking.Person, asking.College, async provider =>
         {
-            var see = provider.GetRequiredService<IMemberQuestions<CourseId>>().PermissionReach([]).See;
+            var see = provider.GetRequiredService<MembershipAccessManager<Course>>().ReachSeen();
             return await provider.Campus().Courses.Within(see).Select(course => course.Id).ToListAsync(Cancellation);
         });
 
     private static Task<List<LabId>> SeenLabsAsync(CampusApp campus, Asking asking)
         => campus.Services.AsAsync(asking.Person, asking.College, async provider =>
         {
-            var see = provider.GetRequiredService<IMemberQuestions<LabId>>().PermissionReach([]).See;
+            var see = provider.GetRequiredService<MembershipAccessManager<Lab>>().ReachSeen();
             return await provider.Campus().Labs.Within(see).Select(lab => lab.Id).ToListAsync(Cancellation);
         });
+
+    [Fact]
+    public async Task The_managers_ask_the_college_who_may_be_made_a_member_and_who_may_change_the_roles_it_keeps()
+    {
+        using var campus = await databases.CreateAsync();
+        var data = campus.Scenario;
+        var tutor = data.AlderCourseRoles[CourseMembership.Tutor];
+
+        // The college's own work on its courses adds a seat of the college, active, in a role the college keeps for courses.
+        var optics = await campus.Services.BySystemInAsync(
+            data.Alder,
+            provider => provider.GetRequiredService<CourseTutorManager>().AddAsync(data.Optics, data.NedSeat, tutor, until: null, Cancellation),
+            scope: CourseMembership.Scope);
+        optics.Tutors.Single(row => row.MemberId == data.NedSeat).Roles.Single().RoleId.Should().Be(tutor);
+
+        // A suspended seat is no member to be, and another college's role is no role of this one's.
+        await FluentActions.Awaiting(() => campus.Services.BySystemInAsync(
+                data.Alder,
+                provider => provider.GetRequiredService<CourseTutorManager>().AddAsync(data.Optics, data.SueSeat, null, null, Cancellation),
+                scope: CourseMembership.Scope))
+            .Should().ThrowAsync<RefusalException>().Where(refused => refused.Code == CourseMembership.Codes[MembershipRefusals.MemberNotActive]);
+        await FluentActions.Awaiting(() => campus.Services.BySystemInAsync(
+                data.Alder,
+                provider => provider.GetRequiredService<CourseTutorManager>().GiveRoleAsync(data.Optics, data.NedSeat, data.BirchCourseRoles[CourseMembership.Tutor], null, Cancellation),
+                scope: CourseMembership.Scope))
+            .Should().ThrowAsync<RefusalException>().Where(refused => refused.Code == CourseMembership.Codes[MembershipRefusals.RoleNotForMembers]);
+
+        // The courses' rules name the college's permission that manages roles for their roles: Ada administers the college
+        // and holds it for the whole of it; Tom tutors and does not, and is refused as Tenancy refuses it.
+        var renamed = await campus.Services.AsAsync(data.Ada, CampusScenario.InAlder, provider =>
+            provider.GetRequiredService<CourseRoleManager>().RenameAsync(tutor, "Tutor of record", null, Cancellation));
+        renamed.Name.Should().Be("Tutor of record");
+
+        var refused = (await FluentActions.Awaiting(() => campus.Services.AsAsync(data.Tom, CampusScenario.InAlder, provider =>
+                provider.GetRequiredService<CourseRoleManager>().ArchiveAsync(tutor, Cancellation)))
+            .Should().ThrowAsync<RefusalException>()).Which;
+        (refused.Code, refused.Arguments["Permission"]).Should().Be(("tenancy.not-permitted", DDDToolkit.Supporting.Tenancy.Catalogue.TenancyPermissions.RolesManage));
+    }
 
     /// <summary>Asserts that the questions that refuse answer <paramref name="asking"/> with Tenancy's own refusal, for a course and for a lab, and read nothing for it.</summary>
     private static async Task RefusedAsync(CampusApp campus, Asking asking, string code)
@@ -442,7 +480,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         (await FluentActions.Awaiting(() => campus.Services.AsAsync(asking.Person, asking.College, async provider =>
             {
                 campus.Commands.Reset();
-                return await provider.GetRequiredService<IMemberQuestions<CourseId>>().RequireAsync(data.Optics, CoursePermissions.See, Cancellation);
+                return await provider.GetRequiredService<MembershipAccessManager<Course>>().RequireAsync(data.Optics, CoursePermissions.See, Cancellation);
             }))
             .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(code, "of {0}", asking);
         campus.Commands.Count.Should().Be(0, "somebody who is nobody is refused before anything is read");

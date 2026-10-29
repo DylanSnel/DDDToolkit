@@ -67,7 +67,7 @@ public class ColumnRuleGenerationTests
 
         """;
 
-    private static GeneratorRunOutcome Rule(string attribute, string body = "public static bool Allows(Order order, Caller caller) => order.PlacedBy == caller.UserId;")
+    private static GeneratorRunOutcome Rule(string attribute, string body = "public static bool Allows(Order order, ICurrentUser user) => order.PlacedBy == user.Id;")
         => GeneratorTestHost.Create(Shop +
             $$"""
             [{{attribute}}]
@@ -100,13 +100,13 @@ public class ColumnRuleGenerationTests
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
         SqlOf(result).Should().Be(
-            "{columns}({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})",
+            "{columns}({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})",
             "the columns say where the rule holds, not what it asks; and an export that knows no column rules stops at the placeholder rather than write a policy for the whole row");
     }
 
     [Fact]
     public void A_rule_about_whole_rows_says_nothing_of_columns()
-        => SqlOf(Rule("RowAccess<Order>(RowOperations.Change)")).Should().Be("({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})");
+        => SqlOf(Rule("RowAccess<Order>(RowOperations.Change)")).Should().Be("({col:PlacedBy} IS NOT DISTINCT FROM {user:uid})");
 
     [Theory]
     [InlineData("RowOperations.Read")]
@@ -151,7 +151,7 @@ public class ColumnRuleGenerationTests
     [Fact]
     public void A_function_a_column_rule_calls_by_name_carries_its_schema_since_its_trigger_has_an_empty_search_path()
     {
-        const string calls = "public static bool Allows(Order order, Caller caller) => Sql.Call<bool>(\"{0}\", caller.UserId);";
+        const string calls = "public static bool Allows(Order order, ICurrentUser user) => Sql.Call<bool>(\"{0}\", user.Id);";
 
         var unqualified = Rule("RowAccess<Order>(RowOperations.Change, Columns = [nameof(Order.Status)])", string.Format(calls, "is_agent"));
         var qualified = Rule("RowAccess<Order>(RowOperations.Change, Columns = [nameof(Order.Status)])", string.Format(calls, "public.is_agent"));
@@ -160,7 +160,7 @@ public class ColumnRuleGenerationTests
         unqualified.ShouldHaveDiagnostic("DDD00038", "\"is_agent\"").GetMessage().Should()
             .Contain("a Sql.Call that names its function with its schema, such as \"public.is_agent\", or \"pg_catalog.is_agent\" for one of Postgres's own");
         unqualified.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
-        SqlOf(qualified.ShouldNotHaveDiagnostic("DDD00038")).Should().Be("{columns}public.is_agent({caller:uid})");
+        SqlOf(qualified.ShouldNotHaveDiagnostic("DDD00038")).Should().Be("{columns}public.is_agent({user:uid})");
         policy.ShouldNotHaveDiagnostic("DDD00038").ShouldHaveGenerated("TheRule.RowAccess");
     }
 
@@ -177,7 +177,7 @@ public class ColumnRuleGenerationTests
     {
         var result = Rule(
             "RowAccess<Order>(RowOperations.Change, Columns = [nameof(Order.Status)])",
-            "public static bool Allows(Order order, Caller caller) => order.Note.StartsWith(\"x\");");
+            "public static bool Allows(Order order, ICurrentUser user) => order.Note.StartsWith(\"x\");");
 
         result.Count("DDD00039").Should().Be(1);
         result.ShouldNotHaveDiagnostic("DDD00038");

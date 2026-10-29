@@ -50,7 +50,7 @@ public static partial class FolderQuestions
 public static partial class UsersReadTheDocumentsTheySee
 {
     /// <summary>Whether the caller sees <paramref name="document"/>.</summary>
-    public static bool Allows(Document document, Caller caller) => DocumentsISee.Ids().Contains(document.Id);
+    public static bool Allows(Document document, ICurrentUser user) => DocumentsISee.Ids().Contains(document.Id);
 }
 
 /// <summary>
@@ -63,7 +63,7 @@ public static partial class UsersReadTheDocumentsTheySee
 public static partial class UsersOpenDocumentsOfTheirOwn
 {
     /// <summary>Whether the caller may add <paramref name="document"/>.</summary>
-    public static bool Allows(Document document, Caller caller) => document.OwnerId.Value == caller.UserId;
+    public static bool Allows(Document document, ICurrentUser user) => document.OwnerId.Value == user.Id;
 }
 
 /// <summary>
@@ -78,7 +78,7 @@ public static partial class UsersOpenDocumentsOfTheirOwn
 public static partial class UsersChangeTheDocumentsTheyWorkOn
 {
     /// <summary>Whether the caller may change <paramref name="document"/>.</summary>
-    public static bool Allows(Document document, Caller caller)
+    public static bool Allows(Document document, ICurrentUser user)
         => DocumentsWhereIHold.Ids(DocumentPermissions.Edit).Contains(document.Id)
            || DocumentsWhereIHold.Ids(DocumentPermissions.Share).Contains(document.Id);
 }
@@ -88,7 +88,7 @@ public static partial class UsersChangeTheDocumentsTheyWorkOn
 public static partial class StaffReadTheFoldersTheyAreOn
 {
     /// <summary>Whether the caller sees <paramref name="folder"/>.</summary>
-    public static bool Allows(Folder folder, Caller caller) => FolderQuestions.Seen().Contains(folder.Id);
+    public static bool Allows(Folder folder, ICurrentUser user) => FolderQuestions.Seen().Contains(folder.Id);
 }
 
 /// <summary>
@@ -101,7 +101,7 @@ public static partial class StaffReadTheFoldersTheyAreOn
 public static partial class ArchivistsReadTheFoldersTheyHold
 {
     /// <summary>Whether the caller holds the permission that reads <paramref name="folder"/>.</summary>
-    public static bool Allows(Folder folder, Caller caller) => FolderQuestions.HeldOn(FolderPermissions.Read).Contains(folder.Id);
+    public static bool Allows(Folder folder, ICurrentUser user) => FolderQuestions.HeldOn(FolderPermissions.Read).Contains(folder.Id);
 }
 
 /// <summary>The token role of the host's archivists.</summary>

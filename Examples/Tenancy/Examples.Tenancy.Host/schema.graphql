@@ -53,7 +53,7 @@ type Query {
   tenantProjectInspections(project: ID!, tenant: UUID!): [Inspection!]!
     @cost(weight: "10")
   tenantProjects(tenant: UUID!): [TenantProject!]! @cost(weight: "10")
-  tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
+  tenants(after: String, size: Int): TenantPage! @cost(weight: "10")
   unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
 }
 
@@ -115,8 +115,15 @@ type Mutation {
     @cost(weight: "10")
   seatRename(input: SeatRenameInput!): SeatRenamePayload! @cost(weight: "10")
   seatSuspend(input: SeatSuspendInput!): SeatSuspendPayload! @cost(weight: "10")
+  tenantProjectRename(input: TenantProjectRenameInput!): TenantProjectRenamePayload!
+    @cost(weight: "10")
   tenantShapeChange(input: TenantShapeChangeInput!): TenantShapeChangePayload!
     @cost(weight: "10")
+}
+
+type AcceptedInvitation {
+  seat: Seat!
+  tenant: Tenant!
 }
 
 type AccessHistoryEntry {
@@ -161,8 +168,8 @@ type BrokenRulesError implements CodedError {
 }
 
 type Catalogue {
-  packs: [RolePack!]!
   permissions: [Permission!]!
+  starterRoles: [StarterRole!]!
 }
 
 type ChangedBy {
@@ -229,14 +236,6 @@ type FailureArgument {
   value: String
 }
 
-type GrantOfMine {
-  appliesNow: Boolean!
-  endsAt: DateTime
-  role: String!
-  roleId: UUID!
-  startsAt: DateTime!
-}
-
 type HeldUnits {
   atTenant: Boolean!
   units: [UUID!]!
@@ -289,39 +288,38 @@ type InvalidValuesError implements CodedError {
 }
 
 type Invitation {
-  address: String!
+  address: String
   expiresAt: DateTime!
+  grantUntil: DateTime
   id: UUID!
   issuedAt: DateTime!
   issuedBy: Seat
   role: Role
   unit: OrganizationUnitName
-  until: DateTime
 }
 
 type InvitationAcceptPayload {
+  acceptedInvitation: AcceptedInvitation
   errors: [InvitationAcceptError!]
-  seatId: UUID
 }
 
 type InvitationCancelPayload {
   errors: [InvitationCancelError!]
-  invitationId: UUID
+  invitation: Invitation
 }
 
 type IssuedInvitation {
-  expiresAt: DateTime!
-  id: UUID!
+  invitation: Invitation!
   token: String!
 }
 
 type OrganizationUnit {
-  depth: Int!
+  depth: Int @cost(weight: "1")
   id: UUID!
   kind: UnitKind
   name: String!
   parentId: UUID
-  path: String!
+  path: String @cost(weight: "1")
   status: UnitStatus!
 }
 
@@ -392,10 +390,10 @@ type PersonInvitePayload {
   issuedInvitation: IssuedInvitation
 }
 
-type PlacementOfMine {
-  grants: [GrantOfMine!]!
+type Placement {
+  grants: [RoleGrant!]!
   isPrimary: Boolean!
-  unit: UnitPath!
+  unitId: UUID!
 }
 
 type PlacementWithdrawPayload {
@@ -547,9 +545,9 @@ type RefusalError implements CodedError {
 }
 
 type Role {
-  fromPack: String
+  fromStarterRole: String
   id: UUID!
-  managesAccess: Boolean
+  managesAccess: Boolean @cost(weight: "1")
   name: String
   permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   status: RoleStatus
@@ -565,27 +563,15 @@ type RoleCreatePayload {
   role: Role
 }
 
+type RoleGrant {
+  endsAt: DateTime
+  roleId: UUID!
+  startsAt: DateTime!
+}
+
 type RoleGrantPayload {
   errors: [RoleGrantError!]
   seat: Seat
-}
-
-type RoleOfMine {
-  fromPack: String
-  id: UUID!
-  managesAccess: Boolean!
-  name: String!
-  permissions: [String!]!
-  status: RoleStatus!
-}
-
-type RolePack {
-  administers: Boolean!
-  description: String!
-  key: String!
-  name: String!
-  permissions: [String!]!
-  seededFor: TenantShape
 }
 
 type RolePermissionsSetPayload {
@@ -624,16 +610,21 @@ type SeatDeactivatePayload {
 }
 
 type SeatOfMine {
+  organizationName: String!
   seat: Seat!
-  tenant: TenantOfSeat!
+  slug: String!
+  tenantStatus: TenantStatus!
 }
 
 type SeatOverview {
+  asOf: DateTime!
   permissions: [PermissionOfMine!]!
-  placements: [PlacementOfMine!]!
-  roles: [RoleOfMine!]!
+  placements: [Placement!]!
+  roles: [Role!]!
   seat: Seat!
-  tenant: TenantOfMine!
+  tenant: Tenant!
+  tenantName: String!
+  units: [UnitPath!]!
 }
 
 type SeatPlacePayload {
@@ -656,32 +647,31 @@ type SeatSuspendPayload {
   seat: Seat
 }
 
-type TenantDirectoryPage {
-  items: [TenantListing!]!
-  next: String
+type StarterRole {
+  administers: Boolean!
+  description: String!
+  key: String!
+  name: String!
+  permissions: [String!]!
+  seededFor: TenantShape
 }
 
-type TenantListing {
-  activeSeats: Int!
+type Tenant {
   id: UUID!
-  name: String!
-  slug: String!
-  status: TenantStatus!
-}
-
-type TenantOfMine {
-  id: UUID!
-  name: String!
   shape: TenantShape!
   slug: String!
   status: TenantStatus!
 }
 
-type TenantOfSeat {
-  id: UUID!
+type TenantListing {
+  activeSeats: Int!
   name: String!
-  slug: String!
-  status: TenantStatus!
+  tenant: Tenant!
+}
+
+type TenantPage {
+  items: [TenantListing!]!
+  next: String
 }
 
 type TenantProject {
@@ -695,9 +685,14 @@ type TenantProject {
   unitId: UUID!
 }
 
+type TenantProjectRenamePayload {
+  errors: [TenantProjectRenameError!]
+  tenantProject: TenantProject
+}
+
 type TenantShapeChangePayload {
   errors: [TenantShapeChangeError!]
-  shape: TenantShape
+  tenant: Tenant
 }
 
 type UnitPath {
@@ -930,6 +925,12 @@ union SeatSuspendError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
+union TenantProjectRenameError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
 union TenantShapeChangeError =
   | RefusalError
   | InvalidValuesError
@@ -1126,6 +1127,12 @@ input SeatRenameInput {
 
 input SeatSuspendInput {
   seatId: UUID!
+}
+
+input TenantProjectRenameInput {
+  name: String!
+  project: ID!
+  tenant: UUID!
 }
 
 input TenantShapeChangeInput {

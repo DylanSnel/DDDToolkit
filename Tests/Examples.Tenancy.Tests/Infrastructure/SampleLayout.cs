@@ -1,5 +1,5 @@
 using System.Reflection;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 
 namespace Examples.Tenancy.Tests.Infrastructure;
 
@@ -157,7 +157,7 @@ public static class SampleLayout
 
     /// <summary>
     /// Whether <paramref name="type"/> is a port: an interface a module's application project declares and its
-    /// infrastructure project implements, or the Tenancy package's store, which its use cases load and save
+    /// infrastructure project implements, or the Tenancy package's store, which its managers load and save
     /// through. What a port answers with, the records next to it, is data, not a port: whoever holds it reaches no
     /// storage through it.
     /// </summary>
@@ -169,7 +169,7 @@ public static class SampleLayout
     /// </remarks>
     public static bool IsPort(Type type)
         => Ports.Value.Contains(type)
-            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(TenancyUseCases<,,,,,,,,>.IStore));
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(DDDToolkit.Supporting.Tenancy.Managers.ITenancyStore<,,,,,,,,>));
 
     /// <summary>
     /// The names no folder and no namespace at a project's root may have: each says what kind of class is inside,

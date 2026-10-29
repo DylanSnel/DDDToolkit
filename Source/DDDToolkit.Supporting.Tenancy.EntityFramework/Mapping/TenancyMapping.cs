@@ -28,7 +28,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <item>A role's permissions are a primitive collection, a JSON document on SQLite and SQL Server.</item>
 /// <item>Columns are named after the properties.</item>
 /// <item>Every row that has a tenant gets the tenant filter, through <see cref="TenancyModelBuilderExtensions.ScopeToTenant"/>.</item>
-/// <item>Every unique index says which of Tenancy's refusals a save that breaks it gets, so a rule the use case
+/// <item>Every unique index says which of Tenancy's refusals a save that breaks it gets, so a rule the manager
 /// checked first and a racing save broke anyway is answered the same way, on any database.</item>
 /// </list>
 /// The ids are converted by the application's own converters, which its context registers in
@@ -40,8 +40,8 @@ internal static class TenancyMapping
     internal const int EnumLength = 32;
 
     /// <summary>
-    /// The annotation <see cref="TenancyModelBuilderExtensions.ScopeToTenant"/> puts on an entity type: the name of
-    /// the property that holds its tenant, which the save check reads.
+    /// The annotation <see cref="TenancyModelBuilderExtensions.ScopeToTenant"/> and <see cref="OfTenantConvention"/> put on
+    /// an entity type: the name of the property that holds its tenant, which the save check reads.
     /// </summary>
     internal const string TenantPropertyAnnotation = "DDDToolkit:Tenancy:TenantProperty";
 
@@ -202,7 +202,7 @@ internal static class TenancyMapping
     /// <summary>
     /// The roles' table. A tenant's role names are unique ignoring case, through the normalized name the save
     /// fills in, rather than through the name, which a case-sensitive collation would compare exactly. What its
-    /// pack gave a role is the table's alone, a column that may be empty: a role made by hand has no pack, and a
+    /// starter role gave a role is the table's alone, a column that may be empty: a role made by hand has no starter role, and a
     /// role stored before the column was there remembers nothing yet.
     /// </summary>
     internal static void Roles<TRole, TRoleId, TTenantId>(EntityTypeBuilder<TRole> role, TenancyTableNames tables)
@@ -217,7 +217,7 @@ internal static class TenancyMapping
         Refuses(role.HasIndex(nameof(RoleAggregate<TRoleId, TTenantId>.TenantId), NormalizedNameColumn).IsUnique(), TenancyRefusals.RoleNameTaken);
         role.Property(row => row.Name).HasMaxLength(RoleAggregate<TRoleId, TTenantId>.MaxNameLength);
         role.Property(row => row.Description).HasMaxLength(RoleAggregate<TRoleId, TTenantId>.MaxDescriptionLength);
-        role.PrimitiveCollection(row => row.PermissionsFromPack);
+        role.PrimitiveCollection(row => row.PermissionsFromStarterRole);
         RoleColumns<TRoleId, TTenantId>(role);
         role.ScopeToTenant(row => row.TenantId);
     }
@@ -243,7 +243,7 @@ internal static class TenancyMapping
         }
         else
         {
-            read.Map(right, tables.Rights, TenancyFunctionNames.CallerPermissions);
+            read.Map(right, tables.Rights, TenancyFunctionNames.CurrentPermissions);
         }
 
         right.Property(row => row.Permission).HasMaxLength(Permission.MaxNameLength);
@@ -429,7 +429,7 @@ internal static class TenancyMapping
     }
 
     /// <summary>
-    /// The rights a move changes, as <see cref="TenancyFunctionNames.PermissionsAMoveChanges"/> answers them: mapped to
+    /// The rights a move changes, as <see cref="TenancyFunctionNames.PermissionsAUnitMoveChanges"/> answers them: mapped to
     /// nothing, and read from the SQL that asks the function, under the column names the function gives.
     /// </summary>
     internal static void MoveReaches<TUnitId>(EntityTypeBuilder<MoveReach<TUnitId>> reach)
@@ -440,7 +440,7 @@ internal static class TenancyMapping
         reach.Property(row => row.Permission).HasColumnName(nameof(MoveReach<TUnitId>.Permission));
         reach.Property(row => row.EndsAt).HasColumnName(nameof(MoveReach<TUnitId>.EndsAt)).HasConversion(new NullableUtcDateTimeOffsetConverter());
         reach.Property(row => row.Parent).HasColumnName(nameof(MoveReach<TUnitId>.Parent));
-        reach.Property(row => row.OfCaller).HasColumnName(nameof(MoveReach<TUnitId>.OfCaller));
+        reach.Property(row => row.OfCurrentSeat).HasColumnName(nameof(MoveReach<TUnitId>.OfCurrentSeat));
     }
 
     /// <summary>
@@ -522,13 +522,13 @@ internal static class TenancyMapping
         => AsName(column(nameof(SeatRow<TTenantId, TSeatId>.Status)));
 
     /// <summary>
-    /// The columns a role and its row share: the pack, the status and the permissions. The name is the table's alone.
+    /// The columns a role and its row share: the starter role, the status and the permissions. The name is the table's alone.
     /// </summary>
     private static void RoleColumns<TRoleId, TTenantId>(EntityTypeBuilder role)
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     {
-        role.Property(nameof(RoleRow<TTenantId, TRoleId>.FromPack)).HasMaxLength(RolePack.MaxKeyLength);
+        role.Property(nameof(RoleRow<TTenantId, TRoleId>.FromStarterRole)).HasMaxLength(StarterRole.MaxKeyLength);
         AsName(role.Property(nameof(RoleRow<TTenantId, TRoleId>.Status)));
         role.PrimitiveCollection(nameof(RoleRow<TTenantId, TRoleId>.Permissions));
     }
@@ -556,8 +556,8 @@ internal static class TenancyMapping
 
     /// <summary>
     /// Says which of Tenancy's refusals a save that breaks the unique <paramref name="index"/> is answered with:
-    /// the code, its kind and its English text as <see cref="TenancyRefusals"/> has them, so the index and the use
-    /// case that checks the same rule first give one answer. What the text names, <c>{Slug}</c> or <c>{Name}</c>,
+    /// the code, its kind and its English text as <see cref="TenancyRefusals"/> has them, so the index and the
+    /// manager that checks the same rule first give one answer. What the text names, <c>{Slug}</c> or <c>{Name}</c>,
     /// is filled from the row that broke the index.
     /// </summary>
     private static void Refuses(IndexBuilder index, string code)

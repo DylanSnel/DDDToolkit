@@ -50,7 +50,7 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
         }
 
         ProjectAnswer view, record;
-        using (SampleCallers.BeginSeatOf(DemoPeople.Tove, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Tove, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var gate = scope.ServiceProvider.GetRequiredService<IProjectGate>();
@@ -72,7 +72,7 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
         // answered with the project, whatever the permission. Juno does not see it, and is told nothing.
         async Task<ProjectAnswer> AskAsAsync(DemoPerson person)
         {
-            using (SampleCallers.BeginSeatOf(person, Harbor))
+            using (SampleUsers.BeginSeatOf(person, Harbor))
             {
                 await using var scope = host.Services.CreateAsyncScope();
                 return await scope.ServiceProvider.GetRequiredService<IProjectGate>().AskAsync(depot, InspectionPermissionNames.Record, Cancellation);
@@ -117,7 +117,7 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
         ProjectId[] asked = [.. Harbor.Projects.Select(project => project.Id), DemoData.Meadow.ProjectNamed("Garden shed").Id, new ProjectId(Guid.NewGuid())];
         ProjectId[] hers = [PierSeven, Harbor.ProjectNamed("Inland depot").Id];
 
-        using (SampleCallers.BeginSeatOf(DemoPeople.Rhea, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Rhea, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var gate = scope.ServiceProvider.GetRequiredService<IProjectGate>();
@@ -149,7 +149,7 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
     private async Task<T> AsJunoAsync<T>(Func<IProjectGate, Task<T>> ask)
     {
         var host = await sample.SharedAsync();
-        using (SampleCallers.BeginSeatOf(DemoPeople.Juno, Harbor))
+        using (SampleUsers.BeginSeatOf(DemoPeople.Juno, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await ask(scope.ServiceProvider.GetRequiredService<IProjectGate>());

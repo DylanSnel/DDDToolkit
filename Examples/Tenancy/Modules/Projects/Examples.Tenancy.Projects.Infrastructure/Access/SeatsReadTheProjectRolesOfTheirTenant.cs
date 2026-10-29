@@ -14,5 +14,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class SeatsReadTheProjectRolesOfTheirTenant
 {
     /// <summary>Whether <paramref name="role"/> is one of the calling seat's tenant.</summary>
-    public static bool Allows(ProjectRole role, Caller caller) => role.TenantId == TenancyRowAccess.CallerTenant<TenantId>();
+    public static bool Allows(ProjectRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CurrentTenant<TenantId>();
 }

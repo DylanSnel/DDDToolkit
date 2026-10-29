@@ -42,6 +42,7 @@ global using Examples.Tenancy.Projects.Application.Crew;
 global using Examples.Tenancy.Projects.Application.Crew.Commands;
 global using Examples.Tenancy.Projects.Application.Crew.Queries;
 global using Examples.Tenancy.Projects.Application.Lifecycle.Commands;
+global using Examples.Tenancy.Projects.Application.Operators.Commands;
 global using Examples.Tenancy.Projects.Application.Operators.Queries;
 global using Examples.Tenancy.Projects.Application.Overview;
 global using Examples.Tenancy.Projects.Application.Overview.Queries;
@@ -92,5 +93,6 @@ global using Examples.Tenancy.Host.Storage;
 global using Examples.Tenancy.Catalogue;
 global using Examples.Tenancy.Tests.Infrastructure;
 
-// Tenancy's use cases are TenancyUseCases here as in the sample: the class the toolkit's generator wrote into the
-// Tenants module's domain project, which these tests see through the projects they test.
+// Tenancy's managers are SeatManager and the others here as in the sample: the classes the toolkit's generator wrote
+// into the Tenants module's domain project, which these tests see through the projects they test. Their stores are
+// TenancyStore and InvitationStore, the aliases the generator writes into every project that sees those classes.

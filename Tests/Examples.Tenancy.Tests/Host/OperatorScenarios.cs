@@ -47,7 +47,7 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
 
         // By slug, each with its id, its status and how many of its seats are in use: a suspended seat is not.
         tenants.GetProperty("items").EnumerateArray()
-            .Select(tenant => (tenant.GetProperty("id").GetGuid(), tenant.Text("slug"), tenant.Text("name"), tenant.Text("status"), tenant.GetProperty("activeSeats").GetInt32()))
+            .Select(listed => (listed.GetProperty("tenant").GetProperty("id").GetGuid(), listed.GetProperty("tenant").Text("slug"), listed.Text("name"), listed.GetProperty("tenant").Text("status"), listed.GetProperty("activeSeats").GetInt32()))
             .Should().Equal(
                 (Harbor.Id.Value, Harbor.Slug, Harbor.Name, "active", ActiveSeatsOf(Harbor)),
                 (Meadow.Id.Value, Meadow.Slug, Meadow.Name, "active", ActiveSeatsOf(Meadow)));
@@ -56,8 +56,8 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
         // A page at a time: the marker of one page asks for the next.
         var first = await orla.GetFromJsonAsync<JsonElement>("/operations/tenants?size=1", Cancellation);
         var second = await orla.GetFromJsonAsync<JsonElement>($"/operations/tenants?size=1&after={Uri.EscapeDataString(first.Text("next")!)}", Cancellation);
-        first.GetProperty("items").EnumerateArray().Select(tenant => tenant.Text("slug")).Should().Equal(Harbor.Slug);
-        second.GetProperty("items").EnumerateArray().Select(tenant => tenant.Text("slug")).Should().Equal(Meadow.Slug);
+        first.GetProperty("items").EnumerateArray().Select(listed => listed.GetProperty("tenant").Text("slug")).Should().Equal(Harbor.Slug);
+        second.GetProperty("items").EnumerateArray().Select(listed => listed.GetProperty("tenant").Text("slug")).Should().Equal(Meadow.Slug);
     }
 
     [Fact]
@@ -143,8 +143,9 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
     [Fact]
     public async Task The_use_cases_themselves_refuse_whoever_is_no_operator()
     {
-        // Past the routes and their policy: each query sent as the application's own work in harbor, which holds
-        // every permission there and is no operator. What refuses is each module's own check, on the way to the handler.
+        // Past the routes and their policy: each request sent as the application's own work in harbor, which holds
+        // every permission there and is no operator. What refuses is each module's own check, on the way to the handler,
+        // the operators' command among them.
         var host = await sample.SharedAsync();
         IMessage[] queries =
         [
@@ -152,9 +153,10 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
             new TenantAccessHistory(Harbor.Id, new GreenDonut.Data.PagingArguments(first: 5)),
             new TenantProjects(Harbor.Id),
             new TenantProjectInspections(Harbor.Id, Harbor.ProjectNamed("Pier 7").Id),
+            new RenameTenantProject(Harbor.Id, Harbor.ProjectNamed("Pier 7").Id, "Renamed by the system"),
         ];
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();

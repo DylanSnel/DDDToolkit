@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -15,8 +16,9 @@ namespace DDDToolkit.Startup;
 /// <remarks>
 /// One runner per host, registered where the host asks for its checks, by
 /// <see cref="StartupCheckServiceCollectionExtensions.RunStartupChecks"/>. It runs the checks one after
-/// the other, each as the application itself (<see cref="Caller.System"/>), begun for that check alone: a host that
-/// requires explicit callers would otherwise refuse the first connection a check makes, and a check is the
+/// the other, each as system work that no row access rule holds
+/// (<see cref="AccessManager.BeginSystemBypassingRowAccess"/>), begun for that check alone. A host that requires every
+/// flow of work to begin its user would otherwise refuse the first connection a check makes. A check is the
 /// application's own bookkeeping. What a check throws stops the start as it was thrown; the log names the check,
 /// and the exception carries its name in <see cref="Exception.Data"/>, under <see cref="StartupChecks.FailedCheckKey"/>.
 /// </remarks>
@@ -47,6 +49,7 @@ internal sealed class StartupCheckRunner(StartupChecks checks, IServiceProvider 
 
         var passed = new List<string>();
         var clock = Stopwatch.StartNew();
+        var access = new AccessManager(new CurrentUser());
 
         foreach (var check in ordered)
         {
@@ -60,9 +63,9 @@ internal sealed class StartupCheckRunner(StartupChecks checks, IServiceProvider 
             try
             {
                 // Begun for each check, not once around them all: a check that runs without awaiting anything runs
-                // in this method's flow, so a caller it begins and leaves behind would otherwise be the caller of
-                // every check after it. Ending this one puts back the caller from before it, whatever the check did.
-                using (Callers.Begin(Caller.System))
+                // in this method's flow, so a user it begins and leaves behind would otherwise be the user of every
+                // check after it. Ending this one puts back the user from before it, whatever the check did.
+                using (access.BeginSystemBypassingRowAccess())
                 {
                     await check.RunAsync(services, cancellationToken).ConfigureAwait(false);
                 }

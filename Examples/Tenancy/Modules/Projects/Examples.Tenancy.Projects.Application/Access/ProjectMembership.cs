@@ -18,7 +18,9 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// starter roles the host declares (<see cref="Roles.Custom"/>). A crew role gives the permissions on a project
 /// that a role can, and permissions of other modules that act on a project, a surveyor's permission to record an inspection say:
 /// never one of Tenancy's, which manage the organization, nor one Projects asks at a unit. A project role that holds
-/// such a permission gives nothing with it, so no crew role reaches past its project.</item>
+/// such a permission gives nothing with it, so no crew role reaches past its project. Who makes, renames, archives and
+/// gives permissions to project roles is whoever manages the tenant's roles, <c>TenancyPermissions.RolesManage</c> held
+/// for the whole tenant: the project role manager asks it of the join with Tenancy.</item>
 /// <item><b>Reach from above.</b> A permission held at the unit a project hangs at, its <c>[At]</c> property, or above it,
 /// reaches the project: an organization role at North sees and acts on every project there, and the
 /// organization names a project's owner that way alone. Tenancy's function answers where the caller holds a
@@ -28,7 +30,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// </list>
 /// System work of this module, in the scope <see cref="Scope"/>, holds every permission on every project of its tenant,
 /// which is what the rules say when they name no scope: the seeder opens projects and puts seats on their crews
-/// in it, and a seat that gives up its own place on a crew is saved as this module's work for it. Work in any
+/// in it, and the crew manager saves a change to a seat's own place on a crew as this module's work for it. Work in any
 /// other scope, Tenancy's own included, holds nothing on a project.
 /// <para>
 /// One instance for the application, made where the module is added, from the starter roles the host declares,
@@ -40,10 +42,10 @@ namespace Examples.Tenancy.Projects.Application.Access;
 public sealed class ProjectMembership
 {
     /// <summary>
-    /// The scope of this module's own system work, <c>Caller.SystemIn("projects")</c>: the name of the module as a
+    /// The scope of this module's own system work, <c>CurrentUserSnapshot.SystemIn("projects")</c>: the name of the module as a
     /// scope is written, which is the scope the projects' rules let through when they name none. The seeder works in
-    /// it, and so does the save in which a seat gives up its own place on a crew, which the command has checked
-    /// already.
+    /// it, and so does the save in which a seat gives up its own place on a crew, which the crew manager begins once the
+    /// command's check let it through.
     /// </summary>
     public const string Scope = "projects";
 
@@ -74,7 +76,8 @@ public sealed class ProjectMembership
         Rules = MembershipRules.For<Project>(
             Roles.Custom(
                 starters: [.. starterRoles.Select(role => new DeclaredRole(role.Key, role.Permissions))],
-                otherPermissions: OtherPermissions.AllBut([.. TenancyPermissions.All.Select(permission => permission.Name)])),
+                otherPermissions: OtherPermissions.AllBut([.. TenancyPermissions.All.Select(permission => permission.Name)]),
+                managedWith: TenancyPermissions.RolesManage),
             reachFromAbove: true);
     }
 

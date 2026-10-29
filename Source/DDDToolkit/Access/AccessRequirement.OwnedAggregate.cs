@@ -25,7 +25,7 @@ public abstract partial record AccessRequirement
     /// <remarks>
     /// The fact is the domain's, and the policy the request's: the aggregate marks the property that names its owner,
     /// <c>[Owner] public UserId Owner { get; private set; }</c>, and says nothing of who may do what. The owner is of a type
-    /// the caller has an own of, as the value of <see cref="Own{TValue}"/> is, and the <see cref="ICallersOwn{TValue}"/> of
+    /// the caller has an own of, as the value of <see cref="Own{TValue}"/> is, and the <see cref="IOwnedByCurrentUser{TValue}"/> of
     /// that type says what the caller's own is. A row whose owner is null is nobody's, and nobody is its owner.
     /// <para>
     /// What reads the owner is the storage's, an <see cref="IAggregateOwners{TId}"/>: the Entity Framework package's reads
@@ -43,9 +43,9 @@ public abstract partial record AccessRequirement
 
     /// <summary>
     /// What <see cref="OwnerOf"/> answers: the request is about the aggregate <see cref="Aggregate"/> names, and the caller
-    /// is its owner. Decided by the core's <see cref="CallerAccessCheck"/>, which has the owner read by the
+    /// is its owner. Decided by the core's <see cref="CurrentUserAccessCheck"/>, which has the owner read by the
     /// <see cref="IAggregateOwners{TId}"/> registered for <typeparamref name="TId"/>, and compares it with what the
-    /// <see cref="ICallersOwn{TValue}"/> of the owner's type says is the caller's.
+    /// <see cref="IOwnedByCurrentUser{TValue}"/> of the owner's type says is the caller's.
     /// </summary>
     /// <typeparam name="TId">The aggregate's id.</typeparam>
     [AccessCheckRegistration("services.AddDDDToolkitEntityFramework(), which reads the owner of an aggregate from the context that maps it; a storage of another kind registers an IAggregateOwners<TId> that reads it")]
@@ -63,7 +63,7 @@ public abstract partial record AccessRequirement
         bool IOwnedAggregateRequirement.CanBeAnswered(IServiceProvider? services) => services?.GetService<IAggregateOwners<TId>>() is not null;
 
         /// <inheritdoc />
-        async ValueTask IOwnedAggregateRequirement.RequireAsync(Caller caller, IServiceProvider services, CancellationToken cancellationToken)
+        async ValueTask IOwnedAggregateRequirement.RequireAsync(ICurrentUser user, IServiceProvider services, CancellationToken cancellationToken)
         {
             var owners = services.GetService<IAggregateOwners<TId>>()
                 ?? throw new InvalidOperationException(
@@ -74,11 +74,11 @@ public abstract partial record AccessRequirement
                 ? known
                 : throw new InvalidOperationException(
                     $"The owner of an aggregate whose id is {WrittenTypeNames.Of(typeof(TId))} is a {WrittenTypeNames.Of(type)}, and nothing says what the caller's own {WrittenTypeNames.Of(type)} is. "
-                    + $"Register an ICallersOwn<{WrittenTypeNames.Of(type)}> with services.AddCallersOwn<{WrittenTypeNames.Of(type)}, TCallersOwn>(); a requirement nothing checks lets nobody through.");
+                    + $"Register an IOwnedByCurrentUser<{WrittenTypeNames.Of(type)}> with services.AddOwnedByCurrentUser<{WrittenTypeNames.Of(type)}, THandle>(); a requirement nothing checks lets nobody through.");
 
             // Asked before anything is read: a caller with no own of the type owns nothing, and a database that checks
             // every row may refuse such a caller the table outright, rather than answer that it sees no row.
-            if (handle.Find(caller, services) is not { } own)
+            if (handle.Find(user, services) is not { } own)
             {
                 throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);
             }
@@ -103,11 +103,11 @@ internal interface IOwnedAggregateRequirement
     /// <param name="services">The scope's services, where a reader is registered; <see langword="null"/> for none.</param>
     bool CanBeAnswered(IServiceProvider? services);
 
-    /// <summary>Returns when <paramref name="caller"/> is the owner of the requirement's aggregate, and throws otherwise.</summary>
-    /// <param name="caller">Who is calling.</param>
+    /// <summary>Returns when <paramref name="user"/> is the owner of the requirement's aggregate, and throws otherwise.</summary>
+    /// <param name="user">Who is calling.</param>
     /// <param name="services">The scope's services, where the reader and the caller's own of the owner's type are registered.</param>
     /// <param name="cancellationToken">Stops the reading.</param>
     /// <exception cref="RefusalException"><see cref="ToolkitRefusals.NotOwn"/> or <see cref="ToolkitRefusals.NotFound"/>.</exception>
     /// <exception cref="InvalidOperationException">Nothing reads the owner, or nothing says what the caller's own of its type is.</exception>
-    ValueTask RequireAsync(Caller caller, IServiceProvider services, CancellationToken cancellationToken);
+    ValueTask RequireAsync(ICurrentUser user, IServiceProvider services, CancellationToken cancellationToken);
 }

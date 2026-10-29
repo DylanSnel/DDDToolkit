@@ -45,7 +45,7 @@ public static partial class LabQuestions
 public static partial class SeatsReadTheCoursesTheySee
 {
     /// <summary>Whether the caller sees <paramref name="course"/>.</summary>
-    public static bool Allows(Course course, Caller caller) => CourseQuestions.Seen().Contains(course.Id);
+    public static bool Allows(Course course, ICurrentUser user) => CourseQuestions.Seen().Contains(course.Id);
 }
 
 /// <summary>
@@ -57,7 +57,18 @@ public static partial class SeatsReadTheCoursesTheySee
 public static partial class SeatsReadTheRolesOfCoursesOfTheirCollege
 {
     /// <summary>Whether <paramref name="role"/> is one of the calling seat's college.</summary>
-    public static bool Allows(CourseRole role, Caller caller) => role.TenantId == TenancyRowAccess.CallerTenant<TenantId>();
+    public static bool Allows(CourseRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CurrentTenant<TenantId>();
+}
+
+/// <summary>
+/// Whoever manages the college's roles for the whole college makes and changes the roles of its courses: the permission the
+/// courses' rules name for their roles, which the course role manager asks first.
+/// </summary>
+[RowAccess<CourseRole>(RowOperations.Create | RowOperations.Change, To = [RowAccessRoles.User])]
+public static partial class RoleManagersChangeTheRolesOfCourses
+{
+    /// <summary>Whether the caller holds the permission that manages roles for the whole college.</summary>
+    public static bool Allows(CourseRole role, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(DDDToolkit.Supporting.Tenancy.Catalogue.TenancyPermissions.RolesManage);
 }
 
 /// <summary>A seat reads the labs it sees.</summary>
@@ -65,7 +76,7 @@ public static partial class SeatsReadTheRolesOfCoursesOfTheirCollege
 public static partial class SeatsReadTheLabsTheySee
 {
     /// <summary>Whether the caller sees <paramref name="lab"/>.</summary>
-    public static bool Allows(Lab lab, Caller caller) => LabQuestions.Seen().Contains(lab.Id);
+    public static bool Allows(Lab lab, ICurrentUser user) => LabQuestions.Seen().Contains(lab.Id);
 }
 
 /// <summary>
@@ -78,7 +89,7 @@ public static partial class SeatsReadTheLabsTheySee
 public static partial class MembersReadThePeopleOfTheirUnits
 {
     /// <summary>Whether <paramref name="seat"/> is placed where the calling seat is placed, or below.</summary>
-    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
+    public static bool Allows(Seat seat, ICurrentUser user) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
 }
 
 /// <summary>
@@ -101,5 +112,5 @@ public static partial class PeopleOnMyCourses
 public static partial class MembersReadThePeopleTheyWorkWith
 {
     /// <summary>Whether <paramref name="seat"/> is on a course the calling seat is on.</summary>
-    public static bool Allows(Seat seat, Caller caller) => PeopleOnMyCourses.Ids().Contains(seat.Id);
+    public static bool Allows(Seat seat, ICurrentUser user) => PeopleOnMyCourses.Ids().Contains(seat.Id);
 }

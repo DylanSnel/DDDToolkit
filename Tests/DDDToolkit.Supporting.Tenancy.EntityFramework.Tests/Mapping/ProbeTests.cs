@@ -106,10 +106,9 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
             await widgets.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(tenant, seat)))
         {
-            var answers = scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>();
-            var held = answers.Over(widgets).UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             var readable = widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).OrderBy(widget => widget.Name);
 
             var sql = readable.ToQueryString();
@@ -146,7 +145,7 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
 
         // The table's name is the model's own, and the unit is a parameter.
         var children =
-            "SELECT u.\"Id\" AS \"UnitId\", u.\"Name\" AS \"Permission\", NULL AS \"EndsAt\", u.\"ParentId\" AS \"Parent\", u.\"Name\" = 'North' AS \"OfCaller\" FROM "
+            "SELECT u.\"Id\" AS \"UnitId\", u.\"Name\" AS \"Permission\", NULL AS \"EndsAt\", u.\"ParentId\" AS \"Parent\", u.\"Name\" = 'North' AS \"OfCurrentSeat\" FROM "
             + units + " u WHERE u.\"ParentId\" = {0}";
         var below = tenancy.Set<MoveReach<OrganizationUnitId>>().FromSqlRaw(children, harbor.RootUnit.Value);
 
@@ -214,7 +213,7 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
                 .Where(role => role.Permissions.Contains(HostCatalogue.WidgetRead))
                 .Select(role => role.Id)
                 .ToList();
-            expected.Should().HaveCountGreaterThan(1, "several packs hold the permission, so the question has something to tell apart");
+            expected.Should().HaveCountGreaterThan(1, "several starter roles hold the permission, so the question has something to tell apart");
 
             var holders = widgets.Set<RoleRow<TenantId, RoleId>>().Where(role => role.Permissions.Contains(HostCatalogue.WidgetRead)).Select(role => role.Id);
             translated(holders.ToQueryString());
@@ -289,11 +288,9 @@ public sealed class ProbeTestsOnPostgres(PostgresDatabases postgres) : ProbeTest
             await tenancy.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
+        using (TenancyUsers.Begin(HostUser.InSeat(tenant, seat)))
         {
-            var held = scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>()
-                .Over(widgets)
-                .UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
 
             // The seat is a parameter of the column's own type: no cast of the column, which would keep Postgres from
             // the index on it, and no comparison as text.

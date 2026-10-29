@@ -39,7 +39,7 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
     private static readonly string[] OpenFields = ["seatsOfMine", "invitationAccept"];
 
     /// <summary>The root fields of the application's own staff, as the host names them to the gate.</summary>
-    private static readonly string[] OperatorFields = ["tenants", "tenantAccessHistory", "tenantProjects", "tenantProjectInspections"];
+    private static readonly string[] OperatorFields = ["tenants", "tenantAccessHistory", "tenantProjects", "tenantProjectInspections", "tenantProjectRename"];
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -195,9 +195,9 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
         // Picking a tenant comes before being in one: the caller's own seats are the one field the gate leaves open.
         using var tove = await sample.ClientAsync("tove", tenant: null);
 
-        var mine = (await tove.GraphQLDataAsync("{ seatsOfMine { tenant { slug name } seat { displayName status } } }")).GetProperty("seatsOfMine");
+        var mine = (await tove.GraphQLDataAsync("{ seatsOfMine { slug organizationName seat { displayName status } } }")).GetProperty("seatsOfMine");
 
-        mine.EnumerateArray().Select(seat => seat.GetProperty("tenant").GetProperty("slug").GetString())
+        mine.EnumerateArray().Select(seat => seat.GetProperty("slug").GetString())
             .Should().BeEquivalentTo([Harbor.Slug, DemoData.Meadow.Slug]);
     }
 
@@ -216,7 +216,7 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
         using var nowhere = await host.ClientAsync("rhea", tenant: null);
         var before = sent.Names.Count;
         var accepted = (await nowhere.GraphQLDataAsync(
-            $$"""mutation($token: String!) { invitationAccept(input: { token: $token, displayName: "Rhea" }) { seatId {{SampleGraphQLCalls.Errors}} } }""",
+            $$"""mutation($token: String!) { invitationAccept(input: { token: $token, displayName: "Rhea" }) { acceptedInvitation { seat { id } } {{SampleGraphQLCalls.Errors}} } }""",
             new { token = "not-a-token" })).GetProperty("invitationAccept");
         accepted.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which.GetProperty("code").GetString().Should().Be(TenancyRefusals.InvitationNotFound);
         (await nowhere.GraphQLAsync("{ openInvitations { id } }")).SingleError().Code().Should().Be(TenancyRefusals.TenantRequired);
@@ -245,7 +245,7 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
 
         // Orla is one, with no seat anywhere: her field sends its query.
         using var orla = await host.ClientAsync("orla", tenant: null);
-        (await orla.GraphQLDataAsync("{ tenants { items { slug } } }")).GetProperty("tenants").GetProperty("items").GetArrayLength().Should().Be(2);
+        (await orla.GraphQLDataAsync("{ tenants { items { tenant { slug } } } }")).GetProperty("tenants").GetProperty("items").GetArrayLength().Should().Be(2);
         sent.Names.Skip(asked).Should().Equal(nameof(AllTenants));
     }
 
@@ -255,8 +255,8 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
     /// </summary>
     private static async Task<JsonElement> AskWithoutASeatAsync(SampleFactory host, IRequestExecutor executor, string document)
     {
-        using (Callers.Begin(Caller.User(DemoPeople.Rhea.Id)))
-        using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.Nobody(TenancyRefusals.NotSeated)))
+        using (TestAccess.BeginAs(DemoPeople.Rhea.Id))
+        using (TenancyUsers.Begin(TenancyUser<TenantId, SeatId>.Nobody(TenancyRefusals.NotSeated)))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var answer = await executor.ExecuteAsync(OperationRequestBuilder.New().SetDocument(document).SetServices(scope.ServiceProvider).Build(), Cancellation);

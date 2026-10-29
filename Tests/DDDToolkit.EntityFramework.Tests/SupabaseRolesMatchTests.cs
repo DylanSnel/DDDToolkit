@@ -14,7 +14,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// for: what an exported access file records on the <c>ddd</c> schema, read back from a database it was applied to,
 /// and compared with the host's options. The database decides, so these run on Postgres.
 /// </summary>
-public sealed class SupabaseRolesMatchTests(ExplicitCallersPostgres postgres) : IDisposable
+public sealed class SupabaseRolesMatchTests(ExplicitCurrentUserPostgres postgres) : IDisposable
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -75,7 +75,7 @@ public sealed class SupabaseRolesMatchTests(ExplicitCallersPostgres postgres) : 
         (await stopped.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
             "The access files in the database of 'SupabaseShelfContext' were written for other roles than the ones this host switches to:\n" +
             "- a signed-in user: the policies are for authenticated, and this host runs one as members. Fix: user=authenticated in this host's SupabaseRowAccessRoles, or options.UserRole = \"authenticated\" in its code; or user=members in SupabaseRowAccessRoles of the project that exports.\n" +
-            "- the system caller: the files give the outbox, the inbox and the migration history to desk_books, and this host's system caller runs as ddd_system. Fix: system=desk_books in this host's SupabaseRowAccessRoles, or options.SystemRole = \"desk_books\" in its code; or system=ddd_system in SupabaseRowAccessRoles of the project that exports.\n" +
+            "- system work: the files give the outbox, the inbox and the migration history to desk_books, and this host's system work runs as ddd_system. Fix: system=desk_books in this host's SupabaseRowAccessRoles, or options.SystemRole = \"desk_books\" in its code; or system=ddd_system in SupabaseRowAccessRoles of the project that exports.\n" +
             "- the token role 'analyst': the policies are for desk_analyst, and this host runs it as desk_reader. Fix: token:analyst=desk_analyst in this host's SupabaseRowAccessRoles, or options.TokenRoles[\"analyst\"] = \"desk_analyst\" in its code; or token:analyst=desk_reader in SupabaseRowAccessRoles of the project that exports.\n" +
             "- the token role 'auditor': the policies are for desk_auditor, and this host maps it to no role. Fix: token:auditor=desk_auditor in this host's SupabaseRowAccessRoles, or options.TokenRoles[\"auditor\"] = \"desk_auditor\" in its code; or take token:auditor=desk_auditor out of SupabaseRowAccessRoles of the project that exports.\n" +
             "- the token role 'intern': this host runs it as desk_intern, and the files write nothing for it, so no policy is for that role and no file made it. Fix: token:intern=desk_intern in SupabaseRowAccessRoles of the project that exports; or take token:intern=desk_intern out of this host's SupabaseRowAccessRoles, or options.TokenRoles[\"intern\"] out of its code.\n" +
@@ -93,13 +93,13 @@ public sealed class SupabaseRolesMatchTests(ExplicitCallersPostgres postgres) : 
 
         var stopped = () => RunCheckAsync(database, configure: null);
         (await stopped.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain(
-            "- the system caller: the files make no bookkeeping role (system=none), and this host's system caller runs as ddd_system. Fix: system=none in this host's SupabaseRowAccessRoles, or options.SystemRole = null in its code; or system=ddd_system in SupabaseRowAccessRoles of the project that exports.");
+            "- system work: the files make no bookkeeping role (system=none), and this host's system work runs as ddd_system. Fix: system=none in this host's SupabaseRowAccessRoles, or options.SystemRole = null in its code; or system=ddd_system in SupabaseRowAccessRoles of the project that exports.");
 
         // And the other way round: files that gave the bookkeeping to ddd_system, and a host that runs it as the login role.
         await ApplyRecordAsync(database, SupabaseRowLevelSecurity.DefaultRoles);
         var asLogin = () => RunCheckAsync(database, options => options.SystemRole = null);
         (await asLogin.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain(
-            "- the system caller: the files give the outbox, the inbox and the migration history to ddd_system, and this host's system caller runs as the role it logs in as. Fix: system=ddd_system in this host's SupabaseRowAccessRoles, or options.SystemRole = \"ddd_system\" in its code; or system=none in SupabaseRowAccessRoles of the project that exports.");
+            "- system work: the files give the outbox, the inbox and the migration history to ddd_system, and this host's system work runs as the role it logs in as. Fix: system=ddd_system in this host's SupabaseRowAccessRoles, or options.SystemRole = \"ddd_system\" in its code; or system=none in SupabaseRowAccessRoles of the project that exports.");
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed class SupabaseRolesMatchTests(ExplicitCallersPostgres postgres) : 
 
         var check = services.GetStartupChecks().InOrder().Single(registered => registered.Name == SupabaseRowAccessChecks.RolesMatchAccessFilesCheck);
         check.Stage.Should().Be(StartupCheckStage.Login);
-        check.RunsBefore.Should().Equal(PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck);
+        check.RunsBefore.Should().Equal(PostgresRowAccessChecks.LoginRoleMaySwitchToUserRolesCheck);
 
         await using var provider = services.BuildServiceProvider();
         await check.RunAsync(provider, Cancellation);

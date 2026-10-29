@@ -10,3 +10,6 @@ using DDDToolkit.Supporting.Tenancy.EntityFramework;
 [assembly: TemplateRegistrations(typeof(TenancyEventLogTable))]
 [assembly: TemplateRegistrations(typeof(TenancyEventLogExtensions))]
 [assembly: TemplateRegistrations(typeof(TenancyOutboxExtensions))]
+
+// And Tenancy's queries over a context, closed over the application's four ids: db.Tenancy().
+[assembly: TemplateRegistrations(typeof(TenancyEntityFrameworkExtensions))]

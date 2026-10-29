@@ -13,11 +13,11 @@
 
     Two more properties say what the policies are written with, for a project whose roles or caller
     functions are not the defaults. Each is key=value pairs separated by '|', every pair optional and every
-    pair left out its default, so no value can hold a '|'; each caller function is one called without
+    pair left out its default, so no value can hold a '|'; each current user function is one called without
     arguments. The defaults, which a project never has to write:
 
       <SupabaseRowAccessRoles>user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system</SupabaseRowAccessRoles>
-      <SupabaseCallerFunctions>uid=auth.uid()|role=auth.role()|claims=auth.jwt()</SupabaseCallerFunctions>
+      <SupabaseCurrentUserFunctions>uid=auth.uid()|role=auth.role()|claims=auth.jwt()</SupabaseCurrentUserFunctions>
 
     The export runs before the application's Main, so its configuration cannot reach it; these properties
     are how it does. The roles are also the ones the application switches to: the build records the first
@@ -151,8 +151,8 @@
     -->
     <Error Condition="$(SupabaseRowAccessRoles.Contains(';'))"
            Text="SupabaseRowAccessRoles is '$(SupabaseRowAccessRoles)', with a ';'. Separate its pairs with '|' instead, as in user=authenticated|anonymous=anon|system-in=ddd_system_in: MSBuild splits the export's variables at every ';'." />
-    <Error Condition="$(SupabaseCallerFunctions.Contains(';'))"
-           Text="SupabaseCallerFunctions is '$(SupabaseCallerFunctions)', with a ';'. Separate its pairs with '|' instead, as in uid=auth.uid()|role=auth.role()|claims=auth.jwt(): MSBuild splits the export's variables at every ';'." />
+    <Error Condition="$(SupabaseCurrentUserFunctions.Contains(';'))"
+           Text="SupabaseCurrentUserFunctions is '$(SupabaseCurrentUserFunctions)', with a ';'. Separate its pairs with '|' instead, as in uid=auth.uid()|role=auth.role()|claims=auth.jwt(): MSBuild splits the export's variables at every ';'." />
     <Error Condition="$(SupabaseLoginRole.Contains(';'))"
            Text="SupabaseLoginRole is '$(SupabaseLoginRole)', with a ';'. It is the name of one role, a plain lowercase identifier such as sample_api: MSBuild splits the export's variables at every ';'." />
 
@@ -163,6 +163,6 @@
     -->
     <Exec Command="&quot;$(_DDDToolkitDotnet)&quot; &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
-          EnvironmentVariables="DDDTOOLKIT_SUPABASE_EXPORT=$(SupabaseMigrationsExport);DDDTOOLKIT_SUPABASE_DIRECTORY=$(SupabaseMigrationsDirectory);DDDTOOLKIT_SUPABASE_START=$(MSBuildProjectDirectory);DDDTOOLKIT_SUPABASE_ROLES=$(SupabaseRowAccessRoles);DDDTOOLKIT_SUPABASE_CALLER_FUNCTIONS=$(SupabaseCallerFunctions);DDDTOOLKIT_SUPABASE_GRANTS=$(SupabaseRowAccessGrants);DDDTOOLKIT_SUPABASE_FORCE=$(SupabaseForceRowLevelSecurity);DDDTOOLKIT_SUPABASE_LOGIN_ROLE=$(SupabaseLoginRole)" />
+          EnvironmentVariables="DDDTOOLKIT_SUPABASE_EXPORT=$(SupabaseMigrationsExport);DDDTOOLKIT_SUPABASE_DIRECTORY=$(SupabaseMigrationsDirectory);DDDTOOLKIT_SUPABASE_START=$(MSBuildProjectDirectory);DDDTOOLKIT_SUPABASE_ROLES=$(SupabaseRowAccessRoles);DDDTOOLKIT_SUPABASE_CURRENT_USER_FUNCTIONS=$(SupabaseCurrentUserFunctions);DDDTOOLKIT_SUPABASE_GRANTS=$(SupabaseRowAccessGrants);DDDTOOLKIT_SUPABASE_FORCE=$(SupabaseForceRowLevelSecurity);DDDTOOLKIT_SUPABASE_LOGIN_ROLE=$(SupabaseLoginRole)" />
   </Target>
 </Project>

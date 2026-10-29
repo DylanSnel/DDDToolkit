@@ -83,7 +83,7 @@ public static class SampleStorage
         builder.Services.AddSupabaseRowLevelSecurity(options =>
         {
             options.TokenRoles[SampleTokenRoles.Operator] = SampleTokenRoles.Operator;
-            options.StatementTimeouts[CallerKind.User] = UserStatementTimeout;
+            options.StatementTimeouts[CurrentUserKind.User] = UserStatementTimeout;
         });
 
         // Two bounded sets of connections for the one role the host logs in as: what answers requests, and what

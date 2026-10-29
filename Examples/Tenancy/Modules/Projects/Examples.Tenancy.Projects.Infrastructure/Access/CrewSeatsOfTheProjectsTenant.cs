@@ -18,7 +18,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 /// <remarks>
 /// The lock holds a crew's rows to the permissions that change the crew, and Tenancy's policy keeps every row to a project
 /// of the caller's tenant; neither asks whose the seat is. In C# the crew takes only an active seat of the tenant
-/// (<c>MemberAdmission.RequireMemberAsync</c>). A statement that went round the application could put a seat of
+/// (the crew manager asks the join with Tenancy). A statement that went round the application could put a seat of
 /// another tenant on the crew, and that seat, acting in its own tenant, would then be answered the project by the
 /// projects' functions and could record on it. So a row is added only for a seat the caller reads in the project's
 /// own tenant, asked of Tenancy's function as the caller, under the policy on the seats: Tenancy's default here,

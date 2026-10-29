@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Text.RegularExpressions;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
@@ -48,7 +49,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             {
                 var heldInCSharp = await garden.Services.AsAsync(person, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<ShedId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Shed>>().Reach(permission);
                     return await provider.GetRequiredService<GardenContext>().Sheds.Within(reach).Select(shed => shed.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.ShedsHeldBy(person, permission).Select(id => id.Value).ToList();
@@ -155,7 +156,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
     [Fact]
     public async Task A_gardener_who_writes_a_plots_gardeners_gives_no_role_of_another_garden_and_its_permissions_are_never_held_there()
     {
-        using var garden = await PostgresGarden.CreateAsync(postgres, asCaller: true);
+        using var garden = await PostgresGarden.CreateAsync(postgres, asUser: true);
         var data = garden.Scenario;
         var functions = PlotMembership.Rules.Functions;
         var beans = data.Beans.Value;
@@ -293,7 +294,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
     [Fact]
     public async Task What_is_held_through_a_role_of_plots_is_one_statement_under_the_policies_and_reads_the_role_rows()
     {
-        using var garden = await PostgresGarden.CreateAsync(postgres, asCaller: true);
+        using var garden = await PostgresGarden.CreateAsync(postgres, asUser: true);
         var data = garden.Scenario;
         var commands = garden.Services.Commands;
         var precision = TimeSpan.FromMilliseconds(1);
@@ -333,7 +334,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         commands.Reset();
         var watered = await garden.Services.AsAsync(data.Ada, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<PlotId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Plot>>();
             return await provider.GetRequiredService<GardenContext>().Plots
                 .Within(access.Reach(PlotPermissions.See))
                 .Within(access.Reach(PlotPermissions.Water))
@@ -354,7 +355,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
     [Fact]
     public async Task A_gardener_changes_no_role_past_the_application()
     {
-        using var garden = await PostgresGarden.CreateAsync(postgres, asCaller: true);
+        using var garden = await PostgresGarden.CreateAsync(postgres, asUser: true);
         var data = garden.Scenario;
         var tender = data.MeadowTender.Id.Value;
 
@@ -393,7 +394,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         }
 
         // Somebody who did not sign in reads no role and writes none.
-        await using (var nobody = await CallerSession.BeginAsync(garden.Database, Caller.Anonymous, role: "anon"))
+        await using (var nobody = await UserSession.BeginAsync(garden.Database, CurrentUserSnapshot.Anonymous, role: "anon"))
         {
             (await nobody.ListAsync<long>($"SELECT count(*) FROM {Gardens}\"PlotRoles\"")).Should().Equal(0L);
             (await nobody.ListAsync<long>(
@@ -406,10 +407,10 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         (await FencedByBenAsync()).Should().BeEquivalentTo(before);
         (await garden.Services.PlotsAsync(data.Ben, access => access.HoldAsync(data.Beans, PlotPermissions.Fence, Cancellation)))!.Via.Should().BeNull();
 
-        // And the roles are read as before, under the rule: the admission and the questions run as the caller.
+        // And the roles are read as before, under the rule: what the member manager asks and the questions run as the caller.
         await garden.Services.AsAsync(data.Ben, async provider =>
         {
-            await provider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(data.MeadowTender.Id, Cancellation);
+            await Admitted.RoleAsync<PlotId, PlotRoleId>(provider, PlotMembership.Codes, data.MeadowTender.Id, Cancellation);
             return true;
         });
         (await garden.Services.PlotsAsync(data.Ben, access => access.HoldAsync(data.Beans, PlotPermissions.Plant, Cancellation)))!.Via.Should().Be(MemberVia.Members);
@@ -456,8 +457,8 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         }
 
         LogicalName().Matches(plots.Functions[3].Body).Select(match => match.Value).Should().Equal("{fn:plots/plots_as_member_with}", "{fn:plots/plots_as_member}");
-        plots.Functions[0].Body.Should().Contain("m.\"MemberId\" = {caller:uid} AND ");
-        plots.Functions[3].Body.Should().Contain("$1 IN ('plots.see', 'plots.plant', 'plots.water', 'plots.fence', 'plots.sell') AND r.\"OwnerId\" = {caller:uid}");
+        plots.Functions[0].Body.Should().Contain("m.\"MemberId\" = {user:uid} AND ");
+        plots.Functions[3].Body.Should().Contain("$1 IN ('plots.see', 'plots.plant', 'plots.water', 'plots.fence', 'plots.sell') AND r.\"OwnerId\" = {user:uid}");
 
         // What a role can give stands in front of what the rows say, as the rules say it.
         string Cut(OtherPermissions permissions) => new MembershipRowAccessContribution<PlotGardener>(Plots(otherPermissions: permissions)).Contribute(context, Export)!.Functions[1].Body;
@@ -480,25 +481,25 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             "plots",
             PlotMembership.Rules.Permissions,
             Roles.Custom(starters: PlotMembership.Rules.Roles.Declared),
-            members: MemberSource.Resolved(new DatabaseFunction("gardens", "caller_gardener")),
+            members: MemberSource.Resolved(new DatabaseFunction("gardens", "current_gardener")),
             reachFromAbove: new DatabaseFunction("gardens", "gardens_where_i_hold"));
 
         var functions = new MembershipRowAccessContribution<PlotGardener>(rules).Contribute(context, Export)!.Functions;
 
-        functions[0].Body.Should().Contain("m.\"MemberId\" = (SELECT {fn:gardens/caller_gardener}()) AND ");
+        functions[0].Body.Should().Contain("m.\"MemberId\" = (SELECT {fn:gardens/current_gardener}()) AND ");
         functions[1].Body.Should()
-            .Contain("m.\"MemberId\" = (SELECT {fn:gardens/caller_gardener}()) AND ")
+            .Contain("m.\"MemberId\" = (SELECT {fn:gardens/current_gardener}()) AND ")
             .And.Contain("\n  AND $1 IN ('plots.see', 'plots.plant', 'plots.water', 'plots.fence')\n  AND EXISTS (SELECT 1 FROM ")
             .And.Contain(" k ON k.\"Id\" = h.\"RoleId\"")
             .And.EndWith("AND k.\"Status\" = 'Active' AND $1 = ANY (k.\"Permissions\"))");
         functions[2].Body.Should().Contain("r.\"GardenId\" IN (SELECT reached.place FROM {fn:gardens/gardens_where_i_hold}('plots.see') AS reached(place))");
         functions[3].Body.Should()
             .Contain("r.\"GardenId\" IN (SELECT reached.place FROM {fn:gardens/gardens_where_i_hold}($1) AS reached(place))")
-            .And.Contain("r.\"OwnerId\" = (SELECT {fn:gardens/caller_gardener}())");
+            .And.Contain("r.\"OwnerId\" = (SELECT {fn:gardens/current_gardener}())");
 
         // No function is asked for the roles: the two the rules name, and the plots' own, are all there is.
         functions.SelectMany(function => LogicalName().Matches(function.Body).Select(match => match.Value)).Distinct()
-            .Should().BeEquivalentTo("{fn:gardens/caller_gardener}", "{fn:gardens/gardens_where_i_hold}", "{fn:plots/plots_as_member}", "{fn:plots/plots_as_member_with}");
+            .Should().BeEquivalentTo("{fn:gardens/current_gardener}", "{fn:gardens/gardens_where_i_hold}", "{fn:plots/plots_as_member}", "{fn:plots/plots_as_member_with}");
 
         // And what the functions are written from says all three: other than the plots' own rules, and other than the same without one of them.
         static string MarkerOf(MembershipRules written, DbContext model)
@@ -508,7 +509,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             "plots",
             PlotMembership.Rules.Permissions,
             Roles.Custom(starters: PlotMembership.Rules.Roles.Declared),
-            members: MemberSource.Resolved(new DatabaseFunction("gardens", "caller_gardener")));
+            members: MemberSource.Resolved(new DatabaseFunction("gardens", "current_gardener")));
         new[] { MarkerOf(rules, context), MarkerOf(withoutAbove, context), MarkerOf(PlotMembership.Rules, context) }.Should().OnlyHaveUniqueItems();
     }
 
@@ -620,7 +621,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
 
             var seenInCSharp = await garden.Services.AsAsync(person, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<PlotId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Plot>>().ReachSeen();
                 return await provider.GetRequiredService<GardenContext>().Plots.Within(see).Select(plot => plot.Id.Value).ToListAsync(Cancellation);
             });
             var seen = data.PlotsSeenBy(person).Select(id => id.Value).ToList();
@@ -632,7 +633,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             {
                 var heldInCSharp = await garden.Services.AsAsync(person, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<PlotId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Plot>>().Reach(permission);
                     return await provider.GetRequiredService<GardenContext>().Plots.Within(reach).Select(plot => plot.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.PlotsHeldBy(person, permission).Select(id => id.Value).ToList();

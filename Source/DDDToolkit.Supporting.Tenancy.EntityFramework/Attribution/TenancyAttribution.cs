@@ -61,15 +61,15 @@ public static class TenancyAttribution
     /// });
     /// </code>
     /// <para>
-    /// Tenancy's save interceptor, which <c>UseDDDToolkit</c> adds, fills them from the Tenancy caller of the save
-    /// (<see cref="TenancyCaller{TTenantId, TSeatId}.Actor"/>): both sets for a new row, and the last three for a
+    /// Tenancy's save interceptor, which <c>UseDDDToolkit</c> adds, fills them from the Tenancy user of the save
+    /// (<see cref="TenancyUser{TTenantId, TSeatId}.Actor"/>): both sets for a new row, and the last three for a
     /// row that changes. A row whose own columns did not change, because only a row of one of its entities in
     /// another table did, keeps who changed it last; an aggregate with a version changes its row with every
     /// change of its parts. The first three are fixed once the row is there: Entity Framework refuses a save that
     /// changes one, and the privileges an export writes leave them out of <c>UPDATE</c>.
     /// </para>
     /// <para>
-    /// They are ids, never a name: what a seat is shown by is the application's, which the directory answers by id.
+    /// They are ids, never a name: what a seat is shown by is the application's, which Tenancy's managers answer by id.
     /// They are shadow properties, so the entity's class does not change; read one with
     /// <c>EF.Property&lt;SeatId?&gt;(row, TenancyAttribution.ChangedBySeat)</c>. Adding them to a table that exists
     /// is a migration of your own, as any change to the model is.

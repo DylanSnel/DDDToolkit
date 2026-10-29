@@ -87,7 +87,7 @@ public sealed class HelpDeskDatabase : IAsyncLifetime
         await RunAsOwnerAsync(Script(), cancellation);
 
         // As the application itself, which owns the tables: the rules are for callers.
-        await using var seed = CreateContext(Caller.System);
+        await using var seed = CreateContext(CurrentUserSnapshot.System);
         seed.Tickets.AddRange(
             Ticket("Alice's, open for the north", PostgresRowAccessDatabase.Alice, "north", TicketStatus.Open, isPublic: false),
             Ticket("Bob's own, closed", PostgresRowAccessDatabase.Bob, "north", TicketStatus.Closed, isPublic: false),
@@ -106,18 +106,18 @@ public sealed class HelpDeskDatabase : IAsyncLifetime
             $"No Docker here, so '{PgmqDatabase.Image}' could not be started. Row level security in a schema with capitals is not covered on this machine.");
 
     /// <summary>A context as the application logs in, running as <paramref name="caller"/>.</summary>
-    public HelpDeskContext CreateContext(Caller caller)
-        => HelpDeskContext.Create(ApplicationConnectionString, new PostgresRowLevelSecurityInterceptor(new Fixed(caller), new PostgresRowLevelSecurityOptions()));
+    public HelpDeskContext CreateContext(CurrentUserSnapshot caller)
+        => HelpDeskContext.Create(ApplicationConnectionString, new PostgresRowLevelSecurityInterceptor(new CurrentUser(source: new Fixed(caller)), new PostgresRowLevelSecurityOptions()));
 
     /// <summary>Every ticket <paramref name="caller"/> may read.</summary>
-    public async Task<List<Ticket>> TicketsAsync(Caller caller, CancellationToken cancellationToken)
+    public async Task<List<Ticket>> TicketsAsync(CurrentUserSnapshot caller, CancellationToken cancellationToken)
     {
         await using var context = CreateContext(caller);
         return await context.Tickets.AsNoTracking().ToListAsync(cancellationToken);
     }
 
     /// <summary>Runs <paramref name="sql"/> as <paramref name="caller"/>, with <c>{0}</c>, <c>{1}</c> for <paramref name="parameters"/>, and returns the rows it affected.</summary>
-    public async Task<int> RunAsAsync(Caller caller, string sql, CancellationToken cancellationToken, params object[] parameters)
+    public async Task<int> RunAsAsync(CurrentUserSnapshot caller, string sql, CancellationToken cancellationToken, params object[] parameters)
     {
         await using var context = CreateContext(caller);
         return await context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
@@ -165,8 +165,8 @@ public sealed class HelpDeskDatabase : IAsyncLifetime
         return ticket;
     }
 
-    private sealed class Fixed(Caller caller) : ICallerAccessor
+    private sealed class Fixed(CurrentUserSnapshot caller) : ICurrentUserSource
     {
-        public Caller Current => caller;
+        public CurrentUserSnapshot? Current => caller;
     }
 }

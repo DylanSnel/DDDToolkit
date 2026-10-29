@@ -25,10 +25,10 @@ internal static class SampleGraphQL
 
     /// <summary>
     /// The root fields of the application's own staff, who hold no seat: every tenant, and one tenant's access
-    /// history, its projects and a project's inspections, each in the <c>Operators</c> feature of the module
-    /// that owns it. They ask for an operator instead.
+    /// history, its projects and a project's inspections, and the rename of one of its projects, each in the
+    /// <c>Operators</c> feature of the module that owns it. They ask for an operator instead.
     /// </summary>
-    public static readonly IReadOnlyList<string> OperatorFields = ["tenants", "tenantAccessHistory", "tenantProjects", "tenantProjectInspections"];
+    public static readonly IReadOnlyList<string> OperatorFields = ["tenants", "tenantAccessHistory", "tenantProjects", "tenantProjectInspections", "tenantProjectRename"];
 
     /// <summary>
     /// The most fields the document of one request may have, counted where the document is read. A page of

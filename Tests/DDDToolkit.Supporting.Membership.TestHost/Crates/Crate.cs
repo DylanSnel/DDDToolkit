@@ -140,6 +140,6 @@ public static class CrateMembership
     /// <summary>The rules.</summary>
     public static MembershipRules Rules { get; } = MembershipRules.For<Crate>(
         Roles.External(DepotFunctions.RolesWithPermission, otherPermissions: OtherPermissions.AllBut(DepotPermissions.ManageDepot)),
-        members: MemberSource.Resolved(DepotFunctions.CallerPorter),
+        members: MemberSource.Resolved(DepotFunctions.CurrentPorter),
         reachFromAbove: DepotFunctions.BaysWhereIHold);
 }

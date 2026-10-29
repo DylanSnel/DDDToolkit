@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Roles.Commands;
 using Examples.Tenancy.Tenants.Application.Roles.Queries;
+using Examples.Tenancy.Tenants.Domain;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -32,57 +33,64 @@ internal static class RolesEndpoints
         group.MapGet("/tenancy/roles", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new TenantRoles(), cancellationToken)).Select(Describe)));
 
-        group.MapPost("/tenancy/roles", async (RoleToCreate body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            var id = await sender.Send(new CreateTenantRole(body.Name ?? string.Empty, body.Description ?? string.Empty, body.Permissions ?? []), cancellationToken);
-            return Results.Created((string?)null, new { id });
-        });
+        // Each command answers the role, and its route writes it with its permissions: every one of them requires
+        // tenancy.roles.manage for the whole tenant, which is who reads them.
+        group.MapPost("/tenancy/roles", async (RoleToCreate body, ISender sender, CancellationToken cancellationToken)
+            => Results.Created((string?)null, DescribeChanged(await sender.Send(new CreateTenantRole(body.Name ?? string.Empty, body.Description ?? string.Empty, body.Permissions ?? []), cancellationToken))));
 
         // The role's permissions become exactly the list: an empty one takes every permission off it. So the list must be there,
         // since a body that misspelt or left out the field would otherwise empty the role without a word.
         group.MapPut("/tenancy/roles/{id}/permissions", async (RoleId id, PermissionsToSet body, ISender sender, CancellationToken cancellationToken) =>
         {
             var permissions = body.Permissions ?? throw new BadHttpRequestException("The body's \"permissions\" is null: give the role's permissions as a list, an empty one to take them all off.");
-            await sender.Send(new SetRolePermissions(id, permissions), cancellationToken);
-            return Results.NoContent();
+            return Results.Ok(DescribeChanged(await sender.Send(new SetRolePermissions(id, permissions), cancellationToken)));
         });
 
-        group.MapPost("/tenancy/roles/{id}/archive", async (RoleId id, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new ArchiveTenantRole(id), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/roles/{id}/archive", async (RoleId id, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(DescribeChanged(await sender.Send(new ArchiveTenantRole(id), cancellationToken))));
 
         return group;
     }
 
     /// <summary>
-    /// A role where a seat's overview shows one: a role the seat holds itself, so with its permissions, which a seat may
-    /// always read of its own. Whether a role manages access says who may give it: only someone who holds its
-    /// permissions that do, or whoever manages grants where the seat is placed.
+    /// A role where a seat's overview names one: its id, its name, the starter role it was copied from and its status.
+    /// The overview holds no more than the role, so its permissions, which are for whoever manages the tenant's roles,
+    /// are left out, and so is whether it manages access. The list of the tenant's roles answers both.
     /// </summary>
-    internal static object Describe(TenancyUseCases.RoleSummary role) => new
+    internal static object Describe(Role role) => new
     {
         role.Id,
         role.Name,
-        role.FromPack,
+        role.FromStarterRole,
         role.Status,
-        role.Permissions,
-        role.ManagesAccess,
     };
 
     /// <summary>
-    /// A role in a list of the tenant's roles: the same, and what the tenant uses it for, which says whether it may
-    /// be given on a crew. Its <c>permissions</c> are a list for a caller who manages the tenant's roles and <c>null</c>
-    /// for anybody else: the query left them out.
+    /// A role as a command of this feature answers it: the role's fields, with its permissions, since each of those
+    /// commands requires <c>tenancy.roles.manage</c> for the whole tenant. Whether it manages access is read beside a
+    /// role, and the command reads nothing more.
+    /// </summary>
+    internal static object DescribeChanged(Role role) => new
+    {
+        role.Id,
+        role.Name,
+        role.FromStarterRole,
+        role.Status,
+        role.Permissions,
+    };
+
+    /// <summary>
+    /// A role in a list of the tenant's roles: the role's fields, as its GraphQL type shows them, with whether it manages
+    /// access, which says who may give it. Its <c>permissions</c> are a list for a caller who manages the tenant's roles
+    /// and <c>null</c> for anybody else, as the query says.
     /// </summary>
     internal static object Describe(RoleListing listed) => new
     {
-        listed.Id,
-        listed.Name,
-        listed.FromPack,
-        listed.Status,
-        listed.Permissions,
+        listed.Role.Id,
+        listed.Role.Name,
+        listed.Role.FromStarterRole,
+        listed.Role.Status,
+        permissions = listed.PermissionsShown ? listed.Role.Permissions : null,
         listed.ManagesAccess,
     };
 

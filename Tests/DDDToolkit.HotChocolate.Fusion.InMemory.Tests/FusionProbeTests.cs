@@ -176,7 +176,7 @@ public sealed class FusionProbeTests
         // The gateway carries nothing over to a source schema explicitly. What the host's middleware made
         // ambient before the gateway is ambient in a module's code because the call is awaited in the request's
         // own flow: the caller, and the reader's language.
-        await using var shop = await GatewayHost.StartAsync(builder => builder.AddShop(), app => app.UseAmbientCaller());
+        await using var shop = await GatewayHost.StartAsync(builder => builder.AddShop(), app => app.UseAmbientUser());
 
         var data = await shop.DataAsync(
             """
@@ -224,7 +224,7 @@ public sealed class FusionProbeTests
                 builder.AddShop();
                 builder.Services.AddSingleton<IFailureLocalizer, ByLanguage>();
             },
-            app => app.UseAmbientCaller());
+            app => app.UseAmbientUser());
 
         var dutch = await shop.DataAsync(
             $$"""mutation { productRename(input: { id: 1, name: "" }) { {{Errors}} } }""",
@@ -244,7 +244,7 @@ public sealed class FusionProbeTests
     [Fact]
     public async Task A_source_schema_gets_a_scope_of_the_application_not_the_requests()
     {
-        await using var shop = await GatewayHost.StartAsync(builder => builder.AddShop(), app => app.UseAmbientCaller());
+        await using var shop = await GatewayHost.StartAsync(builder => builder.AddShop(), app => app.UseAmbientUser());
 
         var first = await ScopesAsync(shop);
         var second = await ScopesAsync(shop);

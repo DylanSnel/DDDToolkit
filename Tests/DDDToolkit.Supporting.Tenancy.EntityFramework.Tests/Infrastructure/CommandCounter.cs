@@ -8,7 +8,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests.Infrastructure;
 
 /// <summary>
 /// One command a context sent: its text, the transaction it ran in, if any, the context, the connection it ran on,
-/// the toolkit's caller that was current when it ran, whether an ambient <c>TransactionScope</c> was, and Tenancy's
+/// the toolkit's current user that was current when it ran, whether an ambient <c>TransactionScope</c> was, and Tenancy's
 /// caller that was.
 /// </summary>
 public sealed record SentCommand(
@@ -16,9 +16,9 @@ public sealed record SentCommand(
     DbTransaction? Transaction,
     DbContext? Context,
     DbConnection? Connection,
-    Caller? Caller,
+    CurrentUserSnapshot? Caller,
     bool InAmbientTransaction = false,
-    ITenancyCaller? TenancyCaller = null)
+    ITenancyUser? TenancyUser = null)
 {
     /// <summary>Whether it changes rows rather than reading them.</summary>
     public bool Writes => Text.Contains("INSERT ", StringComparison.Ordinal)
@@ -100,7 +100,7 @@ public sealed class CommandCounter : DbCommandInterceptor
             command.Transaction,
             eventData.Context,
             command.Connection,
-            Callers.Ambient,
+            BegunUser,
             System.Transactions.Transaction.Current is not null,
-            TenancyCallers.Ambient));
+            TenancyUsers.Ambient));
 }

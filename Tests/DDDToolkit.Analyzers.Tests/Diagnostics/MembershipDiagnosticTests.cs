@@ -259,8 +259,8 @@ public class MembershipDiagnosticTests
 
     [Theory]
     [InlineData("EveryMember", "View")]
-    [InlineData("LocksMembers", "Edit")]
-    [InlineData("LocksOwner", "Edit")]
+    [InlineData("ManagesMembers", "Edit")]
+    [InlineData("NamesOwner", "Edit")]
     public void A_second_permission_with_a_setting_that_names_the_one_permission_is_DDD00093(string setting, string first)
     {
         var second = "On<Board>(Owner = false, InRoles = false, " + setting + " = true)";
@@ -339,6 +339,7 @@ public class MembershipDiagnosticTests
             Board(),
             """
             using DDDToolkit.Abstractions.Attributes;
+            using DDDToolkit.Supporting.Membership;
 
             namespace Shop;
 

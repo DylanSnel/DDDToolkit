@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 /// A read across tenants that Tenancy makes runs as a caller begun around that one query, on another context and
 /// connection than the caller's: whatever the caller holds open cannot narrow it, and it does not reach into the
 /// caller's work. Where nothing but the save keeps the rights, as on SQLite, that caller is the application itself,
-/// <see cref="Caller.System"/>, reading the tables; where the database keeps them, it is scoped system work in no
+/// <see cref="CurrentUserSnapshot.System"/>, reading the tables; where the database keeps them, it is scoped system work in no
 /// tenant, asking the database's function.
 /// </summary>
 public sealed class SystemReadTests
@@ -37,7 +37,7 @@ public sealed class SystemReadTests
         await after.BySeat(harbor.Tenant, harbor.AdminSeat, async services =>
         {
             // The caller, a seat of harbor, holds a transaction with a change of its own in it, not yet committed.
-            var context = services.Tenancy();
+            var context = services.TenancyContext();
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             await context.Database.ExecuteSqlRawAsync(
                 "UPDATE \"Roles\" SET \"Permissions\" = '[\"widget.buff\"]' WHERE \"TenantId\" = {0}", [harbor.Tenant.Value], Cancellation);
@@ -51,13 +51,13 @@ public sealed class SystemReadTests
             unknown.Should().Equal([PolishPermission], "meadow's permission is read, and harbor's uncommitted change is not");
 
             var read = after.Commands.Sent.Should().ContainSingle("the read is one query").Which;
-            read.Caller.Should().BeSameAs(Caller.System, "the read runs as the application itself");
+            read.Caller.Should().BeSameAs(CurrentUserSnapshot.System, "the read runs as the application itself");
             read.Context.Should().NotBeNull().And.NotBeSameAs(context, "it runs on a context of its own");
             read.Connection.Should().NotBeSameAs(callers, "and on another connection than the caller's");
             read.Transaction.Should().BeNull("outside the caller's transaction");
 
             // The caller's work is as it was: its transaction open, and nobody begun around it.
-            Callers.Ambient.Should().BeNull();
+            BegunUser.Should().BeNull();
             context.Database.CurrentTransaction.Should().BeSameAs(transaction);
             await transaction.RollbackAsync(Cancellation);
         });
@@ -76,11 +76,11 @@ public sealed class SystemReadTests
             services.Commands.Reset();
 
             var unknown = await TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(
-                scoped.Tenancy(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation);
+                scoped.TenancyContext(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation);
 
             unknown.Should().BeEmpty();
             var read = services.Commands.Sent.Should().ContainSingle().Which;
-            read.Caller.Should().BeSameAs(Caller.System);
+            read.Caller.Should().BeSameAs(CurrentUserSnapshot.System);
             read.InAmbientTransaction.Should().BeFalse("a read of its own does not join the caller's transaction");
             System.Transactions.Transaction.Current.Should().NotBeNull("and the caller's transaction is still the caller's");
         });
@@ -100,21 +100,18 @@ public sealed class SystemReadTests
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, async scoped =>
         {
             services.Commands.Reset();
-            var tenants = await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.Tenancy(), "widgets", Cancellation);
+            var tenants = await scoped.Access().TenantsToSweepAsync("widgets", Cancellation);
 
             tenants.Should().BeEquivalentTo([harbor.Tenant, meadow.Tenant], "a suspended tenant is still visited, and a closed one is not");
             var read = services.Commands.Sent.Should().ContainSingle("the read is one query").Which;
-            read.Caller.Should().BeSameAs(Caller.System, "nothing holds anyone to a tenant here but the filter, which the application itself reads past");
-            read.Context.Should().NotBeNull().And.NotBeSameAs(scoped.Tenancy(), "it runs on a context of its own");
+            read.Caller.Should().BeSameAs(CurrentUserSnapshot.System, "nothing holds anyone to a tenant here but the filter, which the application itself reads past");
+            read.Context.Should().NotBeNull().And.NotBeSameAs(scoped.TenancyContext(), "it runs on a context of its own");
             Regex.Match(read.Text, @"^SELECT (.+?)\s+FROM", RegexOptions.Singleline).Groups[1].Value.Trim()
                 .Should().MatchRegex(@"^""\w+""\.""Id""$", "it projects the ids and nothing else of any tenant");
 
-            // A scope that is none is refused the same here, where the scope travels nowhere; and so is a module's own
-            // context, which maps no tenants.
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.Tenancy(), "Not a scope", Cancellation))
+            // A scope that is none is refused the same here, where the scope travels nowhere.
+            await FluentActions.Awaiting(() => scoped.Access().TenantsToSweepAsync("Not a scope", Cancellation))
                 .Should().ThrowAsync<ArgumentException>();
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.Widgets(), "widgets", Cancellation))
-                .Should().ThrowAsync<InvalidOperationException>().WithMessage("'TestWidgetContext' does not map HostTenant*modelBuilder.AddTenancy()*");
             services.Commands.Count.Should().Be(1);
         });
     }
@@ -130,21 +127,21 @@ public sealed class SystemReadTests
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, async scoped =>
         {
             services.Commands.Reset();
-            await FluentActions.Awaiting(() => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation))
+            await FluentActions.Awaiting(() => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.TenancyContext(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation))
                 .Should().ThrowAsync<DbException>();
-            await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.Tenancy(), "widgets", Cancellation))
+            await FluentActions.Awaiting(() => scoped.Access().TenantsToSweepAsync("widgets", Cancellation))
                 .Should().ThrowAsync<DbException>();
 
             services.Commands.Sent.Select(command => (Text: command.Text.Trim(), Caller: command.Caller!.ToString())).Should().Equal(
                 ("SELECT f.v AS \"Value\" FROM \"" + TenancyFunctionNames.RolePermissionsInUse + "\"() AS f(v)", "system in " + TenancyWork.SystemScope),
                 ("SELECT f.v AS \"TenantId\" FROM \"" + TenancyFunctionNames.TenantsToSweep + "\"() AS f(v)", "system in widgets"));
             services.Commands.Sent.Should().OnlyContain(
-                command => command.TenancyCaller == null && !ReferenceEquals(command.Context, scoped.Tenancy()) && !command.InAmbientTransaction,
+                command => command.TenancyUser == null && !ReferenceEquals(command.Context, scoped.TenancyContext()) && !command.InAmbientTransaction,
                 "in no tenant, though the work around it is a seat's in harbor, and on a context of its own");
 
             // The seat's own work goes on as it was.
-            TenancyCallers.Ambient.Should().Be(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat));
-            Callers.Ambient.Should().BeNull();
+            TenancyUsers.Ambient.Should().Be(HostUser.InSeat(harbor.Tenant, harbor.AdminSeat));
+            BegunUser.Should().BeNull();
         });
     }
 }

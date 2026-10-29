@@ -16,9 +16,9 @@ public static class TenancyFunctions
 {
     /// <summary>
     /// Answers the calling seat: the active seat of the caller's verified identity in the tenant the connection
-    /// names, or <c>NULL</c> for a caller without one. As <see cref="TenancyRowAccess.CallerSeatId{TSeatId}"/>.
+    /// names, or <c>NULL</c> for a caller without one. As <see cref="TenancyRowAccess.CurrentSeatId{TSeatId}"/>.
     /// </summary>
-    public static DatabaseFunction CallerSeat { get; } = new(TenancyRowAccess.Owner, "caller_seat");
+    public static DatabaseFunction CurrentSeat { get; } = new(TenancyRowAccess.Owner, "current_seat");
 
     /// <summary>
     /// Answers, for a permission, the units the calling seat's hold of it reaches: where it is held, and every unit below.

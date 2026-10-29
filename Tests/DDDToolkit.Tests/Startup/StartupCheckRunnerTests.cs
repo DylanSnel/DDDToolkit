@@ -59,25 +59,25 @@ public sealed class StartupCheckRunnerTests
     {
         // A check that begins a caller of its own and never ends it, without awaiting anything, writes that caller
         // into the flow the runner runs in. The check after it still runs as the application.
-        var seen = new ConcurrentQueue<Caller?>();
+        var seen = new ConcurrentQueue<CurrentUserSnapshot?>();
         using var host = Build(services => services
             .RunStartupChecks()
             .AddStartupCheck(new StartupCheck("tests.leaves-a-caller-behind", StartupCheckStage.Services, (_, _) =>
             {
-                seen.Enqueue(Callers.Ambient);
-                _ = Callers.Begin(Caller.User(Guid.NewGuid()));
+                seen.Enqueue(BegunUser);
+                _ = TestAccess.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid()));
                 return Task.CompletedTask;
             }))
             .AddStartupCheck(new StartupCheck("tests.after-it", StartupCheckStage.Database, (_, _) =>
             {
-                seen.Enqueue(Callers.Ambient);
+                seen.Enqueue(BegunUser);
                 return Task.CompletedTask;
             })));
 
         await host.StartAsync(Cancellation);
 
         seen.Should().Equal(
-            [Caller.System, Caller.System],
+            [CurrentUserSnapshot.System, CurrentUserSnapshot.System],
             "a check is the application's own bookkeeping, and a host that requires explicit callers refuses work that names none");
 
         await host.StopAsync(Cancellation);
@@ -488,7 +488,7 @@ public sealed class StartupCheckRunnerTests
     {
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            using var system = Callers.Begin(Caller.System);
+            using var system = TestAccess.BeginSystemBypassingRowAccess();
             await check(services, cancellationToken);
         }
 

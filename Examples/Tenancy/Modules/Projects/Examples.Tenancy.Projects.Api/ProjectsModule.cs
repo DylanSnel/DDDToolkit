@@ -52,7 +52,7 @@ public static class ProjectsModule
     /// <c>[Permissions]</c> class the module declares. The host says where its tables live and where
     /// what it publishes goes (see <see cref="ModuleHost"/>), and hands over the starter roles the application
     /// declares for its tenants' crews, which the projects' rules are made with. Tenancy must be registered first:
-    /// Projects asks Tenancy's answers. Its context keeps rows to a tenant, so it cannot do without Tenancy's save
+    /// Projects asks Tenancy. Its context keeps rows to a tenant, so it cannot do without Tenancy's save
     /// check, which <c>AddTenancy</c> brings and <c>UseDDDToolkit</c> puts on it, in whichever order the modules are
     /// registered; in a host without Tenancy its first save is refused.
     /// </summary>
@@ -91,9 +91,9 @@ public static class ProjectsModule
             .MapAccessEndpoints();
 
     /// <summary>
-    /// Maps what the application's own staff read of the projects: <c>GET /operations/tenants/{tenant}/projects</c>,
-    /// every project of one tenant. An operator holds no seat, so the host maps it outside the group that requires
-    /// one.
+    /// Maps what the application's own staff read and change of the projects: <c>GET /operations/tenants/{tenant}/projects</c>,
+    /// every project of one tenant, and <c>PUT /operations/tenants/{tenant}/projects/{project}/name</c>, an operator's
+    /// rename. An operator holds no seat, so the host maps them outside the group that requires one.
     /// </summary>
     /// <param name="operators">The group for operators. What it requires is the host's to decide.</param>
     public static IEndpointRouteBuilder MapProjectsOperations(this IEndpointRouteBuilder operators)

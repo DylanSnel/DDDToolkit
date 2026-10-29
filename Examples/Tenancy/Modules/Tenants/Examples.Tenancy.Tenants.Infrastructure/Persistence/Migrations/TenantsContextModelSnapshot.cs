@@ -256,7 +256,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.Access.RoleRow<Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId, Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>", b =>
                 {
-                    b.Property<string>("FromPack")
+                    b.Property<string>("FromStarterRole")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -639,7 +639,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.Property<string>("FromPack")
+                    b.Property<string>("FromStarterRole")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -657,7 +657,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text[]");
 
-                    b.PrimitiveCollection<string[]>("PermissionsFromPack")
+                    b.PrimitiveCollection<string[]>("PermissionsFromStarterRole")
                         .HasColumnType("text[]");
 
                     b.Property<string>("Status")

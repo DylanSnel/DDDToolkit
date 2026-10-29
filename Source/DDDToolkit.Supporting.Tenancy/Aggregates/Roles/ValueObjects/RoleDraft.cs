@@ -4,5 +4,5 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <param name="Name">The role's name, 1 to 120 characters, unique in its tenant.</param>
 /// <param name="Description">What the role is for, at most 1000 characters.</param>
 /// <param name="Permissions">The permissions it grants; the permissions they imply are added.</param>
-/// <param name="FromPack">The key of the pack it was copied from, or <see langword="null"/> for a role made by hand.</param>
-public sealed record RoleDraft(string Name, string Description, IReadOnlyCollection<string> Permissions, string? FromPack = null);
+/// <param name="FromStarterRole">The key of the starter role it was copied from, or <see langword="null"/> for a role made by hand.</param>
+public sealed record RoleDraft(string Name, string Description, IReadOnlyCollection<string> Permissions, string? FromStarterRole = null);

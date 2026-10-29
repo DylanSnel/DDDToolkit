@@ -58,9 +58,9 @@ public sealed class ProjectMembershipTests
     [Fact]
     public void The_database_holds_a_crew_and_an_owner_to_the_permissions_the_commands_require()
     {
-        Rules.MembersLockPermission.Should().Be(AddCrewMember.RequiredPermission);
-        new[] { GiveCrewRole.RequiredPermission, TakeCrewRole.RequiredPermission, RemoveCrewMember.RequiredPermission }.Should().OnlyContain(permission => permission == Rules.MembersLockPermission);
-        Rules.OwnerLockPermission.Should().Be(ChangeProjectOwner.RequiredPermission);
+        Rules.ManagesMembersPermission.Should().Be(AddCrewMember.RequiredPermission);
+        new[] { GiveCrewRole.RequiredPermission, TakeCrewRole.RequiredPermission, RemoveCrewMember.RequiredPermission }.Should().OnlyContain(permission => permission == Rules.ManagesMembersPermission);
+        Rules.NamesOwnerPermission.Should().Be(ChangeProjectOwner.RequiredPermission);
     }
 
     [Fact]
@@ -68,10 +68,10 @@ public sealed class ProjectMembershipTests
     {
         Rules.SystemScopes.Should().Equal([ProjectMembership.Scope], "the module's own scope, which the rules let through without saying it");
 
-        Rules.IsOwnWork(Caller.System).Should().BeTrue();
-        Rules.IsOwnWork(Caller.SystemIn(ProjectMembership.Scope)).Should().BeTrue("the seeding and a seat that gives up its own place on a crew work in it");
-        Rules.IsOwnWork(Caller.SystemIn(TenancyWork.SystemScope)).Should().BeFalse("Tenancy's work runs the organization, and holds nothing on a project");
-        Rules.IsOwnWork(Caller.SystemIn("inspections")).Should().BeFalse("another module's work holds nothing on a project");
+        Rules.IsOwnWork(CurrentUserSnapshot.System).Should().BeTrue();
+        Rules.IsOwnWork(CurrentUserSnapshot.SystemIn(ProjectMembership.Scope)).Should().BeTrue("the seeding and a seat that gives up its own place on a crew work in it");
+        Rules.IsOwnWork(CurrentUserSnapshot.SystemIn(TenancyWork.SystemScope)).Should().BeFalse("Tenancy's work runs the organization, and holds nothing on a project");
+        Rules.IsOwnWork(CurrentUserSnapshot.SystemIn("inspections")).Should().BeFalse("another module's work holds nothing on a project");
     }
 
     [Fact]

@@ -87,7 +87,7 @@ public sealed class StrictAnswersTests(SampleHosts sample) : IClassFixture<Sampl
         using var vic = await host.ClientAsync("vic", Harbor.Slug);
         var pier = Harbor.ProjectNamed("Pier 7");
         Guid Seat(DemoPerson person) => Harbor.SeatOf(person).Value;
-        Guid Role(string pack) => Harbor.ProjectRoles[pack].Value;
+        Guid Role(string starterRole) => Harbor.ProjectRoles[starterRole].Value;
 
         // Put on the crew in the reverse of the order of their ids, and given roles in the reverse of theirs.
         foreach (var person in new[] { DemoPeople.Tove, DemoPeople.Rhea })
@@ -96,9 +96,9 @@ public sealed class StrictAnswersTests(SampleHosts sample) : IClassFixture<Sampl
             added.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
-        foreach (var pack in new[] { SampleCatalogue.Surveyor, SampleCatalogue.CrewLead })
+        foreach (var starterRole in new[] { SampleCatalogue.Surveyor, SampleCatalogue.CrewLead })
         {
-            using var given = await leo.GiveCrewRoleAsync(pier, Harbor.SeatOf(DemoPeople.Vic), Harbor.ProjectRoles[pack]);
+            using var given = await leo.GiveCrewRoleAsync(pier, Harbor.SeatOf(DemoPeople.Vic), Harbor.ProjectRoles[starterRole]);
             given.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 

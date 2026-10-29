@@ -20,9 +20,10 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// </para>
 /// <para>
 /// They say who holds a permission: the owner by owning the resource, a member by being one and through its roles.
-/// They do not say who may add a member, give or take a role, or hand the resource to another owner. That is the
-/// application's to decide, command by command: each of its commands requires what the application chooses,
-/// usually one of the resource's permissions held on it, and whatever further rule it has it writes itself.
+/// They also name the permission that manages the members and the one that names the owner (<c>ManagesMembers</c>,
+/// <c>NamesOwner</c>), which the resource's member manager requires, and, where a customer makes the roles, the
+/// permission that manages those roles (<see cref="Access.Roles.ManagedWith"/>). A rule of the application's own
+/// beyond those, such as that nobody gives a role for longer than they hold the permission, it writes itself.
 /// </para>
 /// <para>
 /// It is data, checked once when it is made, so everything that decides access reads the same thing: the questions
@@ -80,8 +81,8 @@ public sealed class MembershipRules
         OwnerPermissions = [.. Permissions.Where(permission => permission.Owner).Select(permission => permission.Name)];
         _ownerKeys = new HashSet<string>(OwnerPermissions, StringComparer.Ordinal);
         EveryMemberPermission = OneMarked(permission => permission.EveryMember, "EveryMember", "every member holds", what)?.Name;
-        MembersLockPermission = OneMarked(permission => permission.LocksMembers, "LocksMembers", "locks the members", what)?.Name;
-        OwnerLockPermission = OneMarked(permission => permission.LocksOwner, "LocksOwner", "locks the owner", what)?.Name;
+        ManagesMembersPermission = OneMarked(permission => permission.ManagesMembers, "ManagesMembers", "manages the members", what)?.Name;
+        NamesOwnerPermission = OneMarked(permission => permission.NamesOwner, "NamesOwner", "names the owner", what)?.Name;
         _notFromAbove = new HashSet<string>(Permissions.Where(permission => !permission.FromAbove).Select(permission => permission.Name), StringComparer.Ordinal);
 
         // What a role can give: the permissions marked InRoles, or, where the roles take permissions of other modules, every
@@ -111,8 +112,8 @@ public sealed class MembershipRules
         CheckRoles(what);
         _roles = roles.Declared.ToDictionary(role => role.Name, StringComparer.Ordinal);
 
-        MembersLock(MembersLockPermission, "LocksMembers", what);
-        MembersLock(OwnerLockPermission, "LocksOwner", what);
+        HeldBySomebody(ManagesMembersPermission, "ManagesMembers", what);
+        HeldBySomebody(NamesOwnerPermission, "NamesOwner", what);
         SystemScopes = Scopes(systemScopes, scope);
     }
 
@@ -137,7 +138,7 @@ public sealed class MembershipRules
     /// The scopes whose system work holds every permission on every resource of this kind
     /// (<see cref="SystemScopes"/>). Left out, the scope of the module that declares the resource
     /// (<see cref="IMembershipResource.MembershipScope"/>): <c>boards</c> for the module <c>Boards</c>, so work begun
-    /// as <c>Caller.SystemIn("boards")</c> does what it needs on boards. Said, the scopes named and no
+    /// as <c>CurrentUserSnapshot.SystemIn("boards")</c> does what it needs on boards. Said, the scopes named and no
     /// other: name the module's own among them to keep it, and say <c>[]</c> for no system work in a scope at all.
     /// </param>
     /// <typeparam name="TResource">The resource: the aggregate root a member class names, which the generator makes one.</typeparam>
@@ -216,34 +217,35 @@ public sealed class MembershipRules
     public RolePermissions RolePermissions { get; }
 
     /// <summary>
-    /// The permission the application's own commands require to change the members of a resource, the one marked
-    /// <c>LocksMembers</c>, or <see langword="null"/>. It is here for a database that checks every row itself, and
-    /// for nothing else: whatever writes the database's policies holds both member tables to it, for every role the
-    /// functions are granted to, and a row is written only by a caller that holds it on the resource, or the
-    /// permission that locks the owner. No code of the package gates a command by it.
+    /// The permission that manages the members of a resource, the one marked <c>ManagesMembers</c>, or
+    /// <see langword="null"/>. The resource's member manager requires it on the resource to add or remove a member and to
+    /// give or take a role, and lets only system work make those changes where it is <see langword="null"/>. A database
+    /// that checks every row itself holds both member tables to it as well: whatever writes the database's policies
+    /// writes a row only for a caller that holds it on the resource, or the permission that names the owner.
     /// <para>
     /// The database asks what the caller holds when each statement runs. Mark it <c>Owner</c>, as the default is,
     /// where a caller opens a resource as itself: the owner's own first rows are then its to write.
     /// </para>
     /// </summary>
-    public string? MembersLockPermission { get; }
+    public string? ManagesMembersPermission { get; }
 
     /// <summary>
-    /// The permission the application's own command requires to hand a resource to another owner, the one marked
-    /// <c>LocksOwner</c>, or <see langword="null"/>. As <see cref="MembersLockPermission"/>, it is here for a database that
-    /// checks every row itself: a change of a resource leaves its owner as it was unless the caller holds it there.
+    /// The permission that names the owner of a resource, the one marked <c>NamesOwner</c>, or <see langword="null"/>.
+    /// The resource's member manager requires it on the resource to hand the resource to another owner, and lets only
+    /// system work do that where it is <see langword="null"/>. A database that checks every row itself holds the owner
+    /// column to it as well: a change of a resource leaves its owner as it was unless the caller holds it there.
     /// <para>
     /// Whoever holds it by owning the resource alone holds it no longer once the owner has changed, and what a
     /// hand-over writes after that is then not its to write. A hand-over by the owner itself is saved as the
     /// application's own work; one by somebody who holds it through a role, or from above, as the caller.
     /// </para>
     /// </summary>
-    public string? OwnerLockPermission { get; }
+    public string? NamesOwnerPermission { get; }
 
     /// <summary>
     /// The scopes whose work is the application's own for this resource: work that runs as
-    /// <see cref="Caller.SystemIn"/> in one of them holds every permission on every resource of this kind, as
-    /// <see cref="Caller.System"/> does. The module's own scope unless the rules say otherwise; work in any other
+    /// <see cref="CurrentUserSnapshot.SystemIn"/> in one of them holds every permission on every resource of this kind, as
+    /// <see cref="CurrentUserSnapshot.System"/> does. The module's own scope unless the rules say otherwise; work in any other
     /// scope holds nothing on a resource, since a scope is a module's own and another module's work is not above
     /// this resource's rules.
     /// </summary>
@@ -278,18 +280,18 @@ public sealed class MembershipRules
     public bool ReachesFromAbove(string permission) => ReachFromAbove is not null && !_notFromAbove.Contains(permission);
 
     /// <summary>
-    /// Whether <paramref name="caller"/> is the application's own work for this resource, which holds every
-    /// permission on every resource of this kind: <see cref="Caller.System"/>, always, and
-    /// <see cref="Caller.SystemIn"/> in one of <see cref="SystemScopes"/>. Work in any other scope is not, and holds
-    /// nothing.
+    /// Whether <paramref name="user"/> is system work for this resource, which holds every permission on every
+    /// resource of this kind: <see cref="CurrentUserSnapshot.System"/>, always, and <see cref="CurrentUserSnapshot.SystemIn"/>
+    /// in one of <see cref="SystemScopes"/>. Work in any other scope is not, and holds nothing.
     /// </summary>
-    /// <param name="caller">The caller a question is asked for.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="caller"/> is null.</exception>
-    public bool IsOwnWork(Caller caller)
+    /// <param name="user">The caller a question is asked for.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="user"/> is null.</exception>
+    public bool IsOwnWork(CurrentUserSnapshot user)
     {
-        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(user);
 
-        return caller.IsSystem || (caller.IsSystemIn && caller.Scope is { } scope && SystemScopes.Contains(scope, StringComparer.Ordinal));
+        return user.Kind == CurrentUserKind.System
+            || (user.Kind == CurrentUserKind.SystemIn && user.SystemScope is { } scope && SystemScopes.Contains(scope, StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -443,10 +445,11 @@ public sealed class MembershipRules
     }
 
     /// <summary>
-    /// Refuses a lock nobody could pass: a permission the database's lock asks for that the owner does not hold,
-    /// every member does not hold, no role can give and nothing above reaches. The lock would keep everybody out.
+    /// Refuses a permission that manages the members or names the owner and that nobody could hold: the owner does not
+    /// hold it, every member does not hold it, no role can give it and nothing above reaches it. Only system work could
+    /// then make those changes, through the manager and in the database alike.
     /// </summary>
-    private void MembersLock(string? permission, string setting, string what)
+    private void HeldBySomebody(string? permission, string setting, string what)
     {
         if (permission is null || OwnerHolds(permission) || MembershipGives(permission) || RolePermissions.Allows(permission) || ReachesFromAbove(permission))
         {
@@ -455,7 +458,7 @@ public sealed class MembershipRules
 
         throw new ArgumentException(
             "'" + permission + "' is marked " + setting + ", and nobody would hold it on " + what + ": not the owner (Owner = false), no role (InRoles = false), not every member, "
-            + "and nothing above. The database's lock would keep everybody out. Let the owner hold it, or a role give it.",
+            + "and nothing above. Only system work could then make the changes it is for. Let the owner hold it, or a role give it.",
             "permissions");
     }
 
@@ -471,7 +474,7 @@ public sealed class MembershipRules
             if (string.IsNullOrEmpty(scope) || !scope.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_' or '-'))
             {
                 throw new ArgumentException(
-                    "'" + scope + "' is not a scope. A scope is lower case letters, digits, '_' and '-', such as a module's name: what Caller.SystemIn is begun with.",
+                    "'" + scope + "' is not a scope. A scope is lower case letters, digits, '_' and '-', such as a module's name: what AccessManager.BeginSystem(scope) is begun with.",
                     "systemScopes");
             }
         }

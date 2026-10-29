@@ -25,7 +25,7 @@ public sealed class TenancyInvitationOptions<TInvitationId>
             ? "the lifetimes are out of order: MinLifetime is more than nothing, and no more than DefaultLifetime, which is no more than MaxLifetime"
             : null;
 
-    /// <summary>The options, checked: a use case made without registration still says what is wrong.</summary>
+    /// <summary>The options, checked: a manager made without registration still says what is wrong.</summary>
     internal TenancyInvitationOptions<TInvitationId> Checked() => Problem() is { } problem ? throw Invalid(problem) : this;
 
     internal static InvalidOperationException Invalid(string problem)

@@ -170,9 +170,9 @@ public sealed class EventLogTests : IDisposable
         await using var host = Host();
         var alice = Guid.Parse("a11ce000-0000-4000-8000-000000000031");
 
-        async Task<(string Kind, string? Id)> SettledAsAsync(IServiceProvider services, Caller? caller, int number)
+        async Task<(string Kind, string? Id)> SettledAsAsync(IServiceProvider services, CurrentUserSnapshot? caller, int number)
         {
-            using var running = caller is null ? null : Callers.Begin(caller);
+            using var running = caller is null ? null : TestAccess.BeginAs(caller);
             var id = HiveId.CreateSequential();
             await InScopeAsync(services, async context =>
             {
@@ -185,22 +185,22 @@ public sealed class EventLogTests : IDisposable
         }
 
         // The default accessor reads the toolkit's own caller, each time it is asked.
-        (await SettledAsAsync(host, Callers.FromClaims($$"""{"sub":"{{alice}}","role":"authenticated"}"""), 1)).Should().Be((ActedByKinds.User, alice.ToString()));
-        (await SettledAsAsync(host, Callers.FromClaims("""{"sub":"auth0|ada","role":"authenticated"}"""), 2)).Should().Be((ActedByKinds.User, "auth0|ada"), "a user whose id is no uuid is kept by the token's sub");
-        (await SettledAsAsync(host, Caller.SystemIn("apiary"), 3)).Should().Be((ActedByKinds.System, "apiary"), "scoped system work is the system, in its scope");
-        (await SettledAsAsync(host, Caller.System, 4)).Should().Be((ActedByKinds.System, null));
-        (await SettledAsAsync(host, Caller.Anonymous, 5)).Should().Be((ActedByKinds.Anonymous, null));
+        (await SettledAsAsync(host, CurrentUserSnapshot.FromClaims($$"""{"sub":"{{alice}}","role":"authenticated"}"""), 1)).Should().Be((ActedByKinds.User, alice.ToString()));
+        (await SettledAsAsync(host, CurrentUserSnapshot.FromClaims("""{"sub":"auth0|ada","role":"authenticated"}"""), 2)).Should().Be((ActedByKinds.User, "auth0|ada"), "a user whose id is no uuid is kept by the token's sub");
+        (await SettledAsAsync(host, CurrentUserSnapshot.SystemIn("apiary"), 3)).Should().Be((ActedByKinds.System, "apiary"), "scoped system work is the system, in its scope");
+        (await SettledAsAsync(host, CurrentUserSnapshot.System, 4)).Should().Be((ActedByKinds.System, null));
+        (await SettledAsAsync(host, CurrentUserSnapshot.Anonymous, 5)).Should().Be((ActedByKinds.Anonymous, null));
         (await SettledAsAsync(host, caller: null, 6)).Should().Be((ActedByKinds.System, null), "outside any caller the application itself acts, as in every host that requires none");
 
         // A host whose caller accessor knows the request is asked through it.
-        await using (var requests = Host(services: services => services.AddSingleton<ICallerAccessor>(new CallerOfTheTest { Current = Callers.FromClaims($$"""{"sub":"{{alice}}"}""") })))
+        await using (var requests = Host(services: services => services.AddSingleton<ICurrentUser>(new UserOfTheTest { Current = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{alice}}"}""") })))
         {
             (await SettledAsAsync(requests, caller: null, 7)).Should().Be((ActedByKinds.User, alice.ToString()));
         }
 
         // A package or a host that knows more kinds of actor registers an accessor of its own, which then answers.
         await using var named = Host(services: services => services.AddSingleton<IActedByAccessor>(new Named("seat", "front-row-4")));
-        (await SettledAsAsync(named, Callers.FromClaims($$"""{"sub":"{{alice}}"}"""), 8)).Should().Be(("seat", "front-row-4"));
+        (await SettledAsAsync(named, CurrentUserSnapshot.FromClaims($$"""{"sub":"{{alice}}"}"""), 8)).Should().Be(("seat", "front-row-4"));
     }
 
     [Fact]

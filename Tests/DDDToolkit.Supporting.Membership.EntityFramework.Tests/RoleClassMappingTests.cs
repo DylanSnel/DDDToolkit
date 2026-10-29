@@ -161,10 +161,9 @@ public sealed class RoleClassMappingTests
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
 
-        // No context is registered here at all: nothing of the roles' rows is read for the admission.
-        var admission = scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>();
-        await admission.RequireRoleAsync(owners, Cancellation);
-        await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(PlotRoleId.CreateSequential(), Cancellation).AsTask());
+        // No context is registered here at all: nothing of the roles' rows is read for what the member manager asks.
+        await Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, owners, Cancellation);
+        await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, PlotRoleId.CreateSequential(), Cancellation));
     }
 
     [Fact]
@@ -180,13 +179,13 @@ public sealed class RoleClassMappingTests
             services.AddMembership<PlotGardener, PlotGardenerId, UserId, PlotRoleId, TContext, Plot, PlotId>(PlotMembership.Rules);
             await using var provider = services.BuildServiceProvider();
             await using var scope = provider.CreateAsyncScope();
-            using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
+            using (TestAccess.BeginAs(TestUsers.User(UserId.CreateSequential())))
             {
-                var asked = FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<IMemberQuestions<PlotId>>().Reach(PlotPermissions.Plant))
+                var asked = FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Plot>>().Reach(PlotPermissions.Plant))
                     .Should().Throw<InvalidOperationException>().Which;
 
-                // The admission is told the same: it reads the same rows.
-                (await FluentActions.Awaiting(() => scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(PlotRoleId.CreateSequential(), Cancellation).AsTask())
+                // What the member manager asks of a role is told the same: it reads the same rows.
+                (await FluentActions.Awaiting(() => Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, PlotRoleId.CreateSequential(), Cancellation))
                     .Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(asked.Message);
 
                 return asked;
@@ -203,6 +202,27 @@ public sealed class RoleClassMappingTests
         (await AskedAsync<PlotsWithStrayRoles>()).Message.Should()
             .Be("The members of Plot hold roles known by PlotRoleId, and its role class StrayRole is known by GardenId. A member holds a role of the resource by that role's id: "
                 + "declare the member class with GardenId as its role.");
+    }
+
+    [Fact]
+    public void A_context_that_says_nothing_of_a_role_class_maps_it_by_convention_as_IsCustomRole_does()
+    {
+        var byHand = ModelOf(builder =>
+        {
+            builder.Entity<Plot>();
+            builder.Entity<PlotRole>().IsCustomRole();
+        });
+        var byConvention = ModelOf(builder =>
+        {
+            builder.Entity<Plot>();
+            builder.Entity<PlotRole>();
+        });
+
+        byConvention.ToDebugString(Microsoft.EntityFrameworkCore.Infrastructure.MetadataDebugStringOptions.LongDefault).Should().Be(byHand.ToDebugString(Microsoft.EntityFrameworkCore.Infrastructure.MetadataDebugStringOptions.LongDefault));
+        byConvention.FindEntityType(typeof(PlotRole))!.FindAnnotation(MembershipModel.RoleOfAnnotation)!.Value.Should().Be(typeof(Plot).FullName);
+
+        // A garden is the host's own column, which the package knows nothing of: the indexes over it are the host's to say.
+        byConvention.FindEntityType(typeof(PlotRole))!.GetIndexes().Should().BeEmpty();
     }
 
     /// <summary>The model of a context that maps what <paramref name="map"/> says.</summary>

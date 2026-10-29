@@ -26,8 +26,8 @@ public sealed class HoldsCheckedAtSaveTests
         using var filing = await FilingAsync(holds: true, ownContexts);
         var data = filing.Scenario;
 
-        await filing.Services.SendAsync(TestCallers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal));
-        await filing.Services.SendAsync(TestCallers.Staff(data.Keeper), new AdmitStaff(data.Cabinet, new StaffCode("N-100"), FolderMembership.Clerk));
+        await filing.Services.SendAsync(TestUsers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal));
+        await filing.Services.SendAsync(TestUsers.Staff(data.Keeper), new AdmitStaff(data.Cabinet, new StaffCode("N-100"), FolderMembership.Clerk));
 
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Hal);
         (await filing.Services.ReadAsync(data.Cabinet)).Staff.Should().Contain(member => member.MemberId == new StaffCode("N-100"));
@@ -91,7 +91,7 @@ public sealed class HoldsCheckedAtSaveTests
         var data = filing.Scenario;
 
         // Ada owns the minutes and may share them: what is refused is the way round the check, not the caller.
-        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ada), provider =>
+        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ada), provider =>
                 provider.GetRequiredService<ShareDocumentHandler>().HandleAsync(new ShareDocument(data.Minutes, data.Hal), Cancellation)))
             .Should().ThrowAsync<InvalidOperationException>();
         refused.WithMessage($"Document {data.Minutes} was changed with no request in hand*Nothing was saved.");
@@ -107,7 +107,7 @@ public sealed class HoldsCheckedAtSaveTests
         using var filing = await FilingAsync(holds: false, ownContexts: false);
         var data = filing.Scenario;
 
-        await filing.Services.AsAsync(TestCallers.User(data.Ada), provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), provider =>
             provider.GetRequiredService<ShareDocumentHandler>().HandleAsync(new ShareDocument(data.Minutes, data.Hal), Cancellation));
 
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Hal);
@@ -121,7 +121,7 @@ public sealed class HoldsCheckedAtSaveTests
 
         // Ada owns the minutes, and holds the permission that shares there: the request checked the minutes, and its
         // handler, by mistake, shares the budget, which she only looks on.
-        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
             {
                 var command = new ShareDocument(data.Minutes, data.Hal);
                 await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
@@ -167,7 +167,7 @@ public sealed class HoldsCheckedAtSaveTests
         var written = DocumentId.CreateSequential();
 
         // Nothing was there to check: writing a document is held to whatever its own request requires, and to nothing here.
-        await filing.Services.AsAsync(TestCallers.User(data.Hal), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Hal), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             context.Documents.Add(new Document(written, "Notes", data.Hal, data.Now));
@@ -183,7 +183,7 @@ public sealed class HoldsCheckedAtSaveTests
         using var filing = await FilingAsync(holds: true, ownContexts: false);
         var data = filing.Scenario;
 
-        await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
         {
             var command = new ShareDocument(data.Minutes, data.Hal);
             await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
@@ -212,7 +212,7 @@ public sealed class HoldsCheckedAtSaveTests
         // The handler loads the minutes at the version the check read, and somebody changes them before the save: the
         // save loses the race. Tried again the way Entity Framework resolves a conflict, with the stored values taken
         // as the loaded ones, it is at a version the check never read, and loses again.
-        var lost = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        var lost = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
             {
                 var command = new ShareDocument(data.Minutes, data.Hal);
                 await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
@@ -242,7 +242,7 @@ public sealed class HoldsCheckedAtSaveTests
 
         // A unit of work around the dispatcher: the dispatcher asks the checks and runs the handler, which changes the
         // minutes and leaves the save to whatever sent it. When that saves, the request's handling has returned.
-        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
             {
                 var context = provider.GetRequiredService<FilingContext>();
                 await DispatchAsync(provider, context, new ShareDocument(data.Minutes, data.Hal));
@@ -267,7 +267,7 @@ public sealed class HoldsCheckedAtSaveTests
         using var filing = await FilingAsync(holds: false, ownContexts: false);
         var data = filing.Scenario;
 
-        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
+        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
             {
                 var command = new ShareDocument(data.Minutes, data.Hal);
                 await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
@@ -327,7 +327,7 @@ public sealed class HoldsCheckedAtSaveTests
         await FluentActions.Awaiting(() => ShareWithAChangeInBetweenAsync(filing, new ShareDocument(data.Minutes, data.Hal)))
             .Should().ThrowAsync<ConcurrencyConflictException>("the hold is the same after the base alone as after the one call");
 
-        await filing.Services.SendAsync(TestCallers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal));
+        await filing.Services.SendAsync(TestUsers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal));
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Hal, "sent again, through its checks, it is saved");
     }
 
@@ -345,7 +345,7 @@ public sealed class HoldsCheckedAtSaveTests
     /// minutes made between the two.
     /// </summary>
     private static Task ShareWithAChangeInBetweenAsync(SqliteFiling filing, ShareDocument command)
-        => filing.Services.AsAsync(TestCallers.User(filing.Scenario.Ada), async provider =>
+        => filing.Services.AsAsync(TestUsers.User(filing.Scenario.Ada), async provider =>
         {
             await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
             await ChangeInBetweenAsync(filing);

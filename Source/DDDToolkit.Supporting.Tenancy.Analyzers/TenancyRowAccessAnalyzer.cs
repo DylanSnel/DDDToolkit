@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// Tenancy's organization, its seats and its roles, and those of the application's own aggregates. On a tenant or an
 /// invitation it would narrow what Tenancy's own work and the person accepting an invitation read, so it is
 /// refused there.</item>
-/// <item>DDD00101: <c>TenancyRowAccess.CallerSeat&lt;TSeat&gt;()</c> answers with the application's seat class, the one
+/// <item>DDD00101: <c>TenancyRowAccess.CurrentSeat&lt;TSeat&gt;()</c> answers with the application's seat class, the one
 /// declared with <c>[SeatAggregate]</c>; another type is no row the function answers with.</item>
 /// </list>
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class TenancyRowAccessAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        [DiagnosticDescriptors.RestrictiveRuleOutOfReach, DiagnosticDescriptors.CallerSeatOfAnotherType];
+        [DiagnosticDescriptors.RestrictiveRuleOutOfReach, DiagnosticDescriptors.CurrentSeatOfAnotherType];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -41,7 +41,7 @@ public sealed class TenancyRowAccessAnalyzer : DiagnosticAnalyzer
             }
 
             start.RegisterSymbolAction(AnalyzeRule, SymbolKind.NamedType);
-            start.RegisterOperationAction(operation => AnalyzeCallerSeat(operation, rowAccess), OperationKind.Invocation);
+            start.RegisterOperationAction(operation => AnalyzeCurrentSeat(operation, rowAccess), OperationKind.Invocation);
         });
     }
 
@@ -71,11 +71,11 @@ public sealed class TenancyRowAccessAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static void AnalyzeCallerSeat(OperationAnalysisContext context, INamedTypeSymbol rowAccess)
+    private static void AnalyzeCurrentSeat(OperationAnalysisContext context, INamedTypeSymbol rowAccess)
     {
         var invocation = (IInvocationOperation)context.Operation;
         var method = invocation.TargetMethod;
-        if (method.Name != "CallerSeat"
+        if (method.Name != "CurrentSeat"
             || !SymbolEqualityComparer.Default.Equals(method.ContainingType, rowAccess)
             || method.TypeArguments.Length != 1
             || method.TypeArguments[0] is not INamedTypeSymbol seat
@@ -85,7 +85,7 @@ public sealed class TenancyRowAccessAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        context.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.CallerSeatOfAnotherType, invocation.Syntax.GetLocation(), seat.Name));
+        context.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.CurrentSeatOfAnotherType, invocation.Syntax.GetLocation(), seat.Name));
     }
 
     /// <summary>The name of the parent of Tenancy's that <paramref name="type"/> derives from, or null for none.</summary>

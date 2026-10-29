@@ -108,12 +108,12 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
             "reading follows the parent row, whose own policies decide");
         script.Should().Contain(
             "CREATE POLICY \"TicketComment (update) for authenticated\" ON \"desk\".\"TicketComment\" FOR UPDATE TO authenticated\n" +
-            "    USING (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))))\n" +
-            "    WITH CHECK (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))));",
+            "    USING (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())))))\n" +
+            "    WITH CHECK (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())))));",
             "changing an entity asks the root's Change rules about the root row");
         script.Should().Contain(
             "CREATE POLICY \"TicketComment (delete) for authenticated\" ON \"desk\".\"TicketComment\" FOR DELETE TO authenticated\n" +
-            "    USING (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))));",
+            "    USING (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())))));",
             "a rule that allows Change is asked once, however many of the operations it allows");
     }
 
@@ -124,9 +124,9 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
     /// condition with a comment that runs to the end of its line gets its closing parenthesis on the next.
     /// </summary>
     [Theory]
-    [InlineData("(SELECT desk.caller_on_duty())", "((SELECT desk.caller_on_duty()))")]
-    [InlineData("((SELECT desk.caller_on_duty()))", "((SELECT desk.caller_on_duty()))")]
-    [InlineData("((SELECT desk.caller_on_duty()) = TRUE)", "((SELECT desk.caller_on_duty()) = TRUE)")]
+    [InlineData("(SELECT desk.current_on_duty())", "((SELECT desk.current_on_duty()))")]
+    [InlineData("((SELECT desk.current_on_duty()))", "((SELECT desk.current_on_duty()))")]
+    [InlineData("((SELECT desk.current_on_duty()) = TRUE)", "((SELECT desk.current_on_duty()) = TRUE)")]
     [InlineData("((SELECT TRUE) UNION (SELECT FALSE))", "(((SELECT TRUE) UNION (SELECT FALSE)))")]
     [InlineData("(WITH duty AS (SELECT TRUE AS here) SELECT here FROM duty)", "((WITH duty AS (SELECT TRUE AS here) SELECT here FROM duty))")]
     [InlineData("({col:IsPublic})", "(\"IsPublic\")")]
@@ -174,9 +174,9 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
         script.Should().Contain(
             "CREATE POLICY \"TicketComment (insert) for authenticated\" ON \"desk\".\"TicketComment\" FOR INSERT TO authenticated\n" +
             "    WITH CHECK (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (" +
-            "(((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))" +
+            "(((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())))" +
             " OR " +
-            "((((r.\"Owner\" IS NULL) AND (r.\"Team\" IS NOT NULL)) AND (r.\"Team\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_claims() #>> '{app_metadata,team}'))) AND \"ddd\".written_in_this_transaction(r.xmin)))));",
+            "((((r.\"Owner\" IS NULL) AND (r.\"Team\" IS NOT NULL)) AND (r.\"Team\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_claims() #>> '{app_metadata,team}'))) AND \"ddd\".written_in_this_transaction(r.xmin)))));",
             "the owner changes the ticket, so adds to it; a teammate only creates one, so adds only to a ticket this transaction wrote");
     }
 
@@ -194,7 +194,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
             "    USING (EXISTS (SELECT 1 FROM \"desk\".\"TicketComment\" p1" +
             " WHERE p1.\"TicketId\" = \"desk\".\"CommentReaction\".\"TicketCommentTicketId\" AND p1.\"Id\" = \"desk\".\"CommentReaction\".\"TicketCommentId\"" +
             " AND EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = p1.\"TicketId\"" +
-            " AND (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))))))\n",
+            " AND (((SELECT \"ddd\".current_user_id()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))))))\n",
             "the write rules are about the ticket, so the policy goes up from the reaction through its comment to the ticket, which is alone where the rule is asked");
     }
 
@@ -265,10 +265,10 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
     [Fact]
     public async Task The_setup_script_makes_the_procedure_that_sets_a_caller_and_gives_it_to_the_login_role_alone()
     {
-        const string signature = "\"ddd\".use_caller(text, text, text[], text[])";
+        const string signature = "\"ddd\".use_current_user(text, text, text[], text[])";
         var setup = PostgresRowAccess.SetupScript(loginRole: PostgresRowAccessDatabase.LoginRole);
 
-        setup.Should().Contain("CREATE OR REPLACE PROCEDURE \"ddd\".use_caller(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS $procedure$\nBEGIN\n");
+        setup.Should().Contain("CREATE OR REPLACE PROCEDURE \"ddd\".use_current_user(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS $procedure$\nBEGIN\n");
         setup.Should().Contain($"REVOKE ALL ON PROCEDURE {signature} FROM PUBLIC;\n");
         setup.Should().Contain($"GRANT USAGE ON SCHEMA \"ddd\" TO \"{PostgresRowAccessDatabase.LoginRole}\";\n", "the role that logs in calls it, and needs the schema it is in for that");
         setup.Should().Contain($"GRANT EXECUTE ON PROCEDURE {signature} TO \"{PostgresRowAccessDatabase.LoginRole}\";\n");
@@ -294,14 +294,14 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
     public async Task The_prelude_makes_the_procedure_where_it_is_missing_or_differs_and_takes_it_from_public()
     {
         database.Require();
-        const string signature = "\"ddd\".use_caller(text, text, text[], text[])";
+        const string signature = "\"ddd\".use_current_user(text, text, text[], text[])";
         const string state = $"SELECT xmin::text || '|' || pg_catalog.has_function_privilege('public', oid, 'EXECUTE')::text || '|' || (prosrc LIKE '%request.jwt.claim.email%')::text FROM pg_catalog.pg_proc WHERE oid = '{signature}'::regprocedure";
         await using var model = DeskContext.Create();
         var script = PostgresRowAccess.Script(model, [DeskRules.Owners, DeskRules.Public]);
 
-        script.Should().Contain("    use_caller constant text := $procedure$\nBEGIN\n    PERFORM pg_catalog.set_config('role', role_name, true);\n");
+        script.Should().Contain("    use_current_user constant text := $procedure$\nBEGIN\n    PERFORM pg_catalog.set_config('role', role_name, true);\n");
         script.Should().Contain($"    IF pg_catalog.has_function_privilege('public', '{signature}', 'EXECUTE') THEN\n        REVOKE ALL ON PROCEDURE {signature} FROM PUBLIC;\n    END IF;\n");
-        script.Should().NotContain("CREATE OR REPLACE PROCEDURE \"ddd\".use_caller(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS $procedure$", "only its owner may replace it, so the prelude replaces it only when it differs");
+        script.Should().NotContain("CREATE OR REPLACE PROCEDURE \"ddd\".use_current_user(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS $procedure$", "only its owner may replace it, so the prelude replaces it only when it differs");
 
         try
         {
@@ -320,7 +320,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
 
             // Another body under the same name, executable by everybody: replaced, and taken back.
             await database.RunAsOwnerAsync(
-                $"CREATE OR REPLACE PROCEDURE ddd.use_caller(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS $$BEGIN NULL; END$$; GRANT EXECUTE ON PROCEDURE {signature} TO PUBLIC;",
+                $"CREATE OR REPLACE PROCEDURE ddd.use_current_user(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS $$BEGIN NULL; END$$; GRANT EXECUTE ON PROCEDURE {signature} TO PUBLIC;",
                 Cancellation);
             (await ScalarAsync<string>(state)).Should().EndWith("|true|false");
             await database.RunAsOwnerAsync(script, Cancellation);
@@ -340,7 +340,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
 
         // The fixture ran the setup as the superuser, who owns ddd and its function, and gave the
         // application's role the desk's schema and tables. What a script needed already, it gets here: its
-        // access functions, and USAGE on ddd for the caller functions the policies call.
+        // access functions, and USAGE on ddd for the current user functions the policies call.
         await database.RunAsOwnerAsync(
             $"""
             GRANT USAGE ON SCHEMA ddd TO {PostgresRowAccessDatabase.LoginRole};
@@ -376,7 +376,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
         using var shelves = SupabaseShelfContext.Create();
         using var yard = YardContext.Create();
         using var scale = DeskScaleContext.Create();
-        var shelvesByName = RowAccessRule.For<SupabaseShelf>("Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {caller:claim:shelf})");
+        var shelvesByName = RowAccessRule.For<SupabaseShelf>("Shelves by name", RowOperations.Read, "({col:Name} IS NOT DISTINCT FROM {user:claim:shelf})");
         var cratesOfWatchedTickets = RowAccessRule.For<Crate>(
             "Crates of watched tickets", RowOperations.Read, "({col:Id} = ANY (ARRAY(SELECT {fn:desk/tickets_i_watch}())))");
         RowAccessRule[] rules = [shelvesByName, cratesOfWatchedTickets, DeskRules.WatchersBySet];
@@ -433,7 +433,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
             "CREATE OR REPLACE FUNCTION \"desk\".tickets_i_watch() RETURNS SETOF uuid\n" +
             "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$\n" +
             "    SELECT DISTINCT e1.\"TicketId\" FROM \"desk\".\"TicketWatcher\" e1\n" +
-            "    WHERE (e1.\"User\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))\n" +
+            "    WHERE (e1.\"User\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id()))\n" +
             "$function$;",
             "its whole question is whether one of the ticket's watchers is the caller, which the watchers' table answers alone");
         sql.Should().Contain(
@@ -450,13 +450,13 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
         var sql = PostgresRowAccess.CreateStatements(desk, [], [DeskRules.ReactedSet], new RowAccessExport());
 
         TicketsIReactedIn.RowAccessSql.Should().Be(
-            "{exists:Comments:e1}{exists:e1:Reactions:e2}({col:e2:User} IS NOT DISTINCT FROM {caller:uid}){/exists}{/exists}",
+            "{exists:Comments:e1}{exists:e1:Reactions:e2}({col:e2:User} IS NOT DISTINCT FROM {user:uid}){/exists}{/exists}",
             "the generator names the entity whose collection the inner question is asked of");
         sql.Should().Contain(
             "CREATE OR REPLACE FUNCTION desk.tickets_i_reacted_in() RETURNS SETOF uuid\n" +
             "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$\n" +
             "    SELECT DISTINCT e1.\"TicketId\" FROM \"desk\".\"TicketComment\" e1\n" +
-            "    WHERE (EXISTS (SELECT 1 FROM \"desk\".\"CommentReaction\" e2 WHERE e2.\"TicketCommentTicketId\" = e1.\"TicketId\" AND e2.\"TicketCommentId\" = e1.\"Id\" AND ((e2.\"User\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))))\n" +
+            "    WHERE (EXISTS (SELECT 1 FROM \"desk\".\"CommentReaction\" e2 WHERE e2.\"TicketCommentTicketId\" = e1.\"TicketId\" AND e2.\"TicketCommentId\" = e1.\"Id\" AND ((e2.\"User\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())))))\n" +
             "$function$;",
             "the comments' table answers with each ticket's key, and a comment's reactions are asked for that comment: the tickets' table is never read");
     }
@@ -472,7 +472,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
             .And.Contain(
                 "WHERE root.\"Id\" = $1 AND (root.\"IsPublic\" OR EXISTS (SELECT 1 FROM \"desk\".\"TicketComment\" e1 WHERE e1.\"TicketId\" = root.\"Id\" AND ("
                 + "((e1.\"Text\" IS NOT DISTINCT FROM $2) AND EXISTS (SELECT 1 FROM \"desk\".\"CommentReaction\" e2 WHERE e2.\"TicketCommentTicketId\" = e1.\"TicketId\" AND e2.\"TicketCommentId\" = e1.\"Id\" AND ("
-                + "(e2.\"User\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))))))))\n",
+                + "(e2.\"User\" IS NOT DISTINCT FROM (SELECT \"ddd\".current_user_id())))))))))\n",
                 "a comment belongs to the row, a reaction to its comment, and the function's own parameter is read between the two");
     }
 
@@ -781,7 +781,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
     public async Task A_restrictive_policy_of_your_own_is_left_apart_and_still_restricts()
     {
         database.Require();
-        var bob = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
+        var bob = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
         await database.RunAsOwnerAsync("""CREATE POLICY "Only public tickets, by hand" ON desk."Tickets" AS RESTRICTIVE FOR SELECT TO authenticated USING ("IsPublic");""", Cancellation);
 
         try
@@ -795,7 +795,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
             (await database.TitlesAsync(bob, Cancellation)).Should().Equal(
                 ["Everyone's"],
                 "Bob's rules let him read his own ticket and the public one, and the restrictive policy still holds him to the public one");
-            (await database.TitlesAsync(Caller.Anonymous, Cancellation)).Should().Equal(["Everyone's"]);
+            (await database.TitlesAsync(CurrentUserSnapshot.Anonymous, Cancellation)).Should().Equal(["Everyone's"]);
         }
         finally
         {
@@ -1145,13 +1145,13 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
     [Fact]
     public void A_restrictive_rule_about_the_caller_alone_is_asked_as_it_is_on_every_table()
     {
-        var narrowing = RowAccessRule.For<Ticket>("Only the signed in", RowOperations.Read, "{restrictive}({caller:signedin})", RowAccessRoles.User);
+        var narrowing = RowAccessRule.For<Ticket>("Only the signed in", RowOperations.Read, "{restrictive}({user:signedin})", RowAccessRoles.User);
 
         var script = ScriptFor(DeskRules.Owners, narrowing);
 
         script.Should().Contain(
             "CREATE POLICY \"Only the signed in (select) for authenticated\" ON \"desk\".\"CommentReaction\" AS RESTRICTIVE FOR SELECT TO authenticated\n" +
-            "    USING (((SELECT \"ddd\".caller_id()) IS NOT NULL));\n",
+            "    USING (((SELECT \"ddd\".current_user_id()) IS NOT NULL));\n",
             "nothing of the row is asked, so no ticket is read to ask it");
         PoliciesOn(script, "Tickets").Should().NotContain(name => name.EndsWith("for anon", StringComparison.Ordinal) && name.StartsWith("Only the signed in", StringComparison.Ordinal), "the rule is for the roles of its To");
     }
@@ -1172,20 +1172,20 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
         var reading = RowAccessRule.For<Ticket>(
             "Read what the callers ticket says",
             RowOperations.Read,
-            $"({{row:desk.caller_ticket:1:{TicketType}:q1}}{{col:q1:Status}}{{/row}} = {{rowval:{TicketType}:Status:1}}) AND ({{row:desk.caller_ticket:1:{TicketType}:q2}}{{col:q2:Team}}{{/row}} = {{col:Team}})");
+            $"({{row:desk.current_ticket:1:{TicketType}:q1}}{{col:q1:Status}}{{/row}} = {{rowval:{TicketType}:Status:1}}) AND ({{row:desk.current_ticket:1:{TicketType}:q2}}{{col:q2:Team}}{{/row}} = {{col:Team}})");
 
         var script = ScriptFor(reading);
 
         script.Should().Contain(
-            "USING (((SELECT q1.\"Status\" FROM desk.caller_ticket() q1) = 1) AND ((SELECT q2.\"Team\" FROM desk.caller_ticket() q2) = \"Team\"));",
+            "USING (((SELECT q1.\"Status\" FROM desk.current_ticket() q1) = 1) AND ((SELECT q2.\"Team\" FROM desk.current_ticket() q2) = \"Team\"));",
             "each property read is a select of its own from the function, the column the model maps it to");
-        PostgresRowAccess.FunctionsAskedBy("{row:desk/caller_ticket:0:" + TicketType + ":q1}{col:q1:Status}{/row}").Should().Equal(["desk/caller_ticket"], "a row question named by its logical name is a function the script asks");
+        PostgresRowAccess.FunctionsAskedBy("{row:desk/current_ticket:0:" + TicketType + ":q1}{col:q1:Status}{/row}").Should().Equal(["desk/current_ticket"], "a row question named by its logical name is a function the script asks");
     }
 
     [Fact]
     public void A_row_of_a_type_the_model_does_not_map_is_refused()
     {
-        var reading = RowAccessRule.For<Ticket>("Read what a stranger says", RowOperations.Read, "({row:desk.caller_person:1:Shop.Person:q1}{col:q1:Kind}{/row} = 1)");
+        var reading = RowAccessRule.For<Ticket>("Read what a stranger says", RowOperations.Read, "({row:desk.current_person:1:Shop.Person:q1}{col:q1:Kind}{/row} = 1)");
 
         FluentActions.Invoking(() => ScriptFor(reading))
             .Should().Throw<InvalidOperationException>()

@@ -1,42 +1,50 @@
 # How a request is checked
 
-This page follows one request from the attribute written above it to the rows Postgres lets it touch. The other
-pages explain each piece on its own: [Access requirements](access-requirements.md) the requirement and the checks,
-[Row level security](row-level-security.md) the caller on the connection and the policies,
-[Tenancy](tenancy.md) and [Membership](membership.md) the cases they decide. Here they are put in the order a
-request meets them, for six requests, four of them the [Tenancy sample](../Examples/Tenancy)'s own, and six callers
-of the sample's seed.
+This page follows a request from the attribute above it to the rows that Postgres lets it read or write. It uses six
+requests and six callers from the seed of the [Tenancy sample](../Examples/Tenancy). Four of the requests are the
+sample's own. Each piece also has a page of its own:
 
-Three questions stand between a caller and a row, and each is answered in a place of its own:
+- [Access requirements](access-requirements.md): the requirement and the access check.
+- [Row level security](row-level-security.md): the caller on the connection, and the policies.
+- [Tenancy](tenancy/overview.md) and [Membership](membership/overview.md): the requirements these packages decide.
 
-- **Who may send the request.** The request states a requirement, and the module's checks hold the caller to it
-  before the handler runs. This is the door.
-- **With what rights the code runs.** The caller who sent the request, or system work, which trusted code begins
-  on purpose around the work and which ends with it.
-- **Which rows it may touch.** Every statement runs as that caller, and Postgres asks the policies of each table,
-  row by row, whatever the code above it did.
+Three questions decide what a caller can do with a row. Each is answered in a different place:
+
+- **Who may send the request?** The request states a requirement. The access check holds the caller to it before the
+  handler runs.
+- **Which caller does the code run as?** The caller who sent the request, or system work. Trusted code starts
+  system work explicitly around one piece of work, and the system work ends with that work.
+- **Which rows may the code touch?** Every statement runs as that caller. Postgres checks the row level security
+  (RLS) policies of each table, row by row, whatever the code before it did.
+
+The diagram shows the seven layers a request passes. Purple: the check that decides. Green: the handler and the rows,
+which the request reaches only when the access check lets it through.
 
 ```mermaid
 flowchart LR
     subgraph compiles ["when the module compiles"]
         direction TB
-        Write["1 · what you write:<br/>an attribute"] --> Generated["2 · what the<br/>generator writes:<br/>RequiredAccess"]
+        Write["<b>1 · What you write</b><br/><small>an attribute</small>"] --> Generated["<b>2 · What the generator writes</b><br/><small>RequiredAccess</small>"]
     end
     subgraph sent ["each time a request is sent"]
         direction TB
-        Set["3 · the module's<br/>checks"] --> Check["4 · the check<br/>that decides"] --> Statement[("5 · one statement,<br/>as the caller")]
+        Set["<b>3 · The module's checks</b><br/><small>AccessChecks</small>"] --> Check["<b>4 · The check that decides</b><br/><small>one check per case</small>"] --> Statement[("<b>5 · One statement</b><br/><small>as the caller</small>")]
     end
     subgraph answered ["the answer"]
         direction TB
-        Door["6 · what the door says:<br/>let through, or a code"] --> Rows[("7 · the handler and<br/>the rows, as the caller")]
+        Answer["<b>6 · Let through or refused</b><br/><small>with a refusal code</small>"] --> Rows[("<b>7 · The handler and the rows</b><br/><small>as the caller</small>")]
     end
     compiles --> sent --> answered
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class Check strong
+    class Rows good
 ```
 
-The first two layers happen when the code compiles. The other five happen each time a request is sent: the checks
-run in C#, before the handler; the statement they send and every statement the handler sends run in Postgres, as
-the caller. A layer that has nothing to do is passed by: a requirement that reads nothing sends no statement, and a
-request the door refused never reaches a table.
+Layers 1 and 2 happen when the code compiles. Layers 3 to 7 happen each time a request is sent. The access check runs in
+C#, before the handler. The statement a check sends, and every statement of the handler, run in Postgres as the caller.
+A layer with nothing to do is skipped. A requirement that reads nothing sends no statement, and a refused request never
+reaches a table.
 
 <details>
 <summary>Show the code: one request through the seven layers</summary>
@@ -61,66 +69,73 @@ await _checks.RequireAsync(message, cancellationToken);
 
 ## Six requests and six callers
 
-The sample's seed has a tenant called **harbor**, Harbor Works. Its organization is a tree of units: the root, two
-regions below it, North and South, and areas below those, North Coast among them. The project **Pier 7** sits at
-North Coast; Leo owns it, and Juno and Vic are on its crew. **Bay bridge** sits at South Bay, and Juno is not on
-its crew. Every request below is sent for harbor: its `Tenant` header names it, and the host looks up the caller's
+The sample's seed has a tenant called **harbor** (Harbor Works). Its organization is a tree of units: the root, two
+regions below it (North and South), and areas below those, such as North Coast. The project **Pier 7** is at North
+Coast. Leo owns it, and Juno and Vic are on its crew. The project **Bay bridge** is at South Bay, and Juno is not on its
+crew. Every request below is sent for harbor. Its `Tenant` header names the tenant, and the host looks up the caller's
 seat there before anything else ([TenantHeader](../Examples/Tenancy/Examples.Tenancy.Host/Access/TenantHeader.cs)).
 
 | Caller | Who it is | Runs on Postgres as |
 |---|---|---|
-| **Ada** | harbor's first administrator: Access admin and Area manager at the root, so she holds every permission in harbor | `authenticated` |
-| **Juno** | a seat at North Coast with no role of the organization, and a surveyor on Pier 7's crew, which gives no permission to manage it | `authenticated` |
-| **A new sign-in** | a person who signed in and has no seat in harbor | `authenticated` |
-| **Orla** | one of the application's operators: her token carries the operators' role, and she has no seat anywhere | `tenancy_operator` |
-| **Anonymous** | a request with no token | `anon` |
-| **System work** | the application's own work in harbor, begun by trusted code with `TenancyUseCases.BeginSystemIn(harbor)`, in the scope of the module whose request it sends: `tenancy`, and `projects` for a request of Projects', the one the projects' rules let through | `ddd_system_in`, scope `tenancy` or `projects` |
+| **Ada** | Harbor's first administrator. She has the Access admin and Area manager roles at the root, so she holds every permission in harbor. | `authenticated` |
+| **Juno** | A seat at North Coast with no role in the organization. She is a surveyor on Pier 7's crew. That role gives no permission to manage the crew. | `authenticated` |
+| **A new sign-in** | A person who signed in and has no seat in harbor. | `authenticated` |
+| **Orla** | One of the application's operators. Her token carries the operators' role. She has no seat in any tenant. | `tenancy_operator` |
+| **Anonymous** | A request without a token. | `anon` |
+| **System work** | System work in harbor. Trusted code starts it with `access.BeginSystemIn(harbor)` on Tenancy's `TenancyAccessManager`. Its scope is the module of the request it sends: `tenancy`, or `projects` for a request of the Projects module, because the projects' rules let only that scope through. | `ddd_system_in`, scope `tenancy` or `projects` |
 
-| Request | What it does | What it requires | Where it is from |
+| Request | What it does | What it requires | Where it comes from |
 |---|---|---|---|
-| `OrganizationUnits` | lists the units the caller reads | `[InTenant]`: a seat in the tenant | the sample's Tenants module |
-| `AddOrganizationUnit` | adds a unit below another | `[RequiresPermission(TenancyPermissions.UnitsManage)]`, `[AtUnit]` on the parent | the sample's Tenants module |
-| `AddCrewMember` | puts a seat on a project's crew | `[RequiresPermission(RequiredPermission)]`, `[OnResource]` on the project, `[ExpectedVersion]` on the version read | the sample's Projects module |
-| `RenameSeat` | gives a seat another name | `[RequiresPermission(RequiredPermission)]` with `[OrOwn]` on the seat: your own seat, or any with the permission | the sample's Tenants module |
-| `TenantAuditLog` | reads a tenant's audit log | the property: an operator, or the permission that manages seats for the whole tenant | the audit log of [Access requirements](access-requirements.md#the-door-and-the-rows) |
-| `RegisterOrganization` | makes a new tenant with the caller as its administrator | `[SignedIn]`, and system work the handler begins | the registration of [Tenancy](tenancy.md#who-may-ask-and-what-the-work-runs-as) |
+| `OrganizationUnits` | Lists the units the caller can read. | `[InTenant]`: a seat in the tenant | The sample's Tenants module |
+| `AddOrganizationUnit` | Adds a unit below another unit. | `[RequiresPermission(TenancyPermissions.UnitsManage)]`, with `[AtUnit]` on the parent | The sample's Tenants module |
+| `AddCrewMember` | Puts a seat on a project's crew. | `[RequiresPermission(RequiredPermission)]`, with `[OnResource]` on the project and `[ExpectedVersion]` on the version the caller read | The sample's Projects module |
+| `RenameSeat` | Gives a seat another name. | `[RequiresPermission(RequiredPermission)]`, with `[OrOwn]` on the seat: the caller's own seat, or any seat with the permission | The sample's Tenants module |
+| `TenantAuditLog` | Reads a tenant's audit log. | The property: an operator, or the permission that manages seats for the whole tenant | The audit log example in [Access requirements](access-requirements.md#access-checks-and-row-policies) |
+| `RegisterOrganization` | Creates a new tenant, with the caller as its administrator. | `[SignedIn]`. The handler starts system work. | The registration example in [Tenancy](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) |
 
-Pick a request and a caller below, and follow each layer: what it does for that pair, the code it runs, and the
-statement it sends.
+Pick a request and a caller below. For each layer, the walk-through shows what happens for that pair, the code that
+runs, and the statement sent to Postgres.
 
 <div data-interactive="RequestWalkthrough">
 
 > [!TIP]
 > On the [docs site](https://dylansnel.github.io/DDDToolkit/docs/how-a-request-is-checked) this is a walk-through
-> you can click through: pick a request, a caller and a situation, and step through the seven layers. Everything
-> it shows is on this page; [Every request, every caller](#every-request-every-caller) has its answers as tables.
+> you can click through. Pick a request, a caller and a situation, and step through the seven layers. The walk-through
+> shows only what is on this page. The tables in
+> [Results for each request and caller](#results-for-each-request-and-caller) give the same answers.
 
 </div>
 
-The sample's routes ask for a seat before they send a request of a seated module, as a host may. The walk-through
-starts where every way in ends, at the send: a route, a GraphQL field, a job or a test all reach the same door.
+The sample's routes already require a seat before they send a request of a module that needs one. A host may do this.
+The walk-through starts at the send, because every entry point ends there. A route, a GraphQL field, a job and a test
+all reach the same access check.
 
 ## 1. What you write
 
-A request says who may send it, and nothing more. It says it with an attribute where the requirement reads no
-value of the request but a permission and the ids it carries, which is nearly always, and with the property
-`RequiredAccess` where the requirement is computed from its values or combines cases no stack of attributes says:
-one caller or another, two permissions in two places.
+A request states who may send it. Most requests state it with attributes, because the requirement only names a
+permission and the ids the request carries. A request implements the property `RequiredAccess` instead in two cases:
+when the requirement is computed from the request's values, and when it combines cases that stacked attributes cannot
+express, such as one caller or another, or two permissions at two places.
 
-So the sample's requests carry attributes. A marker on a member says where a permission is held: `[AtUnit]` at that
-unit or above it, `[OnResource]` on that resource through its members, nothing for the whole tenant. `[OrOwn]` on
-a seat makes the caller's own seat the other way in. The permission is a constant of the catalogue; a request may name
-one of its own, as `RenameSeat` and `AddCrewMember` do, so its handler reads the same permission.
+The sample's requests use attributes. A marker on a member states where the permission is held:
+
+- `[AtUnit]`: at that unit, or at a unit above it.
+- `[OnResource]`: on that resource, through its members.
+- No marker: for the whole tenant.
+
+`[OrOwn]` on a seat lets the caller through when the seat is the caller's own, as an alternative to the permission.
+The permission is a constant of the catalogue. A request can declare its own constant for it, as `RenameSeat` and
+`AddCrewMember` do. The handler then reads the same constant.
 
 ```csharp
 [InTenant]
-public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest;
+public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest;
 
 [RequiresPermission(TenancyPermissions.UnitsManage)]
-public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest;
+public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;
 
 [RequiresPermission(RequiredPermission)]
-public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest
+public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest
 {
     public const string RequiredPermission = TenancyPermissions.SeatsManage;
 }
@@ -134,39 +149,41 @@ public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, 
 }
 ```
 
-The other two are the examples of [Access requirements](access-requirements.md#the-door-and-the-rows) and
-[Tenancy](tenancy.md#who-may-ask-and-what-the-work-runs-as), not the sample's. The audit log lets one caller or
-another through, so it answers the property; the registration lets any signed-in person through, and its handler
-begins the system work that makes the tenant ([System work: a scope, and back](#system-work-a-scope-and-back)):
+The other two requests come from examples in [Access
+requirements](access-requirements.md#access-checks-and-row-policies) and
+[Tenancy](tenancy/who-may-do-what.md#requests-that-provision-a-tenant). They are not in the sample. The audit log lets
+one caller or another through, so it implements the property. The registration lets any signed-in person through. Its
+handler starts the system work that creates the tenant ([System work](#system-work)).
 
 ```csharp
 public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AuditEntry>>, IAuditRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
-        TenancyAccess.RequiresOperator(),
+        TenancyAccess.Operator(),
         TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 }
 
 [SignedIn]
-public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest;
+public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest;
 ```
 
-Each attribute stands for one call, and the property says the same as that call. Written as the property, the
-sample's four and the registration would read as below. The sample does not write them so: its `AccessDeclarationTests` hold a request
-that answers the property to what no attribute says, so a reviewer reads one way of saying each thing.
+Each attribute stands for one method call, and the property can return the same call. Written with the property, the
+sample's four requests and the registration look as below. The sample does not write them this way. Its
+`AccessDeclarationTests` allow the property only for a requirement that no attribute can express, so a reviewer sees
+one way of writing each requirement.
 
 ```csharp
-public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest
+public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
-public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest
+public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, Parent);
 }
 
-public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest
+public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
         AccessRequirement.Own(Seat),
@@ -178,7 +195,7 @@ public sealed record AddCrewMember(ProjectId Project, SeatId Seat, ProjectRoleId
     AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(ProjectPermissionNames.ManageCrew, Project, ExpectedVersion);
 }
 
-public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest
+public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
 }
@@ -186,22 +203,23 @@ public sealed record RegisterOrganization(string Slug, string Name, string Admin
 
 ## 2. What the generator writes
 
-An attribute is plain C# by the time the code runs. When the module compiles, the toolkit's generator reads every
-request of the module's interface and writes one line for each that states its requirement with attributes, the
-call the attributes stand for, into the interface itself, which is declared `partial` for that reason. The lines
-are one `switch` on the request's type, and they are the interface's implementation of `RequiredAccess`: a default
-every request of the module gets.
+When the module compiles, the toolkit's generator turns the attributes into plain C#. It reads every request of the
+module's interface. For each request that states its requirement with attributes, it writes one line with the call
+the attributes stand for. The lines go into the interface itself, which is why the interface is declared `partial`.
+Together the lines form one `switch` on the request's type. This `switch` is the interface's default implementation of
+`RequiredAccess`, which every request of the module inherits.
 
-A request that answers the property itself gets no line. C# takes a class's own implementation over the
-interface's default, so `TenantAuditLog` answers with its own, and every reader of the property reads the same
-requirement either way: the checks, a handler that asks them again, a test. A request the switch does not know, one
-of another project that states nothing, is the last arm, and is stopped: a requirement somebody forgot never opens
-a door. A module that says a [default](access-requirements.md#a-modules-default) on its interface, as the sample's
-Projects module says `[InTenant]`, gets a line with the default for each request that states nothing, and a last arm
-that answers the default too.
+- A request that implements the property itself gets no line. C# uses a class's own implementation over the
+  interface's default, so `TenantAuditLog` returns its own requirement. Every reader of the property gets the same
+  requirement either way: the access check, a handler that asks it again, and a test.
+- A request that the `switch` does not know, such as a request of another project that states nothing, reaches the
+  last arm. The last arm throws, so a forgotten requirement lets nobody through.
+- A module can declare a [default](access-requirements.md#a-modules-default) on its interface, as the sample's
+  Projects module does with `[InTenant]`. Each request that states nothing then gets a line with the default, and the
+  last arm returns the default too.
 
-The two blocks below are what the generator writes for this page's requests. The registration is among them, as a
-request of `ITenantsRequest`, so its line is one the sample's own file does not have.
+The two blocks below are the generator's output for this page's requests. The registration is a request of
+`ITenantsRequest` here, so its line does not appear in the sample's own generated file.
 
 ```csharp title="TenantsAccessBehavior.g.cs for this page's requests, the interface's part, shortened"
 using DDDToolkit_Generated_IRequireAccess = global::DDDToolkit.Access.IRequireAccess;
@@ -238,14 +256,16 @@ partial interface IProjectsRequest
 }
 ```
 
-Nothing is read by reflection and nothing is looked up when a request is sent. Stacked attributes become
-`AccessRequirement.All` of their calls, in the order they are written, and `[OrOwn]` becomes `Any` of the caller's
-own and the permission ([Yours, or the permission](access-requirements.md#yours-or-the-permission)). Where the project uses Mediator the
-same file holds the pipeline behavior, which asks the module's checks before every handler of the interface; it
-reads the property, so it never knows which way a request said it.
+No reflection runs, and nothing is looked up when a request is sent. Stacked attributes become `AccessRequirement.All`
+of their calls, in the order they are written. `[OrOwn]` becomes `Any` of the caller's own and the permission
+([The caller's own, or a permission](access-requirements.md#the-callers-own-or-a-permission)). When the project uses
+Mediator, the same file also contains the pipeline behavior. The behavior asks the module's checks before every
+handler of the interface. It reads the property, so it works the same for attributes and for the property. Then it
+runs the handler inside the work a check begins for the request, such as the operator work of an operator's command
+([An operator's request](access-requirements.md#an-operators-request)).
 
 <details>
-<summary>Show the code: the behavior the same file holds</summary>
+<summary>Show the code: the behavior in the same file</summary>
 
 ```csharp title="TenantsAccessBehavior.g.cs, the behavior, shortened"
 public sealed class TenantsAccessBehavior<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse>
@@ -256,7 +276,10 @@ public sealed class TenantsAccessBehavior<TMessage, TResponse> : IPipelineBehavi
     public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
     {
         await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
-        return await next(message, cancellationToken).ConfigureAwait(false);
+        using (_checks.BeginWork(message, isQuery: message is IBaseQuery))
+        {
+            return await next(message, cancellationToken).ConfigureAwait(false);
+        }
     }
 }
 
@@ -274,52 +297,63 @@ public static class TenantsAccessBehaviorRegistration
 
 ## 3. The module's checks
 
-A module's requests are held to the checks of the module's interface, and to no other module's: the set is
-`AccessChecks<TRequests>`, one per interface, made once per scope. A check is registered for an interface, so the
-same check registered for two modules is two entries, and the container keeps them apart by the interface they are
-for. The core's `CallerAccessCheck` comes first in every set, so the cases about who is calling mean the same
-everywhere; the checks a module adds follow, in the order they were added.
+Each module has its own set of checks, `AccessChecks<TRequests>`, one per request interface. The container makes one
+set per scope. A request is checked only by the set of its own module's interface. A check is registered for one
+interface, so the same check registered for two modules is two registrations, one per interface. The core's
+`CurrentUserAccessCheck` is first in every set, so the cases about who is calling work the same in every module. The checks
+a module adds come after it, in the order they were added.
 
 | The Tenants module's set, for `ITenantsRequest` | Added by | Decides |
 |---|---|---|
-| `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
-| `TenancyAccessCheck` over `TenantsContext` | `services.AddTenancyAccess<ITenantsRequest, TenantsContext>()` | every `TenancyRequirement` |
+| `CurrentUserAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
+| Tenancy's check of operators | `services.AddTenancyAccess<ITenantsRequest, TenantsContext>()` | `Operator()`, `Operator(tenant)` |
+| `TenancyAccessCheck` over `TenantsContext` | the same call | every other `TenancyRequirement` |
 
 | The Projects module's set, for `IProjectsRequest` | Added by | Decides |
 |---|---|---|
-| `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
-| `TenancyAccessCheck` over `ProjectsContext` | `services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>()` | every `TenancyRequirement` |
+| `CurrentUserAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
+| Tenancy's check of operators | `services.AddTenancyAccess<IProjectsRequest, ProjectsContext>()` | `Operator()`, `Operator(tenant)` |
+| `TenancyAccessCheck` over `ProjectsContext` | the same call | every other `TenancyRequirement` |
 | `MemberAccessCheck<Project, ProjectId>` | `services.AddProjectMemberAccess<IProjectsRequest>()`, generated for the project's members | `MemberAccess<ProjectId>`: `On`, `Sees`, `SeenWith` |
 | `ProjectsAccessCheck` | `services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>()` | `ProjectsRequirement`, the module's own case |
 
-Each check says what it decides with a type test on the requirement, `requirement is TenancyRequirement`, which
-reads nothing. The set asks them in order and gives the requirement to the first that says yes. Three things are
-the set's own:
+Each check's `Decides` method is a type test on the requirement, such as `requirement is TenancyRequirement`. It reads
+nothing. The set asks the checks in order and gives the requirement to the first check that returns `true`. The set
+itself does three things:
 
-- **Who is calling, first.** Before any check, the set asks the host's `ICallerAccessor` who is calling. In a host
-  that [requires explicit callers](row-level-security.md#fail-closed-callers), work nobody began a caller for fails
-  there, whatever the request requires.
-- **Anyone, by asking nobody.** `AccessRequirement.AllowAnonymous()`, what `[AllowAnonymous]` stands for, is let
-  through by the set itself.
-- **Combinations, case by case.** `All` and `Any` are decided by asking each case of the check that decides it
-  alone, so cases of different owners combine: the caller's own of the core's with a permission of Tenancy's. Every case
-  must have its check before any is asked.
+- **It asks who is calling, first.** Before any check runs, the set asks `ICurrentUser` who is calling. In a host that
+  [requires an explicit current user](row-level-security.md#requiring-an-explicit-current-user), work that began no user fails
+  here, whatever the request requires.
+- **It lets `AllowAnonymous()` through itself.** `AccessRequirement.AllowAnonymous()`, which `[AllowAnonymous]` stands
+  for, passes without asking any check.
+- **It splits combinations.** For `All` and `Any`, the set gives each case to the check that decides that case. So
+  cases of different packages combine, for example the core's case of the caller's own with a permission of Tenancy's.
+  Every case must have a check before any case is asked.
 
-A requirement no check decides is not let through: the set stops the request with an exception that names the
-registration that is missing, `AddTenancyAccess` for one of Tenancy's cases. Once a check lets the request through,
-the request is [in hand](access-requirements.md#the-request-in-hand) for the handler that runs next and the save
-it ends with.
+When no check decides a requirement, the set stops the request with an `InvalidOperationException`. The message names
+the missing registration, for example `AddTenancyAccess` for a case of Tenancy's. When a check lets the request
+through, the request is [in hand](access-requirements.md#the-request-in-hand) for the handler that runs next and for
+its save.
+
+The diagram shows how the set handles one requirement. Purple: the requirement read from the request. Green: let
+through. Red: refused or stopped.
 
 ```mermaid
 flowchart TB
-    Read["who is calling, then<br/>RequiredAccess, once"] -- "AllowAnonymous()" --> InHand["let through,<br/>the request in hand"]
-    Read -- "All, Any" --> Cases["each case to<br/>its own check"]
-    Read -- "a case" --> First{"the first check<br/>that Decides it"}
+    Read["<b>RequiredAccess</b><br/><small>read once, after asking who is calling</small>"] -- "AllowAnonymous()" --> InHand["<b>Let through</b><br/><small>the request is in hand</small>"]
+    Read -- "All, Any" --> Cases["<b>Each case</b><br/><small>to its own check</small>"]
+    Read -- "one case" --> First{"first check whose<br/>Decides returns true"}
     Cases --> First
-    First -- "none" --> Stopped["stopped, naming<br/>the registration"]
-    First -- "found" --> Require["its RequireAsync"]
+    First -- "none" --> Stopped["<b>Stopped</b><br/><small>the message names the registration</small>"]
+    First -- "found" --> Require["<b>RequireAsync</b><br/><small>of that check</small>"]
     Require -- "returns" --> InHand
-    Require -- "refuses" --> Refused["refused,<br/>with a code"]
+    Require -- "throws a refusal" --> Refused["<b>Refused</b><br/><small>with a refusal code</small>"]
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class Read strong
+    class InHand good
+    class Stopped,Refused bad
 ```
 
 <details>
@@ -330,7 +364,7 @@ flowchart TB
 services.TryAddScoped(provider => new AccessChecks<TRequests>(
     provider.GetServices<RegisteredAccessCheck<TRequests>>()
         .Select(registered => registered.Check)
-        .Prepend(new CallerAccessCheck(callers, provider))));
+        .Prepend(new CurrentUserAccessCheck(provider.GetRequiredService<ICurrentUser>(), provider))));
 
 // AddAccessCheck<TRequests, TCheck>, which a package's registration calls for the interface it is given
 services.TryAddScoped<TCheck>();
@@ -339,7 +373,7 @@ services.TryAddEnumerable(ServiceDescriptor.Scoped<RegisteredAccessCheck<TReques
 
 ```csharp shortened
 // AccessChecks<TRequests>.RequireAsync, shortened
-_callers?.AskWhoIsCalling();                                     // NoCallerException where nobody was begun
+_currentUser?.AskWhoIsCalling();                                 // NoCurrentUserException where nothing was begun
 
 var requirement = request.RequiredAccess
     ?? throw new InvalidOperationException("... declares no access requirement ...");
@@ -358,42 +392,43 @@ return RequestInHand.Take(request, requirement, check, cancellationToken);   // 
 
 ## 4. The check that decides
 
-Each case belongs to whoever can decide it, and each check asks the caller before it reads anything: a caller that
-is nobody in the tenant is refused with its own reason, without a statement made for it. Only four cases read.
+Each case is decided by the check of the package that owns the case. Every check looks at the caller before it reads
+anything. A caller who is nobody in the tenant is refused with the reason Tenancy gives for that caller, and no
+statement is sent. Only four cases read from the database.
 
 | The case | Its check | What it reads | Refused with |
 |---|---|---|---|
-| `SignedIn()` | the core's `CallerAccessCheck` | nothing: the caller's token | `access.not-signed-in`, 403 |
-| `Own(seat)` | the core's `CallerAccessCheck` | nothing: the caller's seat in the tenant, found when the request came in | `access.not-own`, 403 |
-| `OwnerOf(board)` | the core's `CallerAccessCheck` | one statement, the storage's: the owner's column of the one row, as the caller; nothing for a caller with no own of the owner's type | `access.not-own`, 403; `access.not-found`, 404, for a row the caller does not see ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)) |
-| `InTenant()` | Tenancy's | nothing: the seat, found when the request came in | the caller's own reason, such as `tenancy.not-seated`, 403 |
-| `AtTenant(permission)` | Tenancy's | one statement: the permission at the tenant's root, for a seat; nothing for system work in the tenant, which holds every permission there | `tenancy.not-permitted` with the permission, 403 |
-| `AtUnit(permission, unit)` | Tenancy's | one statement: the permission at the unit or above it, for a seat; for system work in the tenant, whether the unit is the tenant's | `tenancy.not-permitted` with the permission and the unit, 403 |
-| `RequiresOperator()` | Tenancy's | nothing: the token's role | `tenancy.operators-only`, 403 |
-| `On(permission, project, version)` | Membership's | one statement: the project as the caller sees it, how the caller holds the permission there, and its version; nothing for a caller who is nobody | the caller's own reason for nobody; `projects.not-found`, 404, for a project the caller does not see; `projects.not-permitted` with the permission, 403; then a lost race, 409 |
-| `All(...)`, `Any(...)` | the set, case by case | what each case reads, in order, until it is decided | for `All` the first failing case's own; for `Any` one `access.refused` with each case's reason, 403 |
+| `SignedIn()` | the core's `CurrentUserAccessCheck` | Nothing. It looks at the caller's token. | `access.not-signed-in`, 403 |
+| `Own(seat)` | the core's `CurrentUserAccessCheck` | Nothing. It compares with the caller's seat in the tenant, found when the request came in. | `access.not-own`, 403 |
+| `OwnerOf(board)` | the core's `CurrentUserAccessCheck` | One statement, sent by the storage: the owner column of the one row, read as the caller. Nothing for a caller who has no value of the owner's type. | `access.not-own`, 403. `access.not-found`, 404, for a row the caller cannot see ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)) |
+| `InTenant()` | Tenancy's | Nothing. The seat was found when the request came in. | The caller's own reason, such as `tenancy.not-seated`, 403 |
+| `AtTenant(permission)` | Tenancy's | One statement for a seat: the permission at the tenant's root. Nothing for system work in the tenant, which holds every permission there. | `tenancy.not-permitted` with the permission, 403 |
+| `AtUnit(permission, unit)` | Tenancy's | One statement for a seat: the permission at the unit or above it. For system work in the tenant: whether the unit belongs to the tenant. | `tenancy.not-permitted` with the permission and the unit, 403 |
+| `Operator()`, `Operator(tenant)` | Tenancy's check of operators | Nothing. It looks at the token's role, and compares the tenant the request names with the command's `[ForTenant]` member. | `tenancy.operators-only`, 403. `tenancy.tenant-mismatch`, 400, for a request that names another tenant than the command. |
+| `On(permission, project, version)` | Membership's | One statement: the project as the caller sees it, how the caller holds the permission there, and the project's version. Nothing for a caller who is nobody. | For nobody, the caller's own reason. For a project the caller cannot see, `projects.not-found`, 404. Without the permission, `projects.not-permitted` with the permission, 403. Then a changed version, 409. |
+| `All(...)`, `Any(...)` | the set, case by case | What each case reads, in order, until the result is known | For `All`, the refusal of the first failing case. For `Any`, one `access.refused` with each case's reason, 403. |
 
-Membership's order is the same for every request: nobody, then not found, then not permitted, then the version.
-So a caller who does not see a project learns nothing about it, not even that it exists, and only a caller who may
-act learns that somebody changed it since they read it. What the check read it keeps for the request: a save under
-[the expert hold](membership.md#the-expert-hold) is held to it.
+Membership's check always tests in this order: nobody, not found, not permitted, version. So a caller who cannot see a
+project learns nothing about it, not even that it exists. Only a caller who may act learns that somebody changed the
+project since they read it. The check keeps what it read for the request. A save that uses
+[the expert hold](membership/checks-and-saves.md#the-expert-hold) is checked against it.
 
 <details>
 <summary>Show the code: the core's check, Tenancy's, Membership's and the combinations'</summary>
 
 ```csharp shortened
-// CallerAccessCheck, the core's, shortened: who is calling, with nothing read
+// CurrentUserAccessCheck, the core's, shortened: who is calling, with nothing read
 public bool Decides(AccessRequirement requirement)
     => requirement is AccessRequirement.SignedInUser || (requirement is IOwnedRequirement owned && owned.CanBeAnswered(services));
 
 switch (requirement)
 {
     case AccessRequirement.SignedInUser:
-        if (!callers.Current.IsSignedIn)                         // a token that names a user
+        if (!user.IsAuthenticated)                               // a token that names a user
             throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
         return;
     case IOwnedRequirement owned:                                // the request names the value, never whose it is
-        if (!owned.IsTheCallers(callers.Current, services))
+        if (!owned.IsTheCurrentUsers(user, services))
             throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);
         return;
 }
@@ -401,30 +436,43 @@ switch (requirement)
 
 ```csharp shortened
 // TenancyAccessCheck, Tenancy.EntityFramework, shortened
-public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement;
+public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement && !IsOperatorCase(requirement);
 
 switch (requirement)
 {
     case TenancyRequirement.InTenant:
-        answers.RequireTenant();                                 // a seat here, or system work here
+        access.CurrentTenant.Require();                          // a seat here, or system work here
         break;
     case TenancyRequirement.AtTenant required:
-        answers.RequireTenant();                                 // nobody is refused without a statement
+        access.CurrentTenant.Require();                          // nobody is refused without a statement
         if (!await HoldsAtTenantAsync(required.Permission, cancellationToken))
             throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission));
         break;
     case TenancyRequirement.AtUnit<TUnitId> required:
-        answers.RequireTenant();
+        access.CurrentTenant.Require();
         if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken))
             throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission), ("Unit", required.Unit));
-        break;
-    case TenancyRequirement.Operator:
-        if (!options.IsOperator(callers.Current))                // the token's role, never a seat
-            throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
         break;
     default:
         throw new InvalidOperationException("... which Tenancy's access check does not decide ...");
 }
+```
+
+```csharp shortened
+// TenancyOperatorCheck, Tenancy, shortened: the operator cases, decided from the token
+public bool Decides(AccessRequirement requirement) => IsOperatorCase(requirement);
+
+// RequireAsync
+if (!options.IsOperator(user.Snapshot))                         // the token's role, never a seat
+    throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
+if (requirement is TenancyRequirement.OperatorIn<TTenantId> required
+    && TenancyUsers.Current<TTenantId, TSeatId>().NamedTenant is { } named && !named.Equals(required.Tenant))
+    throw TenancyRefusals.Refuse(TenancyRefusals.TenantMismatch);   // the request names another tenant
+
+// BeginWork, once the request was let through: operator work around a command's handler
+if (isQuery)
+    return null;                                                 // a query begins nothing
+return TenancyWork.BeginOperatorIn<TTenantId, TSeatId>(required.Tenant, operatorsIdentity, required.Scope);
 ```
 
 ```csharp shortened
@@ -460,19 +508,24 @@ case AccessRequirement.AllOf all:
 
 </details>
 
-## 5. The statement at the door
+## 5. The statement the check sends
 
-A check that reads sends one statement, over the module's own context, and the statement runs as the caller, like
-every other: it is held to the policies too. Tenancy answers its two questions from its read model: `SeatRights`,
-which holds for each seat the permissions its grants give at each unit, and `OrganizationUnitPaths`, the closure table of
-the tree, which holds every pair of a unit and a unit at or below it, so "at North Coast or above it" is one join and no
-walk up the tree. Membership answers from the rules of the resource, written as one expression: as a member of
-the crew in a role that gives the permission, as its owner, or from above, the permission held where the project sits; and,
-around it, whether the caller sees the project at all.
+A check that reads sends one statement through the module's own context. The statement runs as the caller, like every
+other statement, so the policies apply to it too.
 
-What Entity Framework sends is written when the statement runs, from the questions' LINQ, so the SQL on this page
-is approximately what it sends, with parameter names of its own. The permission at North Coast or above it is one join
-on the closure table:
+Tenancy's two queries read its read model:
+
+- `SeatRights`: for each seat, the permissions its grants give at each unit.
+- `OrganizationUnitPaths`: the closure table of the tree. It has one row for each pair of a unit and a unit at or below
+  it. So "at North Coast or above it" is one join, without walking up the tree.
+
+Membership's query is built from the rules of the resource, as one expression. The caller holds the permission on the
+project in one of three ways: as a crew member in a role that gives the permission, as the project's owner, or from
+above, through the permission held at the unit where the project is. The same statement also tests whether the caller
+can see the project at all.
+
+Entity Framework translates the queries' LINQ when the statement runs. The SQL on this page is therefore approximate,
+and the real parameter names differ. The permission at North Coast or above it is one join on the closure table:
 
 ```sql shortened
 -- HoldsAtAsync: the permission at the unit or above it, approximately what Entity Framework sends
@@ -485,10 +538,10 @@ SELECT EXISTS (
 ```
 
 <details>
-<summary>Show the code: Tenancy's two questions, Membership's, and the SQL each sends</summary>
+<summary>Show the code: Tenancy's two queries, Membership's query, and the SQL each sends</summary>
 
 ```csharp shortened
-// TenancyQuestions, shortened: the two questions a check asks
+// TenancyQueries, shortened: the two queries a check asks
 public Task<bool> HoldsAtTenantAsync(string permission, CancellationToken cancellationToken)
     => executor.AnyAsync(
         from right in source.SeatRights
@@ -527,7 +580,7 @@ SELECT p."Version",
                              INNER JOIN "projects"."ProjectRoles" AS k ON h."RoleId" = k."Id"
                              WHERE h."CrewMemberId" = m."Id" AND k."Status" = 'Active' AND @permission = ANY (k."Permissions")))
          OR p."OwnerSeatId" = @seat AS "AsMember",                                 -- or its owner
-       p."UnitId" IN (SELECT path."DescendantId" FROM "tenancy".caller_permissions() AS r   -- or the permission where it sits
+       p."UnitId" IN (SELECT path."DescendantId" FROM "tenancy".current_permissions() AS r   -- or the permission where it sits
                       INNER JOIN "tenancy".tenant_unit_paths() AS path ON r."UnitId" = path."AncestorId"
                       WHERE r."SeatId" = @seat AND r."Permission" = @permission) AS "FromAbove"
 FROM "projects"."Projects" AS p
@@ -538,26 +591,31 @@ LIMIT 1
 ```
 
 ```sql shortened
--- EfMemberQuestions.HoldAsync for the application's own work: every permission, so only the project and its version
+-- EfMemberQuestions.HoldAsync for system work: every permission, so only the project and its version
 SELECT p."Version" FROM "projects"."Projects" AS p WHERE p."Id" = @project LIMIT 1
 ```
 
-The periods are left out of the crew's part: a crew member and a role count from their start to their end,
-compared with now, as a grant does. The Projects module reads Tenancy through functions,
-`"tenancy".caller_permissions()` and the others, rather than its tables ([Modules read through
-functions](tenancy.md#modules-read-through-functions)); `caller_permissions()` runs as the caller, so a seat reads its
-own rights and nobody else's.
+The crew part leaves out the time periods. A crew member and a role count from their start to their end, compared
+with now, as a grant does. The Projects module reads Tenancy through functions, such as
+`"tenancy".current_permissions()`, instead of reading Tenancy's tables
+([Modules read through functions](tenancy/postgres.md#read-functions-for-modules)). `current_permissions()` runs as
+the caller, so a seat reads only its own permissions.
 
 </details>
 
 ### The caller on the connection
 
-Every statement says who it runs as before it runs. The host begins the caller when a request comes in: the
-toolkit's caller from the validated token, and Tenancy's caller, the seat that identity has in the tenant the
-request names. When a context opens a connection, the row level security interceptor sets the database role and the
-token's claims on it, the way PostgREST does for each request, and Tenancy's tenant beside them, in one statement.
-Through a pooler that hands each transaction another server connection it sets them for each transaction instead
-([How the settings travel](row-level-security.md#how-the-settings-travel)).
+Before a statement runs, the connection is set to the caller. When a request comes in, the host starts two things:
+
+- the toolkit's current user, from the validated token;
+- Tenancy's user: the seat of that identity in the tenant the request names.
+
+When a context opens a connection, the RLS interceptor sends one statement. The statement sets the
+database role, the token's claims (as PostgREST does for each request) and Tenancy's tenant. Behind a pooler that
+gives each transaction another server connection, the interceptor sets them for each transaction instead
+([How the settings travel](row-level-security.md#settings-per-connection-or-per-transaction)).
+
+The diagram shows the order. The shaded step sets the caller on the connection.
 
 ```mermaid
 sequenceDiagram
@@ -565,49 +623,55 @@ sequenceDiagram
     participant Context
     participant Interceptor
     participant Postgres
-    Host->>Host: begins the caller and the seat
+    Host->>Host: starts the user and the seat
     Context->>Interceptor: opens a connection
-    Interceptor->>Postgres: set role, claims, tenant
-    Context->>Postgres: the statement, as the caller
-    Postgres->>Postgres: the policies, row by row
+    rect rgba(91, 46, 201, 0.12)
+    Interceptor->>Postgres: sets role, claims and tenant
+    end
+    Context->>Postgres: sends the statement as the caller
+    Postgres->>Postgres: checks the policies, row by row
 ```
 
-What the policies read comes from those settings: `auth.uid()` and `auth.jwt()` read the claims, the policies for
-a role are the ones Postgres asks, and `"tenancy".system_tenant()` reads Tenancy's setting. `"tenancy".caller_seat()` finds the seat from the verified identity and
-that tenant, and only an active one in an active tenant, so a wrong tenant reaches no seat.
+The policies read these settings:
+
+- `auth.uid()` and `auth.jwt()` read the claims.
+- The role decides which policies Postgres applies.
+- `"tenancy".system_tenant()` reads Tenancy's tenant setting.
+- `"tenancy".current_seat()` finds the seat from the verified identity and that tenant. It returns only an active seat
+  in an active tenant, so a wrong tenant finds no seat.
 
 ```sql shortened
 -- the caller on the connection, as the interceptor sets it for each of the six; … is the rest of the statement
-SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<Ada>","role":"authenticated",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);
-SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<Juno>","role":"authenticated",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);
-SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<the new sign-in>","role":"authenticated",…}', false), …, set_config('tenancy.caller_tenant', '', false);
-SELECT set_config('role', 'tenancy_operator', false), set_config('request.jwt.claims', '{"sub":"<Orla>","role":"tenancy_operator",…}', false), …, set_config('tenancy.caller_tenant', '', false);
-SELECT set_config('role', 'anon', false), set_config('request.jwt.claims', '{"role":"anon"}', false), …, set_config('tenancy.caller_tenant', '', false);
-SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{"role":"ddd_system_in","scope":"tenancy"}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);
+SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<Ada>","role":"authenticated",…}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);
+SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<Juno>","role":"authenticated",…}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);
+SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"<the new sign-in>","role":"authenticated",…}', false), …, set_config('tenancy.current_tenant', '', false);
+SELECT set_config('role', 'tenancy_operator', false), set_config('request.jwt.claims', '{"sub":"<Orla>","role":"tenancy_operator",…}', false), …, set_config('tenancy.current_tenant', '', false);
+SELECT set_config('role', 'anon', false), set_config('request.jwt.claims', '{"role":"anon"}', false), …, set_config('tenancy.current_tenant', '', false);
+SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{"role":"ddd_system_in","scope":"tenancy"}', false), …, set_config('tenancy.current_tenant', '<harbor>', false);
 ```
 
 <details>
-<summary>Show the code: where the caller is begun, and the function that finds the seat</summary>
+<summary>Show the code: where the user and the Tenancy user start, and the function that finds the seat</summary>
 
 ```csharp shortened
-// The sample's TenantHeader.UseTenantSelection, shortened: both callers begun for the request
-var caller = context.GetSupabaseCaller();                         // from the validated token, or anonymous
-using (Callers.Begin(caller))
+// The sample's TenantHeader.UseTenantSelection, shortened: the user and the Tenancy user begun for the request
+var requestUser = context.GetSupabaseUser();                      // from the validated token, or anonymous
+using (access.BeginAs(requestUser))                               // access is the application's AccessManager
 {
-    var seat = await selection.ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
-    using (TenancyCallers.Begin(seat))                            // the seat in harbor, or nobody and why
+    var seat = await selection.ResolveAsync(requestUser, context.Request.Headers["Tenant"], context.RequestAborted);
+    using (TenancyUsers.Begin(seat))                            // the seat in harbor, or nobody and why
     {
         await next(context);
     }
 }
 ```
 
-```sql title="20261026210726_access.tenants.ddd.sql, the caller's seat and tenant, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the caller's seat and tenant, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".system_tenant() RETURNS uuid
     LANGUAGE sql STABLE SET search_path = '' AS $function$
-SELECT nullif(pg_catalog.current_setting('tenancy.caller_tenant', true), '')::pg_catalog.uuid
+SELECT nullif(pg_catalog.current_setting('tenancy.current_tenant', true), '')::pg_catalog.uuid
 $function$;
-CREATE OR REPLACE FUNCTION "tenancy".caller_seat() RETURNS uuid
+CREATE OR REPLACE FUNCTION "tenancy".current_seat() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT s."Id" FROM "tenancy"."Seats" s
 JOIN "tenancy"."Tenants" t ON t."Id" = s."TenantId"
@@ -615,20 +679,29 @@ WHERE s."Identity" = (SELECT auth.uid())
   AND s."TenantId" = (SELECT "tenancy".system_tenant())
   AND s."Status" = 'Active' AND t."Status" = 'Active'
 $function$;
-CREATE OR REPLACE FUNCTION "tenancy".caller_tenant() RETURNS uuid
+CREATE OR REPLACE FUNCTION "tenancy".current_tenant() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-SELECT s."TenantId" FROM "tenancy"."Seats" s WHERE s."Id" = (SELECT "tenancy".caller_seat())
+SELECT s."TenantId" FROM "tenancy"."Seats" s WHERE s."Id" = (SELECT "tenancy".current_seat())
 $function$;
 ```
 
 </details>
 
-## 6. What the door says
+## 6. Let through or refused
 
-A check that returns lets the request through, and the handler runs next, with the request in hand. A check that
-refuses throws a refusal: a code, a kind, and arguments such as the permission. The edge turns the kind into a status, 403
-for not permitted, 404 for not found, 409 for a lost race, and the code is what a client reads. The handler of a
-refused request does not run, so nothing it would read or write reaches a table.
+When the check returns, the request is let through. The handler runs next, with the request in hand. Around the
+handler, the behavior begins the work that a check says the handler runs in (`BeginWork`). Of the six requests, none
+begins work. A query begins nothing. A command marked `[Operator]` runs as operator work, which is system work
+recorded as the operator. The work acts in the tenant of the command's `[ForTenant]` member. With
+`[Operator(Tenant = OperatorTenant.FromRequest)]` it acts in the tenant that the `Tenant` header names. Tenancy's check
+of operators refuses such a command before the handler runs. A caller who is no operator gets `tenancy.operators-only`,
+and a header that names another tenant than the command gets `tenancy.tenant-mismatch`
+([An operator's request](access-requirements.md#an-operators-request)).
+
+When the check refuses, it throws a `RefusalException` with a refusal code, a kind, and arguments such as the
+permission. The edge turns the kind into an HTTP status: 400 for invalid, 403 for not permitted, 404 for not found. A
+changed version throws a `ConcurrencyConflictException`, which the edge answers with 409. The client reads the refusal
+code. The handler of a refused request does not run, so nothing it would read or write reaches a table.
 
 ```json
 {
@@ -644,68 +717,87 @@ refused request does not run, so nothing it would read or write reaches a table.
 }
 ```
 
-That is Juno renaming Leo's seat: neither way in holds, so `Any` answers once, with both reasons. The door is not the
-only refusal a caller meets. A handler, or the use case of the package it calls, refuses what only it can read:
-the sample's `AddCrewMember` handler refuses a seat that is not active, Tenancy's provisioning refuses everyone but
-system work. And the database refuses a row its policies do not allow, after the door let the request through.
+The refusal above is Juno renaming Leo's seat. Neither alternative holds, so `Any` gives one refusal with both reasons.
+The access check is not the only place that refuses. A handler, or the manager of the package it calls, refuses what
+only it can read. For example, the sample's `AddCrewMember` handler refuses a seat that is not active, and Tenancy's
+provisioning refuses everyone except system work. The database also refuses a row that its policies do not allow, after
+the access check let the request through.
 
 ## 7. The handler and the rows
 
-The handler acts on what the request names, which is what the door checked: the parent unit, the project, the
-seat. Its statements run as the same caller. Postgres first asks whether the caller's role may run the command on
-the table at all, its privileges, and then, for each row, the policies of the table for that role. A row passes
-when one permissive policy allows it, and every restrictive policy as well: the permissive ones say who may, and
-the restrictive ones narrow that, as Tenancy's keep every row to the caller's tenant. The policies come from row
-access rules, the packages' own and those a module writes in C# beside its infrastructure, and are exported into
-`supabase/migrations` with the functions they ask and the privileges they need
-([Row access rules written in C#](row-level-security.md#row-access-rules-written-in-c)).
+The handler acts on the ids the request names, which are the ids the access check tested: the parent unit, the project,
+the seat. Its statements run as the same caller. Postgres checks two things:
+
+1. **The privileges.** May the caller's role run this command on this table at all?
+2. **The policies, for each row.** A row passes when at least one permissive policy allows it and every restrictive
+   policy allows it. Permissive policies grant access. Restrictive policies limit it. For example, Tenancy's
+   restrictive policies keep every row to the caller's tenant.
+
+The policies come from row access rules: the packages' rules, and the rules a module writes in C# in its
+infrastructure project. The export writes them into `supabase/migrations`, with the functions they call and the
+privileges they need ([Row access rules written in C#](row-level-security.md#row-access-rules-written-in-c)).
+
+The diagram shows the two steps. Purple: the statement. Green: the row is read or written. Red: refused.
 
 ```mermaid
 flowchart LR
-    Statement["a statement,<br/>as the caller"] --> Privilege["may its role run<br/>the command at all?"]
-    Privilege -- "no" --> Denied["42501,<br/>permission denied"]
-    Privilege -- "yes" --> Policies["per row: one permissive<br/>policy allows it, and<br/>every restrictive one?"]
-    Policies -- "yes" --> Row[("the row is read<br/>or written")]
-    Policies -- "no" --> Refused["read: not there<br/>written: 42501"]
+    Statement["<b>A statement</b><br/><small>as the caller</small>"] --> Privilege{"may the role run<br/>this command?"}
+    Privilege -- "no" --> NoPrivilege["<b>42501</b><br/><small>permission denied</small>"]
+    Privilege -- "yes" --> Policies{"per row: one permissive<br/>and every restrictive<br/>policy allow it?"}
+    Policies -- "yes" --> Row[("<b>Row read or written</b>")]
+    Policies -- "no" --> Refused["<b>Row refused</b><br/><small>a read skips it, a write<br/>fails with 42501 or<br/>skips a hidden row</small>"]
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class Statement strong
+    class Row good
+    class NoPrivilege,Refused bad
 ```
 
-The policies decide per table and the door per request, so a policy may let through more than one request
-requires. Tenancy's policy on the seats lets a seat change its own row, and a seat that manages seats or grants
-anywhere in the tenant change any, because every save of a seat writes its version; the sample holds the name to
-`RenameSeat`'s own rule with a [column rule](row-level-security.md#column-rules), a trigger on that one column.
-Every member of a tenant reads all its units through Tenancy's policy, while the sample's directory lists only the
-units a seat is placed in and below: the tree is the organization's, and Tenancy's questions read it as their caller,
-so it has no narrower default to replace, as the seats have
-([Who reads the seats: a default you may replace](tenancy.md#who-reads-the-seats-a-default-you-may-replace)).
+The policies decide per table. The access check decides per request. So a policy can allow more than one request
+requires. Two examples:
 
-The policies below are the sample's, as its export wrote them, with the schemas quoted, as everywhere the toolkit
-writes SQL. A unit is added below a parent where the caller holds the permission that manages units, the same permission at the
-same unit the door asked about:
+- Tenancy's update policy on the seats lets a seat change its own row. It also lets a seat that manages seats or grants
+  anywhere in the tenant change any seat's row, because every save of a seat writes the seat's version. The sample holds
+  the name column to `RenameSeat`'s rule with a [column rule](row-level-security.md#column-rules), which is a trigger on
+  that one column.
+- Tenancy's read policy lets every member of a tenant read all its units. The sample's directory lists only the units a
+  seat is placed at, and the units below them. The tree belongs to the whole organization, and Tenancy's own queries
+  read it as their caller. So the units have no narrower default policy to replace, as the seats have ([Who reads the
+  seats: a default you may replace](tenancy/postgres.md#default-read-policies-for-seats-and-invitations)).
 
-```sql title="20261026210726_access.tenants.ddd.sql, the units' insert policy, shortened"
+The policies below are copied from the sample's export. The toolkit quotes schema names in all SQL it writes. The
+insert policy on the units allows a new unit below a parent where the caller holds the permission that manages units.
+This is the same permission at the same unit that the check tested:
+
+```sql title="20261028202433_access.tenants.ddd.sql, the units' insert policy, shortened"
 CREATE POLICY "Unit managers add below their units (insert) for authenticated" ON "tenancy"."OrganizationUnits" FOR INSERT TO authenticated
-    WITH CHECK (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ("ParentId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('tenancy.units.manage')))));
+    WITH CHECK (("TenantId" = (SELECT "tenancy".current_tenant())) AND ("ParentId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('tenancy.units.manage')))));
 ```
 
-The Supabase export writes each table's privileges from the same policies: a role gets each command one permissive
-policy for it allows, and `USAGE` on the schemas of those tables, and no more
-([Privileges from the policies](row-level-security.md#privileges-from-the-policies)). So a role no permissive
-policy lets write a table may not write it at all, and a role no permissive policy of a schema is for may not use
-that schema: Postgres refuses the statement with 42501, `permission denied`, before it asks a policy.
+The Supabase export writes each table's privileges from the same policies
+([Privileges from the policies](row-level-security.md#privileges-from-the-policies)). A role gets a command on a table
+only when a permissive policy for that role allows the command. It gets `USAGE` on a schema only when it has a
+privilege on a table in that schema. So:
+
+- a role without a permissive policy that allows writing a table cannot write that table;
+- a role without any permissive policy in a schema cannot use that schema.
+
+In both cases Postgres refuses the statement with 42501, `permission denied`, before it checks any policy.
 
 <details>
 <summary>Show the code: the policies and functions the export writes for the units, the seats, the crew and the audit log</summary>
 
-```sql title="20261026210726_access.tenants.ddd.sql, the units' other policies and the function they ask, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the units' other policies and the function they ask, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".units_where_i_hold_permission(permission text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT p."DescendantId" FROM "tenancy"."SeatRights" r
 JOIN "tenancy"."OrganizationUnitPaths" p ON p."AncestorId" = r."UnitId" AND p."TenantId" = r."TenantId"
-WHERE r."SeatId" = (SELECT "tenancy".caller_seat()) AND r."Permission" = $1 AND "tenancy".permission_is_live($1)
+WHERE r."SeatId" = (SELECT "tenancy".current_seat()) AND r."Permission" = $1 AND "tenancy".permission_is_live($1)
   AND r."StartsAt" <= pg_catalog.now() AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
 $function$;
 CREATE POLICY "Members read the units (select) for authenticated" ON "tenancy"."OrganizationUnits" FOR SELECT TO authenticated
-    USING ("TenantId" = (SELECT "tenancy".caller_tenant()));
+    USING ("TenantId" = (SELECT "tenancy".current_tenant()));
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON "tenancy"."OrganizationUnits" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT "tenancy".system_tenant()));
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON "tenancy"."OrganizationUnits" FOR SELECT TO tenancy_operator
@@ -717,17 +809,17 @@ CREATE POLICY "Closed to anonymous callers (all) for anon" ON "tenancy"."Organiz
     WITH CHECK (false);
 ```
 
-```sql title="20261026210726_access.tenants.ddd.sql, the seats and the name's column rule, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the seats and the name's column rule, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".holds_at_tenant(permission text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT EXISTS (SELECT 1 FROM "tenancy"."SeatRights" r
                JOIN "tenancy"."OrganizationUnits" u ON u."Id" = r."UnitId" AND u."TenantId" = r."TenantId"
-               WHERE r."SeatId" = (SELECT "tenancy".caller_seat()) AND r."Permission" = $1 AND "tenancy".permission_is_live($1) AND r."StartsAt" <= pg_catalog.now() AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
+               WHERE r."SeatId" = (SELECT "tenancy".current_seat()) AND r."Permission" = $1 AND "tenancy".permission_is_live($1) AND r."StartsAt" <= pg_catalog.now() AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
                  AND u."ParentId" IS NULL)
 $function$;
 CREATE POLICY "Managers and the seat change it (update) for authenticated" ON "tenancy"."Seats" FOR UPDATE TO authenticated
-    USING (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage')) OR "Id" = (SELECT "tenancy".caller_seat())))
-    WITH CHECK (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage')) OR "Id" = (SELECT "tenancy".caller_seat())));
+    USING (("TenantId" = (SELECT "tenancy".current_tenant())) AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage')) OR "Id" = (SELECT "tenancy".current_seat())))
+    WITH CHECK (("TenantId" = (SELECT "tenancy".current_tenant())) AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage')) OR "Id" = (SELECT "tenancy".current_seat())));
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON "tenancy"."Seats" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT "tenancy".system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT "tenancy".system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
@@ -735,7 +827,7 @@ CREATE OR REPLACE FUNCTION "tenancy".seats_displayname_column_rule() RETURNS tri
     LANGUAGE plpgsql SET search_path = '' AS $body$
 BEGIN
     IF CURRENT_USER = 'authenticated' THEN
-        IF ((OLD."Id" = (SELECT "tenancy".caller_seat())) OR (SELECT "tenancy".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND ((NEW."Id" = (SELECT "tenancy".caller_seat())) OR (SELECT "tenancy".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN
+        IF ((OLD."Id" = (SELECT "tenancy".current_seat())) OR (SELECT "tenancy".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND ((NEW."Id" = (SELECT "tenancy".current_seat())) OR (SELECT "tenancy".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN
             RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Name changes by the seat or with the seats permission'' does not let this caller change "DisplayName" of "tenancy"."Seats".';
         END IF;
     ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN
@@ -749,14 +841,14 @@ CREATE TRIGGER seats_displayname_column_rule BEFORE UPDATE OF "DisplayName" ON "
     EXECUTE FUNCTION "tenancy".seats_displayname_column_rule();
 ```
 
-```sql title="20261026203139_access.projects.ddd.sql, the crew and the function it asks, shortened"
+```sql title="20261028202434_access.projects.ddd.sql, the crew and the function it asks, shortened"
 CREATE OR REPLACE FUNCTION "projects".projects_where_i_hold(text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT holding.id FROM "projects".projects_as_member_with($1) AS holding(id)
 UNION
 SELECT joined.id FROM "projects".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'
 UNION
-SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r."OwnerSeatId" = (SELECT "tenancy".caller_seat())
+SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r."OwnerSeatId" = (SELECT "tenancy".current_seat())
 UNION
 SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IS NOT NULL AND r."UnitId" IN (SELECT reached.place FROM "tenancy".units_where_i_hold_permission($1) AS reached(place))
 UNION
@@ -767,14 +859,15 @@ CREATE POLICY "System work in its tenant (insert) for ddd_system_in" ON "project
 CREATE POLICY "Members change with the permission (insert) for authenticated" ON "projects"."ProjectCrewMembers" AS RESTRICTIVE FOR INSERT TO authenticated
     WITH CHECK ("ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.crew.manage') AS held(id)) OR "ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.owner.change') AS held(id)));
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "projects"."ProjectCrewMembers" AS RESTRICTIVE FOR ALL TO authenticated
-    USING (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".caller_tenant())))
-    WITH CHECK (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".caller_tenant())));
+    USING (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".current_tenant())))
+    WITH CHECK (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".current_tenant())));
 ```
 
-The audit log is not the sample's. Its two ways through the door are two row rules on its own table, one for the
-operators' role and one for a seat that manages seats, which the export writes as a policy each; Tenancy adds the
-restrictive ones of every table kept to a tenant ([The door and the rows](access-requirements.md#the-door-and-the-rows)).
-The operators' rule is also what gives `tenancy_operator` its one privilege on the table, `SELECT`:
+The audit log is not part of the sample. Its two alternatives have two row rules on its table: one for the operators'
+role, and one for a seat that manages seats. The export writes one policy for each rule. Tenancy adds the restrictive
+policies it adds to every table that belongs to a tenant
+([Access checks and row policies](access-requirements.md#access-checks-and-row-policies)). The operators' rule is
+also what gives `tenancy_operator` its only privilege on the table, `SELECT`:
 
 ```sql shortened
 -- the audit log's policies, as the export writes them from its two row rules
@@ -784,8 +877,8 @@ CREATE POLICY "Seat managers read the audit log (select) for authenticated" ON "
     USING ((SELECT "tenancy".holds_at_tenant('tenancy.seats.manage')));
 -- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "audit"."AuditEntries" AS RESTRICTIVE FOR ALL TO authenticated
-    USING ("TenantId" = (SELECT "tenancy".caller_tenant()))
-    WITH CHECK ("TenantId" = (SELECT "tenancy".caller_tenant()));
+    USING ("TenantId" = (SELECT "tenancy".current_tenant()))
+    WITH CHECK ("TenantId" = (SELECT "tenancy".current_tenant()));
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON "audit"."AuditEntries" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 -- ... and the same for update and delete
@@ -793,102 +886,119 @@ CREATE POLICY "Operators only read (insert) for tenancy_operator" ON "audit"."Au
 
 </details>
 
-The crew's permissive policy for a signed-in caller, `"ProjectCrewMembers (insert) for authenticated"`, lets
-whoever may change the project add a row; Membership's restrictive lock, `"Members change with the permission"`, narrows
-that to the permission that changes the members, `projects.crew.manage`, or the one that names the owner. That lock is
-[the second lock](membership.md#on-postgres-the-second-lock), and it is why a request the door let through for its
-own seat may still be saved as the application's work ([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)).
+On the crew table, the permissive insert policy for signed-in callers, `"ProjectCrewMembers (insert) for
+authenticated"`, lets anyone who may change the project add a row. Membership's restrictive policy, `"Members change
+with the permission"`, narrows that to callers who hold `projects.crew.manage` (the permission that changes the
+members) or `projects.owner.change` (the permission that names the owner). This restrictive policy is
+[the lock on the member rows](membership/postgres.md#who-writes-the-member-rows). Because of it, a handler saves a
+change to the caller's own place on the crew as system work, even after the access check let the caller through
+([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)).
 
-### Going round the door
+### Statements that skip the access check
 
-The door holds only what passes it. A statement that never went through a request, SQL of your own, another
-module's code, a tool connected as the caller, or Supabase's Data API where a schema is exposed to it, meets no
-check: it meets the policies, as the caller it runs as. The sample exposes none of its schemas to the Data API, so
-there the only way in is its own API, but the policies would hold every one of these just the same.
+The access check sees only requests. A statement sent without a request meets no check. Examples are your own SQL,
+another module's code, a tool connected as the caller, and Supabase's Data API for an exposed schema. Only the policies
+apply to such a statement, as the caller it runs as. The sample exposes none of its schemas to the Data API, so its only
+entry point is its own API. The policies would apply to all of these statements in the same way.
+
+The diagram shows both paths. Purple: the policies, which every statement meets. Grey: a statement without a request,
+which skips the access check.
 
 ```mermaid
 flowchart TB
-    Request["a request"] --> Door["the door: its requirement"]
-    Door --> Handler["the handler"]
-    Handler --> Policies[("the policies,<br/>as the caller")]
-    Around["SQL, a tool, the Data API,<br/>as the same caller"] --> Policies
+    Request["<b>A request</b>"] --> Checks["<b>The access check</b><br/><small>its requirement</small>"]
+    Checks --> Handler["<b>The handler</b>"]
+    Handler --> Policies[("<b>The policies</b><br/><small>as the caller</small>")]
+    Around["<b>SQL, a tool, the Data API</b><br/><small>as the same caller, no request</small>"] --> Policies
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    class Policies strong
+    class Around muted
 ```
 
-What they hold is coarser than what one request requires. A policy says who may change a row of a table, for every
-request that changes it: the projects' update policy lets a member that may close a project write its row, and only
-the sample's column rule on a project's name and plan keeps that member's own statement from renaming it. That is
-why the toolkit watches the ways round the behavior that it can see
-([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)), and why a rule about a column
-is a column rule.
+Policies are coarser than requirements. A policy decides who may change a row of a table, for every request that changes
+it. For example, the projects' update policy lets a member who may close a project write the project's row. Only the
+sample's column rule on a project's name and plan stops that member's own statement from renaming the project. For this
+reason the toolkit reports the ways around the pipeline behavior that it can detect ([Handlers reached without the
+access check](access-requirements.md#handlers-reached-without-the-access-check)), and a rule about one column is written
+as a column rule.
 
-For the six requests, a caller the door refused who goes round it finds this, and the tables of [Every request,
-every caller](#every-request-every-caller) give the answer for each caller the door refused:
+For the six requests, this is what a refused caller gets when they send the statement directly. The
+[result tables](#results-for-each-request-and-caller) give this answer for every refused caller:
 
-| A caller the door refused | Sends, round the door | Postgres answers |
+| A refused caller | Sends directly | Postgres answers |
 |---|---|---|
-| Juno, `AddOrganizationUnit` | `INSERT INTO "tenancy"."OrganizationUnits"` below North Coast | refused, 42501: the insert policy asks `units_where_i_hold_permission('tenancy.units.manage')`, and North Coast is not in it |
-| Juno, `AddCrewMember` on Pier 7 | `INSERT INTO "projects"."ProjectCrewMembers"` | refused, 42501: she may not change the project, and Membership's lock asks for `projects.crew.manage` |
-| Juno, `RenameSeat` of Leo's seat | `UPDATE "tenancy"."Seats" SET "DisplayName" = ...` | `UPDATE 0`: the update policy hides Leo's row from her, so nothing changes |
-| Orla, `OrganizationUnits` | `SELECT * FROM "tenancy"."OrganizationUnits"` | every unit of every tenant: operators read every tenant, though the request requires a seat |
-| Orla, any request that writes | `INSERT` or `UPDATE` on a table kept to a tenant | refused, 42501, `permission denied`: no permissive policy lets her role write, so it holds only `SELECT`, and Tenancy's restrictive `Operators only read` refuses every row it would write as well |
-| the new sign-in, `OrganizationUnits` | the same `SELECT` | no row: `caller_tenant()` finds no seat, so no unit is its tenant's |
-| anybody anonymous | anything | refused, 42501, `permission denied`: no permissive policy is for `anon`, so it may not use the schemas of a module kept to a tenant, and a restrictive policy closes every table of them as well |
+| Juno, `AddOrganizationUnit` | `INSERT INTO "tenancy"."OrganizationUnits"` below North Coast | Refused, 42501. The insert policy calls `units_where_i_hold_permission('tenancy.units.manage')`, and North Coast is not in the result. |
+| Juno, `AddCrewMember` on Pier 7 | `INSERT INTO "projects"."ProjectCrewMembers"` | Refused, 42501. She may not change the project, and Membership's lock requires `projects.crew.manage`. |
+| Juno, `RenameSeat` of Leo's seat | `UPDATE "tenancy"."Seats" SET "DisplayName" = ...` | `UPDATE 0`. The update policy hides Leo's row from her, so nothing changes. |
+| Orla, `OrganizationUnits` | `SELECT * FROM "tenancy"."OrganizationUnits"` | Every unit of every tenant. Operators may read every tenant, although the request requires a seat. |
+| Orla, any request that writes | `INSERT` or `UPDATE` on a table that belongs to a tenant | Refused, 42501, `permission denied`. No permissive policy lets her role write, so the role has only `SELECT`. Tenancy's restrictive policy `Operators only read` would also refuse every row. |
+| The new sign-in, `OrganizationUnits` | The same `SELECT` | No rows. `current_tenant()` finds no seat, so no unit is in the caller's tenant. |
+| Any anonymous caller | Any statement | Refused, 42501, `permission denied`. No permissive policy is for `anon`, so `anon` cannot use the schemas of a module that belongs to a tenant. A restrictive policy also closes every table in them. |
 
-## System work: a scope, and back
+## System work
 
-System work is no requirement. It is a scope that trusted code begins around the work it does, and when the scope
-ends the caller before it is current again. Inside it, the connection runs as `ddd_system_in` with the scope's name in
-its claims, and the policies of system work hold it to its tenant and its scope. Outside it, nobody holds what it
-holds: no request requires system work, so no caller opens a door by asking for it.
+System work is not a requirement. It is a scope. Trusted code starts it around a piece of work, and when the scope
+ends, the previous caller is current again. Inside the scope, the connection runs as `ddd_system_in`, with the scope's
+name in its claims. The policies for system work keep it to its tenant and its scope. No request can require system
+work, so a caller cannot get the permissions of system work by sending a request.
 
-`RegisterOrganization` shows both halves. Its requirement lets any signed-in person through: Ada, Juno, the new
-sign-in and Orla, an operator being a signed-in user too. Its handler reads the administrator from the caller's own
-token first, then begins system work outside any tenant, the only work Tenancy's provisioning lets make a tenant.
-The provisioning moves on to system work in the tenant it makes, so every row it writes is that tenant's, and the
-next statement after the `using` runs as the person who sent the request again.
+`RegisterOrganization` shows both sides:
+
+1. Its requirement, `[SignedIn]`, lets any signed-in person through: Ada, Juno, the new sign-in and Orla. An operator
+   is a signed-in user too.
+2. The handler reads the administrator from the caller's token first.
+3. The handler then starts system work outside any tenant. Tenancy's provisioning creates a tenant only in this kind
+   of system work.
+4. The provisioning switches to system work in the new tenant, so every row it writes belongs to that tenant.
+5. After the `using` block, the next statement runs as the person who sent the request again.
+
+The diagram shows the registration. The shaded part runs as system work.
 
 ```mermaid
 sequenceDiagram
     participant Ada
-    participant Door as [SignedIn]
+    participant Checks as [SignedIn]
     participant Handler
     participant Tenancy as ProvisionAsync
     participant Postgres
-    Ada->>Door: RegisterOrganization
-    Door->>Handler: let through
-    Handler->>Handler: the token's user
-    Handler->>Tenancy: in system work
-    Tenancy->>Postgres: as ddd_system_in
-    Tenancy-->>Handler: the new tenant
-    Handler->>Postgres: then as Ada again
+    Ada->>Checks: RegisterOrganization
+    Checks->>Handler: lets it through
+    Handler->>Handler: reads the token's user
+    rect rgba(91, 46, 201, 0.12)
+    Handler->>Tenancy: calls it in system work
+    Tenancy->>Postgres: writes as ddd_system_in
+    Tenancy-->>Handler: returns the new tenant
+    end
+    Handler->>Postgres: sends as Ada again
 ```
 
-A handler that forgets the scope gets no further than the use case: Tenancy's provisioning refuses a seat with
-`access.system-only`, and a caller with no seat with its own reason. System work begun around a send works the
-other way round, and the sample's seeding does it: it begins system work in each tenant and sends
-`MarkTenantAsDemo`, whose requirement, `[InTenant]`, lets system work there through, and whose handler refuses
-everyone else ([System work is a scope](access-requirements.md#system-work-is-a-scope)).
+A handler that does not start the scope fails in the package's manager. Tenancy's provisioning,
+`TenantManager.ProvisionAsync`, refuses a seat with `access.system-only`, and refuses a caller without a seat with that
+caller's own reason, `tenancy.not-seated`. System work can also start before the request is sent. The sample's seeding does this. It starts system work in each tenant
+and sends `MarkTenantAsDemo`. That request requires `[InTenant]`, which lets system work in the tenant through, and
+its handler refuses everyone else ([System work](access-requirements.md#system-work)).
 
 <details>
-<summary>Show the code: the registration's handler, and the policy its rows meet</summary>
+<summary>Show the code: the registration's handler, and the policy for the rows it writes</summary>
 
 ```csharp shortened
 // RegisterOrganization's handler, from Tenancy's page, shortened
-var caller = callers.Current;                                     // read before the system work begins
-if (caller.UserId is not { } administrator || caller.Claim("is_anonymous") == "true")
+var user = access.CurrentUser.Snapshot;                           // read before the system work begins
+if (user.Id is not { } administrator || user.FindClaim("is_anonymous") == "true")
 {
     throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
 }
 
-using (TenancyUseCases.BeginSystem())                             // system work outside any tenant, begun here
+using (access.BeginSystem())                                      // system work outside any tenant, begun here
 {
-    var made = await tenants.ProvisionAsync(new TenancyUseCases.TenantToProvision(
+    var tenant = await tenants.ProvisionAsync(new TenantToProvision(
         command.Slug, command.Name, TenantShape.Flat, command.Name, administrator), cancellationToken);
-    return made.Tenant;
-}                                                                 // the caller before it is current again
+    return tenant;
+}                                                                 // the user before it is current again
 ```
 
-```sql title="20261026210726_access.tenants.ddd.sql, the tenant the provisioning writes, shortened"
+```sql title="20261028202433_access.tenants.ddd.sql, the tenant the provisioning writes, shortened"
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON "tenancy"."Tenants" FOR INSERT TO ddd_system_in
     WITH CHECK (("Id" = (SELECT "tenancy".system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 ```
@@ -897,11 +1007,14 @@ CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON "te
 
 ## A requirement of your own
 
-Some rules belong to your module alone: a board is exported only by a tenant on the Pro plan. No package knows
-plans, so the module states the rule as a requirement of its own, decides it with a check of its own, and says it
-with an attribute of its own, which stacks beside the packages' attributes like any other. Four pieces: the
-requirement, a record; the attribute, marked with `[StatesRequirement]` to name the call it stands for; the check;
-and the line that adds the check to the module's set.
+Some rules belong only to your module. For example, only a tenant on the Pro plan may export a board. No package knows
+about plans, so the module declares its own requirement, its own check and its own attribute. The attribute stacks
+with the packages' attributes like any other. There are four pieces:
+
+- the requirement, a record;
+- the attribute, marked with `[StatesRequirement]`, which names the call the attribute stands for;
+- the check;
+- the line that adds the check to the module's set.
 
 ```csharp
 public enum Plan { Free, Team, Pro }
@@ -930,14 +1043,14 @@ public interface ITenantPlans
 
 // The check: Decides is a type test; RequireAsync asks who is calling before it reads, then returns or refuses
 // with the module's code
-public sealed class PlanCheck(ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> answers, ITenantPlans plans) : IAccessCheck
+public sealed class PlanCheck(TenancyAccessManager access, ITenantPlans plans) : IAccessCheck
 {
     public bool Decides(AccessRequirement requirement) => requirement is PlanAtLeast;
 
     public async ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
     {
         var required = (PlanAtLeast)requirement;
-        var tenant = answers.RequireTenant().Tenant;             // nobody in the tenant: refused with its own reason
+        var tenant = access.CurrentTenant.Require().Id;          // nobody in the tenant: refused with its own reason
         if (await plans.CurrentAsync(tenant, cancellationToken) < required.Plan)
         {
             throw new RefusalException("boards.plan-too-low", RefusalKind.NotPermitted, "That takes a higher plan.");
@@ -947,7 +1060,7 @@ public sealed class PlanCheck(ITenancyAnswers<TenantId, SeatId, OrganizationUnit
 
 public static class BoardsModule
 {
-    // Beside Tenancy's check for the permission: services.AddTenancyAccess<..., IBoardsRequest, BoardsContext>()
+    // Beside Tenancy's check for the permission: services.AddTenancyAccess<IBoardsRequest, BoardsContext>()
     public static IServiceCollection AddBoardsAccess(this IServiceCollection services)
         => services.AddAccessCheck<IBoardsRequest, PlanCheck>();
 }
@@ -973,103 +1086,113 @@ partial interface IBoardsRequest
 }
 ```
 
-The two attributes are `All` of their calls, in the order they are written, so the plan is asked first. Like the
-packages' checks, `PlanCheck` asks who is calling before it reads anything. Tenancy's answers, which come with
-Tenancy closed over the application's ids, as the sample's own checks take them, read nothing for
-`RequireTenant()`, since the seat was found when the request came in, and refuse a caller who is nobody in the
-tenant with its own reason, `tenancy.not-seated`. So the new sign-in, an operator and an anonymous caller never
-learn a tenant's plan. A seat of a tenant on the Free plan is refused with `boards.plan-too-low` before the permission is
-asked; on Pro the permission is asked next, and its refusal is Tenancy's own. The set gives `PlanAtLeast` to `PlanCheck`,
-since its type test is the one that says yes, and the permission's case to Tenancy's check, as before. A module that forgets `AddBoardsAccess` has its request
-stopped, with a message that names `AddAccessCheck<IBoardsRequest, TCheck>()`. The attribute is yours like the
-check: the generator knows no attribute by name, only what `[StatesRequirement]` says about it
-([Writing your own supporting domain](writing-a-supporting-domain.md)).
+The generator writes the two attributes as `All` of their calls, in the order they are written, so the plan is
+checked first.
 
-The plan stays in C#. No policy knows it until you write a row rule that asks it: the door holds the request, and the
-rows are held by whatever rules the tables have.
+- **Who is calling comes first.** Like the packages' checks, `PlanCheck` looks at the caller before it reads anything.
+  It takes `TenancyAccessManager`, closed over the application's ids, as the sample's checks do.
+  `CurrentTenant.Require()` reads nothing, because the seat was found when the request came in. For a caller who is
+  nobody in the tenant, it throws that caller's reason, `tenancy.not-seated`. So the new sign-in, an operator and an anonymous caller never learn a tenant's plan.
+- **Then the plan, then the permission.** A seat of a tenant on the Free plan is refused with `boards.plan-too-low`, and
+  the permission is not checked. On the Pro plan the permission is checked next, and a refusal there is Tenancy's.
+- **Each case goes to its own check.** The set gives `PlanAtLeast` to `PlanCheck`, because `PlanCheck`'s type test
+  matches it. It gives the permission's case to Tenancy's check.
+- **A missing registration stops the request.** When a module forgets `AddBoardsAccess`, the set stops the request with
+  a message that names `AddAccessCheck<IBoardsRequest, TCheck>()`.
+- **The attribute is yours.** The generator knows no attribute by name. It reads only what `[StatesRequirement]`
+  declares about the attribute ([Writing your own supporting domain](writing-a-supporting-domain.md)).
 
-## Every request, every caller
+The plan check exists only in C#. No policy checks the plan unless you write a row rule for it. The access check
+applies to the request, and the tables' rules apply to the rows.
 
-What the walk-through shows, request by request. "The door" is what the checks answer; "At the door" the statement
-they send; "The rows" what the handler then reads or writes, and the policies say; "Round the door" what Postgres
-answers a caller the door refused who sends the statement themselves ([Going round the door](#going-round-the-door)),
-with "–" where the door let the caller through, or refused for something other than a right.
+## Results for each request and caller
+
+These tables give the walk-through's answers, request by request. The columns:
+
+- **The access check**: let through, or the refusal code and status.
+- **Statement of the check**: the statement the check sends, or nothing.
+- **The handler and the rows**: what the handler reads or writes, and what the policies allow. "none" means the
+  handler does not run.
+- **Sent directly**: what Postgres answers a refused caller who sends the statement without a request
+  ([Statements that skip the access check](#statements-that-skip-the-access-check)). A dash (–) means the access check
+  let the caller through, or refused for a reason other than a missing permission.
 
 ### OrganizationUnits
 
-| Caller | The door | At the door | The rows | Round the door |
+| Caller | The access check | Statement of the check | The handler and the rows | Sent directly |
 |---|---|---|---|---|
-| Ada | let through: a seat in harbor | nothing: the seat was found when the request came in | every unit of harbor: she is placed at the root, and the directory lists her units and every unit below them | – |
-| Juno | let through | nothing | North Coast only, where she is placed; Tenancy's policy would let her read every unit of harbor | – |
-| the new sign-in | `tenancy.not-seated`, 403 | nothing | none: the handler does not run | no row: `caller_tenant()` finds no seat, so no unit is its tenant's |
-| Orla | `tenancy.not-seated`, 403 | nothing | none | every unit of every tenant: operators read every tenant, though the request requires a seat |
-| Anonymous | `tenancy.not-seated`, 403 | nothing | none | refused, 42501: `anon` may not use Tenancy's schema, and a restrictive policy closes every table of it as well |
-| System work | let through: system work in harbor works in the tenant | nothing | every unit of harbor, under the policy of system work in its tenant | – |
+| Ada | let through, because she has a seat in harbor | nothing, because the seat was found when the request came in | every unit of harbor. She is placed at the root, and the directory lists the units she is placed at and every unit below them. | – |
+| Juno | let through | nothing | North Coast only, where she is placed. Tenancy's policy would let her read every unit of harbor. | – |
+| the new sign-in | `tenancy.not-seated`, 403 | nothing | none, because the handler does not run | no row, because `current_tenant()` finds no seat, so no unit is in the caller's tenant |
+| Orla | `tenancy.not-seated`, 403 | nothing | none | every unit of every tenant. Operators may read every tenant, although the request requires a seat. |
+| Anonymous | `tenancy.not-seated`, 403 | nothing | none | refused, 42501. `anon` cannot use Tenancy's schema, and a restrictive policy also closes every table in it. |
+| System work | let through, because system work in harbor counts as working in the tenant | nothing | every unit of harbor, allowed by the policy for system work in its tenant | – |
 
 ### AddOrganizationUnit
 
-| Caller and parent | The door | At the door | The rows | Round the door |
+| Caller and parent | The access check | Statement of the check | The handler and the rows | Sent directly |
 |---|---|---|---|---|
-| Ada, below North Coast | let through: `tenancy.units.manage` at the root, which is above North Coast | `HoldsAtAsync`, one statement | a new unit below North Coast; the insert policy asks the same permission at the parent | – |
-| Ada, below Meadow Gardens' root | `tenancy.not-permitted`, 403, with the permission and the unit | `HoldsAtAsync`: her permissions are harbor's | none | refused, 42501: the row is not of her tenant, and its parent is none of the units where she holds the permission |
-| Juno, either | `tenancy.not-permitted`, 403, with the permission and the unit | `HoldsAtAsync` | none | refused, 42501: the parent is not among `units_where_i_hold_permission('tenancy.units.manage')` for her |
-| the new sign-in, Orla, Anonymous | `tenancy.not-seated`, 403 | nothing: nobody is refused before a statement | none | refused, 42501: the insert policy finds no tenant of the new sign-in's, Orla's role holds only `SELECT` on the units, and `anon` may not use the schema |
-| System work, below North Coast | let through: every permission in harbor, and North Coast is harbor's | whether the unit is harbor's | a new unit below North Coast, under the policy of Tenancy's own work, scope `tenancy` | – |
-| System work, below Meadow Gardens' root | `tenancy.not-permitted`, 403 | whether the unit is harbor's: it is not | none | refused, 42501: the policy of Tenancy's work writes only rows of harbor, the tenant `system_tenant()` names |
+| Ada, below North Coast | let through, because she holds `tenancy.units.manage` at the root, which is above North Coast | `HoldsAtAsync`, one statement | a new unit below North Coast. The insert policy checks the same permission at the parent. | – |
+| Ada, below Meadow Gardens' root | `tenancy.not-permitted`, 403, with the permission and the unit | `HoldsAtAsync`. Her permissions are only harbor's. | none | refused, 42501. The row is not in her tenant, and its parent is not one of the units where she holds the permission. |
+| Juno, either | `tenancy.not-permitted`, 403, with the permission and the unit | `HoldsAtAsync` | none | refused, 42501. The parent is not in `units_where_i_hold_permission('tenancy.units.manage')` for her. |
+| the new sign-in, Orla, Anonymous | `tenancy.not-seated`, 403 | nothing, because a caller who is nobody is refused before any statement | none | refused, 42501. The insert policy finds no tenant for the new sign-in. Orla's role has only `SELECT` on the units. `anon` cannot use the schema. |
+| System work, below North Coast | let through, because system work holds every permission in harbor, and North Coast is in harbor | whether the unit is in harbor | a new unit below North Coast, allowed by the policy for Tenancy's own work, scope `tenancy` | – |
+| System work, below Meadow Gardens' root | `tenancy.not-permitted`, 403 | whether the unit is in harbor. It is not. | none | refused, 42501. The policy for Tenancy's work writes only rows of harbor, the tenant that `system_tenant()` returns. |
 
 ### AddCrewMember
 
-| Caller, project and version | The door | At the door | The rows | Round the door |
+| Caller, project and version | The access check | Statement of the check | The handler and the rows | Sent directly |
 |---|---|---|---|---|
-| Ada, either project, the version she read | let through: `projects.crew.manage` from above, held at the root | `HoldAsync`, one statement | the seat is on the crew; the permissive policy and Membership's lock both let her | – |
-| Ada, an old version | a lost race, 409 `concurrency-conflict`, asked only once she may act | `HoldAsync` | none: read the project again, and decide again | – |
-| Juno, Pier 7 | `projects.not-permitted`, 403, with the permission: she sees it, a surveyor holds no permission to manage the crew | `HoldAsync` | none | refused, 42501: Pier 7 is not among `projects_where_i_hold('projects.crew.manage')` for her, so Membership's lock refuses the row |
-| Juno, Bay bridge | `projects.not-found`, 404: she does not see it, as if it did not exist | `HoldAsync`: no row | none | refused, 42501: Membership's lock refuses her row as well |
-| the new sign-in, Orla, Anonymous | `tenancy.not-seated`, 403 | nothing | none | refused, 42501: the crew's policies find no seat of the new sign-in's, Orla's role holds only `SELECT` on the crew, and `anon` may not use the schema |
-| System work, the version it read | let through: the projects' own work, in their scope, holds every permission | the project and its version | the seat is on the crew, under the policy of system work in its tenant and Membership's lock, which lets the projects' scope through | – |
-| System work, an old version | a lost race, 409 `concurrency-conflict` | the project and its version | none | – |
+| Ada, either project, the version she read | let through, because she holds `projects.crew.manage` at the root, which counts from above | `HoldAsync`, one statement | the seat is on the crew. The permissive policy and Membership's lock both allow her. | – |
+| Ada, an old version | a changed version, 409 `concurrency-conflict`. The version is compared only after the check finds that she may act. | `HoldAsync` | none. Read the project again, and decide again. | – |
+| Juno, Pier 7 | `projects.not-permitted`, 403, with the permission. She can see the project, but a surveyor has no permission to manage the crew. | `HoldAsync` | none | refused, 42501. Pier 7 is not in `projects_where_i_hold('projects.crew.manage')` for her, so Membership's lock refuses the row. |
+| Juno, Bay bridge | `projects.not-found`, 404. She cannot see the project, so for her it does not exist. | `HoldAsync`, which returns no row | none | refused, 42501. Membership's lock refuses her row as well. |
+| the new sign-in, Orla, Anonymous | `tenancy.not-seated`, 403 | nothing | none | refused, 42501. The crew's policies find no seat for the new sign-in. Orla's role has only `SELECT` on the crew table. `anon` cannot use the schema. |
+| System work, the version it read | let through, because the projects' own work, in its scope, holds every permission | the project and its version | the seat is on the crew, allowed by the policy for system work in its tenant and Membership's lock, which lets the projects' scope through | – |
+| System work, an old version | a changed version, 409 `concurrency-conflict` | the project and its version | none | – |
 
 ### RenameSeat
 
-| Caller and seat | The door | At the door | The rows | Round the door |
+| Caller and seat | The access check | Statement of the check | The handler and the rows | Sent directly |
 |---|---|---|---|---|
-| Ada, her own | let through: her own seat, the first way in | nothing | renamed: the policy and the column rule both let a seat change its own name | – |
-| Ada, Leo's | let through: not her own, then `tenancy.seats.manage` for the whole tenant | `HoldsAtTenantAsync` | renamed: she holds the permission the policy and the column rule ask | – |
-| Juno, her own | let through: her own seat | nothing | renamed | – |
-| Juno, Leo's | `access.refused`, 403, with `access.not-own` and `tenancy.not-permitted` | `HoldsAtTenantAsync` | none | UPDATE 0: the update policy hides Leo's row from her, so nothing changes |
-| the new sign-in | `access.refused`, 403, with `access.not-own` and `tenancy.not-seated` | nothing | none | UPDATE 0: the update policy finds no seat of theirs in harbor, so it lets them change no row |
-| Orla, Anonymous | `access.refused`, 403, with `access.not-own` and `tenancy.not-seated` | nothing | none | refused, 42501: Orla's role holds only `SELECT` on the seats, and `anon` may not use the schema |
-| System work, either | let through: no seat of its own, then every permission in harbor | nothing | renamed, under the policy of Tenancy's own work; the column rule holds callers, not the application's own work | – |
+| Ada, her own | let through, because it is her own seat, the first alternative | nothing | renamed. The policy and the column rule both let a seat change its own name. | – |
+| Ada, Leo's | let through. The seat is not hers, so the check tests `tenancy.seats.manage` for the whole tenant, which she holds. | `HoldsAtTenantAsync` | renamed. She holds the permission that the policy and the column rule require. | – |
+| Juno, her own | let through, because it is her own seat | nothing | renamed | – |
+| Juno, Leo's | `access.refused`, 403, with `access.not-own` and `tenancy.not-permitted` | `HoldsAtTenantAsync` | none | UPDATE 0. The update policy hides Leo's row from her, so nothing changes. |
+| the new sign-in | `access.refused`, 403, with `access.not-own` and `tenancy.not-seated` | nothing | none | UPDATE 0. The update policy finds no seat of theirs in harbor, so it lets them change no row. |
+| Orla, Anonymous | `access.refused`, 403, with `access.not-own` and `tenancy.not-seated` | nothing | none | refused, 42501. Orla's role has only `SELECT` on the seats. `anon` cannot use the schema. |
+| System work, either | let through. System work has no seat, so the check tests the permission, and system work holds every permission in harbor. | nothing | renamed, allowed by the policy for Tenancy's own work. The column rule checks only the roles `authenticated`, `anon` and `tenancy_operator`, so system work passes it. | – |
 
 ### TenantAuditLog
 
-| Caller and row rules | The door | At the door | The rows | Round the door |
+| Caller and row rules | The access check | Statement of the check | The handler and the rows | Sent directly |
 |---|---|---|---|---|
-| Ada | let through: not an operator, then `tenancy.seats.manage` for the whole tenant | `HoldsAtTenantAsync` | harbor's entries, through the seat managers' rule, kept to her tenant | – |
-| Juno | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-permitted` | `HoldsAtTenantAsync` | none | no row: the seat managers' rule lets her read none, as she does not hold the permission |
-| the new sign-in | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-seated` | nothing | none | no row: no seat of theirs manages seats |
-| Anonymous | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-seated` | nothing | none | refused, 42501: no permissive policy is for `anon`, so it holds no privilege on the table |
-| Orla | let through: an operator, the first way in | nothing | harbor's entries, through the operators' rule | – |
-| Orla, with the operators' rule forgotten | let through | nothing | 42501, permission denied: with the rule gone no permissive policy is for her role, so the Supabase export grants it nothing on the table; an error, not a refusal, so the host answers 500. Where the host grants the privileges itself, an empty page instead, and nothing says why | – |
-| System work | let through: not an operator, then every permission in harbor | nothing | harbor's entries, under the policy of system work in its tenant | – |
+| Ada | let through. She is not an operator, so the check tests `tenancy.seats.manage` for the whole tenant, which she holds. | `HoldsAtTenantAsync` | harbor's entries, through the seat managers' rule, limited to her tenant | – |
+| Juno | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-permitted` | `HoldsAtTenantAsync` | none | no row, because she does not hold the permission that the seat managers' rule requires |
+| the new sign-in | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-seated` | nothing | none | no row, because they have no seat that manages seats |
+| Anonymous | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-seated` | nothing | none | refused, 42501. No permissive policy is for `anon`, so it has no privilege on the table. |
+| Orla | let through, because she is an operator, the first alternative | nothing | harbor's entries, through the operators' rule | – |
+| Orla, with the operators' rule forgotten | let through | nothing | 42501, permission denied. Without the rule, no permissive policy is for her role, so the Supabase export grants the role nothing on the table. This is an error, not a refusal, so the host answers 500. When the host grants the privileges itself, she gets an empty page instead, with no reason given. | – |
+| System work | let through. System work is not an operator, so the check tests the permission, and system work holds every permission in harbor. | nothing | harbor's entries, allowed by the policy for system work in its tenant | – |
 
 ### RegisterOrganization
 
-| Caller and handler | The door | At the door | The rows | Round the door |
+| Caller and handler | The access check | Statement of the check | The handler and the rows | Sent directly |
 |---|---|---|---|---|
-| Ada, Juno, the new sign-in, Orla | let through: signed in | nothing | a new tenant, the caller its administrator, written as system work in that tenant | – |
-| Ada or Juno, the system work forgotten | let through | nothing | none: the provisioning refuses a seat, `access.system-only`, 403 | – |
-| the new sign-in or Orla, the system work forgotten | let through | nothing | none: the provisioning refuses a caller with no seat with its own reason, `tenancy.not-seated`, 403 | – |
-| Anonymous | `access.not-signed-in`, 403 | nothing | none | refused, 42501: no policy lets a caller write a tenant, and `anon` may not use the schema |
-| System work | `access.not-signed-in`, 403: system work is nobody's sign-in | nothing | none | refused, 42501: system work in harbor writes no other tenant's row |
+| Ada, Juno, the new sign-in, Orla | let through, because they are signed in | nothing | a new tenant, the caller its administrator, written as system work in that tenant | – |
+| Ada or Juno, the system work forgotten | let through | nothing | none. The provisioning refuses a seat with `access.system-only`, 403. | – |
+| the new sign-in or Orla, the system work forgotten | let through | nothing | none. The provisioning refuses a caller without a seat with that caller's own reason, `tenancy.not-seated`, 403. | – |
+| Anonymous | `access.not-signed-in`, 403 | nothing | none | refused, 42501. No policy lets a caller write a tenant, and `anon` cannot use the schema. |
+| System work | `access.not-signed-in`, 403, because system work is not a signed-in user | nothing | none | refused, 42501. System work in harbor cannot write another tenant's row. |
 
 ## Where to look next
 
-- [Access requirements](access-requirements.md): the vocabulary, combinations, the request in hand, and holding it
-  with a test.
+- [Access requirements](access-requirements.md): the requirements and their attributes, combinations, the request in
+  hand, and testing the requirements.
 - [Row level security](row-level-security.md): the caller on the connection, row access rules, column rules, and
   what happens when the policies refuse what C# allowed.
-- [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) and [Membership](membership.md#with-tenancy): the cases
-  they decide, and the policies they ship.
-- [Who may do what, in the sample](tenancy.md#who-may-do-what-in-the-sample): the sample's modules, and how to run
-  them.
+- [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) and
+  [Membership](membership/beside-an-organization.md#with-tenancy): the requirements they decide, and the policies they
+  ship.
+- [Who may do what, in the sample](tenancy/the-sample.md#who-may-do-what-in-the-sample): the sample's modules, and how
+  to run them.

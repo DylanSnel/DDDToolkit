@@ -12,8 +12,8 @@ namespace Examples.Tenancy.Inspections.Api.Operators.Rest;
 /// tenant. The route sends the query of the application project's <c>Operators</c> feature.
 /// </summary>
 /// <remarks>
-/// An operator holds no seat, so the route names its tenant in the path and not in a header. It reads; there is no
-/// route here that records an inspection, because an operator changes nothing itself.
+/// An operator holds no seat, so the route names its tenant in the path and not in a header. It reads. An operator
+/// records no inspection: that is a seat's work.
 /// <para>
 /// Like every route of this project, it decides nothing and takes only the sender;
 /// <see cref="InspectionsModule"/> says what all of them keep to. Internal: the module's entry maps it into the

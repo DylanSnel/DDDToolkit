@@ -50,7 +50,7 @@ public sealed class InvitationOverTimeScenarios(SampleHosts sample) : IClassFixt
             Cancellation);
         invited.StatusCode.Should().Be(HttpStatusCode.OK);
         var issued = await invited.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
-        var (token, expiresAt) = (issued.Text("token"), issued.GetProperty("expiresAt").GetDateTimeOffset());
+        var (token, expiresAt) = (issued.Text("token"), issued.GetProperty("invitation").GetProperty("expiresAt").GetDateTimeOffset());
 
         // Listed while it is open: asked first, and judged once the clock has said it still was.
         var whileOpen = await tove.GetFromJsonAsync<JsonElement>("/tenancy/invitations", Cancellation);

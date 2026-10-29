@@ -17,7 +17,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// and under a login role that holds nothing, where the bookkeeping role does the deleting. The system clock
 /// throughout, because the guard reads the database's.
 /// </summary>
-public sealed class EventLogRetentionTests(ExplicitCallersPostgres postgres) : IDisposable
+public sealed class EventLogRetentionTests(ExplicitCurrentUserPostgres postgres) : IDisposable
 {
     private static readonly TimeSpan KeepFor = LoggedApiaryContext.KeepFor;
 
@@ -202,7 +202,7 @@ public sealed class EventLogRetentionTests(ExplicitCallersPostgres postgres) : I
         await using (var scope = host.CreateAsyncScope())
         {
             var byHand = () => scope.ServiceProvider.GetRequiredService<DomainEventRetention<ApiaryContext>>().DeleteExpiredAsync(Cancellation);
-            await byHand.Should().ThrowAsync<NoCallerException>();
+            await byHand.Should().ThrowAsync<NoCurrentUserException>();
         }
 
         // No caller a request runs as may delete a row of the log: the privilege is the bookkeeping role's alone.

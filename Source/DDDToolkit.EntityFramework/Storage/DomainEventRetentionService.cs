@@ -13,7 +13,7 @@ namespace DDDToolkit.EntityFramework.Storage;
 /// <c>services.AddDomainEventRetention&lt;TContext&gt;(...)</c>.
 /// <para>
 /// Deleting old rows is the toolkit's own bookkeeping, the event log's included: where the host requires
-/// explicit callers, each run begins <c>Caller.System</c>. Without it nothing is begun.
+/// an explicit current user, each run begins system work. Without it nothing is begun.
 /// </para>
 /// </summary>
 public sealed class DomainEventRetentionService<TContext> : BackgroundService where TContext : DbContext
@@ -57,7 +57,7 @@ public sealed class DomainEventRetentionService<TContext> : BackgroundService wh
     public async Task<DomainEventRetentionResult> DeleteExpiredAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        using var bookkeeping = ToolkitCallers.BeginBookkeeping(ToolkitCallers.Required(scope.ServiceProvider));
+        using var bookkeeping = ToolkitWork.BeginBookkeeping(ToolkitWork.Required(scope.ServiceProvider));
         var retention = scope.ServiceProvider.GetRequiredService<DomainEventRetention<TContext>>();
         var result = await retention.DeleteExpiredAsync(cancellationToken).ConfigureAwait(false);
 

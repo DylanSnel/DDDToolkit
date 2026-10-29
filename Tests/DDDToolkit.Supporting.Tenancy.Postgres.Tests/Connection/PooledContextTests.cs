@@ -109,7 +109,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
             await using var widgets = await scoped.GetRequiredService<IDbContextFactory<WidgetContext>>().CreateDbContextAsync(Cancellation);
             rented.Add(widgets);
 
-            var held = scoped.Answers().Over(widgets).UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             return await widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).OrderBy(widget => widget.Name).Select(widget => widget.Name).ToListAsync(Cancellation);
         }
 
@@ -135,7 +135,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         rented.Should().HaveCount(60);
         rented.Distinct().Count().Should().BeLessThan(rented.Count, "the pool handed contexts out again");
         recorder.Sent.Should().HaveCount(60, "each read is one statement, the question inside it")
-            .And.OnlyContain(command => command.Text.Contains("tenancy." + TenancyFunctionNames.CallerPermissions + "()", StringComparison.Ordinal) && command.Caller!.Kind == CallerKind.User);
+            .And.OnlyContain(command => command.Text.Contains("tenancy." + TenancyFunctionNames.CurrentPermissions + "()", StringComparison.Ordinal) && command.Caller!.Kind == CurrentUserKind.User);
     }
 
     [Fact]
@@ -148,8 +148,8 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
 
         Task<IReadOnlyList<(SeatId Seat, RoleId Role)>> AdministratorsAsync(IServiceProvider scoped, TenantId tenant)
         {
-            rented.Add(scoped.Tenancy());
-            return scoped.GetRequiredService<HostTenancy.IStore>().AdministratorsAsync(tenant, DateTimeOffset.UtcNow, Cancellation);
+            rented.Add(scoped.TenancyContext());
+            return scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().AdministratorsAsync(tenant, DateTimeOffset.UtcNow, Cancellation);
         }
 
         // The request's own context comes from the pool too, and the store with it. Ada administers Harbor and is told
@@ -159,7 +159,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => AdministratorsAsync(scoped, Harbor))).Should().BeEmpty();
         (await services.BySeat(Odette.Identity, Orchard, Odette.Seat, scoped => AdministratorsAsync(scoped, Orchard))).Should().Equal((Odette.Seat, OrchardRoles.Administrator));
         recorder.Sent.Should().HaveCount(3).And.OnlyContain(
-            command => command.Text.Contains(TenancyFunctionNames.TenantAdministrators, StringComparison.Ordinal) && command.Caller!.Kind == CallerKind.User,
+            command => command.Text.Contains(TenancyFunctionNames.TenantAdministrators, StringComparison.Ordinal) && command.Caller!.Kind == CurrentUserKind.User,
             "the store found that the database keeps the rights, from the application's services, and asked its function as the signed-in user");
 
         // System work in the tenant reads the rights itself, on the same context.
@@ -170,10 +170,10 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         // that manage access, and Ada after him hers.
         async Task<int> OwnReachesAsync(IServiceProvider scoped, SeatId seat)
         {
-            rented.Add(scoped.Tenancy());
-            var reaches = await scoped.GetRequiredService<HostTenancy.IStore>().RightsAMoveChangesAsync(
+            rented.Add(scoped.TenancyContext());
+            var reaches = await scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().RightsAMoveChangesAsync(
                 Harbor, seat, North, NorthPier, scoped.GetRequiredService<Catalogue.TenancyCatalogue>().AccessManagingPermissions, DateTimeOffset.UtcNow, Cancellation);
-            return reaches.Count(reach => reach.OfCaller);
+            return reaches.Count(reach => reach.OfCurrentSeat);
         }
 
         var catalogue = services.Provider.GetRequiredService<Catalogue.TenancyCatalogue>();
@@ -183,7 +183,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         rented.Distinct().Should().ContainSingle("each request was handed the context the one before gave back");
 
         // And the checks a host runs at start-up find a context that comes from a pool.
-        TenancyPostgresChecks.EnsureExplicitCallers(services.Provider);
+        TenancyPostgresChecks.EnsureExplicitCurrentUser(services.Provider);
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);
     }
 
@@ -198,14 +198,14 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         // The request's own context, the unit of work of its command, is one of the pool's.
         Task<T> As<T>(Person person, Func<IServiceProvider, Task<T>> act) => services.BySeat(person.Identity, Harbor, person.Seat, scoped =>
         {
-            var context = scoped.Tenancy();
+            var context = scoped.TenancyContext();
             context.IsPooled().Should().BeTrue();
             rented.Add(context);
             return act(scoped);
         });
 
         // Ada, who administers Harbor, adds a seat, places it and gives it a role: three commands, three requests.
-        var seat = await As(Ada, scoped => scoped.Seats().AddSeatAsync(Pat, Cancellation, configure: seat => seat.Rename("Pat")));
+        var seat = (await As(Ada, scoped => scoped.Seats().AddAsync(Pat, Cancellation, configure: seat => seat.Rename("Pat")))).Id;
         await As(Ada, async scoped =>
         {
             await scoped.Seats().PlaceAsync(seat, North, primary: true, Cancellation);
@@ -213,19 +213,19 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         });
         await As(Ada, async scoped =>
         {
-            await scoped.Seats().GrantAsync(seat, North, HarborRoles.Watcher, until: null, reason: null, Cancellation);
+            await scoped.Seats().GrantAsync(seat, HarborRoles.Watcher, North, until: null, reason: null, Cancellation);
             return true;
         });
 
         // Oli, on the context she gave back, manages no seats: the use case asks the database as him, and refuses.
-        var refused = await RefusedAsync(TenancyRefusals.NotPermitted, () => As(Oli, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Uninvited"))));
+        var refused = await RefusedAsync(TenancyRefusals.NotPermitted, () => As(Oli, scoped => scoped.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Uninvited"))));
         refused.Arguments["Permission"].Should().Be(Catalogue.TenancyPermissions.SeatsManage);
 
         rented.Should().HaveCount(4);
         rented.Distinct().Should().ContainSingle("each request was handed the context the one before gave back");
 
         // Each save stored its events with what it changed, in the same transaction.
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>(
                 "SELECT \"EventName\" FROM ddd.\"OutboxMessages\" WHERE \"AggregateId\" ILIKE $1 ORDER BY \"CreatedAt\", \"EventName\"",
                 Cancellation,
@@ -303,7 +303,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         // Ada loads Oli's seat on her request's context, changes it, and ends the request without saving.
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped =>
         {
-            var context = scoped.Tenancy();
+            var context = scoped.TenancyContext();
             rented.Add(context);
 
             var seat = await context.Set<HostSeat>().AsTracking().SingleAsync(candidate => candidate.Id == Oli.Seat, Cancellation);
@@ -316,7 +316,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         // Odette, in Orchard, is handed that instance with nothing tracked on it, and her commands save her changes alone.
         await services.BySeat(Odette.Identity, Orchard, Odette.Seat, async scoped =>
         {
-            var context = scoped.Tenancy();
+            var context = scoped.TenancyContext();
             rented.Add(context);
             context.ChangeTracker.Entries().Should().BeEmpty("what the renter before tracked left with her");
 
@@ -326,7 +326,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
 
         rented.Distinct().Should().ContainSingle("the second request was handed the context the first gave back");
 
-        await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
+        await using var owner = await AsUser.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>("SELECT \"DisplayName\" FROM tenancy.\"Seats\" WHERE \"Id\" = ANY ($1) ORDER BY 1", Cancellation, new[] { Oli.Seat.Value, OliInOrchard.Value }))
             .Should().Equal("Oli", "Oliver");
         (await owner.ListAsync<string>("SELECT \"AggregateId\" FROM ddd.\"OutboxMessages\" WHERE \"EventName\" = $1", Cancellation, "tenancy.seat-suspended"))
@@ -377,7 +377,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         await services.InScopeAsync(async scoped =>
         {
             await using var read = await scoped.GetRequiredService<IDbContextFactory<WidgetContext>>().CreateDbContextAsync(Cancellation);
-            foreach (var context in new DbContext[] { scoped.Tenancy(), scoped.Widgets(), read })
+            foreach (var context in new DbContext[] { scoped.TenancyContext(), scoped.Widgets(), read })
             {
                 // Pooled, or the limit would bound nothing: without a pool every open is a connection of its own.
                 var connects = new NpgsqlConnectionStringBuilder(context.Database.GetConnectionString());
@@ -394,7 +394,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         // Three questions: who the caller is, with every permission it holds and where; who holds a permission at a unit, inside a
         // query on a context taken from the factory; and where the caller holds one, inside a module's own query.
         var catalogue = services.Provider.GetRequiredService<Catalogue.TenancyCatalogue>();
-        var overview = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
+        var overview = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation));
         overview.Seat.Id.Should().Be(Ada.Seat);
         overview.Permissions.Should().HaveCount(catalogue.LivePermissions.Count).And.OnlyContain(reach => reach.AtTenant);
 
@@ -403,7 +403,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         var readable = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped =>
         {
             await using var widgets = await scoped.GetRequiredService<IDbContextFactory<WidgetContext>>().CreateDbContextAsync(Cancellation);
-            var held = scoped.Answers().Over(widgets).UnitsWhereIHold(HostCatalogue.WidgetRead);
+            var held = widgets.Tenancy().UnitsWhereIHold(HostCatalogue.WidgetRead);
             return await widgets.Widgets.Where(widget => held.Contains(widget.UnitId)).OrderBy(widget => widget.Name).Select(widget => widget.Name).ToListAsync(Cancellation);
         });
         readable.Should().Equal("Gauge", "Pump", "Valve");
@@ -432,7 +432,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
 
         // For a seat, the database's function answers, in one statement each, sent as that person.
         recorder.Sent.Should().HaveCount(Asking.Length);
-        recorder.Sent.Select(command => command.Caller!.UserId).Should().Equal(Asking.Select(asking => (Guid?)asking.Person.Identity));
+        recorder.Sent.Select(command => command.Caller!.Id).Should().Equal(Asking.Select(asking => (Guid?)asking.Person.Identity));
         recorder.Sent.Should().OnlyContain(command => command.Text.Contains(TenancyFunctionNames.SeatsHoldingPermissionAt, StringComparison.Ordinal),
             "the context found that the database keeps the rights, from the application's services its options were built with");
 
@@ -464,7 +464,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         await using var context = await scoped.GetRequiredService<IDbContextFactory<TContext>>().CreateDbContextAsync(Cancellation);
         rented(context);
 
-        var holders = scoped.Answers().Over(context).SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, unit);
+        var holders = context.Tenancy().SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, unit);
         return await context.Set<SeatRow<TenantId, SeatId>>().Where(seat => holders.Contains(seat.Id)).Select(seat => seat.Id).ToListAsync(Cancellation);
     }
 }

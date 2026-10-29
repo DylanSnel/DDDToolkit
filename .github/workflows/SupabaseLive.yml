@@ -173,16 +173,22 @@ jobs:
       # grants and policies on them, their rows in the history Supabase keeps of applied migrations, and the
       # queue the shop talks through. The pgmq extension stays, but its migration is forgotten with the rest:
       # the CLI refuses to apply migrations older than the last one it remembers. Applying it again is harmless.
+      # The history forgets every exported migration and every migration in the example's folder, by version, so a
+      # migration written by hand is forgotten without being named here. The matrix's second job relies on it: the
+      # first job applied the same migrations to the same project.
       - name: Start from an empty shop
         if: env.BRANCHING != 'true'
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          versions=$(ls Examples/ModularMonolith.Supabase/supabase/migrations | sed -nE 's/^([0-9]+)_.*\.sql$/\1/p' | paste -sd, -)
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v versions="$versions" <<'SQL'
+          SELECT set_config('shop.migrations', :'versions', false);
           DROP SCHEMA IF EXISTS catalog, ordering, inventory, payments, shipping, ddd CASCADE;
           DO $$
           BEGIN
             IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
               DELETE FROM supabase_migrations.schema_migrations
-              WHERE name LIKE '%.ddd' OR name IN ('enable_queues', 'grant_modules_to_callers');
+              WHERE name LIKE '%.ddd'
+                 OR version = ANY (string_to_array(current_setting('shop.migrations'), ','));
             END IF;
             IF to_regclass('pgmq.q_shop') IS NOT NULL THEN
               PERFORM pgmq.drop_queue('shop');

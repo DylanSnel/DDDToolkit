@@ -22,10 +22,10 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
     /// <summary>Who a statement runs as and what it sees, in one row: the backend, the role, the user, the team and every visible note.</summary>
     private const string Who =
         "SELECT pg_catalog.pg_backend_pid()::text || '|' || current_user || '|' || coalesce(auth.uid()::text, 'none') || '|' || " +
-        $"coalesce(pg_catalog.current_setting('{TeamOfTheCaller.Setting}', true), '') || '|' || " +
+        $"coalesce(pg_catalog.current_setting('{TeamOfTheUser.Setting}', true), '') || '|' || " +
         """coalesce((SELECT string_agg("Text", ',' ORDER BY "Text") FROM notes."Notes"), '') AS "Value" """;
 
-    private readonly CallerOfTheTest _caller = new();
+    private readonly UserOfTheTest _user = new();
     private readonly TenantSetting _tenant = new() { Current = "north" };
     private readonly string _pool = "pooler-" + Guid.NewGuid().ToString("N")[..12];
 
@@ -68,7 +68,7 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
 
         const int Flows = 16;
         const int Rounds = 25;
-        var interceptor = PoolerFixture.Interceptor(new AmbientCallerAccessor(), RowLevelSecurityScope.Transaction, [new TeamOfTheCaller()]);
+        var interceptor = PoolerFixture.Interceptor(new CurrentUser(), RowLevelSecurityScope.Transaction, [new TeamOfTheUser()]);
         var backends = new ConcurrentDictionary<string, bool>(StringComparer.Ordinal);
         var wrong = new ConcurrentBag<string>();
 
@@ -80,7 +80,7 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
                     // Alice and Bob in turn, each flow starting with the other one.
                     var (id, name, team) = (flow + round) % 2 == 0 ? (Alice, "Alice", "amber") : (Bob, "Bob", "teal");
 
-                    using (Callers.Begin(PooledNotesHost.User(id, team)))
+                    using (TestAccess.BeginAs(PooledNotesHost.User(id, team)))
                     {
                         await using var context = PoolerFixture.Context(Connection, interceptor);
 
@@ -122,7 +122,7 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
     {
         database.Require();
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = Context();
 
         // The backend the caller's transactions run on, read inside one of them.
@@ -203,8 +203,8 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
         await using var relay = new CuttableRelay(database.PoolerHost, database.PoolerPort);
         var dropping = new NpgsqlConnectionStringBuilder(database.Pooled(_pool + "-dropped", relay.Port)) { Pooling = false }.ConnectionString;
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
-        var context = PoolerFixture.Context(dropping, PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant]));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        var context = PoolerFixture.Context(dropping, PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant]));
         BackendState state;
         try
         {
@@ -255,7 +255,7 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
                 await dirty.OpenAsync(Cancellation);
                 await using var leave = new NpgsqlCommand(
                     "SELECT pg_catalog.pg_backend_pid() FROM (SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', $1, false), " +
-                    $"set_config('request.jwt.claim.sub', $2, false), set_config('{TenantSetting.Tenant}', 'left behind', false), set_config('{TeamOfTheCaller.Setting}', 'left behind', false)) set",
+                    $"set_config('request.jwt.claim.sub', $2, false), set_config('{TenantSetting.Tenant}', 'left behind', false), set_config('{TeamOfTheUser.Setting}', 'left behind', false)) set",
                     dirty);
                 leave.Parameters.Add(new NpgsqlParameter { Value = ClaimsOf(Bob) });
                 leave.Parameters.Add(new NpgsqlParameter { Value = Bob.ToString() });
@@ -266,25 +266,25 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
                 new BackendState(backend, "authenticated", LoginRole, ClaimsOf(Bob), Bob.ToString(), "left behind"),
                 "the control: the session is as the last client left it");
 
-            var team = new TeamOfTheCaller();
-            await using var context = PoolerFixture.Context(Connection, PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant, team]));
+            var team = new TeamOfTheUser();
+            await using var context = PoolerFixture.Context(Connection, PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant, team]));
 
-            _caller.Current = PooledNotesHost.User(Alice, "amber");
+            _user.Current = PooledNotesHost.User(Alice, "amber");
             (await WhoAsync(context)).Should().Be($"{backend}|authenticated|{Alice}|amber|Alice's", "Alice's transaction runs as Alice, whatever the session carries");
             (await BackendState.OfAsync(context, Cancellation)).Should().Be(
-                new BackendState(backend, "authenticated", LoginRole, _caller.Current.Claims!, "", "north"), "the setting Supabase's auth.uid() reads first is emptied, not Bob's");
+                new BackendState(backend, "authenticated", LoginRole, _user.Current.Claims!, "", "north"), "the setting Supabase's auth.uid() reads first is emptied, not Bob's");
 
             // A caller without a team or a tenant: both settings are emptied for the transaction, not left as they were.
-            _caller.Current = Callers.FromClaims(ClaimsOf(Bob));
+            _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
             _tenant.Current = null;
             (await WhoAsync(context)).Should().Be($"{backend}|authenticated|{Bob}||Bob's");
             (await BackendState.OfAsync(context, Cancellation)).Tenant.Should().Be("");
 
-            _caller.Current = Caller.Anonymous;
+            _user.Current = CurrentUserSnapshot.Anonymous;
             (await WhoAsync(context)).Should().Be($"{backend}|anon|none||", "nobody is signed in, though the session says Bob");
 
             // The system runs as the login role, which sees no table here: the role the session carries is not its.
-            _caller.Current = Caller.System;
+            _user.Current = CurrentUserSnapshot.System;
             var state = await BackendState.OfAsync(context, Cancellation);
             state.Should().Be(new BackendState(backend, LoginRole, LoginRole, "", "", ""));
         }
@@ -326,7 +326,7 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
     {
         database.Require();
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var first = Guarded();
         await using var second = Guarded();
 
@@ -359,10 +359,10 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
     {
         database.Require();
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _user.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = PoolerFixture.Context(
             Connection,
-            PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant], configure: options => options.StatementTimeouts[CallerKind.User] = TimeSpan.FromMilliseconds(200)));
+            PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant], configure: options => options.StatementTimeouts[CurrentUserKind.User] = TimeSpan.FromMilliseconds(200)));
 
         var backend = (await BackendState.OfAsync(context, Cancellation)).Backend;
         (await context.Database.SqlQueryRaw<string>("""SELECT pg_catalog.current_setting('statement_timeout') AS "Value" """).SingleAsync(Cancellation))
@@ -379,12 +379,12 @@ public sealed class PoolerLeakTests(PoolerFixture database) : IAsyncLifetime
     }
 
     private NotesContext Context()
-        => PoolerFixture.Context(Connection, PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant]));
+        => PoolerFixture.Context(Connection, PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant]));
 
     private GuardedNotesContext Guarded()
         => new(new DbContextOptionsBuilder<GuardedNotesContext>()
             .UseNpgsql(Connection)
-            .AddInterceptors(PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Transaction, [_tenant]))
+            .AddInterceptors(PoolerFixture.Interceptor(_user, RowLevelSecurityScope.Transaction, [_tenant]))
             .Options);
 
     private static Task<string> WhoAsync(NotesContext context)
