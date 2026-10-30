@@ -104,3 +104,4 @@ DDD00103 | DDDToolkit.Tenancy | Error | An operator's command takes its tenant f
 DDD00104 | DDDToolkit.Tenancy | Error | [Operator] stands beside no requirement an operator cannot meet
 DDD00105 | DDDToolkit.Tenancy | Warning | [Operator] on a query names no tenant and no scope
 DDD00106 | DDDToolkit.Membership | Info | A member or role manager is not written
+DDD00107 | DDDToolkit.Access | Error | The registration of an access behavior is written and in scope where it is called

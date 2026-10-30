@@ -1533,6 +1533,9 @@ public static class BillingAccessBehaviorRegistration
 - The behavior is named after the interface: `IBillingRequest` gives `BillingAccessBehavior`. It is in the
   interface's namespace and has the interface's visibility. An interface the behavior cannot be written for is
   [DDD00056](diagnostics.md#ddd00056).
+- The registration, `AddBillingAccessBehavior`, is also in the interface's namespace. Code in that namespace and in
+  the namespaces inside it sees the call. Code anywhere else needs a using directive, and this includes a registration
+  class one namespace up. Without it the call is CS1061, and [DDD00107](diagnostics.md#ddd00107) names the namespace.
 - The behavior runs the next step inside `BeginWork`, so the work a check begins reaches the handler and ends with it.
   A command an operator sends runs as operator work this way. A message that implements Mediator's `IBaseQuery` is
   passed as a query, and a check begins nothing for it.
@@ -1550,9 +1553,10 @@ public static class BillingAccessBehaviorRegistration
 - A notification reaches its handlers through neither pipeline, so nothing would check its requirement. A
   notification that implements the interface is [DDD00058](diagnostics.md#ddd00058). Send work that needs a check as
   a command or a query.
-- Without the library, no behavior is generated. You call `RequireAsync` yourself,
+- Without the library, no behavior and no registration are generated. You call `RequireAsync` yourself,
   [as described above](#asking-the-checks-without-mediator). The generator still writes the requirements of the
-  attributes into a `partial` interface, because your call reads them.
+  attributes into a `partial` interface, because your call reads them. A call to the registration in such a project is
+  [DDD00107](diagnostics.md#ddd00107).
 
 Mediator's own generator registers the behaviors a host lists in `MediatorOptions.PipelineBehaviors`. It reads that
 list from your source code, and one source generator cannot see what another one writes. So the registration depends

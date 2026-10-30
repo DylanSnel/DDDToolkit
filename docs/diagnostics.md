@@ -106,6 +106,7 @@ problem, and the fix.
 | [DDD00104](#ddd00104) | Error | [Operator] stands beside no requirement an operator cannot meet |
 | [DDD00105](#ddd00105) | Warning | [Operator] on a query names no tenant and no scope |
 | [DDD00106](#ddd00106) | Info | A member or role manager is not written |
+| [DDD00107](#ddd00107) | Error | The registration of an access behavior is written and in scope where it is called |
 
 The Meaning column is the title the IDE shows for each id.
 
@@ -139,7 +140,8 @@ rules, by topic:
   [DDD00100](#ddd00100) and [DDD00101](#ddd00101) do the same for rules over Tenancy's tables.
 - [DDD00056](#ddd00056) to [DDD00058](#ddd00058) and [DDD00061](#ddd00061): the
   [access behavior written for a request interface](access-requirements.md#the-generated-behavior-with-mediator).
-  They catch a message that reaches its handler without a check of what it requires.
+  They catch a message that reaches its handler without a check of what it requires. [DDD00107](#ddd00107) names
+  the cause when a call to the behavior's registration does not compile.
 - [DDD00077](#ddd00077) to [DDD00086](#ddd00086) and [DDD00089](#ddd00089):
   [what a request declares](access-requirements.md#what-a-request-declares). They catch a request that declares
   nothing, a request whose attributes say something other than what is checked, and a request that says one
@@ -177,7 +179,7 @@ added later:
 - [DDD00042](#ddd00042) to [DDD00050](#ddd00050), [DDD00053](#ddd00053), and [DDD00065](#ddd00065) to
   [DDD00067](#ddd00067), about [supporting domains](writing-a-supporting-domain.md).
 - [DDD00052](#ddd00052), about a function's name.
-- [DDD00056](#ddd00056) and [DDD00057](#ddd00057), about an access behavior.
+- [DDD00056](#ddd00056), [DDD00057](#ddd00057) and [DDD00107](#ddd00107), about an access behavior.
 
 Each of these says what the generator could not do.
 
@@ -3927,6 +3929,52 @@ the name is free and the manager can do its work. This information names the man
 A type of the manager's name in the global namespace is your own manager, and the generator writes none and reports
 nothing. A resource whose member list is not written gets no manager either. [DDD00059](#ddd00059) or
 [DDD00060](#ddd00060) says why.
+
+## DDD00107
+
+**The registration of an access behavior is written and in scope where it is called.**
+
+```csharp
+namespace Shop.Billing.Access;
+
+[AccessRequests]
+public partial interface IBillingRequest : IRequireAccess;
+```
+
+```csharp
+namespace Shop.Billing;
+
+public static class BillingApplication
+{
+    public static IServiceCollection AddBillingApplication(this IServiceCollection services)
+        => services.AddBillingAccessBehavior();   // CS1061 and DDD00107
+}
+```
+
+The compiler reports CS1061 at this call, and CS1061 does not name the cause. DDD00107 is reported beside it, at the
+same call. The message names one of two causes.
+
+**The namespace of the interface is not imported.** The generator declares the registration in the namespace of the
+interface, here `Shop.Billing.Access`. Code in that namespace and in the namespaces inside it sees the registration.
+Code anywhere else needs a using directive, and this includes a class one namespace up. Add it to the file, or add a
+`global using` to the project:
+
+```csharp
+using Shop.Billing.Access;
+```
+
+**The project of the interface does not reference the Mediator library.** The generator writes the behavior and its
+registration only in a project that references the library. The message names the project of the interface, which can
+differ from the project of the call. Add the package `Mediator.Abstractions` to that project. Or remove the call and
+ask the checks yourself, as [Asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)
+shows.
+
+A project without the library that asks the checks itself writes no such call, so DDD00107 is not reported there. For
+that reason the diagnostic is on the call and not on the interface.
+
+DDD00107 comes from an analyzer. It is an error because the call does not compile in either case. In a project that
+references the library, an interface without a behavior is [DDD00056](#ddd00056) or [DDD00057](#ddd00057), and DDD00107
+is not reported beside them.
 
 ## Building the model fails: the owned type must carry the key part
 
