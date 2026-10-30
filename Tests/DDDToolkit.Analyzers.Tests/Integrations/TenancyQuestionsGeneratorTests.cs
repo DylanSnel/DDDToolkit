@@ -202,10 +202,7 @@ public class TenancyQuestionsGeneratorTests
             .RunCore();
 
         result.ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00051").ShouldCompile();
-        var literal = CSharpSyntaxTree.ParseText(result.Source("ReportIsReadableInTenant.AccessFunction")).GetRoot()
-            .DescendantNodes().OfType<VariableDeclaratorSyntax>().Single(variable => variable.Identifier.Text == "RowAccessSql")
-            .Initializer!.Value;
-        ((LiteralExpressionSyntax)literal).Token.ValueText.Should().Be(
+        SqlOf(result, "ReportIsReadableInTenant.AccessFunction").Should().Be(
             "(({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold_permission_in_tenant}({arg:1}, 'reports.read'))))"
             + " AND ({col:RoleId} = ANY (ARRAY(SELECT {fn:tenancy/roles_with_permission_in_tenant}({arg:1}, 'reports.read')))))");
     }
@@ -342,10 +339,10 @@ public class TenancyQuestionsGeneratorTests
         result.Count("DDD00065").Should().BeGreaterThan(0, "the shorthands do not stand in for what the classes the package asks for say");
     }
 
-    /// <summary>The SQL the generator wrote into the rule <c>TheRule</c>.</summary>
-    private static string SqlOf(GeneratorRunOutcome result)
+    /// <summary>The SQL the generator wrote into the rule <c>TheRule</c>, or into what <paramref name="hint"/> names.</summary>
+    private static string SqlOf(GeneratorRunOutcome result, string hint = "TheRule.RowAccess")
     {
-        var literal = CSharpSyntaxTree.ParseText(result.Source("TheRule.RowAccess")).GetRoot()
+        var literal = CSharpSyntaxTree.ParseText(result.Source(hint)).GetRoot()
             .DescendantNodes().OfType<VariableDeclaratorSyntax>().Single(variable => variable.Identifier.Text == "RowAccessSql")
             .Initializer!.Value;
 
