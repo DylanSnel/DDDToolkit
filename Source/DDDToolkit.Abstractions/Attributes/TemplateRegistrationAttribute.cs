@@ -51,6 +51,10 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// A method over a template an application may leave out says so with <see cref="OnlyWith"/>: it is written only where
 /// that template has a class, and a project without one hears nothing of it.
 /// </para>
+/// <para>
+/// A method whose wrapper only saves type arguments in a call, and registers nothing, says so with
+/// <see cref="Shorthand"/>: each project it concerns gets the wrapper, and nothing is reported.
+/// </para>
 /// </summary>
 /// <remarks>
 /// The generic method keeps working on its own. The wrapper only saves the application from repeating, in
@@ -96,4 +100,25 @@ public sealed class TemplateRegistrationAttribute : Attribute
     /// template.
     /// </summary>
     public Type? OnlyWith { get; set; }
+
+    /// <summary>
+    /// Whether the wrapper only saves the type arguments of a call anywhere in a project, as a question a row access rule
+    /// asks does: <c>user.CurrentSeatId()</c> for <c>user.CurrentSeatId&lt;SeatId&gt;()</c>. The generic method answers just
+    /// the same, so the wrapper is a convenience. It changes two things.
+    /// <list type="bullet">
+    /// <item>
+    /// Each project of a module that sees the method gets its own wrapper, where a project otherwise leaves it to a project
+    /// of its module below it. A wrapper is internal, and what calls this one may sit in any project: rules usually sit in
+    /// an infrastructure project, above an application project that holds the same wrappers.
+    /// </item>
+    /// <item>
+    /// Nothing is reported when the wrapper cannot be closed, where a missing template is DDD00049 otherwise, several
+    /// classes DDD00045 and a type that does not fit DDD00050. A project that declares only some of a package's classes has
+    /// no wrapper for a method over the others, and writes the type arguments.
+    /// </item>
+    /// </list>
+    /// A shorthand does not count as a registration the project can call, so what a package's own generator says of its
+    /// classes is still said.
+    /// </summary>
+    public bool Shorthand { get; set; }
 }

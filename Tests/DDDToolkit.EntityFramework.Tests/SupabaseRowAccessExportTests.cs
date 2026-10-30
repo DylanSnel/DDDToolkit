@@ -729,7 +729,7 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
     {
         var ticket = new Ticket(TicketId.CreateSequential(), "Watched", owner: null, team: null, TicketStatus.Open, isPublic: false);
 
-        var ask = () => TicketWatchers.Allows(ticket.Id);
+        var ask = () => TicketWatchers.Allows(ticket.Id, RowUser.From(CurrentUserSnapshot.Anonymous));
 
         ask.Should().Throw<DatabaseOnlyException>().Which.SqlText.Should().Be("desk.is_watcher(ticketId)");
     }

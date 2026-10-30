@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy;
@@ -30,6 +31,11 @@ using DDDToolkit.Supporting.Tenancy.Managers;
 // in which tenant, and the work that is not the caller's own. A project of another module that sees only the ids says
 // which they are with [assembly: TenancyIds<...>], and gets the class in its root namespace.
 [assembly: TemplateFacade(typeof(TenancyAccessManager<,,,>))]
+
+// The questions a row access rule asks of Tenancy, closed over the module's ids in every project of a module that declares
+// the classes or says which ids are Tenancy's with [assembly: TenancyIds<...>]: user.CurrentSeatId() for
+// user.CurrentSeatId<SeatId>(). A wrapper is internal, and a rule may sit in any project.
+[assembly: TemplateRegistrations(typeof(TenancyRowAccess))]
 
 // A request that requires a permission and marks no member of where it is held, [RequiresPermission(permission)] on its own, requires it
 // for the whole tenant: Tenancy's case, so Tenancy says it. A permission at a unit is marked [AtUnit], and one on a resource

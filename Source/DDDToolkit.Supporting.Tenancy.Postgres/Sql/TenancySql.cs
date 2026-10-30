@@ -1,4 +1,5 @@
 using System.Text;
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.EntityFramework.Postgres;
@@ -43,7 +44,7 @@ internal static class TenancySql
     /// <summary>The functions, by the names rules ask them by, relative to <see cref="TenancyRowAccess.Owner"/>.</summary>
     internal const string CurrentSeat = "current_seat";
 
-    /// <summary>The calling seat's own row, which <c>TenancyRowAccess.CurrentSeat&lt;TSeat&gt;()</c> asks.</summary>
+    /// <summary>The calling seat's own row, which <c>user.CurrentSeat&lt;TSeat&gt;()</c> asks.</summary>
     internal const string CurrentSeatRow = "current_seat_row";
 
     internal const string CurrentTenant = "current_tenant";
@@ -421,7 +422,7 @@ internal static class TenancySql
             GrantTo: usersAndSystemIn);
 
         // The calling seat's own row, every column the application's seat class maps, for a rule that reads a field of
-        // it: TenancyRowAccess.CurrentSeat<TSeat>().Kind. It runs as its owner, so a rule on the seats that reads it does
+        // it: user.CurrentSeat<TSeat>().Kind. It runs as its owner, so a rule on the seats that reads it does
         // not ask the seats' policies again, and a seat reads its own fields whatever the application's read rule on
         // the seats says. No row for a caller without a seat, so every field it answers is null then.
         yield return new ContributedFunction(

@@ -29,20 +29,16 @@ manager and `WhereIHold` read in C#. For `documents`:
   registered ([`UseDDDToolkit`](../entity-framework.md#usedddtoolkit)). The only Membership option a context can take
   is [the expert hold](checks-and-saves.md#the-expert-hold).
 
-### The mark and the contracts
+### The mark and the questions
 
-The tutorial writes the mark ([step 3](tutorial.md#step-3-where-it-is-stored)), two contracts, the row access rules
-and the lock ([step 4](tutorial.md#step-4-the-databases-own-rules)), and calls `AddMembershipPostgres()`
-([step 5](tutorial.md#step-5-the-modules-registration-and-the-host)). A third contract returns the people a caller
-works with. Its `Ids` method declares the member id type:
+The tutorial writes the mark ([step 3](tutorial.md#step-3-where-it-is-stored)), the row access rules and the lock
+([step 4](tutorial.md#step-4-the-databases-own-rules)), and calls `AddMembershipPostgres()`
+([step 5](tutorial.md#step-5-the-modules-registration-and-the-host)). A rule asks the last three functions by the
+resource's id. A third question returns the people a caller works with. It also names the member id type:
 
 ```csharp
 // The people the caller shares a document with, by their member id
-[ResourceAccessContract<DocumentId>(ResourceAccessSet.FellowMembers)]
-public static partial class PeopleIShareWith
-{
-    public static partial AccessSet<UserId> Ids();
-}
+public static bool Allows(Person person, IRowUser user) => user.FellowMembers<DocumentId, UserId>().Contains(person.Id);
 ```
 
 - **The mark tells the build which rules belong to the resource.** Put `[MembershipRules<TMember>]` on a static
@@ -59,12 +55,12 @@ public static partial class PeopleIShareWith
 
 - **The access file names `MembershipRowAccessContribution<DocumentShare>` and the package's assembly without a
   version.** A new release of your application leaves the access file unchanged.
-- **A contract names no function.** The generator reads the declaration. The export writes the function that this
+- **A question names no function.** The generator reads the id and the set. The export writes the function that this
   contribution says returns the set. A rule that uses a set that no function returns is refused, with the rule and
   the resource named.
-- **The contract's id** is declared, or it is the id the toolkit writes for `[AggregateRoot<Guid>]` in the declaring
-  project. Contracts belong to the owning module. Rules of other modules call them
-  ([A resource's access, asked by its id](../row-level-security.md#resource-access-contracts)).
+- **The question's id** is declared, or it is the id the toolkit writes for `[AggregateRoot<Guid>]` in the declaring
+  project. A module publishes the id in its contracts. Rules of other modules ask by it
+  ([A resource's access, asked by its id](../row-level-security.md#asking-about-a-resource-by-its-id)).
 - **`FellowMembers` reads the member rows alone.** An owner without a current member row finds nobody by owning. A
   read rule on another table can call it. One example is a read rule on
   [Tenancy's seats](../tenancy/postgres.md#restrictive-rules) that lets a seat read the people on its
@@ -161,7 +157,7 @@ writes a lock from the same marks:
   ([When the database refuses](../row-level-security.md#when-the-database-refuses)).
 - **The database checks each statement when it runs.**
   - Opening a resource writes the owner's member row in the same save. The owner sees the resource as soon as the resource
-    row names the owner. So a rule over `DocumentsISee.Ids()` lets the owner write the member rows of a resource it
+    row names the owner. So a rule over `user.Sees<DocumentId>()` lets the owner write the member rows of a resource it
     has just opened. Where callers open resources as themselves, let the owner hold the locking permission.
   - An owner who holds the permissions only by owning loses them once the owner column changes. The rest of that
     hand-over is then no longer the old owner's to write. So the member manager saves an owner's own hand-over as

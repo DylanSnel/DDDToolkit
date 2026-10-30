@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// A restrictive rule of the application's on Tenancy's organization: <c>Restrictive = true</c>, so its policy is
 /// AND-ed with every policy that allows, Tenancy's defaults included, and only narrows what they allow. Here only an
 /// employee's seat reads the organization, its units and the closure of its tree, which the application says by a
-/// field of its own seat class, read through <c>TenancyRowAccess.CurrentSeat&lt;HostSeat&gt;()</c>. Tenancy's own
+/// field of its own seat class, read through <c>user.CurrentSeat&lt;HostSeat&gt;()</c>. Tenancy's own
 /// work, and what its functions answer as their owner, keep working under it: every use case runs, and a seat the rule
 /// keeps out of the organization still learns what the unit it works at is called.
 /// </summary>
@@ -232,6 +232,6 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
 [RowAccess<HostOrganization>(RowOperations.Read, Restrictive = true)]
 public static partial class OnlyEmployeesReadTheOrganization
 {
-    public static bool Allows(HostOrganization organization, ICurrentUser user)
-        => TenancyRowAccess.CurrentSeat<HostSeat>().Kind == HostSeatKind.Employee;
+    public static bool Allows(HostOrganization organization, IRowUser user)
+        => user.CurrentSeat<HostSeat>().Kind == HostSeatKind.Employee;
 }

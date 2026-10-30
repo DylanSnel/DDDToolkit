@@ -283,7 +283,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
 public static partial class MembersReadOnlyThemselves
 {
     /// <summary>Whether <paramref name="seat"/> is the calling seat.</summary>
-    public static bool Allows(HostSeat seat, ICurrentUser user) => seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>();
+    public static bool Allows(HostSeat seat, IRowUser user) => seat.Id == user.CurrentSeatId<SeatId>();
 }
 
 /// <summary>A member reads the people of its own part of the tree: the seats placed at a unit it is placed at, or below one.</summary>
@@ -291,7 +291,7 @@ public static partial class MembersReadOnlyThemselves
 public static partial class MembersReadThePeopleOfTheirUnits
 {
     /// <summary>Whether <paramref name="seat"/> is placed at a unit the calling seat belongs to.</summary>
-    public static bool Allows(HostSeat seat, ICurrentUser user) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
+    public static bool Allows(HostSeat seat, IRowUser user) => user.SeatsInMyUnits<SeatId>().Contains(seat.Id);
 }
 
 /// <summary>A rule that lets every seat through, which Tenancy holds to the calling seat's tenant.</summary>
@@ -299,7 +299,7 @@ public static partial class MembersReadThePeopleOfTheirUnits
 public static partial class MembersReadEverySeat
 {
     /// <summary>Always.</summary>
-    public static bool Allows(HostSeat seat, ICurrentUser user) => true;
+    public static bool Allows(HostSeat seat, IRowUser user) => true;
 }
 
 /// <summary>A seat that gives roles at an invitation's unit reads it, as the seats managers there do.</summary>
@@ -307,6 +307,6 @@ public static partial class MembersReadEverySeat
 public static partial class GrantsManagersReadTheInvitationsAtTheirUnits
 {
     /// <summary>Whether the calling seat manages grants at <paramref name="invitation"/>'s unit.</summary>
-    public static bool Allows(HostInvitation invitation, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId);
+    public static bool Allows(HostInvitation invitation, IRowUser user)
+        => user.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId);
 }

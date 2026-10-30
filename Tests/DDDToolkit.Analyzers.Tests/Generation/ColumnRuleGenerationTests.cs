@@ -67,7 +67,7 @@ public class ColumnRuleGenerationTests
 
         """;
 
-    private static GeneratorRunOutcome Rule(string attribute, string body = "public static bool Allows(Order order, ICurrentUser user) => order.PlacedBy == user.Id;")
+    private static GeneratorRunOutcome Rule(string attribute, string body = "public static bool Allows(Order order, IRowUser user) => order.PlacedBy == user.Id;")
         => GeneratorTestHost.Create(Shop +
             $$"""
             [{{attribute}}]
@@ -151,7 +151,7 @@ public class ColumnRuleGenerationTests
     [Fact]
     public void A_function_a_column_rule_calls_by_name_carries_its_schema_since_its_trigger_has_an_empty_search_path()
     {
-        const string calls = "public static bool Allows(Order order, ICurrentUser user) => Sql.Call<bool>(\"{0}\", user.Id);";
+        const string calls = "public static bool Allows(Order order, IRowUser user) => Sql.Call<bool>(\"{0}\", user.Id);";
 
         var unqualified = Rule("RowAccess<Order>(RowOperations.Change, Columns = [nameof(Order.Status)])", string.Format(calls, "is_agent"));
         var qualified = Rule("RowAccess<Order>(RowOperations.Change, Columns = [nameof(Order.Status)])", string.Format(calls, "public.is_agent"));
@@ -177,7 +177,7 @@ public class ColumnRuleGenerationTests
     {
         var result = Rule(
             "RowAccess<Order>(RowOperations.Change, Columns = [nameof(Order.Status)])",
-            "public static bool Allows(Order order, ICurrentUser user) => order.Note.StartsWith(\"x\");");
+            "public static bool Allows(Order order, IRowUser user) => order.Note.StartsWith(\"x\");");
 
         result.Count("DDD00039").Should().Be(1);
         result.ShouldNotHaveDiagnostic("DDD00038");

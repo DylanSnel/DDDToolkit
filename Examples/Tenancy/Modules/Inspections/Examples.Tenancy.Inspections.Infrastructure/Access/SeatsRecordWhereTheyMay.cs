@@ -1,8 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using Examples.Tenancy.Inspections.Application.Access;
-using Examples.Tenancy.Projects.Contracts.RowAccess;
-using DDDToolkit.Supporting.Tenancy.Access;
 
 namespace Examples.Tenancy.Inspections.Infrastructure.Access;
 
@@ -15,7 +13,7 @@ namespace Examples.Tenancy.Inspections.Infrastructure.Access;
 public static partial class SeatsRecordWhereTheyMay
 {
     /// <summary>Whether the calling seat may record <paramref name="inspection"/>.</summary>
-    public static bool Allows(Inspection inspection, ICurrentUser user)
-        => ProjectsWhereIHold.Ids(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
-            && inspection.RecordedBy == TenancyRowAccess.CurrentSeatId<SeatId>();
+    public static bool Allows(Inspection inspection, IRowUser user)
+        => user.Holds<ProjectId>(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
+            && inspection.RecordedBy == user.CurrentSeatId();
 }

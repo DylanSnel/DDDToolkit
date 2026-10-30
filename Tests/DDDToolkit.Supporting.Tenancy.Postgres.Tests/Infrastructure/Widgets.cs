@@ -71,16 +71,16 @@ public sealed partial class WidgetPart
 [RowAccess<Widget>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class WidgetsAreReadWhereThePermissionIsHeld
 {
-    public static bool Allows(Widget widget, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetRead).Contains(widget.UnitId);
+    public static bool Allows(Widget widget, IRowUser user)
+        => user.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetRead).Contains(widget.UnitId);
 }
 
 /// <summary>A seat adds, changes and removes the widgets at the units where it holds the permission to change them.</summary>
 [RowAccess<Widget>(RowOperations.Create | RowOperations.Change | RowOperations.Remove, To = [RowAccessRoles.User])]
 public static partial class WidgetsAreChangedWhereThePermissionIsHeld
 {
-    public static bool Allows(Widget widget, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetChange).Contains(widget.UnitId);
+    public static bool Allows(Widget widget, IRowUser user)
+        => user.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetChange).Contains(widget.UnitId);
 }
 
 /// <summary>
@@ -92,9 +92,9 @@ public static partial class WidgetsAreChangedWhereThePermissionIsHeld
 [AccessFunction<Widget>("widgets.readable_in_tenant")]
 public static partial class WidgetIsReadableInTenant
 {
-    public static bool Allows(Widget widget, ICurrentUser user, TenantId tenant)
+    public static bool Allows(Widget widget, IRowUser user, TenantId tenant)
         => widget.TenantId == tenant
-           && TenancyRowAccess.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(widget.UnitId);
+           && user.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(widget.UnitId);
 }
 
 /// <summary>
@@ -107,12 +107,12 @@ public static partial class WidgetIsReadableInTenant
 [AccessFunction<Widget>("widgets.read_as_in_tenant")]
 public static partial class WidgetIsReadAsInTenant
 {
-    public static bool Allows(Widget widget, ICurrentUser user, TenantId tenant, SeatId seat, RoleId role)
+    public static bool Allows(Widget widget, IRowUser user, TenantId tenant, SeatId seat, RoleId role)
         => widget.TenantId == tenant
-           && TenancyRowAccess.SeatedInTenant(tenant)
-           && TenancyRowAccess.HoldsPermissionInTenant(tenant, HostCatalogue.WidgetRead)
-           && TenancyRowAccess.SeatInTenant<SeatId, TenantId>(tenant) == seat
-           && TenancyRowAccess.RolesWithPermissionInTenant<RoleId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(role);
+           && user.SeatedInTenant(tenant)
+           && user.HoldsPermissionInTenant(tenant, HostCatalogue.WidgetRead)
+           && user.SeatInTenant<SeatId, TenantId>(tenant) == seat
+           && user.RolesWithPermissionInTenant<RoleId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(role);
 }
 
 /// <summary>The widgets' rules, as a script is written from them.</summary>

@@ -2151,11 +2151,11 @@ public static partial class PeopleOnMyProjects
 }
 
 // A rule of Inspections, and one of Projects' own, alike
-public static bool Allows(Inspection inspection, ICurrentUser user) => ProjectsISee.Ids().Contains(inspection.ProjectId);
-public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
+public static bool Allows(Inspection inspection, IRowUser user) => ProjectsISee.Ids().Contains(inspection.ProjectId);
+public static bool Allows(Project project, IRowUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
 
 // A read rule on the application's seat class
-public static bool Allows(Seat seat, ICurrentUser user) => PeopleOnMyProjects.Ids().Contains(seat.Id);
+public static bool Allows(Seat seat, IRowUser user) => PeopleOnMyProjects.Ids().Contains(seat.Id);
 ```
 
 **Type parameters**

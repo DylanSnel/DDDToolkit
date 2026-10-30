@@ -2,13 +2,13 @@ namespace DDDToolkit.Abstractions.Attributes;
 
 /// <summary>
 /// Marks a <c>static partial</c> method of an <see cref="AccessFunctionsAttribute"/> class as a question an
-/// SQL function answers with one value, such as the caller's team:
+/// SQL function answers with one value, such as the caller's team. The method takes <c>this IRowUser user</c> first:
 /// <code>
 /// [AccessScalar("current_team")]
-/// public static partial string CurrentTeam();
+/// public static partial string CurrentTeam(this IRowUser user);
 ///
 /// // in a rule
-/// =&gt; ticket.Team == Questions.CurrentTeam();
+/// =&gt; ticket.Team == user.CurrentTeam();
 /// </code>
 /// Without an argument that reads the row, the policy asks it once per statement,
 /// <c>(SELECT &lt;schema&gt;.current_team())</c>, in the schema of the context that defines the function.

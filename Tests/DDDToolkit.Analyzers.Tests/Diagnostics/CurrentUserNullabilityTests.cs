@@ -1,7 +1,7 @@
 namespace DDDToolkit.Analyzers.Tests.Diagnostics;
 
 /// <summary>
-/// <c>IsAuthenticated</c> on <c>ICurrentUser</c> and on <c>CurrentUserSnapshot</c> carries
+/// <c>IsAuthenticated</c> on <c>ICurrentUser</c>, on <c>IRowUser</c> and on <c>CurrentUserSnapshot</c> carries
 /// <c>[MemberNotNullWhen(true, nameof(Id))]</c>. Code that tested it reads <c>Id.Value</c> without CS8629. Code that did
 /// not test it still gets the warning.
 /// </summary>
@@ -9,6 +9,7 @@ public class CurrentUserNullabilityTests
 {
     [Theory]
     [InlineData("ICurrentUser")]
+    [InlineData("IRowUser")]
     [InlineData("CurrentUserSnapshot")]
     public void After_IsAuthenticated_answered_true_the_id_has_a_value(string type)
     {
@@ -28,6 +29,7 @@ public class CurrentUserNullabilityTests
 
     [Theory]
     [InlineData("ICurrentUser")]
+    [InlineData("IRowUser")]
     [InlineData("CurrentUserSnapshot")]
     public void Without_the_test_the_id_may_be_null(string type)
     {

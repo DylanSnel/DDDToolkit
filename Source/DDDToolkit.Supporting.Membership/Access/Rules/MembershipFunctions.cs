@@ -5,7 +5,8 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// caller of the connection. They are the resource's own names, because an application may have several kinds
 /// of resource with members in one schema. They follow from the resource's name (<see cref="For"/>), so a resource
 /// that keeps its name keeps them; one that is renamed with <c>[Members("...")]</c> gets new ones. Rules do not ask
-/// them by name: they ask the last three by the resource's id, through a <c>[ResourceAccessContract&lt;TKey&gt;]</c>,
+/// them by name: they ask the last three by the resource's id, <c>user.Sees&lt;TKey&gt;()</c>,
+/// <c>user.Holds&lt;TKey&gt;(permission)</c> and <c>user.FellowMembers&lt;TKey, TMemberId&gt;()</c>,
 /// and the export writes the policy with whatever the names are.
 /// </summary>
 /// <param name="AsMember">Answers the ids of the resources the caller is a member of now.</param>

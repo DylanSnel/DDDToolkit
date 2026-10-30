@@ -1,6 +1,5 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy.Access;
 
 namespace Examples.Tenancy.Projects.Infrastructure.Access;
 
@@ -14,5 +13,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class SeatsReadTheProjectRolesOfTheirTenant
 {
     /// <summary>Whether <paramref name="role"/> is one of the calling seat's tenant.</summary>
-    public static bool Allows(ProjectRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CurrentTenant<TenantId>();
+    public static bool Allows(ProjectRole role, IRowUser user) => role.TenantId == user.CurrentTenant();
 }

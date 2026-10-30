@@ -415,7 +415,8 @@ public class TenancyClosedOverTheIdsTests
         infrastructure.HintNames.Should().NotContain("TemplateFacade", "the access manager is the application project's, which this one sees")
             .And.NotContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration", "AddTenancy takes the classes, which the module does not see");
 
-        // The API project above it of the same module gets none of it again: the infrastructure project holds them.
+        // The API project above it of the same module gets none of it again: the infrastructure project holds them. A
+        // shorthand is the exception, since what asks one may sit in any project: Tenancy's questions name no Entity Framework.
         var api = GeneratorTestHost.Create("namespace Shop.Projects.Api; public static class Endpoints;", "Endpoints.cs")
             .WithSource(ModuleAttribute("Projects"), "Module.cs")
             .WithTenancyOnEntityFramework()
@@ -426,7 +427,8 @@ public class TenancyClosedOverTheIdsTests
 
         api.ShouldCompile();
         api.ReportedDiagnostics.Should().BeEmpty();
-        api.HintNames.Should().NotContain("Registration").And.NotContain("TemplateFacade");
+        api.GeneratedSources.Select(source => source.HintName).Where(name => !name.StartsWith("TenancyRowAccess.", StringComparison.Ordinal))
+            .Should().NotContain(name => name.Contains("Registration") || name.Contains("TemplateFacade"));
     }
 
     [Fact]

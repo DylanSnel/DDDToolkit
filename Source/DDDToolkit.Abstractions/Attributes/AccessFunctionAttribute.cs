@@ -8,14 +8,14 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// [AccessFunction&lt;Project&gt;("projects.is_member")]
 /// public static partial class ProjectMembership
 /// {
-///     public static bool Allows(Project project, ICurrentUser user)
+///     public static bool Allows(Project project, IRowUser user)
 ///         =&gt; project.Members.Any(member =&gt; member.UserId == user.Id);
 /// }
 ///
 /// [RowAccess&lt;Project&gt;(RowOperations.Read)]
 /// public static partial class MembersSeeTheirProjects
 /// {
-///     public static bool Allows(Project project, ICurrentUser user) =&gt; ProjectMembership.Allows(project, user);
+///     public static bool Allows(Project project, IRowUser user) =&gt; ProjectMembership.Allows(project, user);
 /// }
 /// </code>
 /// </summary>
@@ -25,19 +25,20 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// aggregate's table back, and Postgres stops with infinite recursion. The function runs as its owner,
 /// <c>SECURITY DEFINER</c>, so it reads them without their policies, and a rule calls it with the row's id.
 /// The context that maps <typeparamref name="TAggregate"/> writes it, once, however many modules see this
-/// class. The generator adds <c>Name</c>, and an <c>Allows(key)</c> a rule calls with a key rather than an
-/// aggregate, <c>ProjectMembership.Allows(task.ProjectId)</c>, which only the database can answer. Another
+/// class. The generator adds <c>Name</c>, and an <c>Allows(key, user)</c> a rule calls with a key rather than an
+/// aggregate, <c>ProjectMembership.Allows(task.ProjectId, user)</c>, which only the database can answer. Another
 /// module, which sees only this module's contracts, asks it through an
 /// <see cref="AccessFunctionContractAttribute{TKey}"/> there. <c>Allows(project, user)</c> stays an
 /// ordinary method, so C# asks the same question of an aggregate it holds.
 /// </para>
 /// <para>
-/// <c>Allows</c> may take more than the aggregate and the current user: strings, numbers, flags, <c>Guid</c>s and
+/// <c>Allows</c> may take more than the aggregate and the user: strings, numbers, flags, <c>Guid</c>s and
 /// ids, which the function takes as parameters after the key, and a rule passes along with it:
-/// <c>ProjectMembership.Allows(task.ProjectId, "lead")</c>. With <see cref="Shape"/> set to
+/// <c>ProjectMembership.Allows(task.ProjectId, user, "lead")</c>. With <see cref="Shape"/> set to
 /// <see cref="AccessFunctionShape.Set"/>, the function answers with the keys of every aggregate it allows,
-/// once per statement, and the generator adds <c>Ids(...)</c> in place of <c>Allows(key)</c>, for a rule to
-/// ask <c>ProjectMembership.Ids().Contains(task.ProjectId)</c>.
+/// once per statement, and the generator adds <c>Ids(user, ...)</c> in place of <c>Allows(key, user)</c>, for a rule to
+/// ask <c>ProjectMembership.Ids(user).Contains(task.ProjectId)</c>. The user adds nothing to the SQL. It is there
+/// because the question is asked for the caller, and only a rule has one.
 /// </para>
 /// </remarks>
 /// <typeparam name="TAggregate">The aggregate root the question is about.</typeparam>

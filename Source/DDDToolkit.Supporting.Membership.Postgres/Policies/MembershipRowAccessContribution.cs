@@ -82,8 +82,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// <para>
 /// It keeps no table to itself, and allows nothing. What a caller may read and change of a resource is the
 /// application's own row access rules to say, and they ask <c>seen</c> and <c>held on</c> by the resource's id,
-/// through a contract the application declares for each, with no function's name in it:
-/// <c>[ResourceAccessContract&lt;DocumentId&gt;(ResourceAccessSet.Seen)]</c> on an empty static partial class. The
+/// with no function's name in it: <c>user.Sees&lt;DocumentId&gt;()</c> and <c>user.Holds&lt;DocumentId&gt;(permission)</c>. The
 /// two functions say which set they answer for the resource (<see cref="ResourceAccessAnswer"/>), and the script
 /// writes such a rule with them, whatever the rules call them. The member tables follow the resource's rules, as
 /// every table of an aggregate's entities does. The functions' owner is the rules' name, a dot in it written as a

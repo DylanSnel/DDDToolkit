@@ -50,7 +50,7 @@ public sealed class QuotedSchemaPostgresTests(HelpDeskDatabase database) : IClas
 
         all.Should().HaveCount(5, "the application itself is not subject to the rules");
         seen.Select(ticket => ticket.Title).Should().BeEquivalentTo(
-            all.Where(ticket => DeskRules.Reads(ticket, caller) || TeammatesWorkOnTheTeamsTickets.Allows(ticket, Answering(caller))).Select(ticket => ticket.Title),
+            all.Where(ticket => DeskRules.Reads(ticket, caller) || TeammatesWorkOnTheTeamsTickets.Allows(ticket, RowUser.From(caller))).Select(ticket => ticket.Title),
             "Postgres answers what the rules answer, the watchers' through the set the access function in \"Help_Desk\" answers");
     }
 

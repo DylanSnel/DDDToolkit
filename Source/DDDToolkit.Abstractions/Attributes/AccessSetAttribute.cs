@@ -2,14 +2,14 @@ namespace DDDToolkit.Abstractions.Attributes;
 
 /// <summary>
 /// Marks a <c>static partial</c> method of an <see cref="AccessFunctionsAttribute"/> class as a set-shaped
-/// question an SQL function answers, <c>RETURNS SETOF</c>. The method returns
+/// question an SQL function answers, <c>RETURNS SETOF</c>. The method takes <c>this IRowUser user</c> first and returns
 /// <see cref="Access.AccessSet{T}"/>, and a rule asks whether a value is in it:
 /// <code>
 /// [AccessSet("ids_i_follow")]
-/// public static partial AccessSet&lt;TId&gt; IdsIFollow&lt;TId&gt;(string kind) where TId : IEntityId;
+/// public static partial AccessSet&lt;TId&gt; IdsIFollow&lt;TId&gt;(this IRowUser user, string kind) where TId : IEntityId;
 ///
 /// // in a rule
-/// =&gt; Questions.IdsIFollow&lt;ProjectId&gt;("projects").Contains(project.Id);
+/// =&gt; user.IdsIFollow&lt;ProjectId&gt;("projects").Contains(project.Id);
 /// </code>
 /// The policy asks it once per statement, <c>"Id" = ANY (ARRAY(SELECT "projects".ids_i_follow('projects')))</c>,
 /// so its arguments are constants, the caller or the function's own parameters, never the row: an argument

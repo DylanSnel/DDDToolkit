@@ -1,7 +1,5 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy.Access;
-using Examples.Tenancy.Projects.Contracts.RowAccess;
 
 namespace Examples.Tenancy.Projects.Infrastructure.Access;
 
@@ -18,7 +16,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 
 /// <summary>
 /// A seat changes a project, and writes its crew, when it holds a permission that changes one on it
-/// (<see cref="ProjectsWhereIHold"/>): through the organization, any of the four, and through the crew, or by
+/// (<c>user.Holds&lt;ProjectId&gt;</c>): through the organization, any of the four, and through the crew, or by
 /// owning it, the three a crew gives. A project that is moved has to pass at the unit it arrives at as well, where
 /// the permission to open one is what the application asks, so that permission counts at a unit too.
 /// </summary>
@@ -26,10 +24,10 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class SeatsChangeTheProjectsTheyWorkOn
 {
     /// <summary>Whether the calling seat may change <paramref name="project"/>.</summary>
-    public static bool Allows(Project project, ICurrentUser user)
-        => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectPermissionNames.ManageCrew).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectPermissionNames.ChangeOwner).Contains(project.Id)
-            || TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.Open).Contains(project.UnitId);
+    public static bool Allows(Project project, IRowUser user)
+        => user.Holds<ProjectId>(ProjectPermissionNames.Edit).Contains(project.Id)
+            || user.Holds<ProjectId>(ProjectPermissionNames.Close).Contains(project.Id)
+            || user.Holds<ProjectId>(ProjectPermissionNames.ManageCrew).Contains(project.Id)
+            || user.Holds<ProjectId>(ProjectPermissionNames.ChangeOwner).Contains(project.Id)
+            || user.UnitsWhereIHold(ProjectPermissionNames.Open).Contains(project.UnitId);
 }

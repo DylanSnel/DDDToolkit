@@ -1496,10 +1496,10 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// The access functions a rule's or a function's SQL asks, by name: <c>projects.is_member</c> for
-    /// <c>ProjectMembership.Allows(project, user)</c> and for <c>ProjectMembers.Allows(task.ProjectId)</c>,
+    /// <c>ProjectMembership.Allows(project, user)</c> and for <c>ProjectMembers.Allows(task.ProjectId, user)</c>,
     /// and a logical name, <c>desk/tickets_i_watch</c>, for a function named relative to its owner and for a
     /// question of an <c>[AccessFunctions]</c> class; and the name of a resource access set,
-    /// <c>@Projects.Contracts.ProjectId/seen</c>, for a <c>[ResourceAccessContract]</c>, which the function a
+    /// <c>@Projects.Contracts.ProjectId/seen</c>, for <c>user.Sees&lt;ProjectId&gt;()</c>, which the function a
     /// contribution says answers that set resolves (<see cref="ResourceAccessAnswer"/>). Not those written with
     /// <c>Sql.Call</c>, or a question named with its schema, which are functions of your own.
     /// </summary>

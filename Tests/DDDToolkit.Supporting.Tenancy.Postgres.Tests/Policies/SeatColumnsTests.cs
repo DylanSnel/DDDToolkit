@@ -293,5 +293,5 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
 public static partial class JobTitlesChangeWithTheSeatsPermissionAtTenant
 {
     /// <summary>Whether the calling seat manages seats for the whole tenant.</summary>
-    public static bool Allows(HostSeat seat, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
+    public static bool Allows(HostSeat seat, IRowUser user) => user.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }

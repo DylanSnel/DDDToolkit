@@ -79,7 +79,7 @@ public class RowAccessGenerationTests
         [AccessFunction<Order>("shop.is_member")]
         public static partial class Membership
         {
-            public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.UserId == user.Id);
+            public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.UserId == user.Id);
         }
 
 
@@ -98,7 +98,7 @@ public class RowAccessGenerationTests
     /// <summary>The SQL the generator wrote into an access function.</summary>
     private static string FunctionSqlOf(string expression)
     {
-        var result = Function($"public static bool Allows(Order order, ICurrentUser user) => {expression};");
+        var result = Function($"public static bool Allows(Order order, IRowUser user) => {expression};");
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00041").ShouldCompile();
         return ConstantIn(result.Source("TheFunction.AccessFunction"));
     }
@@ -125,7 +125,7 @@ public class RowAccessGenerationTests
     /// <summary>The SQL the generator wrote into the rule, as the string the export reads.</summary>
     private static string SqlOf(string expression)
     {
-        var result = Rule($"public static bool Allows(Order order, ICurrentUser user) => {expression};");
+        var result = Rule($"public static bool Allows(Order order, IRowUser user) => {expression};");
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00040").ShouldCompile();
 
         var literal = CSharpSyntaxTree.ParseText(result.Source("TheRule.RowAccess")).GetRoot()
@@ -179,10 +179,10 @@ public class RowAccessGenerationTests
             public static partial class ShopQuestions
             {
                 [AccessScalar("current_customer")]
-                public static partial CustomerId CurrentCustomer();
+                public static partial CustomerId CurrentCustomer(this IRowUser user);
 
                 [AccessScalar("current_level")]
-                public static partial int CurrentLevel();
+                public static partial int CurrentLevel(this IRowUser user);
             }
 
 
@@ -195,7 +195,7 @@ public class RowAccessGenerationTests
                 [RowAccess<Order>(RowOperations.Read)]
                 public static partial class TheRule
                 {
-                    public static bool Allows(Order order, ICurrentUser user) => {{expression}};
+                    public static bool Allows(Order order, IRowUser user) => {{expression}};
                 }
                 """).RunCore();
 
@@ -203,11 +203,11 @@ public class RowAccessGenerationTests
             return ConstantIn(result.Source("TheRule.RowAccess"));
         }
 
-        Of("order.PlacedBy == ShopQuestions.CurrentCustomer()")
+        Of("order.PlacedBy == user.CurrentCustomer()")
             .Should().Be("({col:PlacedBy} = (SELECT {fn:shop/current_customer}()))", "a caller the question does not know answers null, and a null customer must not match it: SQL's = is null then, which a policy counts as no");
-        Of("order.PlacedBy != ShopQuestions.CurrentCustomer()")
+        Of("order.PlacedBy != user.CurrentCustomer()")
             .Should().Be("({col:PlacedBy} <> (SELECT {fn:shop/current_customer}()))", "IS DISTINCT FROM a null would pass every order that has a customer");
-        Of("ShopQuestions.CurrentLevel() == order.Level")
+        Of("user.CurrentLevel() == order.Level")
             .Should().Be("((SELECT {fn:shop/current_level}()) = {col:Level})", "the question need not be on the right");
     }
 
@@ -220,10 +220,10 @@ public class RowAccessGenerationTests
             public static partial class ShopQuestions
             {
                 [AccessScalar("current_customer")]
-                public static partial CustomerId CurrentCustomer();
+                public static partial CustomerId CurrentCustomer(this IRowUser user);
 
                 [AccessScalar("current_level")]
-                public static partial int CurrentLevel();
+                public static partial int CurrentLevel(this IRowUser user);
             }
 
 
@@ -236,7 +236,7 @@ public class RowAccessGenerationTests
                 [RowAccess<Order>(RowOperations.Read)]
                 public static partial class TheRule
                 {
-                    public static bool Allows(Order order, ICurrentUser user) => {{expression}};
+                    public static bool Allows(Order order, IRowUser user) => {{expression}};
                 }
                 """).RunCore();
 
@@ -246,13 +246,13 @@ public class RowAccessGenerationTests
 
         // coalesce(..., FALSE) would be FALSE for such a caller, and NOT would make that a yes: SQL's own
         // comparison is null, and NOT null is null, which a policy counts as no.
-        Of("!(order.PlacedBy == ShopQuestions.CurrentCustomer())")
+        Of("!(order.PlacedBy == user.CurrentCustomer())")
             .Should().Be("(NOT ({col:PlacedBy} = (SELECT {fn:shop/current_customer}())))");
-        Of("!(ShopQuestions.CurrentLevel() < order.Level)")
+        Of("!(user.CurrentLevel() < order.Level)")
             .Should().Be("(NOT ((SELECT {fn:shop/current_level}()) < {col:Level}))");
-        Of("(order.PlacedBy == ShopQuestions.CurrentCustomer()) == false")
+        Of("(order.PlacedBy == user.CurrentCustomer()) == false")
             .Should().Be("(({col:PlacedBy} = (SELECT {fn:shop/current_customer}())) = FALSE)", "a comparison of the comparison stays SQL's own too");
-        Of("!(order.PlacedBy == ShopQuestions.CurrentCustomer() && order.IsPublic)")
+        Of("!(order.PlacedBy == user.CurrentCustomer() && order.IsPublic)")
             .Should().Be("(NOT (({col:PlacedBy} = (SELECT {fn:shop/current_customer}())) AND {col:IsPublic}))");
     }
 
@@ -289,12 +289,12 @@ public class RowAccessGenerationTests
     [InlineData("Sql.Call<bool>(\"private.check; DROP TABLE x\")")]
     [InlineData("Sql.Raw<bool>(order.Team!)")]
     public void Sql_that_is_not_a_function_name_or_not_written_in_the_rule_is_refused(string expression)
-        => Rule($"public static bool Allows(Order order, ICurrentUser user) => {expression};").Count("DDD00039").Should().Be(1);
+        => Rule($"public static bool Allows(Order order, IRowUser user) => {expression};").Count("DDD00039").Should().Be(1);
 
     [Fact]
     public void A_body_that_returns_is_the_same_as_an_arrow()
     {
-        var result = Rule("public static bool Allows(Order order, ICurrentUser user) { return order.IsPublic; }");
+        var result = Rule("public static bool Allows(Order order, IRowUser user) { return order.IsPublic; }");
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldContain("TheRule.RowAccess", "{col:IsPublic}");
     }
@@ -399,7 +399,7 @@ public class RowAccessGenerationTests
             [AccessFunction<Order>("shop.orders_on_duty", Shape = AccessFunctionShape.Set)]
             public static partial class TheFunction
             {
-                public static bool Allows(Order order, ICurrentUser user, string kind) => {{expression}};
+                public static bool Allows(Order order, IRowUser user, string kind) => {{expression}};
             }
             """).RunCore();
 
@@ -455,7 +455,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.Duties.Any());
+                public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.Duties.Any());
             }
             """).RunCore();
 
@@ -471,7 +471,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class MembersSeeTheirOrders
             {
-                public static bool Allows(Order order, ICurrentUser user) => order.IsPublic || Membership.Allows(order, user);
+                public static bool Allows(Order order, IRowUser user) => order.IsPublic || Membership.Allows(order, user);
             }
             """).RunCore();
 
@@ -487,7 +487,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => Membership.Allows(order, null!);
+                public static bool Allows(Order order, IRowUser user) => Membership.Allows(order, null!);
             }
             """).RunCore();
 
@@ -495,13 +495,13 @@ public class RowAccessGenerationTests
     }
 
     [Fact]
-    public void An_access_function_gets_its_name_and_an_Allows_that_takes_the_aggregates_key()
+    public void An_access_function_gets_its_name_and_an_Allows_that_takes_the_aggregates_key_and_the_user()
     {
         var result = GeneratorTestHost.Create(Shop + Membership).RunCore();
 
         result.ShouldCompile();
         result.ShouldContain("Membership.AccessFunction", "public const string Name = \"shop.is_member\";");
-        result.ShouldContain("Membership.AccessFunction", "public static bool Allows(global::Shop.OrderId orderId) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop.is_member(orderId)\");");
+        result.ShouldContain("Membership.AccessFunction", "public static bool Allows(global::Shop.OrderId orderId, global::DDDToolkit.Abstractions.Access.IRowUser user) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop.is_member(orderId)\");");
     }
 
     [Fact]
@@ -512,7 +512,7 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class MembersSeeTheirOrders
             {
-                public static bool Allows(Order order, ICurrentUser user) => Membership.Allows(order.Id);
+                public static bool Allows(Order order, IRowUser user) => Membership.Allows(order.Id, user);
             }
             """).RunCore();
 
@@ -531,13 +531,13 @@ public class RowAccessGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class MembersSeeTheirOrders
             {
-                public static bool Allows(Order order, ICurrentUser user) => OrderMembers.Allows(order.Id);
+                public static bool Allows(Order order, IRowUser user) => OrderMembers.Allows(order.Id, user);
             }
             """).RunCore();
 
         result.ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
         result.ShouldContain("OrderMembers.AccessFunctionContract", "public const string Name = \"shop.is_member\";");
-        result.ShouldContain("OrderMembers.AccessFunctionContract", "public static bool Allows(global::Shop.OrderId orderId)");
+        result.ShouldContain("OrderMembers.AccessFunctionContract", "public static bool Allows(global::Shop.OrderId orderId, global::DDDToolkit.Abstractions.Access.IRowUser user)");
         ConstantIn(result.Source("MembersSeeTheirOrders.RowAccess")).Should().Be("{fn:shop.is_member}({col:Id})");
     }
 
@@ -553,14 +553,14 @@ public class RowAccessGenerationTests
     [InlineData("is_member", "DDD00052")]
     [InlineData("shop.is-member", "DDD00038")]
     public void An_access_function_named_without_its_schema_and_owner_or_not_as_an_identifier_is_an_error(string name, string id)
-        => Function("public static bool Allows(Order order, ICurrentUser user) => order.IsPublic;", name).Count(id).Should().Be(1);
+        => Function("public static bool Allows(Order order, IRowUser user) => order.IsPublic;", name).Count(id).Should().Be(1);
 
     // ------------------------------------------------------------------ DDD00041
 
     [Fact]
     public void A_rule_that_reads_the_entities_itself_is_told_to_ask_an_access_function()
     {
-        var result = Rule("public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.UserId == user.Id);");
+        var result = Rule("public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.UserId == user.Id);");
 
         result.ReportedDiagnostics.Single(diagnostic => diagnostic.Id == "DDD00041").GetMessage().Should().Contain("[AccessFunction<Order>]");
         result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
@@ -572,25 +572,34 @@ public class RowAccessGenerationTests
     [InlineData("order.Team!.StartsWith(\"n\")", "order.Team!.StartsWith(\"n\")")]
     [InlineData("DateTime.UtcNow.Year > 2000", "DateTime.UtcNow.Year")]
     [InlineData("user.FindClaim(\"app_metadata.role\").Length > 0", "user.FindClaim(\"app_metadata.role\").Length")]
-    [InlineData("order.PlacedBy?.Value == user.RequireId()", "user.RequireId()")]
-    [InlineData("user.RequireSystemWork().IsSystem", "user.RequireSystemWork()")]
     public void What_the_database_cannot_check_is_an_error_on_that_expression_and_nothing_is_generated(string expression, string reported)
     {
-        var result = Rule($"public static bool Allows(Order order, ICurrentUser user) => {expression};");
+        var result = Rule($"public static bool Allows(Order order, IRowUser user) => {expression};");
 
         result.Count("DDD00039").Should().Be(1);
         result.ReportedDiagnostics.Single(diagnostic => diagnostic.Id == "DDD00039").GetMessage().Should().Contain(reported);
         result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
     }
 
+    [Theory]
+    [InlineData("order.PlacedBy?.Value == user.RequireId()")]
+    [InlineData("user.RequireSystemWork().IsSystem")]
+    [InlineData("user.IsSystem")]
+    [InlineData("user.Kind == CurrentUserKind.User")]
+    [InlineData("user.Snapshot == null")]
+    public void What_only_the_current_user_a_handler_has_knows_does_not_compile_in_a_rule(string expression)
+        => Rule($"public static bool Allows(Order order, IRowUser user) => {expression};")
+            .CompilationErrors.Should().Contain(error => error.Id == "CS1061", "a rule's user holds what the generator translates, and nothing else");
+
     // ------------------------------------------------------------------ DDD00038
 
     [Theory]
-    [InlineData("public static bool Allows(Order order, ICurrentUser user) => true;", "public static class")]
+    [InlineData("public static bool Allows(Order order, IRowUser user) => true;", "public static class")]
     [InlineData("public static bool Allows(Order order) => true;", "public static partial class")]
-    [InlineData("public static bool Allows(Order order, ICurrentUser user) { var yes = true; return yes; }", "public static partial class")]
-    [InlineData("public static int Allows(Order order, ICurrentUser user) => 1;", "public static partial class")]
-    [InlineData("public static bool Check(Order order, ICurrentUser user) => true;", "public static partial class")]
+    [InlineData("public static bool Allows(Order order, IRowUser user) { var yes = true; return yes; }", "public static partial class")]
+    [InlineData("public static int Allows(Order order, IRowUser user) => 1;", "public static partial class")]
+    [InlineData("public static bool Check(Order order, IRowUser user) => true;", "public static partial class")]
+    [InlineData("public static bool Allows(Order order, ICurrentUser user) => true;", "public static partial class")]
     public void A_rule_of_another_shape_is_an_error(string body, string declaration)
     {
         var result = Rule(body, declaration: declaration);
@@ -620,7 +629,7 @@ public class RowAccessGenerationTests
             [RowAccess<Line>(RowOperations.Read)]
             public static partial class LinesAreEveryones
             {
-                public static bool Allows(Line line, ICurrentUser user) => line.IsPublic;
+                public static bool Allows(Line line, IRowUser user) => line.IsPublic;
             }
             """).RunCore();
 

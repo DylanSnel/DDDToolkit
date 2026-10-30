@@ -386,10 +386,11 @@ composed over several: [references/graphql.md](references/graphql.md). The mista
   goes in its `partial void OnChangingMembers()`, events in `OnMemberAdded` and the other hooks. The member manager
   requires the permission marked `[On<T>(ManagesMembers = true)]` (`NamesOwner = true` to hand a resource on), and a
   role manager the one the rules name, `Roles.Custom(managedWith: ...)`, held for the whole tenant with Tenancy.
-- A row rule asks a resource with members by its id, through a one-line contract in the module that owns the
-  id: `[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)] public static partial class ProjectsISee;`,
-  asked as `ProjectsISee.Ids().Contains(row.ProjectId)`. No rule and no contract names the SQL function: the
-  Membership contribution says which of its functions answers.
+- A row rule takes `IRowUser`, not `ICurrentUser`, and asks a resource with members by its id, which is all a module's
+  contracts publish of it: `user.Sees<ProjectId>().Contains(row.ProjectId)`, `user.Holds<ProjectId>(permission)` and
+  `user.FellowMembers<ProjectId, SeatId>()`. No rule names the SQL function: the Membership contribution says which of
+  its functions answers. Tenancy's questions are asked of the user too, without type arguments where the module declares
+  the classes or has the `[assembly: TenancyIds<...>]` line: `user.UnitsWhereIHold(permission)`, `user.CurrentSeatId()`.
 - Tenancy's and Membership's SQL on Postgres comes with referencing their Postgres packages, from what the
   application marks: the catalogue `[TenancyCatalogue]`, the operators' token roles `[TenancyOperators]`, each
   resource's rules `[MembershipRules<TMember>]`. Never write a class derived from `TenancyRowAccessContribution`

@@ -13,5 +13,5 @@ namespace Examples.Tenancy.Inspections.Infrastructure.Access;
 public static partial class OperatorsSeeEveryInspection
 {
     /// <summary>Whether an operator may read <paramref name="inspection"/>: every one of them.</summary>
-    public static bool Allows(Inspection inspection, ICurrentUser user) => true;
+    public static bool Allows(Inspection inspection, IRowUser user) => true;
 }

@@ -942,8 +942,8 @@ Tenancy's questions as a row access rule asks them, so a module writes its rules
 [RowAccess<Report>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class ReportsAreReadWhereThePermissionIsHeld
 {
-    public static bool Allows(Report report, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>("reports.read").Contains(report.UnitId);
+    public static bool Allows(Report report, IRowUser user)
+        => user.UnitsWhereIHold<OrganizationUnitId>("reports.read").Contains(report.UnitId);
 }
 ```
 

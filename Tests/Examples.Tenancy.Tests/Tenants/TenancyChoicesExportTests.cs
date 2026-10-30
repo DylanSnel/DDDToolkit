@@ -25,7 +25,7 @@ public sealed class TenancyChoicesExportTests
     /// <summary>
     /// A read rule on the sample's seat the sample does not have, as the generator writes one:
     /// <c>[RowAccess&lt;Seat&gt;(RowOperations.Read)]</c> on <c>MembersReadThePeopleOfTheirUnits</c>, whose <c>Allows</c>
-    /// is <c>TenancyRowAccess.SeatsInMyUnits&lt;SeatId&gt;().Contains(seat.Id)</c>. Without <c>To</c>, as the docs write it.
+    /// is <c>user.SeatsInMyUnits&lt;SeatId&gt;().Contains(seat.Id)</c>. Without <c>To</c>, as the docs write it.
     /// </summary>
     private static readonly RowAccessRule PeopleOfTheirUnits = RowAccessRule.For(
         typeof(Seat).FullName!, "Members read the people of their units", RowOperations.Read, "({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}())))");

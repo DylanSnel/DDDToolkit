@@ -404,7 +404,7 @@ public static class DeskRoles
 [RowAccess<Ticket>(RowOperations.Read, To = [DeskRoles.Analyst])]
 public static partial class AnalystsReadEveryTicket
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user) => user.IsAuthenticated;
+    public static bool Allows(Ticket ticket, IRowUser user) => user.IsAuthenticated;
 }
 ```
 
@@ -784,14 +784,21 @@ and what the rule allows:
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
 public static partial class ACustomerSeesTheirOrders
 {
-    public static bool Allows(Order order, ICurrentUser user)
+    public static bool Allows(Order order, IRowUser user)
         => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 }
 ```
 
 When the class compiles, the generator translates `Allows` into SQL and writes the SQL into the class as
-`RowAccessSql`. The rule is still an ordinary method. So a handler, a test or a screen calls the same rule in C#:
-`ACustomerSeesTheirOrders.Allows(order, user)`.
+`RowAccessSql`. The rule is still an ordinary method. So a test runs the same rule in C#:
+`ACustomerSeesTheirOrders.Allows(order, RowUser.From(CurrentUserSnapshot.User(alice)))`.
+
+A rule's second parameter is an `IRowUser`, from `DDDToolkit.Abstractions.Access`. It is not the `ICurrentUser` that a
+handler takes, and neither interface derives from the other. `IRowUser` holds what the generator translates: `Id`,
+`IsAuthenticated`, `Role` and `FindClaim`. A question that only the database answers is an extension method on
+`IRowUser`. So such a question does not compile where there is no rule. `user.RequireId()`, `user.IsSystem` and
+`user.Kind` do not compile in a rule either. A rule that takes an `ICurrentUser` is
+[DDD00038](diagnostics.md#ddd00038).
 
 In the diagram, purple is the rule and green is where the rule is used:
 
@@ -801,7 +808,7 @@ flowchart LR
     template["<b>RowAccessSql</b><br/><small>SQL with the columns still to fill in</small>"]
     script["<b>PostgresRowAccess.Script</b><br/><small>columns from the Entity Framework model</small>"]
     policies["<b>CREATE POLICY</b><br/><small>on the aggregate's tables</small>"]
-    handler["<b>A handler or a test</b><br/><small>calls Allows directly</small>"]
+    handler["<b>A test</b><br/><small>calls Allows with RowUser.From</small>"]
     rule -->|"the generator,<br/>at compile time"| template
     template --> script
     script --> policies
@@ -832,8 +839,8 @@ var sql = PostgresRowAccess.Script(context,
     RowAccessRule.For<Order>("A customer sees their orders", RowOperations.Read | RowOperations.Change, ACustomerSeesTheirOrders.RowAccessSql),
 ]);
 
-// The same rule, called directly
-var allowed = ACustomerSeesTheirOrders.Allows(order, user);
+// The same rule, called directly from a test
+var allowed = ACustomerSeesTheirOrders.Allows(order, RowUser.From(CurrentUserSnapshot.User(alice)));
 ```
 
 ```sql
@@ -905,7 +912,7 @@ database can answer, use an [access function](#access-functions) or a
 into the rule:
 
 ```csharp
-public static bool Allows(Order order, ICurrentUser user)
+public static bool Allows(Order order, IRowUser user)
     => order.PlacedBy?.Value == user.Id
        || Sql.Call<bool>("support.is_agent", user.Id);
 ```
@@ -959,14 +966,14 @@ flowchart LR
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
 public static partial class ACustomerHasTheirOrders
 {
-    public static bool Allows(Order order, ICurrentUser user)
+    public static bool Allows(Order order, IRowUser user)
         => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 }
 
 [RowAccess<Order>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class AuditorsSeeEveryOrder
 {
-    public static bool Allows(Order order, ICurrentUser user) => user.FindClaim("app_metadata.auditor") == "true";
+    public static bool Allows(Order order, IRowUser user) => user.FindClaim("app_metadata.auditor") == "true";
 }
 ```
 
@@ -1037,8 +1044,8 @@ its employees read the organization:
 [RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
 public static partial class OnlyEmployeesReadTheOrganization
 {
-    public static bool Allows(Organization organization, ICurrentUser user)
-        => TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee;
+    public static bool Allows(Organization organization, IRowUser user)
+        => user.CurrentSeat<Seat>().Kind == SeatKind.Employee;
 }
 ```
 
@@ -1181,14 +1188,14 @@ The rules are on the order. No rule mentions the lines:
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
 public static partial class ACustomerHasTheirOrders
 {
-    public static bool Allows(Order order, ICurrentUser user)
+    public static bool Allows(Order order, IRowUser user)
         => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 }
 
 [RowAccess<Order>(RowOperations.Create)]
 public static partial class NobodyOrdersForSomebodyElse
 {
-    public static bool Allows(Order order, ICurrentUser user) => order.PlacedBy?.Value == user.Id;
+    public static bool Allows(Order order, IRowUser user) => order.PlacedBy?.Value == user.Id;
 }
 ```
 
@@ -1248,14 +1255,14 @@ rule, and call the access function from the rules:
 [AccessFunction<Project>("projects.is_member")]
 public static partial class ProjectMembership
 {
-    public static bool Allows(Project project, ICurrentUser user)
+    public static bool Allows(Project project, IRowUser user)
         => project.Members.Any(member => member.UserId == user.Id);
 }
 
 [RowAccess<Project>(RowOperations.Read | RowOperations.Change)]
 public static partial class MembersWorkOnTheirProjects
 {
-    public static bool Allows(Project project, ICurrentUser user) => ProjectMembership.Allows(project, user);
+    public static bool Allows(Project project, IRowUser user) => ProjectMembership.Allows(project, user);
 }
 ```
 
@@ -1306,8 +1313,9 @@ still calls it. The context's next script drops it once no policy does. The Supa
 the module's newest access file, refuses the change and says why. A script of yours has no history to compare with.
 
 **Called with an id.** A rule may hold a project's id and not the project. For such a rule, the generator adds `Name`
-and an `Allows` overload that takes the aggregate's id. `ProjectMembership.Allows(task.ProjectId)` becomes
-`projects.is_member("ProjectId")`. Only the database can answer this overload. Called in C#, it throws
+and an `Allows` overload that takes the aggregate's id and the user. `ProjectMembership.Allows(task.ProjectId, user)`
+becomes `projects.is_member("ProjectId")`. The user adds nothing to the SQL. The overload takes it so that it cannot be
+called where there is no rule. Only the database can answer this overload. Called in C#, it throws
 `DatabaseOnlyException`. Where C# holds the project, `ProjectMembership.Allows(project, user)` answers in memory,
 because the members are loaded with the project.
 
@@ -1324,7 +1332,7 @@ public static partial class ProjectMembers;
 [AccessFunction<Project>(ProjectMembers.Name)]
 public static partial class ProjectMembership
 {
-    public static bool Allows(Project project, ICurrentUser user)
+    public static bool Allows(Project project, IRowUser user)
         => project.Members.Any(member => member.UserId == user.Id);
 }
 
@@ -1332,7 +1340,7 @@ public static partial class ProjectMembership
 [RowAccess<ProjectTask>(RowOperations.All)]
 public static partial class ProjectMembersWorkOnItsTasks
 {
-    public static bool Allows(ProjectTask task, ICurrentUser user) => ProjectMembers.Allows(task.ProjectId);
+    public static bool Allows(ProjectTask task, IRowUser user) => ProjectMembers.Allows(task.ProjectId, user);
 }
 ```
 
@@ -1356,7 +1364,7 @@ entity's own entities in the same way, as deep as the model goes:
 [AccessFunction<Ticket>("desk.reacted_to_comment")]
 public static partial class ReactedToComment
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user, string text)
+    public static bool Allows(Ticket ticket, IRowUser user, string text)
         => ticket.IsPublic || ticket.Comments.Any(comment => comment.Text == text
             && comment.Reactions.Any(reaction => reaction.User == user.Id));
 }
@@ -1376,16 +1384,16 @@ the `Allows` overload that takes the id, and a rule passes them along:
 [AccessFunction<Project>("projects.has_role")]
 public static partial class ProjectRoles
 {
-    public static bool Allows(Project project, ICurrentUser user, string role)
+    public static bool Allows(Project project, IRowUser user, string role)
         => project.Members.Any(member => member.UserId == user.Id && member.Role == role);
 }
 
-// ProjectRoles.Allows(project, user, "lead") and ProjectRoles.Allows(task.ProjectId, "lead") both become
+// ProjectRoles.Allows(project, user, "lead") and ProjectRoles.Allows(task.ProjectId, user, "lead") both become
 // projects.has_role("Id", 'lead') and projects.has_role("ProjectId", 'lead') in their policies
 ```
 
 The function is `projects.has_role(uuid, text)`. A contract publishes a function like it by declaring the method,
-`static partial bool Allows(ProjectId key, string role);`, and the generator writes its body.
+`static partial bool Allows(ProjectId key, IRowUser user, string role);`, and the generator writes its body.
 
 ### Set-shaped access functions
 
@@ -1398,25 +1406,26 @@ of ids it allows. Postgres then finds those rows through the index on the id. A 
 [AccessFunction<Ticket>("tickets_i_watch", Shape = AccessFunctionShape.Set)]
 public static partial class TicketsIWatch
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user)
+    public static bool Allows(Ticket ticket, IRowUser user)
         => ticket.Watchers.Any(watcher => watcher.User == user.Id);
 }
 
 [RowAccess<Ticket>(RowOperations.Read)]
 public static partial class WatchersReadTheTicketsTheyWatch
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user) => TicketsIWatch.Ids().Contains(ticket.Id);
+    public static bool Allows(Ticket ticket, IRowUser user) => TicketsIWatch.Ids(user).Contains(ticket.Id);
 }
 ```
 
-With `Shape = AccessFunctionShape.Set`, the generator adds `Ids(...)` in place of the `Allows` overload that takes an
-id. `Ids(...)` takes the function's own parameters. The policy calls the set once.
+With `Shape = AccessFunctionShape.Set`, the generator adds `Ids(user, ...)` in place of the `Allows` overload that takes
+an id. `Ids` takes the rule's user, which adds nothing to the SQL, and then the function's own parameters. The policy
+calls the set once.
 
 In the diagram, purple is the rule and green is the index scan that it leads to:
 
 ```mermaid
 flowchart TD
-    rule["<b>TicketsIWatch.Ids().Contains(ticket.Id)</b><br/><small>the rule</small>"]
+    rule["<b>TicketsIWatch.Ids(user).Contains(ticket.Id)</b><br/><small>the rule</small>"]
     policy["<b>Id = ANY (ARRAY(SELECT desk.tickets_i_watch()))</b><br/><small>the policy</small>"]
     set["<b>InitPlan</b><br/><small>the ids of the tickets the caller watches</small>"]
     scan["<b>Index scan on the id</b><br/><small>those tickets and no others</small>"]
@@ -1464,7 +1473,7 @@ So the tickets' table is still never read:
 [AccessFunction<Ticket>("desk.tickets_i_reacted_in", Shape = AccessFunctionShape.Set)]
 public static partial class TicketsIReactedIn
 {
-    public static bool Allows(Ticket ticket, ICurrentUser user)
+    public static bool Allows(Ticket ticket, IRowUser user)
         => ticket.Comments.Any(comment => comment.Reactions.Any(reaction => reaction.User == user.Id));
 }
 ```
@@ -1482,29 +1491,35 @@ A set-shaped function needs an aggregate whose id is one column.
 #### Database-only questions
 
 Some questions that the database answers are not about one aggregate, such as the ids of what the caller follows.
-Declare such a question in an `[AccessFunctions]` class, as a method without a body. The generator writes the body:
+Declare such a question in an `[AccessFunctions]` class, as an extension method on `IRowUser` without a body. The
+generator writes the body:
 
 ```csharp
 [AccessFunctions]
 public static partial class Questions
 {
     [AccessSet("ids_i_follow")]
-    public static partial AccessSet<TId> IdsIFollow<TId>(string kind) where TId : IEntityId;
+    public static partial AccessSet<TId> IdsIFollow<TId>(this IRowUser user, string kind) where TId : IEntityId;
 
     [AccessScalar("current_team")]
-    public static partial string CurrentTeam();
+    public static partial string CurrentTeam(this IRowUser user);
 }
 
-// Questions.IdsIFollow<ProjectId>("projects").Contains(project.Id)
+// user.IdsIFollow<ProjectId>("projects").Contains(project.Id)
 //   "Id" = ANY (ARRAY(SELECT "projects".ids_i_follow('projects')))
-// project.Team == Questions.CurrentTeam()
+// project.Team == user.CurrentTeam()
 //   "Team" = (SELECT "projects".current_team())
 ```
 
+- Every question declares `this IRowUser user` as its first parameter. Without it, the question is
+  [DDD00038](diagnostics.md#ddd00038). So a question cannot be called where there is no rule. The user adds nothing to
+  the SQL.
+- A question asked of anything but the rule's own `user` parameter is [DDD00039](diagnostics.md#ddd00039).
+- The class is a top-level `static partial` class, as a class of extension methods is.
 - An `[AccessSet]` question returns a set. An `[AccessScalar]` question returns a value. Called in C#, either one
   throws `DatabaseOnlyException`.
-- The parameters are strings, numbers, flags, `Guid`s, ids, or a type parameter constrained to `IEntityId`, for a
-  question over ids that a package does not know.
+- The parameters after the user are strings, numbers, flags, `Guid`s, ids, or a type parameter constrained to
+  `IEntityId`, for a question over ids that a package does not know.
 - The SQL function is the function of that name. It is an access function, or a function that a package writes into
   your migrations.
 - A question named with its schema, such as `extras.current_team`, is a function of yours. The policy calls it as
@@ -1523,14 +1538,14 @@ comparison is unknown, and a policy counts unknown as no:
 
 - A ticket without a team is not in the team of a caller without one.
 - A team is not "another team" than a team nobody knows.
-- The comparison stays unknown under `!`. So `!(ticket.Team == Questions.CurrentTeam())` lets such a caller through no
+- The comparison stays unknown under `!`. So `!(ticket.Team == user.CurrentTeam())` lets such a caller through no
   more than `==` does.
 
 There is no C# behavior to match here, because the question throws in C#.
 
 **A row of the caller.** An `[AccessRow]` question returns one row of a table, the caller's row. A rule reads a field
-of that row as it reads a column. The method takes no parameters, and returns the class that the table is mapped to,
-or a type parameter constrained to `class`. The function of that name returns `SETOF` that table. The database asks
+of that row as it reads a column. The method takes no parameters after the user, and returns the class that the table
+is mapped to, or a type parameter constrained to `class`. The function of that name returns `SETOF` that table. The database asks
 the question once per statement, for the field that the rule reads:
 
 ```csharp
@@ -1538,10 +1553,10 @@ the question once per statement, for the field that the rule reads:
 public static partial class Questions
 {
     [AccessRow("current_profile")]
-    public static partial Profile CurrentProfile();
+    public static partial Profile CurrentProfile(this IRowUser user);
 }
 
-// project.Region == Questions.CurrentProfile().Region
+// project.Region == user.CurrentProfile().Region
 //   "Region" = (SELECT q1."Region" FROM "projects".current_profile() q1)
 ```
 
@@ -1549,7 +1564,7 @@ public static partial class Questions
   that model. A rule of another context is refused when its script is written.
 - When the function returns no row, every field is null, and the caller passes no condition built on a field.
 - Tenancy offers one such question, the calling seat's row:
-  `TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee`.
+  `user.CurrentSeat<Seat>().Kind == SeatKind.Employee`.
 
 ### Function names relative to the module
 
@@ -1675,40 +1690,43 @@ CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" 
 
 </details>
 
-### Resource access contracts
+### Asking about a resource by its id
 
 A package that keeps a resource's access writes the functions that answer it, and names those functions itself. For
 each resource with members, the [Membership package](membership/postgres.md#the-five-functions) writes functions that
 return the resources the caller sees and the resources the caller holds a permission on. It takes their names from
 the resource's rules. A rule should not repeat those names, and a module that checks another module's resource should
 not need to know them. So the rule asks by the resource's id. An `[AccessFunctionContract]`, above, is for a function
-that your module defines and names. A `[ResourceAccessContract]` is for a set that a package returns.
+that your module defines and names. These questions are for a set that a package returns.
 
-In the diagram, purple is the contract and green is the policy that the export writes:
+What a module publishes of a resource is its id, in its contracts. Anyone who sees the id may ask the three questions.
+Each question answers only for the caller. A question that nothing answers is refused when the access file is written.
+
+In the diagram, purple is the question and green is the policy that the export writes:
 
 ```mermaid
 flowchart LR
-    contract["<b>ProjectsISee</b><br/><small>contract of ProjectId: the projects seen</small>"]
+    question["<b>user.Sees&lt;ProjectId&gt;()</b><br/><small>the projects seen, in the rule</small>"]
     rule["<b>The rule's SQL</b><br/><small>the set by ProjectId and Seen</small>"]
     answer["<b>The Membership contribution</b><br/><small>projects_i_see returns Seen for ProjectId</small>"]
     policy["<b>The policy</b><br/><small>calls projects.projects_i_see()</small>"]
-    contract -->|"the generator"| rule
+    question -->|"the generator"| rule
     rule -->|"the export"| policy
     answer -->|"declares the set"| policy
     classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
     classDef good fill:#1f8a5b26,stroke:#1f8a5b
-    class contract strong
+    class question strong
     class policy good
 ```
 
-The contract is one line, in the contracts of the module that owns the resource. It names the resource's id and the
-set, and no function:
+The questions are extension methods on `IRowUser`, in `DDDToolkit.Abstractions.Access`. They name the resource's id and
+the set, and no function:
 
-| Set | The contract publishes | Returns |
-|---|---|---|
-| `ResourceAccessSet.Seen` | `Ids()` | the resources the caller sees |
-| `ResourceAccessSet.HeldOn` | `Ids(string permission)` | the resources the caller holds the permission on |
-| `ResourceAccessSet.FellowMembers` | `Ids()`, which the contract declares itself with the id that its members are known by: `public static partial AccessSet<SeatId> Ids();` | the members of the resources the caller is a member of, the people the caller works with. Their ids are not a resource's ids. |
+| A rule asks | Returns |
+|---|---|
+| `user.Sees<ProjectId>()` | the resources the caller sees |
+| `user.Holds<ProjectId>(permission)` | the resources the caller holds the permission on |
+| `user.FellowMembers<ProjectId, SeatId>()` | the members of the resources the caller is a member of, the people the caller works with. Their ids are not a resource's ids, so the second type argument says what they are. |
 
 A rule checks the set as it checks any set, with `Contains`, once per statement. The generator writes the set into
 the rule's SQL by the id's full name and the set. The export writes the policy with the function that a contribution
@@ -1718,13 +1736,10 @@ resource, so a host only lists its contribution.
 - **The function's name is set in one place, or nowhere.** The functions take their names from the resource's
   rules. A database that already has its own names keeps them in the rules, under `functions:`, and nothing else
   changes. A rule names no function.
-- **Another module calls the owning module's contract.** The contract references only the id. So the calling
-  module knows neither the resource's aggregate nor the package that returns the set. The owning module's rules call
-  the same contract, so a question has one name in every module.
-- **Only the owning module declares a contract.** A contract of an id whose assembly declares another module is
-  [DDD00038](diagnostics.md#ddd00038). So only the owning module publishes what it shares of its resources. Any
-  project of that module may declare the contract. Its contracts project is the place where other modules can see
-  it.
+- **A module publishes its id.** A rule of another module needs the id and nothing else. So the asking module knows
+  neither the resource's aggregate nor the package that returns the set. The owning module's rules ask the same
+  questions, so a question has one form in every module.
+- **Only a rule can ask.** In a handler there is no `IRowUser`, so `currentUser.Sees<ProjectId>()` does not compile.
 - **Refused when no function returns the set.** A rule that asks for a set that no contribution of the export
   returns is refused when its access file is written. That happens, for example, when the host does not list the
   Membership contribution for the resource. The refusal names the rule and the resource. A rule written without the
@@ -1732,8 +1747,9 @@ resource, so a host only lists its contribution.
   message says to write them together, or to give the script the other context's names. One function returns a set
   for a resource.
   Two functions that declare the same set, in one context or in two, are refused, and the refusal names both.
-- **SQL of yours calls a set the same way.** A contract's generated `Name` is the set's name. So a contribution of
-  yours writes `{fn:...}` with `ProjectsWhereIHold.Name` in it, as the sample's `UnitChangesWithItsPermissions` does.
+- **SQL of yours calls a set the same way.** `ResourceAccessAnswer.NameOf(typeof(ProjectId), ResourceAccessSet.HeldOn)`
+  is the set's name. So a contribution of yours writes `{fn:...}` with it, as the sample's
+  `UnitChangesWithItsPermissions` does.
 - **A package of yours** declares which set a function returns with `Answers` on its `ContributedFunction`:
   `new ResourceAccessAnswer(typeof(TId), ResourceAccessSet.Seen)`. Such a function returns `SETOF` the id's type,
   or `SETOF` the members' id type for `FellowMembers`. It takes no parameters for the resources seen and for the
@@ -1748,8 +1764,7 @@ resource, so a host only lists its contribution.
   writes is called this way. Two modules whose own access functions call each other are still refused, and the
   refusal names the cycle.
 
-A contract that declares its `Ids` itself, for documentation, gets that declaration implemented. The contract's id is
-the id of the resource's aggregate. That id is one of these:
+The id in a question is the id of the resource's aggregate. That id is one of these:
 
 - an id declared with `[EntityId<Guid>]`, as a module's contracts declare it,
 - in the project that declares the aggregate, the id that the generator writes next to an aggregate root declared
@@ -1758,33 +1773,28 @@ the id of the resource's aggregate. That id is one of these:
   `[assembly: GenerateTenancyIds]` in a contracts project
   ([Modules split by layer](tenancy/your-module.md#modules-split-by-layer)).
 
-A contract of another shape is [DDD00038](diagnostics.md#ddd00038).
+A type that is no id does not compile.
 
 <details>
-<summary>Show the code: Projects' contracts, a rule of each module that calls them, and the policy that the export writes</summary>
+<summary>Show the code: a rule of each module that asks about a project, and the policy that the export writes</summary>
 
 ```csharp
-// Projects.Contracts, the module's contracts project: what other modules may ask, a line each
-[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)]
-public static partial class ProjectsISee;
+// Projects.Contracts holds only ProjectId.
 
-[ResourceAccessContract<ProjectId>(ResourceAccessSet.HeldOn)]
-public static partial class ProjectsWhereIHold;
-
-// Projects.Infrastructure: the module's own rule calls its contract
+// Projects.Infrastructure: the module's own rule asks by the id
 [RowAccess<Project>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsSeeTheProjectsTheyReach
 {
-    public static bool Allows(Project project, ICurrentUser user) => ProjectsISee.Ids().Contains(project.Id);
+    public static bool Allows(Project project, IRowUser user) => user.Sees<ProjectId>().Contains(project.Id);
 }
 
-// Inspections.Infrastructure: another module's rule calls the same contract, with the project id it stores
+// Inspections.Infrastructure: another module's rule asks the same, with the project id it stores
 [RowAccess<Inspection>(RowOperations.Create, To = [RowAccessRoles.User])]
 public static partial class SeatsRecordWhereTheyMay
 {
-    public static bool Allows(Inspection inspection, ICurrentUser user)
-        => ProjectsWhereIHold.Ids(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
-            && inspection.RecordedBy == TenancyRowAccess.CurrentSeatId<SeatId>();
+    public static bool Allows(Inspection inspection, IRowUser user)
+        => user.Holds<ProjectId>(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
+            && inspection.RecordedBy == user.CurrentSeatId();
 }
 ```
 
@@ -1828,7 +1838,7 @@ bypass the access check before the handler.
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
 public static partial class StateChangesWithTheClosePermission
 {
-    public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
+    public static bool Allows(Project project, IRowUser user) => user.Holds<ProjectId>(ProjectPermissionNames.Close).Contains(project.Id);
 }
 ```
 
@@ -1877,24 +1887,24 @@ a stricter permission:
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class SeatsChangeTheProjectsTheyWorkOn
 {
-    public static bool Allows(Project project, ICurrentUser user)
-        => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectPermissionNames.ManageCrew).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectPermissionNames.ChangeOwner).Contains(project.Id)
-            || TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.Open).Contains(project.UnitId);
+    public static bool Allows(Project project, IRowUser user)
+        => user.Holds<ProjectId>(ProjectPermissionNames.Edit).Contains(project.Id)
+            || user.Holds<ProjectId>(ProjectPermissionNames.Close).Contains(project.Id)
+            || user.Holds<ProjectId>(ProjectPermissionNames.ManageCrew).Contains(project.Id)
+            || user.Holds<ProjectId>(ProjectPermissionNames.ChangeOwner).Contains(project.Id)
+            || user.UnitsWhereIHold(ProjectPermissionNames.Open).Contains(project.UnitId);
 }
 
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.Name), nameof(Project.Planned)])]
 public static partial class NameAndPlanChangeWithTheEditPermission
 {
-    public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
+    public static bool Allows(Project project, IRowUser user) => user.Holds<ProjectId>(ProjectPermissionNames.Edit).Contains(project.Id);
 }
 
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
 public static partial class StateChangesWithTheClosePermission
 {
-    public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
+    public static bool Allows(Project project, IRowUser user) => user.Holds<ProjectId>(ProjectPermissionNames.Close).Contains(project.Id);
 }
 ```
 
@@ -1992,7 +2002,7 @@ decide whether to hold it. Hold it to the permission that your command for chang
 [RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.JobTitle)])]
 public static partial class JobTitlesChangeWithTheSeatsPermission
 {
-    public static bool Allows(Seat seat, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
+    public static bool Allows(Seat seat, IRowUser user) => user.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }
 ```
 
@@ -2278,7 +2288,7 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
 - A function carries the context's function comment. So the next script keeps the function while the contribution
   still writes it, and replaces it in place. The script drops the function once the contribution stops writing it.
 - A function that returns a resource's access declares its set with `Answers`. Rules then call it by the resource's
-  id ([Resource access contracts](#resource-access-contracts)).
+  id ([Asking about a resource by its id](#asking-about-a-resource-by-its-id)).
 - A function returns a type, `SETOF` a type, or rows of named columns, such as
   `TABLE ("TicketId" uuid, "DueAt" timestamp with time zone)`. Those column names belong to the function. They are
   the same in every application, whatever its tables call their columns. So a package can map a function's rows for

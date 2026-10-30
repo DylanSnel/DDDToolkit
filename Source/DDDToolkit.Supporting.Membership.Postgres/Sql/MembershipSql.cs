@@ -353,7 +353,7 @@ internal static class MembershipSql
 
         // Each runs as its owner, so it reads the member rows without the policies that ask it, and is
         // executable by the roles the row access rules of the resource are for, and no other. The two that answer access say so, by the type of
-        // the resource's id: a rule asks them through a [ResourceAccessContract] of that id, and never by name.
+        // the resource's id: a rule asks them by that id, user.Sees<TKey>() and the like, and never by name.
         return
         [
             new ContributedFunction(rules.Functions.AsMember, "", returns, asMember, SecurityDefiner: true, GrantTo: written.GrantTo),

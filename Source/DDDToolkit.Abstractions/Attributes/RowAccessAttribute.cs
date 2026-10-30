@@ -8,7 +8,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// [RowAccess&lt;Order&gt;(RowOperations.Read | RowOperations.Change)]
 /// public static partial class ACustomerSeesTheirOrders
 /// {
-///     public static bool Allows(Order order, ICurrentUser user)
+///     public static bool Allows(Order order, IRowUser user)
 ///         => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 /// }
 /// </code>
@@ -16,7 +16,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// translate as an error on that expression. <c>DDDToolkit.EntityFramework.Postgres</c> turns the rule into
 /// Postgres policies, for the aggregate's table and every table of its entities, and
 /// <c>DDDToolkit.EntityFramework.Supabase</c> writes those into <c>supabase/migrations</c> as part of the
-/// build. The method stays an ordinary method, so a handler can ask the same rule in C#. A rule that names
+/// build. The method stays an ordinary method, so a test can run the same rule in C#, with the user
+/// <see cref="Access.RowUser.From"/> makes. A rule that names
 /// <see cref="Columns"/> holds a change of those columns alone, and becomes a trigger rather than a policy.
 /// </summary>
 /// <typeparam name="TAggregate">The aggregate root the rule guards. Its entities follow it.</typeparam>
@@ -71,8 +72,8 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// [RowAccess&lt;Organization&gt;(RowOperations.Read, Restrictive = true)]
     /// public static partial class OnlyEmployeesReadTheOrganization
     /// {
-    ///     public static bool Allows(Organization organization, ICurrentUser user)
-    ///         =&gt; TenancyRowAccess.CurrentSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
+    ///     public static bool Allows(Organization organization, IRowUser user)
+    ///         =&gt; user.CurrentSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
     /// }
     /// </code>
     /// So a rule written without it, about a table where a package's default already lets every member read, has no

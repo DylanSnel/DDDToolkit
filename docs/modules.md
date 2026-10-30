@@ -637,7 +637,6 @@ Projects/
     ValueObjects/                 ProjectId.cs
     Permissions/                  ProjectPermissionNames.cs
     Gate/                         IProjectGate.cs, ProjectAnswer.cs
-    RowAccess/                    ProjectsISee.cs, ProjectsWhereIHold.cs: what another module's row rules may ask
   Examples.Tenancy.Projects.Domain/
     GlobalUsings.cs
     Aggregates/

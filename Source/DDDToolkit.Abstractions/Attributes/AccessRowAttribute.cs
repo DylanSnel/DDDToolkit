@@ -6,12 +6,13 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// reads as it reads its own row's:
 /// <code>
 /// [AccessRow("current_seat_row")]
-/// public static partial TSeat CurrentSeat&lt;TSeat&gt;() where TSeat : class;
+/// public static partial TSeat CurrentSeat&lt;TSeat&gt;(this IRowUser user) where TSeat : class;
 ///
 /// // in a rule
-/// =&gt; TenancyRowAccess.CurrentSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
+/// =&gt; user.CurrentSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
 /// </code>
-/// The method returns the class the table is mapped to, or a type parameter the rule names it with. A property of
+/// The method takes <c>this IRowUser user</c> and nothing after it, and returns the class the table is mapped to, or a
+/// type parameter the rule names it with. A property of
 /// the answer is <c>(SELECT r1."Kind" FROM &lt;schema&gt;.current_seat_row() r1)</c> in the policy: its column is the
 /// one the model maps it to, and an enum or a value object compared with it is written as that column stores it, as
 /// for the rule's own row. The function returns the table's rows, <c>SETOF</c> the table, and is asked once per

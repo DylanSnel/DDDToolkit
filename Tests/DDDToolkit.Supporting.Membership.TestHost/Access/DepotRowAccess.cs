@@ -15,7 +15,7 @@ public static partial class PalletQuestions
 {
     /// <summary>The pallets the caller sees.</summary>
     [AccessSet("pallets_i_see")]
-    public static partial AccessSet<PalletId> Seen();
+    public static partial AccessSet<PalletId> PalletsISee(this IRowUser user);
 }
 
 /// <summary>The questions about crates the database answers, under the names a crate's rules give its functions.</summary>
@@ -24,12 +24,12 @@ public static partial class CrateQuestions
 {
     /// <summary>The crates the caller sees: those it is on, and those that stand where it holds the permission that sees.</summary>
     [AccessSet("crates_i_see")]
-    public static partial AccessSet<CrateId> Seen();
+    public static partial AccessSet<CrateId> CratesISee(this IRowUser user);
 
     /// <summary>The crates on which <paramref name="permission"/> is held by the caller: as one of its porters, as its owner, or from a bay above.</summary>
     /// <param name="permission">A permission.</param>
     [AccessSet("crates_where_i_hold")]
-    public static partial AccessSet<CrateId> HeldOn(string permission);
+    public static partial AccessSet<CrateId> CratesWhereIHold(this IRowUser user, string permission);
 }
 
 /// <summary>A porter reads the pallets it is on.</summary>
@@ -37,7 +37,7 @@ public static partial class CrateQuestions
 public static partial class PortersReadThePalletsTheyAreOn
 {
     /// <summary>Whether the caller sees <paramref name="pallet"/>.</summary>
-    public static bool Allows(Pallet pallet, ICurrentUser user) => PalletQuestions.Seen().Contains(pallet.Id);
+    public static bool Allows(Pallet pallet, IRowUser user) => user.PalletsISee().Contains(pallet.Id);
 }
 
 /// <summary>A porter reads the crates it sees: those it is on, and those in a bay where it holds the permission that sees.</summary>
@@ -45,5 +45,5 @@ public static partial class PortersReadThePalletsTheyAreOn
 public static partial class PortersReadTheCratesTheySee
 {
     /// <summary>Whether the caller sees <paramref name="crate"/>.</summary>
-    public static bool Allows(Crate crate, ICurrentUser user) => CrateQuestions.Seen().Contains(crate.Id);
+    public static bool Allows(Crate crate, IRowUser user) => user.CratesISee().Contains(crate.Id);
 }

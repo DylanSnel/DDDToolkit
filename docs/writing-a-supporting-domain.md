@@ -549,13 +549,16 @@ is only an offer. The host lists it with `[assembly: UseRowAccessContribution]`,
 application. Until the host lists it, the build warns with [DDD00069](diagnostics.md#ddd00069).
 
 **Functions for the application's rules.** The package declares the questions that the application's rules may ask in
-an `[AccessFunctions(Owner = "subscriptions")]` class. The functions that the package contributes answer these
+an `[AccessFunctions(Owner = "subscriptions")]` class, each an extension method on `IRowUser`, with `this IRowUser user`
+as its first parameter. So a question cannot be called where there is no rule. A question over the application's ids may
+carry `[TemplateRegistration(Shorthand = true)]` and `[TemplateType]`s, for a wrapper without type arguments in every
+project of a module, as Tenancy's questions do. The functions that the package contributes answer these
 questions. The export finds them by their logical names, such as `subscriptions/active_plans`, in the default schema
 of the context that maps the package's tables. A package that keeps the access to a resource of the application, as
 Membership keeps a resource's members, lets the application ask by the resource's id instead. Its function states which
-set it returns (`Answers` on the `ContributedFunction`). A rule asks through a one-line
-`[ResourceAccessContract<TId>]` of the application, so neither side names the function
-([A resource's access, asked by its id](row-level-security.md#resource-access-contracts)).
+set it returns (`Answers` on the `ContributedFunction`). A rule asks `user.Sees<TId>()`, so neither side names the
+function
+([A resource's access, asked by its id](row-level-security.md#asking-about-a-resource-by-its-id)).
 
 **Data for other modules.** The package also gives other modules its data as functions, and not as its tables. Each
 function returns rows under its own column names, and the package ships the mapping that reads them into a module's

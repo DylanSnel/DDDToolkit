@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// Tenancy's organization, its seats and its roles, and those of the application's own aggregates. On a tenant or an
 /// invitation it would narrow what Tenancy's own work and the person accepting an invitation read, so it is
 /// refused there.</item>
-/// <item>DDD00101: <c>TenancyRowAccess.CurrentSeat&lt;TSeat&gt;()</c> answers with the application's seat class, the one
+/// <item>DDD00101: <c>user.CurrentSeat&lt;TSeat&gt;()</c> answers with the application's seat class, the one
 /// declared with <c>[SeatAggregate]</c>; another type is no row the function answers with.</item>
 /// </list>
 /// </summary>
@@ -22,7 +22,7 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 public sealed class TenancyRowAccessAnalyzer : DiagnosticAnalyzer
 {
     private const string RowAccess = "DDDToolkit.Abstractions.Attributes.RowAccessAttribute`1";
-    private const string TenancyRowAccess = "DDDToolkit.Supporting.Tenancy.Access.TenancyRowAccess";
+    private const string TenancyRowAccess = "DDDToolkit.Abstractions.Access.TenancyRowAccess";
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =

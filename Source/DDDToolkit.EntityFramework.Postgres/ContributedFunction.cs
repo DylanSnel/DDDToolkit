@@ -66,8 +66,8 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// along that path. False by default.
 /// </param>
 /// <param name="Answers">
-/// The set it answers for a resource, for the rules that ask that set by the resource's id through a
-/// <c>[ResourceAccessContract&lt;TKey&gt;]</c> rather than by this function's name; null for none. See
+/// The set it answers for a resource, for the rules that ask that set by the resource's id,
+/// <c>user.Sees&lt;TKey&gt;()</c> say, rather than by this function's name; null for none. See
 /// <see cref="ResourceAccessAnswer"/>.
 /// </param>
 public sealed record ContributedFunction(
