@@ -157,7 +157,7 @@ take the module name from the folder, so a new module needs only a new folder.
 - `DDD_ModuleContracts` marks the contracts project as the project other modules may use.
 
 **`Directory.Packages.props`**, at the root. **Why:** all package versions are in this one file, so the toolkit's
-packages always have the same version. Write a prerelease version in full, such as `3.2.0-preview.7`.
+packages always have the same version. Write a prerelease version in full, such as `3.2.0-preview.8`.
 
 ```xml {7-10}
 <Project>
@@ -166,10 +166,10 @@ packages always have the same version. Write a prerelease version in full, such 
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.7" />
+    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.8" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
