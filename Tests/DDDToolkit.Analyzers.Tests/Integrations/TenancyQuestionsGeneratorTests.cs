@@ -172,6 +172,44 @@ public class TenancyQuestionsGeneratorTests
     public void A_question_asked_of_anything_but_the_rules_user_is_DDD00039(string expression, string at)
         => RuleAboveTheLine(expression).ShouldHaveDiagnostic("DDD00039", at: at);
 
+    [Fact]
+    public void The_questions_that_take_the_tenant_are_asked_with_an_access_functions_own_parameter_without_type_arguments()
+    {
+        // A set is asked once per statement, so its tenant comes from a parameter of the module's own access function.
+        var result = GeneratorTestHost.Create(Report, "Report.cs")
+            .WithSource(
+                """
+                using DDDToolkit.Abstractions.Access;
+                using DDDToolkit.Abstractions.Attributes;
+                using Shop.Contracts;
+
+                namespace Shop.Reports;
+
+                [AccessFunction<Report>("reports.readable_in_tenant")]
+                public static partial class ReportIsReadableInTenant
+                {
+                    public static bool Allows(Report report, IRowUser user, TenantId tenant)
+                        => user.UnitsWhereIHoldInTenant(tenant, "reports.read").Contains(report.UnitId)
+                           && user.RolesWithPermissionInTenant(tenant, "reports.read").Contains(report.RoleId);
+                }
+                """,
+                "Function.cs")
+            .WithAssemblyName("Shop.Reports.Infrastructure")
+            .WithTenancy()
+            .WithModuleFromTheBuild("Reports")
+            .WithReferencedProject("Shop.Contracts", project => project.WithSource(Ids, "Ids.cs").WithModuleFromTheBuild("Tenants"))
+            .WithReferencedProject("Shop.Reports.Application", project => project.WithSource(TheLine, "Line.cs").WithModuleFromTheBuild("Reports"))
+            .RunCore();
+
+        result.ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00051").ShouldCompile();
+        var literal = CSharpSyntaxTree.ParseText(result.Source("ReportIsReadableInTenant.AccessFunction")).GetRoot()
+            .DescendantNodes().OfType<VariableDeclaratorSyntax>().Single(variable => variable.Identifier.Text == "RowAccessSql")
+            .Initializer!.Value;
+        ((LiteralExpressionSyntax)literal).Token.ValueText.Should().Be(
+            "(({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold_permission_in_tenant}({arg:1}, 'reports.read'))))"
+            + " AND ({col:RoleId} = ANY (ARRAY(SELECT {fn:tenancy/roles_with_permission_in_tenant}({arg:1}, 'reports.read')))))");
+    }
+
     private static GeneratorRunOutcome RuleAboveTheLine(string expression)
         => GeneratorTestHost.Create(Report, "Report.cs")
             .WithSource(Rule(expression), "TheRule.cs")

@@ -157,6 +157,46 @@ public class AccessFunctionsGenerationTests
         result.Count("DDD00039").Should().BeGreaterThan(0);
     }
 
+    [Theory]
+    [InlineData("ShopQuestions.OrdersIFollow(user, \"watching\").Contains(order.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:shop/orders_i_follow}('watching'))))")]
+    [InlineData("ShopQuestions.IsCashier(user) && order.Level < 3", "((SELECT {fn:shop/is_cashier}()) AND coalesce({col:Level} < 3, FALSE))")]
+    [InlineData("ShopQuestions.LevelOf(user, order.Id) > 2", "({fn:shop/level_of}({col:Id}) > 2)")]
+    public void The_static_form_carries_the_user_as_an_argument_which_adds_nothing_to_the_sql(string expression, string sql)
+        => RuleSqlOf(expression).Should().Be(sql);
+
+    [Theory]
+    [InlineData("other.IsCashier()", "other.IsCashier()")]
+    [InlineData("ShopQuestions.IsCashier(other)", "ShopQuestions.IsCashier(other)")]
+    [InlineData("other.OrdersIFollow(\"x\").Contains(order.Id)", "other.OrdersIFollow(\"x\")")]
+    [InlineData("ShopQuestions.OrdersIFollow(other, \"x\").Contains(order.Id)", "ShopQuestions.OrdersIFollow(other, \"x\")")]
+    [InlineData("Mine.Ids(other).Contains(order.Id)", "Mine.Ids(other)")]
+    [InlineData("Member.Allows(order.Id, other)", "Member.Allows(order.Id, other)")]
+    public void A_question_asked_of_anything_but_the_rules_user_is_DDD00039(string expression, string at)
+    {
+        var result = Run(Questions +
+            $$"""
+            [AccessFunction<Order>("mine", Shape = AccessFunctionShape.Set)]
+            public static partial class Mine
+            {
+                public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.UserId == user.Id);
+            }
+
+            [AccessFunctionContract<OrderId>("is_member")]
+            public static partial class Member;
+
+            [RowAccess<Order>(RowOperations.Read)]
+            public static partial class TheRule
+            {
+                private static readonly IRowUser other = RowUser.From(CurrentUserSnapshot.Anonymous);
+
+                public static bool Allows(Order order, IRowUser user) => {{expression}};
+            }
+            """);
+
+        result.ShouldHaveDiagnostic("DDD00039", at: at);
+        result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
+    }
+
     // ------------------------------------------------------------------ questions as the generator declares them
 
     [Fact]
@@ -640,6 +680,10 @@ public class AccessFunctionsGenerationTests
 
     [Theory]
     [InlineData("public static partial bool Allows(string team, IRowUser user);")]
+    [InlineData("public static partial bool Allows(OrderId order);")]
+    [InlineData("public static partial bool Allows(OrderId order, string team);")]
+    [InlineData("public static partial AccessSet<OrderId> Ids();")]
+    [InlineData("public static partial AccessSet<OrderId> Ids(string team);")]
     [InlineData("public static partial AccessSet<string> Ids(IRowUser user);")]
     [InlineData("public static partial bool Allows(OrderId order, IRowUser user); public static partial AccessSet<OrderId> Ids(IRowUser user);")]
     [InlineData("public static bool Allows(OrderId order, IRowUser user) => true;")]

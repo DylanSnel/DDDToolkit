@@ -20,7 +20,7 @@ namespace DDDToolkit.Abstractions.Access;
 /// </para>
 /// <para>
 /// Each question answers only for the caller of the connection, so anyone who sees the id may ask it. Only the database
-/// answers: called in C#, each throws <see cref="DatabaseOnlyException"/>. They are extension methods on
+/// answers. Called in C#, each throws <see cref="DatabaseOnlyException"/>. They are extension methods on
 /// <see cref="IRowUser"/>, so they cannot be called where there is no rule.
 /// </para>
 /// </remarks>
@@ -32,8 +32,8 @@ public static class ResourceQuestions
     /// </summary>
     /// <typeparam name="TKey">The id of the resource's aggregate.</typeparam>
     /// <param name="user">The rule's user.</param>
-    /// <returns>Never in C#: a rule asks the answer's <c>Contains</c>, in SQL.</returns>
-    /// <exception cref="DatabaseOnlyException">Always: the question is the database's.</exception>
+    /// <returns>Nothing in C#. A rule asks the answer's <c>Contains</c>, in SQL.</returns>
+    /// <exception cref="DatabaseOnlyException">Always, since the question is the database's.</exception>
     public static AccessSet<TKey> Sees<TKey>(this IRowUser user)
         where TKey : struct, IEntityId
         => throw new DatabaseOnlyException(NameOf<TKey>("seen") + "()");
@@ -46,8 +46,8 @@ public static class ResourceQuestions
     /// <typeparam name="TKey">The id of the resource's aggregate.</typeparam>
     /// <param name="user">The rule's user.</param>
     /// <param name="permission">A permission.</param>
-    /// <returns>Never in C#: a rule asks the answer's <c>Contains</c>, in SQL.</returns>
-    /// <exception cref="DatabaseOnlyException">Always: the question is the database's.</exception>
+    /// <returns>Nothing in C#. A rule asks the answer's <c>Contains</c>, in SQL.</returns>
+    /// <exception cref="DatabaseOnlyException">Always, since the question is the database's.</exception>
     public static AccessSet<TKey> Holds<TKey>(this IRowUser user, string permission)
         where TKey : struct, IEntityId
         => throw new DatabaseOnlyException(NameOf<TKey>("held_on") + "(permission)");
@@ -60,8 +60,8 @@ public static class ResourceQuestions
     /// <typeparam name="TKey">The id of the resource's aggregate.</typeparam>
     /// <typeparam name="TMemberId">The id the members are known by, such as <c>SeatId</c>, which the resource's id does not say.</typeparam>
     /// <param name="user">The rule's user.</param>
-    /// <returns>Never in C#: a rule asks the answer's <c>Contains</c>, in SQL.</returns>
-    /// <exception cref="DatabaseOnlyException">Always: the question is the database's.</exception>
+    /// <returns>Nothing in C#. A rule asks the answer's <c>Contains</c>, in SQL.</returns>
+    /// <exception cref="DatabaseOnlyException">Always, since the question is the database's.</exception>
     public static AccessSet<TMemberId> FellowMembers<TKey, TMemberId>(this IRowUser user)
         where TKey : struct, IEntityId
         where TMemberId : struct, IEntityId

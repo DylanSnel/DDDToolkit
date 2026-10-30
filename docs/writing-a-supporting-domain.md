@@ -1283,6 +1283,11 @@ global using SubscriptionStore = global::Acme.Subscriptions.ISubscriptionStore<g
   class that an application may leave out. The class is written only where that template has a class, and a project
   without one hears nothing. `OnlyWith` on a `[TemplateRegistration]` does the same for a registration. Tenancy's
   `InvitationManager` and `AddTenancyInvitations` are written only where the application declares an invitation class.
+- **A wrapper that only saves type arguments.** `Shorthand = true` on a `[TemplateRegistration]` is for a method whose
+  generic form answers just the same, and that may be called from any project, as a question a row access rule asks.
+  Each project of a module that sees the method gets its own wrapper, since a wrapper is internal. Nothing is reported
+  when the wrapper cannot be closed, so a project that declares only some of the classes hears nothing of a method over
+  the others. Tenancy's questions are marked so: `user.CurrentSeatId()` for `user.CurrentSeatId<SeatId>()`.
 - **A missing class is reported where the classes are**, with [DDD00065](diagnostics.md#ddd00065), as information.
   The causes are a template with no class or with several classes, or a class that does not meet the constraints.
   Without this diagnostic, the projects above would only learn that the name does not exist. The toolkit does not

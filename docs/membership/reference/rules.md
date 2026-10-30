@@ -244,7 +244,7 @@ The member is a static property or field of type [`MembershipRules`](#membership
 public sealed record MembershipFunctions
 ```
 
-The names of the five set functions a database answers a resource's membership questions with, for the caller of the connection. They are the resource's own names, because an application may have several kinds of resource with members in one schema. They follow from the resource's name ([`For`](#forstring)), so a resource that keeps its name keeps them; one that is renamed with `[Members("...")]` gets new ones. Rules do not ask them by name: they ask the last three by the resource's id, through a `[ResourceAccessContract<TKey>]`, and the export writes the policy with whatever the names are.
+The names of the five set functions a database answers a resource's membership questions with, for the caller of the connection. They are the resource's own names, because an application may have several kinds of resource with members in one schema. They follow from the resource's name ([`For`](#forstring)), so a resource that keeps its name keeps them; one that is renamed with `[Members("...")]` gets new ones. Rules do not ask them by name: they ask the last three by the resource's id, `user.Sees<TKey>()`, `user.Holds<TKey>(permission)` and `user.FellowMembers<TKey, TMemberId>()`, and the export writes the policy with whatever the names are.
 
 | Member | Summary |
 |---|---|

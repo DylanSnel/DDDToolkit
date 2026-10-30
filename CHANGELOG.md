@@ -1033,7 +1033,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   project asks as well. A contract of another shape, keyed by something that is no id, or declared in another module
   than the one whose assembly holds the id, is DDD00038: what a module publishes of its resources is its own to say.
   DDD00039 names the contract among what a rule may ask. See [A resource's access, asked by its
-  id](docs/row-level-security.md#resource-access-contracts).
+  id](docs/row-level-security.md#asking-about-a-resource-by-its-id).
 - **Privileges from the policies.** `RowAccessExport.WriteGrants` has a script of policies write the
   privileges of its tables as well, read from the policies it holds: every privilege the script's roles and
   `PUBLIC` held on a table is taken back, and a role gets each command a permissive policy allows it,
@@ -2473,7 +2473,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   asks the other one when it runs: made with the check of its body turned off, it breaks the circle, and the rule is
   written as any other. Only a function a contribution writes is asked that way; a circle of access functions or of
   contributed functions' bodies is refused as before. See
-  [A resource's access, asked by its id](docs/row-level-security.md#resource-access-contracts).
+  [A resource's access, asked by its id](docs/row-level-security.md#asking-about-a-resource-by-its-id).
 
 #### Samples
 

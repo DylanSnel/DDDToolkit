@@ -10,7 +10,7 @@ namespace DDDToolkit.Abstractions.Access;
 /// </summary>
 /// <remarks>
 /// It answers what the rule can answer in C#. A question only the database answers still throws
-/// <see cref="DatabaseOnlyException"/>: ask the database for that, by loading the row through a context that runs as the
+/// <see cref="DatabaseOnlyException"/>. Ask the database for that, by loading the row through a context that runs as the
 /// caller. <see cref="CurrentUserSnapshot"/> does not implement <see cref="IRowUser"/>, so a call to this method is what
 /// gives a rule a user outside the database.
 /// </remarks>

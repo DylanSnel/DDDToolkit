@@ -183,8 +183,8 @@ When one of your classes is in the way and should become the package's class, ad
 - Other generators in the switch's project do not see the written classes. So an `[ObjectType<Role>]` over a written
   `Role` does not compile in that project, and neither does a row access rule that names a written class. Put that
   code in a project above, or declare the class or id yourself in one line.
-- A written id works as the key of a
-  [resource access contract](../row-level-security.md#asking-about-a-resource-by-its-id) in the same project.
+- A rule in the same project may
+  [ask about a resource](../row-level-security.md#asking-about-a-resource-by-its-id) by a written id.
 - Code outside the root namespace imports the written types with `global using Shop.Tenants;`. A `using` in one file
   does not reach the files that the generators write for your classes.
 

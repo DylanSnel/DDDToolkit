@@ -1842,7 +1842,7 @@ public sealed partial class NoteShare;
 
 ```csharp
 public static bool Allows(Ticket ticket, IRowUser user)
-    => DeskQuestions.TicketsForTeam(ticket.Team!).Contains(ticket.Id);   // DDD00051, on ticket.Team!
+    => user.TicketsForTeam(ticket.Team!).Contains(ticket.Id);   // DDD00051, on ticket.Team!
 ```
 
 A [set-shaped question](row-level-security.md#set-shaped-access-functions) becomes
@@ -1870,7 +1870,7 @@ function that the rule is part of.
 public static partial class DeskQuestions
 {
     [AccessSet("tickets_i_watch")]                                       // DDD00052
-    public static partial AccessSet<TicketId> TicketsIWatch();
+    public static partial AccessSet<TicketId> TicketsIWatch(this IRowUser user);
 }
 ```
 

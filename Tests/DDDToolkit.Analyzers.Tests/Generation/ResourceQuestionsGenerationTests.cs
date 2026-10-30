@@ -290,6 +290,33 @@ public class ResourceQuestionsGenerationTests
             ResourceAccessAnswer.NameOf(emitted.Type("Shop.BoardId"), ResourceAccessSet.Seen), "the export finds the resource by the id the toolkit wrote");
     }
 
+    [Theory]
+    [InlineData("user.Sees<BoardId>().Contains(board.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:@Shop.BoardId/seen}())))")]
+    [InlineData("user.Holds<BoardId>(\"boards.edit\").Contains(board.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:@Shop.BoardId/held_on}('boards.edit'))))")]
+    [InlineData("user.FellowMembers<BoardId, OrderId>().Contains(board.Order)", "({col:Order} = ANY (ARRAY(SELECT {fn:@Shop.BoardId/fellow_members}())))")]
+    public void Each_question_is_asked_by_the_id_the_toolkit_writes_beside_an_aggregate_root(string expression, string sql)
+    {
+        var result = Run(
+            $$"""
+            [AggregateRoot<Guid>]
+            public partial class Board
+            {
+                public Board(BoardId id) : base(id) { }
+
+                public OrderId Order { get; private set; }
+            }
+
+            [RowAccess<Board>(RowOperations.Read)]
+            public static partial class TheRule
+            {
+                public static bool Allows(Board board, IRowUser user) => {{expression}};
+            }
+            """);
+
+        result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
+        RuleSql(result).Should().Be(sql);
+    }
+
     [Fact]
     public void An_id_nothing_writes_does_not_compile_and_writes_no_sql()
     {
@@ -342,6 +369,47 @@ public class ResourceQuestionsGenerationTests
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
         RuleSql(result).Should().Be("({col:Unit} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/held_on}('boards.view'))))", "the rule asks the set by the id the switch wrote");
+    }
+
+    [Theory]
+    [InlineData("user.Sees<OrganizationUnitId>().Contains(board.Unit)", "({col:Unit} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/seen}())))")]
+    [InlineData("user.Holds<OrganizationUnitId>(\"boards.view\").Contains(board.Unit)", "({col:Unit} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/held_on}('boards.view'))))")]
+    [InlineData("user.FellowMembers<OrganizationUnitId, SeatId>().Contains(board.Seat)", "({col:Seat} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/fellow_members}())))")]
+    public void Each_question_is_asked_by_an_id_a_switch_of_the_project_writes(string expression, string sql)
+    {
+        var result = GeneratorTestHost.Create(
+                $$"""
+                [assembly: DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses]
+
+                namespace Shop;
+
+                using System;
+                using DDDToolkit.Abstractions.Access;
+                using DDDToolkit.Abstractions.Attributes;
+
+                [AggregateRoot<Guid>]
+                public partial class Board
+                {
+                    public Board(BoardId id, OrganizationUnitId unit, SeatId seat) : base(id) => (Unit, Seat) = (unit, seat);
+
+                    public OrganizationUnitId Unit { get; private set; }
+
+                    public SeatId Seat { get; private set; }
+                }
+
+                [RowAccess<Board>(RowOperations.Read)]
+                public static partial class TheRule
+                {
+                    public static bool Allows(Board board, IRowUser user) => {{expression}};
+                }
+                """)
+            .WithBuildProperty("RootNamespace", "Shop")
+            .WithTenancy()
+            .WithModuleFromTheBuild("Shop")
+            .RunCore();
+
+        result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
+        RuleSql(result).Should().Be(sql);
     }
 
     /// <summary>Projects' contracts as the sample's build compiles them: the module is the folder's <c>DDD_Module</c>, and no file says it.</summary>

@@ -690,7 +690,7 @@ lock on the member rows and on the owner column.
 
 ### The idea: a rule in C#, a policy in the database
 
-- **Row access rule**: a static class with `[RowAccess<T>(...)]` and one method, `Allows(row, caller)`. Your
+- **Row access rule**: a static class with `[RowAccess<T>(...)]` and one method, `Allows(row, user)`. Your
   application never calls this method. The export translates it into a policy, and Postgres applies the policy to
   every query.
 - **The rule's user**: `Allows` takes an `IRowUser`. Everything a rule asks, it asks of that user. A handler has no
@@ -730,7 +730,7 @@ export finds the function.
 
 **`Harbor.Boards.Infrastructure/Access/BoardRowRules.cs`**
 
-```csharp {11,14,18,22-23,27,31-32}
+```csharp {10,13,17,21-22,26,30-31}
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using Harbor.Boards.Application.Access;
