@@ -63,7 +63,7 @@ public class TenancyRestrictiveRuleTests
              [RowAccess<{{aggregate}}>({{operations}}, Restrictive = true)]
              public static partial class TheRule
              {
-                 public static bool Allows({{aggregate}} row, ICurrentUser user) => {{expression}};
+                 public static bool Allows({{aggregate}} row, IRowUser user) => {{expression}};
              }
              """;
 
@@ -79,7 +79,7 @@ public class TenancyRestrictiveRuleTests
     [Fact]
     public void Only_employees_read_the_organization_is_a_field_of_the_callers_own_seat_asked_once_per_statement()
     {
-        var result = Run(Rule("Organization", "TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee"));
+        var result = Run(Rule("Organization", "user.CurrentSeat<Seat>().Kind == SeatKind.Employee"));
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00100").ShouldNotHaveDiagnostic("DDD00101").ShouldCompile();
         SqlIn(result).Should().Be("{restrictive}({row:tenancy/current_seat_row:0:Campus.Tenants.Seat:q1}{col:q1:Kind}{/row} = {rowval:Campus.Tenants.Seat:Kind:0})");
@@ -90,7 +90,7 @@ public class TenancyRestrictiveRuleTests
     [InlineData("Seat", "RowOperations.Read | RowOperations.Change")]
     [InlineData("Role", "RowOperations.All")]
     public void A_restrictive_rule_on_the_organization_the_seats_or_the_roles_is_no_diagnostic(string aggregate, string operations)
-        => Run(Rule(aggregate, "TenancyRowAccess.CurrentSeat<Seat>().Kind != SeatKind.External", operations))
+        => Run(Rule(aggregate, "user.CurrentSeat<Seat>().Kind != SeatKind.External", operations))
             .ShouldNotHaveDiagnostic("DDD00100").ShouldNotHaveDiagnostic("DDD00101").ShouldCompile();
 
     [Theory]
@@ -98,7 +98,7 @@ public class TenancyRestrictiveRuleTests
     [InlineData("Invitation", "an invitation")]
     public void A_restrictive_rule_on_a_tenant_or_an_invitation_is_DDD00100(string aggregate, string described)
     {
-        var reported = Run(Rule(aggregate, "TenancyRowAccess.HoldsPermission(\"tenancy.seats.manage\")")).ShouldHaveDiagnostic("DDD00100", at: "RowAccess<" + aggregate + ">(RowOperations.Read, Restrictive = true)");
+        var reported = Run(Rule(aggregate, "user.HoldsPermission(\"tenancy.seats.manage\")")).ShouldHaveDiagnostic("DDD00100", at: "RowAccess<" + aggregate + ">(RowOperations.Read, Restrictive = true)");
 
         reported.Severity.Should().Be(DiagnosticSeverity.Error);
         reported.GetMessage().Should().Contain("'TheRule' is a restrictive rule on '" + aggregate + "', " + described + " of Tenancy's");
@@ -106,15 +106,15 @@ public class TenancyRestrictiveRuleTests
 
     [Fact]
     public void A_rule_that_allows_on_a_tenant_is_no_restrictive_rule_and_no_DDD00100()
-        => Run(Rule("Tenant", "TenancyRowAccess.HoldsPermission(\"tenancy.seats.manage\")").Replace(", Restrictive = true", "", StringComparison.Ordinal))
+        => Run(Rule("Tenant", "user.HoldsPermission(\"tenancy.seats.manage\")").Replace(", Restrictive = true", "", StringComparison.Ordinal))
             .ShouldNotHaveDiagnostic("DDD00100");
 
     [Fact]
     public void The_callers_seat_asked_as_another_class_is_DDD00101()
     {
-        var reported = Run(Rule("Organization", "TenancyRowAccess.CurrentSeat<Role>().Name == \"Employee\"")).ShouldHaveDiagnostic("DDD00101", at: "TenancyRowAccess.CurrentSeat<Role>()");
+        var reported = Run(Rule("Organization", "user.CurrentSeat<Role>().Name == \"Employee\"")).ShouldHaveDiagnostic("DDD00101", at: "user.CurrentSeat<Role>()");
 
         reported.Severity.Should().Be(DiagnosticSeverity.Error);
-        reported.GetMessage().Should().Contain("TenancyRowAccess.CurrentSeat<Role>() asks for a seat of 'Role', which is not the application's seat class");
+        reported.GetMessage().Should().Contain("CurrentSeat<Role>() asks for a seat of 'Role', which is not the application's seat class");
     }
 }

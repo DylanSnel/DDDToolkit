@@ -13,29 +13,31 @@ public class TenancyRowAccessTests
     public void Every_question_is_the_databases_and_throws_in_csharp_naming_its_function()
     {
         TenancyRowAccess.Owner.Should().Be("tenancy");
+        var user = RowUser.From(CurrentUserSnapshot.Anonymous);
 
-        Asked(() => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetRead).Contains(OrganizationUnitId.CreateSequential()))
+        Asked(() => user.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetRead).Contains(OrganizationUnitId.CreateSequential()))
             .Should().Be("tenancy/units_where_i_hold_permission");
-        Asked(() => TenancyRowAccess.ReadableUnits<OrganizationUnitId>().Contains(OrganizationUnitId.CreateSequential())).Should().Be("tenancy/readable_units");
-        Asked(() => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(SeatId.CreateSequential())).Should().Be("tenancy/seats_in_my_units");
-        Asked(() => TenancyRowAccess.RolesWithPermission<RoleId>(HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential())).Should().Be("tenancy/roles_with_permission");
-        Asked(() => TenancyRowAccess.CurrentSeatId<SeatId>()).Should().Be("tenancy/current_seat");
-        Asked(() => TenancyRowAccess.CurrentTenant<TenantId>()).Should().Be("tenancy/current_tenant");
-        Asked(() => TenancyRowAccess.HoldsPermission(HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_permission");
-        Asked(() => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage)).Should().Be("tenancy/holds_at_tenant");
+        Asked(() => user.ReadableUnits<OrganizationUnitId>().Contains(OrganizationUnitId.CreateSequential())).Should().Be("tenancy/readable_units");
+        Asked(() => user.SeatsInMyUnits<SeatId>().Contains(SeatId.CreateSequential())).Should().Be("tenancy/seats_in_my_units");
+        Asked(() => user.RolesWithPermission<RoleId>(HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential())).Should().Be("tenancy/roles_with_permission");
+        Asked(() => user.CurrentSeatId<SeatId>()).Should().Be("tenancy/current_seat");
+        Asked(() => user.CurrentTenant<TenantId>()).Should().Be("tenancy/current_tenant");
+        Asked(() => user.HoldsPermission(HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_permission");
+        Asked(() => user.HoldsAtTenant(TenancyPermissions.SeatsManage)).Should().Be("tenancy/holds_at_tenant");
     }
 
     [Fact]
     public void The_questions_that_take_the_tenant_are_the_databases_too()
     {
         var tenant = new TenantId(1);
+        var user = RowUser.From(CurrentUserSnapshot.Anonymous);
 
-        Asked(() => TenancyRowAccess.SeatInTenant<SeatId, TenantId>(tenant)).Should().Be("tenancy/seat_in_tenant");
-        Asked(() => TenancyRowAccess.SeatedInTenant(tenant)).Should().Be("tenancy/seated_in_tenant");
-        Asked(() => TenancyRowAccess.HoldsPermissionInTenant(tenant, HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_permission_in_tenant");
-        Asked(() => TenancyRowAccess.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(OrganizationUnitId.CreateSequential()))
+        Asked(() => user.SeatInTenant<SeatId, TenantId>(tenant)).Should().Be("tenancy/seat_in_tenant");
+        Asked(() => user.SeatedInTenant(tenant)).Should().Be("tenancy/seated_in_tenant");
+        Asked(() => user.HoldsPermissionInTenant(tenant, HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_permission_in_tenant");
+        Asked(() => user.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(OrganizationUnitId.CreateSequential()))
             .Should().Be("tenancy/units_where_i_hold_permission_in_tenant");
-        Asked(() => TenancyRowAccess.RolesWithPermissionInTenant<RoleId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential()))
+        Asked(() => user.RolesWithPermissionInTenant<RoleId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential()))
             .Should().Be("tenancy/roles_with_permission_in_tenant");
     }
 

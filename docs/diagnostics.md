@@ -100,7 +100,7 @@ problem, and the fix.
 | [DDD00098](#ddd00098) | Error | Rules that reach a resource from above read where it hangs from its [At] property |
 | [DDD00099](#ddd00099) | Warning | A permission says what it lets somebody do |
 | [DDD00100](#ddd00100) | Error | A restrictive rule narrows a table it can reach |
-| [DDD00101](#ddd00101) | Error | TenancyRowAccess.CurrentSeat answers with the application's seat class |
+| [DDD00101](#ddd00101) | Error | CurrentSeat answers with the application's seat class |
 | [DDD00102](#ddd00102) | Error | A marker of a requirement's argument goes beside the attribute whose call it is |
 | [DDD00103](#ddd00103) | Error | An operator's command takes its tenant from the request or from itself |
 | [DDD00104](#ddd00104) | Error | [Operator] stands beside no requirement an operator cannot meet |
@@ -1341,14 +1341,15 @@ code that uses the constant from adding errors of its own.
 [RowAccess<Order>(RowOperations.Read)]
 public static class ACustomerSeesTheirOrders                      // DDD00038: not partial
 {
-    public static bool Allows(Order order) => order.PlacedBy == null;   // DDD00038: no ICurrentUser
+    public static bool Allows(Order order) => order.PlacedBy == null;   // DDD00038: no IRowUser
 }
 ```
 
 The generator writes the rule's SQL into another part of the class, so the class is `static partial`. The
 generator translates `Allows`. `Allows` is a static method that takes the aggregate the rule is about and an
-`ICurrentUser`, returns `bool`, and has a single expression for a body: after `=>`, or as its only `return` statement.
-The generator generates nothing until the rule has this shape. A rule without SQL never reaches the database.
+`IRowUser`, returns `bool`, and has a single expression for a body: after `=>`, or as its only `return` statement.
+A rule that takes an `ICurrentUser` is reported, and the message gives the signature it needs. The generator generates
+nothing until the rule has this shape. A rule without SQL never reaches the database.
 
 The same holds for the other classes the generator reads, with more requirements:
 
@@ -1358,26 +1359,14 @@ The same holds for the other classes the generator reads, with more requirements
   aggregate's primary key must be one column, because the function answers with the primary keys of the rows it
   allows.
 - **An `[AccessFunctionContract]`** declares nothing, or one question for the generator to implement:
-  `static partial bool Allows(TKey key, ...)`, or `static partial AccessSet<TKey> Ids(...)`. `Ids` also needs
-  `Shape = AccessFunctionShape.Set` if the attribute names a shape.
-- **A `[ResourceAccessContract]`** is keyed by the id of the resource's aggregate, such as `ProjectId`, because
-  the export finds the resource by the type of its id. It publishes `ResourceAccessSet.Seen` or `HeldOn`. The id
-  is one of these:
-  - an id declared with `[EntityId<T>]`;
-  - the id that the toolkit writes beside an aggregate root of the same project declared with a value,
-    `[AggregateRoot<Guid>]`;
-  - an id that a package's switch writes into the project, `[assembly: GenerateTenancyIds]`.
-
-  A name that the generator finds as none of these is reported, with the line that declares it. The contract is
-  declared in the module that owns the id, because a module publishes the sets of its own resources. A contract
-  for an id whose assembly declares another module is reported. The other module's rules ask the contract that
-  the owner publishes. The contract declares nothing, or the `Ids` its set is asked with, for the generator to
-  implement: `static partial AccessSet<ProjectId> Ids()` for the resources seen, and
-  `static partial AccessSet<ProjectId> Ids(string permission)` for the resources a permission is held on
-  ([a resource's access, asked by its id](row-level-security.md#resource-access-contracts)).
+  `static partial bool Allows(TKey key, IRowUser user, ...)`, or
+  `static partial AccessSet<TKey> Ids(IRowUser user, ...)`. `Ids` also needs `Shape = AccessFunctionShape.Set` if the
+  attribute names a shape.
 - **A question of an `[AccessFunctions]` class** is a `static partial` method without a body, in a
-  `static partial` class. An `[AccessSet]` question returns `AccessSet<T>`, and an `[AccessScalar]` question
-  returns a value. Its parameters are the types above, or a type parameter constrained to `IEntityId`. No
+  `static partial` class. It declares `this IRowUser user` as its first parameter, so it cannot be called where
+  there is no rule. An `[AccessSet]` question returns `AccessSet<T>`, and an `[AccessScalar]` question
+  returns a value. Its parameters after the user are the types above, or a type parameter constrained to
+  `IEntityId`. An `[AccessRow]` question takes none after the user. No
   generator writes the body of an `[AccessSet]` or `[AccessScalar]` method in a class without `[AccessFunctions]`,
   so such a method is reported.
 - **A function's name** is `schema.name`, `owner/name`, or a name relative to its owner. Each part has letters,
@@ -1408,7 +1397,7 @@ The same holds for the other classes the generator reads, with more requirements
 **A row access rule can only say what the database can check.**
 
 ```csharp
-public static bool Allows(Order order, ICurrentUser user)
+public static bool Allows(Order order, IRowUser user)
     => order.Team!.StartsWith("north");                           // DDD00039, on the call
 ```
 
@@ -1416,7 +1405,7 @@ The generator turns a rule into a condition that the database checks for every r
 
 - the aggregate's own properties;
 - constants written in the rule;
-- the current user: `user.Id`, `user.IsAuthenticated`, `user.Role` and `user.FindClaim("app_metadata.team")`;
+- the rule's user: `user.Id`, `user.IsAuthenticated`, `user.Role` and `user.FindClaim("app_metadata.team")`;
 - the time, as `DateTimeOffset.UtcNow` or `DateTime.UtcNow`, which the database answers as `now()`;
 - SQL written with `Sql.Call` or `Sql.Raw`.
 
@@ -1424,14 +1413,13 @@ A rule compares these with `==`, `!=`, `<`, `<=`, `>` and `>=`, and combines the
 `!`. A rule asks what only the database knows through an
 [access function](row-level-security.md#access-functions), a
 [question](row-level-security.md#set-shaped-access-functions) of an `[AccessFunctions]` class, or a
-[resource access contract](row-level-security.md#resource-access-contracts). It asks a set-shaped
-question only with `Contains`.
+[question about a resource by its id](row-level-security.md#asking-about-a-resource-by-its-id). It asks each of the
+rule's own `user` parameter, and a set-shaped question only with `Contains`.
 
 A method call, a local variable or another object has no column and no claim to become. If the generator left it
 out, the database would answer differently from the C# method. So DDD00039 is an error, on the part that cannot
 be translated. Store what the rule needs as a property of the aggregate, or put it in the caller's
-`app_metadata`. The current user's other members, such as `user.RequireId()` and `user.RequireSystemWork()`, have
-no SQL either. A rule compares `user.Id` instead.
+`app_metadata`.
 
 ## DDD00040
 
@@ -1461,7 +1449,7 @@ parent's template. That class reads the parent's properties like its own.
 [RowAccess<Project>(RowOperations.Read)]
 public static partial class MembersSeeTheirProjects
 {
-    public static bool Allows(Project project, ICurrentUser user)
+    public static bool Allows(Project project, IRowUser user)
         => project.Members.Any(member => member.UserId == user.Id);   // DDD00041
 }
 ```
@@ -1476,14 +1464,14 @@ as its owner (`SECURITY DEFINER`), so it reads the entities without their polici
 [AccessFunction<Project>("projects.is_member")]
 public static partial class ProjectMembership
 {
-    public static bool Allows(Project project, ICurrentUser user)
+    public static bool Allows(Project project, IRowUser user)
         => project.Members.Any(member => member.UserId == user.Id);
 }
 
 [RowAccess<Project>(RowOperations.Read)]
 public static partial class MembersSeeTheirProjects
 {
-    public static bool Allows(Project project, ICurrentUser user) => ProjectMembership.Allows(project, user);
+    public static bool Allows(Project project, IRowUser user) => ProjectMembership.Allows(project, user);
 }
 ```
 
@@ -1853,8 +1841,8 @@ public sealed partial class NoteShare;
 **A set-shaped question is asked once per statement, so its arguments do not read the row.**
 
 ```csharp
-public static bool Allows(Ticket ticket, ICurrentUser user)
-    => DeskQuestions.TicketsForTeam(ticket.Team!).Contains(ticket.Id);   // DDD00051, on ticket.Team!
+public static bool Allows(Ticket ticket, IRowUser user)
+    => user.TicketsForTeam(ticket.Team!).Contains(ticket.Id);   // DDD00051, on ticket.Team!
 ```
 
 A [set-shaped question](row-level-security.md#set-shaped-access-functions) becomes
@@ -1882,7 +1870,7 @@ function that the rule is part of.
 public static partial class DeskQuestions
 {
     [AccessSet("tickets_i_watch")]                                       // DDD00052
-    public static partial AccessSet<TicketId> TicketsIWatch();
+    public static partial AccessSet<TicketId> TicketsIWatch(this IRowUser user);
 }
 ```
 
@@ -3782,17 +3770,17 @@ So a restrictive rule on a tenant or an invitation is refused. Put the rule on o
 
 ## DDD00101
 
-**`TenancyRowAccess.CurrentSeat` answers with the application's seat class.**
+**`CurrentSeat` answers with the application's seat class.**
 
 ```csharp
-TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
-TenancyRowAccess.CurrentSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
+user.CurrentSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
+user.CurrentSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
 ```
 
 `CurrentSeat<TSeat>()` is the calling seat's own row, and a rule reads a field of it. The function behind it answers
 with a row of Tenancy's seats table. So `TSeat` must be the class that this table is mapped to: the class declared
 with `[SeatAggregate]`. In a rule of a module whose context does not map the seats, use
-`TenancyRowAccess.CurrentSeatId<SeatId>()` for the seat's id.
+`user.CurrentSeatId()` for the seat's id.
 
 ## DDD00102
 

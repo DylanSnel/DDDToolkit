@@ -23,7 +23,7 @@ public static partial class GardenQuestions
 {
     /// <summary>The garden the caller's requests are in, as its token says it, or null for a caller in none.</summary>
     [AccessScalar("current_garden")]
-    public static partial GardenId CurrentGarden();
+    public static partial GardenId CurrentGarden(this IRowUser user);
 }
 
 /// <summary>The questions about plots the database answers, under the names a plot's rules give its functions.</summary>
@@ -32,12 +32,12 @@ public static partial class PlotQuestions
 {
     /// <summary>The plots the caller sees: those it is a gardener on now, and those it owns.</summary>
     [AccessSet("plots_i_see")]
-    public static partial AccessSet<PlotId> Seen();
+    public static partial AccessSet<PlotId> PlotsISee(this IRowUser user);
 
     /// <summary>The plots on which <paramref name="permission"/> is held by the caller: as its owner, or through a role of plots that gives it.</summary>
     /// <param name="permission">A permission.</param>
     [AccessSet("plots_where_i_hold")]
-    public static partial AccessSet<PlotId> HeldOn(string permission);
+    public static partial AccessSet<PlotId> PlotsWhereIHold(this IRowUser user, string permission);
 }
 
 /// <summary>A signed-in user reads the roles of plots of its own garden, and changes none: no rule lets a caller write one.</summary>
@@ -45,7 +45,7 @@ public static partial class PlotQuestions
 public static partial class GardenersReadTheRolesOfTheirGarden
 {
     /// <summary>Whether the caller reads <paramref name="role"/>: a role of the garden its requests are in.</summary>
-    public static bool Allows(PlotRole role, ICurrentUser user) => role.GardenId == GardenQuestions.CurrentGarden();
+    public static bool Allows(PlotRole role, IRowUser user) => role.GardenId == user.CurrentGarden();
 }
 
 /// <summary>A signed-in user reads the roles of sheds, and changes none.</summary>
@@ -53,7 +53,7 @@ public static partial class GardenersReadTheRolesOfTheirGarden
 public static partial class UsersReadTheRolesOfSheds
 {
     /// <summary>Whether the caller reads <paramref name="role"/>.</summary>
-    public static bool Allows(ShedRole role, ICurrentUser user) => user.IsAuthenticated;
+    public static bool Allows(ShedRole role, IRowUser user) => user.IsAuthenticated;
 }
 
 /// <summary>A gardener reads the plots it is on.</summary>
@@ -61,7 +61,7 @@ public static partial class UsersReadTheRolesOfSheds
 public static partial class GardenersReadThePlotsTheyAreOn
 {
     /// <summary>Whether the caller sees <paramref name="plot"/>.</summary>
-    public static bool Allows(Plot plot, ICurrentUser user) => PlotQuestions.Seen().Contains(plot.Id);
+    public static bool Allows(Plot plot, IRowUser user) => user.PlotsISee().Contains(plot.Id);
 }
 
 /// <summary>Whoever fences a plot changes it, and writes its gardeners and their roles: the permission the plots' rules name for the lock.</summary>
@@ -69,7 +69,7 @@ public static partial class GardenersReadThePlotsTheyAreOn
 public static partial class FencersChangeTheirPlots
 {
     /// <summary>Whether the caller changes <paramref name="plot"/>.</summary>
-    public static bool Allows(Plot plot, ICurrentUser user) => PlotQuestions.HeldOn(PlotPermissions.Fence).Contains(plot.Id);
+    public static bool Allows(Plot plot, IRowUser user) => user.PlotsWhereIHold(PlotPermissions.Fence).Contains(plot.Id);
 }
 
 /// <summary>
@@ -80,5 +80,5 @@ public static partial class FencersChangeTheirPlots
 public static partial class UsersReadTheSheds
 {
     /// <summary>Whether the caller reads <paramref name="shed"/>.</summary>
-    public static bool Allows(Shed shed, ICurrentUser user) => user.IsAuthenticated;
+    public static bool Allows(Shed shed, IRowUser user) => user.IsAuthenticated;
 }

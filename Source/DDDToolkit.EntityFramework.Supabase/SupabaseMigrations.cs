@@ -658,7 +658,7 @@ public static partial class SupabaseMigrations
             {
                 if (ResourceAccessAnswer.IsName(missing))
                 {
-                    // Asked through a [ResourceAccessContract], by the resource's id: no function of a module answers it,
+                    // Asked with user.Sees<TKey>() and the like, by the resource's id: no function of a module answers it,
                     // and a contribution answers it for the context that maps the resource, which may not be among these.
                     throw new InvalidOperationException(
                         $"{what} asks {ResourceAccessAnswer.Described(missing)}, and no row access contribution this host uses answers that set for the modules exported. " +

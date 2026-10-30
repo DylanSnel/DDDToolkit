@@ -1,6 +1,5 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
-using Examples.Tenancy.Projects.Contracts.RowAccess;
 
 namespace Examples.Tenancy.Projects.Infrastructure.Access;
 
@@ -26,5 +25,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class NameAndPlanChangeWithTheEditPermission
 {
     /// <summary>Whether the calling seat holds the permission to edit <paramref name="project"/>.</summary>
-    public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
+    public static bool Allows(Project project, IRowUser user) => user.Holds<ProjectId>(ProjectPermissionNames.Edit).Contains(project.Id);
 }

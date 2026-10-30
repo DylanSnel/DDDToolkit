@@ -111,10 +111,10 @@ internal static class MembershipReference
                         [new(Membership, Folder: "Access/RequiredAccess")],
                         Lead: ["MemberAccess", "On", "SeenWith", "Sees", "OnResourceAttribute", "ExpectedVersionAttribute", "SeenWithAttribute", "MemberAccessCheck"]),
                     new(
-                        "Resource access contracts",
-                        [new(Abstractions, Type: "ResourceAccessContractAttribute"), new(Abstractions, Type: "ResourceAccessSet")],
-                        "From `DDDToolkit.Abstractions`: how the module that owns a resource with members publishes the sets its "
-                        + "access answers, for the row access rules of any module to ask by the resource's id."),
+                        "Asking about a resource by its id",
+                        [new(Abstractions, Type: "ResourceQuestions"), new(Abstractions, Type: "ResourceAccessSet")],
+                        "From `DDDToolkit.Abstractions`: the questions a row access rule of any module asks about a resource with "
+                        + "members, by the resource's id, and the sets its access answers."),
                 ]),
             new(
                 "refusals.md",

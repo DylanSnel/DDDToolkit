@@ -12,22 +12,6 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Access;
 // who holds the permission that changes the owner, whatever the rule below lets a caller change of the resource.
 
 /// <summary>
-/// The documents the caller sees, asked by the document's id: no function's name is said, and the export writes
-/// the policy with the function the package writes for the documents, whatever their rules call it.
-/// </summary>
-[ResourceAccessContract<DocumentId>(ResourceAccessSet.Seen)]
-public static partial class DocumentsISee;
-
-/// <summary>The documents the caller holds a permission on, asked by the document's id and the permission, as <see cref="DocumentsISee"/> is.</summary>
-[ResourceAccessContract<DocumentId>(ResourceAccessSet.HeldOn)]
-public static partial class DocumentsWhereIHold
-{
-    /// <summary>The documents the caller holds <paramref name="permission"/> on: declared to say so here, and implemented by the generator.</summary>
-    /// <param name="permission">A permission.</param>
-    public static partial AccessSet<DocumentId> Ids(string permission);
-}
-
-/// <summary>
 /// The questions about folders the database answers, under the names the package gives a folder's functions, from
 /// the resource's name: a host may still ask the package's functions by name, as an <c>[AccessFunctions]</c> class
 /// asks any function.
@@ -37,20 +21,24 @@ public static partial class FolderQuestions
 {
     /// <summary>The folders the caller sees.</summary>
     [AccessSet("folders_i_see")]
-    public static partial AccessSet<FolderId> Seen();
+    public static partial AccessSet<FolderId> FoldersISee(this IRowUser user);
 
     /// <summary>The folders the caller holds <paramref name="permission"/> on.</summary>
     /// <param name="permission">A permission.</param>
     [AccessSet("folders_where_i_hold")]
-    public static partial AccessSet<FolderId> HeldOn(string permission);
+    public static partial AccessSet<FolderId> FoldersWhereIHold(this IRowUser user, string permission);
 }
 
-/// <summary>A user reads the documents it sees: those it is a member of now, and those it owns.</summary>
+/// <summary>
+/// A user reads the documents it sees: those it is a member of now, and those it owns. Asked by the document's id: no
+/// function's name is said, and the export writes the policy with the function the package writes for the documents,
+/// whatever their rules call it.
+/// </summary>
 [RowAccess<Document>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class UsersReadTheDocumentsTheySee
 {
     /// <summary>Whether the caller sees <paramref name="document"/>.</summary>
-    public static bool Allows(Document document, ICurrentUser user) => DocumentsISee.Ids().Contains(document.Id);
+    public static bool Allows(Document document, IRowUser user) => user.Sees<DocumentId>().Contains(document.Id);
 }
 
 /// <summary>
@@ -63,7 +51,7 @@ public static partial class UsersReadTheDocumentsTheySee
 public static partial class UsersOpenDocumentsOfTheirOwn
 {
     /// <summary>Whether the caller may add <paramref name="document"/>.</summary>
-    public static bool Allows(Document document, ICurrentUser user) => document.OwnerId.Value == user.Id;
+    public static bool Allows(Document document, IRowUser user) => document.OwnerId.Value == user.Id;
 }
 
 /// <summary>
@@ -78,9 +66,9 @@ public static partial class UsersOpenDocumentsOfTheirOwn
 public static partial class UsersChangeTheDocumentsTheyWorkOn
 {
     /// <summary>Whether the caller may change <paramref name="document"/>.</summary>
-    public static bool Allows(Document document, ICurrentUser user)
-        => DocumentsWhereIHold.Ids(DocumentPermissions.Edit).Contains(document.Id)
-           || DocumentsWhereIHold.Ids(DocumentPermissions.Share).Contains(document.Id);
+    public static bool Allows(Document document, IRowUser user)
+        => user.Holds<DocumentId>(DocumentPermissions.Edit).Contains(document.Id)
+           || user.Holds<DocumentId>(DocumentPermissions.Share).Contains(document.Id);
 }
 
 /// <summary>A member of staff reads the folders it is on.</summary>
@@ -88,7 +76,7 @@ public static partial class UsersChangeTheDocumentsTheyWorkOn
 public static partial class StaffReadTheFoldersTheyAreOn
 {
     /// <summary>Whether the caller sees <paramref name="folder"/>.</summary>
-    public static bool Allows(Folder folder, ICurrentUser user) => FolderQuestions.Seen().Contains(folder.Id);
+    public static bool Allows(Folder folder, IRowUser user) => user.FoldersISee().Contains(folder.Id);
 }
 
 /// <summary>
@@ -101,7 +89,7 @@ public static partial class StaffReadTheFoldersTheyAreOn
 public static partial class ArchivistsReadTheFoldersTheyHold
 {
     /// <summary>Whether the caller holds the permission that reads <paramref name="folder"/>.</summary>
-    public static bool Allows(Folder folder, ICurrentUser user) => FolderQuestions.HeldOn(FolderPermissions.Read).Contains(folder.Id);
+    public static bool Allows(Folder folder, IRowUser user) => user.FoldersWhereIHold(FolderPermissions.Read).Contains(folder.Id);
 }
 
 /// <summary>The token role of the host's archivists.</summary>

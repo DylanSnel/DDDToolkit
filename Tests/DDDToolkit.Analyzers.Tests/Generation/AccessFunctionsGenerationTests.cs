@@ -59,16 +59,16 @@ public class AccessFunctionsGenerationTests
         public static partial class ShopQuestions
         {
             [AccessSet("orders_i_follow")]
-            public static partial AccessSet<OrderId> OrdersIFollow(string reason);
+            public static partial AccessSet<OrderId> OrdersIFollow(this IRowUser user, string reason);
 
             [AccessScalar("is_cashier")]
-            public static partial bool IsCashier();
+            public static partial bool IsCashier(this IRowUser user);
 
             [AccessScalar("level_of")]
-            public static partial int LevelOf(OrderId order);
+            public static partial int LevelOf(this IRowUser user, OrderId order);
 
             [AccessScalar("current_team")]
-            public static partial string CurrentTeam();
+            public static partial string CurrentTeam(this IRowUser user);
         }
 
 
@@ -99,7 +99,7 @@ public class AccessFunctionsGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => {{expression}};
+                public static bool Allows(Order order, IRowUser user) => {{expression}};
             }
             """,
             module);
@@ -112,17 +112,17 @@ public class AccessFunctionsGenerationTests
 
     [Fact]
     public void A_set_question_in_a_rule_is_any_of_an_array_of_one_select()
-        => RuleSqlOf("ShopQuestions.OrdersIFollow(\"watching\").Contains(order.Id)")
+        => RuleSqlOf("user.OrdersIFollow(\"watching\").Contains(order.Id)")
             .Should().Be("({col:Id} = ANY (ARRAY(SELECT {fn:shop/orders_i_follow}('watching'))))");
 
     [Fact]
     public void A_scalar_question_without_row_arguments_is_wrapped_in_a_select()
-        => RuleSqlOf("ShopQuestions.IsCashier() && order.Level < 3")
+        => RuleSqlOf("user.IsCashier() && order.Level < 3")
             .Should().Be("((SELECT {fn:shop/is_cashier}()) AND coalesce({col:Level} < 3, FALSE))");
 
     [Fact]
     public void A_scalar_question_with_a_row_argument_is_asked_per_row()
-        => RuleSqlOf("ShopQuestions.LevelOf(order.Id) > 2")
+        => RuleSqlOf("user.LevelOf(order.Id) > 2")
             .Should().Be("({fn:shop/level_of}({col:Id}) > 2)");
 
     [Fact]
@@ -133,11 +133,11 @@ public class AccessFunctionsGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => ShopQuestions.OrdersIFollow(order.Team!).Contains(order.Id);
+                public static bool Allows(Order order, IRowUser user) => user.OrdersIFollow(order.Team!).Contains(order.Id);
             }
             """);
 
-        result.ShouldHaveDiagnostic("DDD00051", at: "order.Team!").GetMessage().Should().Contain("'ShopQuestions.OrdersIFollow'").And.Contain("once per row");
+        result.ShouldHaveDiagnostic("DDD00051", at: "order.Team!").GetMessage().Should().Contain("'user.OrdersIFollow'").And.Contain("once per row");
         result.Count("DDD00051").Should().Be(1, "the value compared with the set, the argument of Contains, is what may read the row");
         result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
     }
@@ -150,11 +150,51 @@ public class AccessFunctionsGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => ShopQuestions.OrdersIFollow("x").Equals(null);
+                public static bool Allows(Order order, IRowUser user) => user.OrdersIFollow("x").Equals(null);
             }
             """);
 
         result.Count("DDD00039").Should().BeGreaterThan(0);
+    }
+
+    [Theory]
+    [InlineData("ShopQuestions.OrdersIFollow(user, \"watching\").Contains(order.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:shop/orders_i_follow}('watching'))))")]
+    [InlineData("ShopQuestions.IsCashier(user) && order.Level < 3", "((SELECT {fn:shop/is_cashier}()) AND coalesce({col:Level} < 3, FALSE))")]
+    [InlineData("ShopQuestions.LevelOf(user, order.Id) > 2", "({fn:shop/level_of}({col:Id}) > 2)")]
+    public void The_static_form_carries_the_user_as_an_argument_which_adds_nothing_to_the_sql(string expression, string sql)
+        => RuleSqlOf(expression).Should().Be(sql);
+
+    [Theory]
+    [InlineData("other.IsCashier()", "other.IsCashier()")]
+    [InlineData("ShopQuestions.IsCashier(other)", "ShopQuestions.IsCashier(other)")]
+    [InlineData("other.OrdersIFollow(\"x\").Contains(order.Id)", "other.OrdersIFollow(\"x\")")]
+    [InlineData("ShopQuestions.OrdersIFollow(other, \"x\").Contains(order.Id)", "ShopQuestions.OrdersIFollow(other, \"x\")")]
+    [InlineData("Mine.Ids(other).Contains(order.Id)", "Mine.Ids(other)")]
+    [InlineData("Member.Allows(order.Id, other)", "Member.Allows(order.Id, other)")]
+    public void A_question_asked_of_anything_but_the_rules_user_is_DDD00039(string expression, string at)
+    {
+        var result = Run(Questions +
+            $$"""
+            [AccessFunction<Order>("mine", Shape = AccessFunctionShape.Set)]
+            public static partial class Mine
+            {
+                public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.UserId == user.Id);
+            }
+
+            [AccessFunctionContract<OrderId>("is_member")]
+            public static partial class Member;
+
+            [RowAccess<Order>(RowOperations.Read)]
+            public static partial class TheRule
+            {
+                private static readonly IRowUser other = RowUser.From(CurrentUserSnapshot.Anonymous);
+
+                public static bool Allows(Order order, IRowUser user) => {{expression}};
+            }
+            """);
+
+        result.ShouldHaveDiagnostic("DDD00039", at: at);
+        result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
     }
 
     // ------------------------------------------------------------------ questions as the generator declares them
@@ -165,9 +205,9 @@ public class AccessFunctionsGenerationTests
         var result = Run(Questions);
 
         result.ShouldCompile();
-        result.ShouldContain("ShopQuestions.AccessFunctions", "public static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> OrdersIFollow(string reason) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop/orders_i_follow\");");
+        result.ShouldContain("ShopQuestions.AccessFunctions", "public static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> OrdersIFollow(this global::DDDToolkit.Abstractions.Access.IRowUser user, string reason) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop/orders_i_follow\");");
 
-        var asked = () => result.Emit().Type("Shop.ShopQuestions").GetMethod("CurrentTeam")!.Invoke(null, null);
+        var asked = () => result.Emit().Type("Shop.ShopQuestions").GetMethod("CurrentTeam")!.Invoke(null, [null]);
         asked.Should().Throw<TargetInvocationException>().WithInnerException<InvalidOperationException>()
             .Which.GetType().Name.Should().Be("DatabaseOnlyException");
     }
@@ -181,18 +221,18 @@ public class AccessFunctionsGenerationTests
             public static partial class Holdings
             {
                 [AccessSet("ids_where_i_hold")]
-                public static partial AccessSet<TId> IdsWhereIHold<TId>(string key) where TId : DDDToolkit.Abstractions.Interfaces.IEntityId;
+                public static partial AccessSet<TId> IdsWhereIHold<TId>(this IRowUser user, string key) where TId : DDDToolkit.Abstractions.Interfaces.IEntityId;
             }
 
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => Holdings.IdsWhereIHold<OrderId>("orders.view").Contains(order.Id);
+                public static bool Allows(Order order, IRowUser user) => user.IdsWhereIHold<OrderId>("orders.view").Contains(order.Id);
             }
             """);
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldCompile();
-        result.ShouldContain("Holdings.AccessFunctions", "IdsWhereIHold<TId>(string key) where TId : global::DDDToolkit.Abstractions.Interfaces.IEntityId => throw");
+        result.ShouldContain("Holdings.AccessFunctions", "IdsWhereIHold<TId>(this global::DDDToolkit.Abstractions.Access.IRowUser user, string key) where TId : global::DDDToolkit.Abstractions.Interfaces.IEntityId => throw");
         SqlIn(result, "TheRule.RowAccess").Should().Be("({col:Id} = ANY (ARRAY(SELECT {fn:shop/ids_where_i_hold}('orders.view'))))");
     }
 
@@ -207,11 +247,11 @@ public class AccessFunctionsGenerationTests
             public static partial class Holdings
             {
                 [AccessScalar("seated_at")]
-                public static partial bool SeatedAt<TPlace>(TPlace place)
+                public static partial bool SeatedAt<TPlace>(this IRowUser user, TPlace place)
                     where TPlace : struct, DDDToolkit.Abstractions.Interfaces.IEntityId, IEquatable<TPlace>;
 
                 [AccessSet("ids_held_at")]
-                public static partial AccessSet<TId> IdsHeldAt<TId, TPlace>(TPlace place, string key)
+                public static partial AccessSet<TId> IdsHeldAt<TId, TPlace>(this IRowUser user, TPlace place, string key)
                     where TId : struct, DDDToolkit.Abstractions.Interfaces.IEntityId, IEquatable<TId>
                     where TPlace : struct, DDDToolkit.Abstractions.Interfaces.IEntityId, IEquatable<TPlace>;
             }
@@ -219,20 +259,20 @@ public class AccessFunctionsGenerationTests
             [AccessFunction<Order>("shop.held_at")]
             public static partial class HeldAt
             {
-                public static bool Allows(Order order, ICurrentUser user, MemberId place)
-                    => Holdings.IdsHeldAt<OrderId, MemberId>(place, "orders.view").Contains(order.Id);
+                public static bool Allows(Order order, IRowUser user, MemberId place)
+                    => user.IdsHeldAt<OrderId, MemberId>(place, "orders.view").Contains(order.Id);
             }
 
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => Holdings.SeatedAt<OrderId>(order.Id);
+                public static bool Allows(Order order, IRowUser user) => user.SeatedAt<OrderId>(order.Id);
             }
             """);
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00051").ShouldCompile();
-        result.ShouldContain("Holdings.AccessFunctions", "SeatedAt<TPlace>(TPlace place) where TPlace : struct, global::DDDToolkit.Abstractions.Interfaces.IEntityId, global::System.IEquatable<TPlace> => throw");
-        result.ShouldContain("Holdings.AccessFunctions", "IdsHeldAt<TId, TPlace>(TPlace place, string key) where TId : struct");
+        result.ShouldContain("Holdings.AccessFunctions", "SeatedAt<TPlace>(this global::DDDToolkit.Abstractions.Access.IRowUser user, TPlace place) where TPlace : struct, global::DDDToolkit.Abstractions.Interfaces.IEntityId, global::System.IEquatable<TPlace> => throw");
+        result.ShouldContain("Holdings.AccessFunctions", "IdsHeldAt<TId, TPlace>(this global::DDDToolkit.Abstractions.Access.IRowUser user, TPlace place, string key) where TId : struct");
 
         SqlIn(result, "TheRule.RowAccess").Should().Be("{fn:shop/seated_at}({col:Id})", "the argument reads the row, so the question is asked of each row");
         SqlIn(result, "HeldAt.AccessFunction").Should().Be(
@@ -242,11 +282,16 @@ public class AccessFunctionsGenerationTests
     }
 
     [Theory]
-    [InlineData("[AccessSet(\"x\")] public static partial System.Collections.Generic.List<OrderId> X();", "to return AccessSet<T>")]
-    [InlineData("[AccessScalar(\"x\")] public static partial AccessSet<OrderId> X();", "to return the one value")]
-    [InlineData("[AccessScalar(\"x\")] public static partial bool X(decimal amount);", "'amount' is decimal")]
+    [InlineData("[AccessSet(\"x\")] public static partial System.Collections.Generic.List<OrderId> X(this IRowUser user);", "to return AccessSet<T>")]
+    [InlineData("[AccessScalar(\"x\")] public static partial AccessSet<OrderId> X(this IRowUser user);", "to return the one value")]
+    [InlineData("[AccessScalar(\"x\")] public static partial bool X(this IRowUser user, decimal amount);", "'amount' is decimal")]
     [InlineData("[AccessScalar(\"x\")] public static bool X() => true;", "static partial method without a body")]
-    [InlineData("[AccessScalar(\"x\")] public static partial bool X(Guid? user);", "'user' is System.Guid?")]
+    [InlineData("[AccessScalar(\"x\")] public static partial bool X(this IRowUser user, Guid? seat);", "'seat' is System.Guid?")]
+    [InlineData("[AccessScalar(\"x\")] public static partial bool X();", "'this IRowUser user' as its first parameter")]
+    [InlineData("[AccessSet(\"x\")] public static partial AccessSet<OrderId> X(string reason);", "'this IRowUser user' as its first parameter")]
+    [InlineData("[AccessRow(\"x\")] public static partial Order X();", "'this IRowUser user' as its first parameter")]
+    [InlineData("[AccessScalar(\"x\")] public static partial bool X(IRowUser user);", "'this IRowUser user' as its first parameter")]
+    [InlineData("[AccessScalar(\"x\")] public static partial bool X(this ICurrentUser user);", "'this IRowUser user' as its first parameter")]
     public void A_question_of_another_shape_is_DDD00038(string declaration, string reason)
     {
         var result = Run(
@@ -268,7 +313,7 @@ public class AccessFunctionsGenerationTests
             public static partial class NotMarked
             {
                 [AccessScalar("x")]
-                public static partial bool X();
+                public static partial bool X(this IRowUser user);
             }
             """).ShouldHaveDiagnostic("DDD00038", at: "X").GetMessage().Should().Contain("[AccessFunctions]");
 
@@ -282,13 +327,13 @@ public class AccessFunctionsGenerationTests
             [AccessFunction<Order>("is_member")]
             public static partial class Membership
             {
-                public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.UserId == user.Id);
+                public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.UserId == user.Id);
             }
 
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => Membership.Allows(order, user) || ShopQuestions.OrdersIFollow("x").Contains(order.Id);
+                public static bool Allows(Order order, IRowUser user) => Membership.Allows(order, user) || user.OrdersIFollow("x").Contains(order.Id);
             }
             """,
             """[assembly: DDDToolkit.Abstractions.Attributes.Module("Shop Floor")]""");
@@ -310,7 +355,7 @@ public class AccessFunctionsGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => ShopQuestions.IsCashier();
+                public static bool Allows(Order order, IRowUser user) => user.IsCashier();
             }
             """);
 
@@ -327,13 +372,13 @@ public class AccessFunctionsGenerationTests
             public static partial class Questions
             {
                 [AccessScalar("is_cashier")]
-                public static partial bool IsCashier();
+                public static partial bool IsCashier(this IRowUser user);
             }
 
             [AccessFunction<Order>("is_member")]
             public static partial class Membership
             {
-                public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.UserId == user.Id);
+                public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.UserId == user.Id);
             }
 
             [AccessFunctionContract<OrderId>("is_member")]
@@ -357,19 +402,19 @@ public class AccessFunctionsGenerationTests
             public static partial class Questions
             {
                 [AccessScalar("support.is_agent")]
-                public static partial bool IsAgent(string team);
+                public static partial bool IsAgent(this IRowUser user, string team);
             }
 
             [AccessFunction<Order>("shop.is_member")]
             public static partial class Membership
             {
-                public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.UserId == user.Id);
+                public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.UserId == user.Id);
             }
 
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => Membership.Allows(order, user) || Questions.IsAgent("north");
+                public static bool Allows(Order order, IRowUser user) => Membership.Allows(order, user) || user.IsAgent("north");
             }
             """,
             module: null);
@@ -392,7 +437,7 @@ public class AccessFunctionsGenerationTests
             [AccessFunction<Order>("{{name}}")]
             public static partial class Membership
             {
-                public static bool Allows(Order order, ICurrentUser user) => order.Level > 1;
+                public static bool Allows(Order order, IRowUser user) => order.Level > 1;
             }
             """).ShouldHaveDiagnostic("DDD00038", at: "Membership");
 
@@ -414,7 +459,7 @@ public class AccessFunctionsGenerationTests
 
         result.ShouldCompile();
         result.ShouldContain("ProjectsWhereIHold.AccessFunctionContract", "public const string Name = \"projects/project_ids_where_i_hold\";");
-        result.ShouldContain("ProjectsWhereIHold.AccessFunctionContract", "public static global::DDDToolkit.Abstractions.Access.AccessSet<global::Projects.Contracts.ProjectId> Ids()");
+        result.ShouldContain("ProjectsWhereIHold.AccessFunctionContract", "public static global::DDDToolkit.Abstractions.Access.AccessSet<global::Projects.Contracts.ProjectId> Ids(global::DDDToolkit.Abstractions.Access.IRowUser user)");
     }
 
     [Fact]
@@ -467,13 +512,13 @@ public class AccessFunctionsGenerationTests
             [AccessFunction<Project>(ProjectsWhereIHold.Name, Shape = AccessFunctionShape.Set)]
             public static partial class ProjectsOfMyCrews
             {
-                public static bool Allows(Project project, ICurrentUser user) => project.Crew.Any(seat => seat.UserId == user.Id);
+                public static bool Allows(Project project, IRowUser user) => project.Crew.Any(seat => seat.UserId == user.Id);
             }
 
             [RowAccess<Project>(RowOperations.Read)]
             public static partial class CrewsSeeTheirProjects
             {
-                public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids().Contains(project.Id);
+                public static bool Allows(Project project, IRowUser user) => ProjectsWhereIHold.Ids(user).Contains(project.Id);
             }
             """).WithReferencedAssembly(Contracts, "Projects.Contracts").RunCore();
 
@@ -493,20 +538,20 @@ public class AccessFunctionsGenerationTests
             [AccessFunction<Order>("shop.in_team_at_level")]
             public static partial class InTeamAtLevel
             {
-                public static bool Allows(Order order, ICurrentUser user, string team, int level) => order.Team == team && order.Level >= level;
+                public static bool Allows(Order order, IRowUser user, string team, int level) => order.Team == team && order.Level >= level;
             }
 
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => InTeamAtLevel.Allows(order, user, "north", 2) || InTeamAtLevel.Allows(order.Id, "south", 3);
+                public static bool Allows(Order order, IRowUser user) => InTeamAtLevel.Allows(order, user, "north", 2) || InTeamAtLevel.Allows(order.Id, user, "south", 3);
             }
             """);
 
         result.ShouldCompile();
         SqlIn(result, "InTeamAtLevel.AccessFunction").Should().Be("(({col:Team} IS NOT DISTINCT FROM {arg:1}) AND coalesce({col:Level} >= {arg:2}, FALSE))");
         result.ShouldContain("InTeamAtLevel.AccessFunction", "public const string RowAccessParameters = \"text, integer\";");
-        result.ShouldContain("InTeamAtLevel.AccessFunction", "public static bool Allows(global::Shop.OrderId orderId, string team, int level) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop.in_team_at_level(orderId, team, level)\");");
+        result.ShouldContain("InTeamAtLevel.AccessFunction", "public static bool Allows(global::Shop.OrderId orderId, global::DDDToolkit.Abstractions.Access.IRowUser user, string team, int level) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop.in_team_at_level(orderId, team, level)\");");
         SqlIn(result, "TheRule.RowAccess").Should().Be("({fn:shop.in_team_at_level}({key}, 'north', 2) OR {fn:shop.in_team_at_level}({col:Id}, 'south', 3))");
     }
 
@@ -517,7 +562,7 @@ public class AccessFunctionsGenerationTests
             [AccessFunction<Order>("shop.over")]
             public static partial class Over
             {
-                public static bool Allows(Order order, ICurrentUser user, decimal amount) => order.Level > 1;
+                public static bool Allows(Order order, IRowUser user, decimal amount) => order.Level > 1;
             }
             """).ShouldHaveDiagnostic("DDD00038", at: "amount").GetMessage().Should().Contain("'amount' is decimal");
 
@@ -529,13 +574,13 @@ public class AccessFunctionsGenerationTests
             [AccessFunction<Order>("orders_i_am_in", Shape = AccessFunctionShape.Set)]
             public static partial class OrdersIAmIn
             {
-                public static bool Allows(Order order, ICurrentUser user) => order.Members.Any(member => member.UserId == user.Id);
+                public static bool Allows(Order order, IRowUser user) => order.Members.Any(member => member.UserId == user.Id);
             }
 
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => OrdersIAmIn.Ids().Contains(order.Id) || OrdersIAmIn.Allows(order, user);
+                public static bool Allows(Order order, IRowUser user) => OrdersIAmIn.Ids(user).Contains(order.Id) || OrdersIAmIn.Allows(order, user);
             }
             """);
 
@@ -544,7 +589,7 @@ public class AccessFunctionsGenerationTests
         result.ShouldContain("OrdersIAmIn.AccessFunction", "public const string? RowAccessOwner = \"shop\";");
         result.ShouldContain("OrdersIAmIn.AccessFunction", "public const string RowAccessParameters = \"\";");
         result.ShouldContain("OrdersIAmIn.AccessFunction", "public const global::DDDToolkit.Abstractions.Attributes.AccessFunctionShape RowAccessShape = global::DDDToolkit.Abstractions.Attributes.AccessFunctionShape.Set;");
-        result.ShouldContain("OrdersIAmIn.AccessFunction", "public static global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> Ids() => throw");
+        result.ShouldContain("OrdersIAmIn.AccessFunction", "public static global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> Ids(global::DDDToolkit.Abstractions.Access.IRowUser user) => throw");
         result.ShouldNotContain("OrdersIAmIn.AccessFunction", "public static bool Allows(global::Shop.OrderId");
         SqlIn(result, "TheRule.RowAccess").Should().Be(
             "(({col:Id} = ANY (ARRAY(SELECT {fn:shop/orders_i_am_in}()))) OR ({key} = ANY (ARRAY(SELECT {fn:shop/orders_i_am_in}()))))",
@@ -578,7 +623,7 @@ public class AccessFunctionsGenerationTests
             [AccessFunction<Line>("lines_i_see", Shape = AccessFunctionShape.Set)]
             public static partial class LinesISee
             {
-                public static bool Allows(Line line, ICurrentUser user) => line.Number > 0;
+                public static bool Allows(Line line, IRowUser user) => line.Number > 0;
             }
             """).RunCore().ShouldHaveDiagnostic("DDD00038", at: "LinesISee").GetMessage().Should().Contain("key is one column");
 
@@ -592,29 +637,29 @@ public class AccessFunctionsGenerationTests
             [AccessFunctionContract<OrderId>("in_team")]
             public static partial class OrdersInTeam
             {
-                public static partial bool Allows(OrderId order, string team);
+                public static partial bool Allows(OrderId order, IRowUser user, string team);
             }
 
             [AccessFunctionContract<OrderId>("followed_for")]
             public static partial class OrdersFollowedFor
             {
-                internal static partial AccessSet<OrderId> Ids(string reason, bool closedToo);
+                internal static partial AccessSet<OrderId> Ids(IRowUser user, string reason, bool closedToo);
             }
 
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, ICurrentUser user) => OrdersInTeam.Allows(order.Id, "north") || OrdersFollowedFor.Ids("audit", true).Contains(order.Id);
+                public static bool Allows(Order order, IRowUser user) => OrdersInTeam.Allows(order.Id, user, "north") || OrdersFollowedFor.Ids(user, "audit", true).Contains(order.Id);
             }
             """);
 
         result.ShouldCompile();
-        result.ShouldContain("OrdersInTeam.AccessFunctionContract", "public static partial bool Allows(global::Shop.OrderId order, string team) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop/in_team(order, team)\");");
-        result.ShouldContain("OrdersFollowedFor.AccessFunctionContract", "internal static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> Ids(string reason, bool closedToo) => throw");
+        result.ShouldContain("OrdersInTeam.AccessFunctionContract", "public static partial bool Allows(global::Shop.OrderId order, global::DDDToolkit.Abstractions.Access.IRowUser user, string team) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop/in_team(order, team)\");");
+        result.ShouldContain("OrdersFollowedFor.AccessFunctionContract", "internal static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> Ids(global::DDDToolkit.Abstractions.Access.IRowUser user, string reason, bool closedToo) => throw");
         SqlIn(result, "TheRule.RowAccess").Should().Be("({fn:shop/in_team}({col:Id}, 'north') OR ({col:Id} = ANY (ARRAY(SELECT {fn:shop/followed_for}('audit', TRUE)))))");
 
         var emitted = result.Emit();
-        var asked = () => emitted.Type("Shop.OrdersInTeam").GetMethod("Allows")!.Invoke(null, [Activator.CreateInstance(emitted.Type("Shop.OrderId")), "north"]);
+        var asked = () => emitted.Type("Shop.OrdersInTeam").GetMethod("Allows")!.Invoke(null, [Activator.CreateInstance(emitted.Type("Shop.OrderId")), null, "north"]);
         asked.Should().Throw<TargetInvocationException>().WithInnerException<InvalidOperationException>()
             .Which.GetType().Name.Should().Be("DatabaseOnlyException");
     }
@@ -630,14 +675,18 @@ public class AccessFunctionsGenerationTests
 
         result.ShouldCompile();
         result.ShouldContain("OrderMembers.AccessFunctionContract", "public const string Name = \"shop.is_member\";");
-        result.ShouldContain("OrderMembers.AccessFunctionContract", "public static bool Allows(global::Shop.OrderId orderId) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop.is_member(orderId)\");");
+        result.ShouldContain("OrderMembers.AccessFunctionContract", "public static bool Allows(global::Shop.OrderId orderId, global::DDDToolkit.Abstractions.Access.IRowUser user) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop.is_member(orderId)\");");
     }
 
     [Theory]
-    [InlineData("public static partial bool Allows(string team);")]
-    [InlineData("public static partial AccessSet<string> Ids();")]
-    [InlineData("public static partial bool Allows(OrderId order); public static partial AccessSet<OrderId> Ids();")]
-    [InlineData("public static bool Allows(OrderId order) => true;")]
+    [InlineData("public static partial bool Allows(string team, IRowUser user);")]
+    [InlineData("public static partial bool Allows(OrderId order);")]
+    [InlineData("public static partial bool Allows(OrderId order, string team);")]
+    [InlineData("public static partial AccessSet<OrderId> Ids();")]
+    [InlineData("public static partial AccessSet<OrderId> Ids(string team);")]
+    [InlineData("public static partial AccessSet<string> Ids(IRowUser user);")]
+    [InlineData("public static partial bool Allows(OrderId order, IRowUser user); public static partial AccessSet<OrderId> Ids(IRowUser user);")]
+    [InlineData("public static bool Allows(OrderId order, IRowUser user) => true;")]
     public void A_contract_question_of_another_shape_is_DDD00038(string declaration)
         => Run(
             $$"""
@@ -655,7 +704,7 @@ public class AccessFunctionsGenerationTests
             [AccessFunctionContract<OrderId>("shop.is_member", Shape = AccessFunctionShape.Row)]
             public static partial class OrderMembers
             {
-                public static partial AccessSet<OrderId> Ids();
+                public static partial AccessSet<OrderId> Ids(IRowUser user);
             }
             """).ShouldHaveDiagnostic("DDD00038", at: "Ids").GetMessage().Should().Contain("Shape = AccessFunctionShape.Set");
 }

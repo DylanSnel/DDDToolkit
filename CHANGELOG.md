@@ -1033,7 +1033,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   project asks as well. A contract of another shape, keyed by something that is no id, or declared in another module
   than the one whose assembly holds the id, is DDD00038: what a module publishes of its resources is its own to say.
   DDD00039 names the contract among what a rule may ask. See [A resource's access, asked by its
-  id](docs/row-level-security.md#resource-access-contracts).
+  id](docs/row-level-security.md#asking-about-a-resource-by-its-id).
 - **Privileges from the policies.** `RowAccessExport.WriteGrants` has a script of policies write the
   privileges of its tables as well, read from the policies it holds: every privilege the script's roles and
   `PUBLIC` held on a table is taken back, and a role gets each command a permissive policy allows it,
@@ -2473,7 +2473,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   asks the other one when it runs: made with the check of its body turned off, it breaks the circle, and the rule is
   written as any other. Only a function a contribution writes is asked that way; a circle of access functions or of
   contributed functions' bodies is refused as before. See
-  [A resource's access, asked by its id](docs/row-level-security.md#resource-access-contracts).
+  [A resource's access, asked by its id](docs/row-level-security.md#asking-about-a-resource-by-its-id).
 
 #### Samples
 
@@ -3149,6 +3149,33 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   widening the page.
 
 ### Changed
+
+- **Everything a row access rule asks, it asks of its user: `Allows(Board board, IRowUser user)`.** A rule takes the new
+  `IRowUser`, in `DDDToolkit.Abstractions.Access`, and no longer `ICurrentUser`. It holds `Id`, `IsAuthenticated`, `Role`
+  and `FindClaim`, what the generator translates, so `user.RequireId()`, `user.IsSystem` and `user.Kind` no longer compile
+  in a rule. `ICurrentUser` does not derive from it, and it does not derive from `ICurrentUser`. A question only the
+  database answers is an extension method on it, so it does not compile where there is no rule. `Allows` over an
+  `ICurrentUser` is DDD00038, with the signature it needs. `RowUser.From(snapshot)` makes the user a test hands a rule to
+  run it in C#. The policies do not change. No package has users yet, so there is no old form to keep.
+- **A rule asks about a resource by its id: `user.Sees<BoardId>()`, `user.Holds<BoardId>(permission)` and
+  `user.FellowMembers<BoardId, SeatId>()`.** `[ResourceAccessContract<TKey>]` is removed, with the classes it asked for in
+  a module's contracts. A module publishes the id, and a rule of any module asks the question. Each question answers
+  only for the caller, and a question nothing answers is refused when the access file is written, as before. SQL of a
+  contribution names a set with `ResourceAccessAnswer.NameOf`. See
+  [Asking about a resource by its id](docs/row-level-security.md#asking-about-a-resource-by-its-id).
+- **The questions of an `[AccessFunctions]` class take the user: `this IRowUser user`, first.** Without it a question is
+  DDD00038. So a host's own question reads `user.TicketsIWatch().Contains(ticket.Id)`. The generated questions of an
+  `[AccessFunction]` and an `[AccessFunctionContract]` take it too: `TicketsIWatch.Ids(user)`,
+  `ProjectMembers.Allows(task.ProjectId, user)`. A question asked of anything but the rule's own `user` parameter is
+  DDD00039. The user adds nothing to the SQL. `Sql.Call` and `Sql.Raw` stay as they are.
+- **Tenancy's questions are extension methods on `IRowUser`, closed over the module's ids:** `user.UnitsWhereIHold(permission)`,
+  `user.CurrentSeatId()`, `user.CurrentTenant()` and the others. `TenancyRowAccess` moved to the namespace
+  `DDDToolkit.Abstractions.Access`, so a rule's one `using` finds them. A module that declares Tenancy's classes, or has
+  the `[assembly: TenancyIds<...>]` line, gets a wrapper without type arguments of every question whose type parameters
+  are all ids, in each of its projects. The generic form keeps working, and `user.CurrentSeat<Seat>()` stays generic.
+- **`[TemplateRegistration(Shorthand = true)]`:** a wrapper that only saves type arguments. Each project of a module gets
+  its own, since a wrapper is internal and what calls it may sit in any project, and nothing is reported when it cannot
+  be closed.
 
 - **The current user is `ICurrentUser`.** Code that needs to know who it runs for takes `ICurrentUser` from dependency
   injection and asks it: `user.Id`, `user.IsAuthenticated`, `user.IsSystem`, `user.SystemScope`, `user.Role`,

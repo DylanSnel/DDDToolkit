@@ -637,7 +637,6 @@ Projects/
     ValueObjects/                 ProjectId.cs
     Permissions/                  ProjectPermissionNames.cs
     Gate/                         IProjectGate.cs, ProjectAnswer.cs
-    RowAccess/                    ProjectsISee.cs, ProjectsWhereIHold.cs: what another module's row rules may ask
   Examples.Tenancy.Projects.Domain/
     GlobalUsings.cs
     Aggregates/
@@ -918,8 +917,8 @@ flowchart LR
 
   <ItemGroup>
     <!-- the version of every other Temp.DDDToolkit.* package: the attribute, the property and the step are 3.2.0's -->
-    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.2.0-preview.7" />
-    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.2.0-preview.7" PrivateAssets="all" />
+    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.2.0-preview.8" />
+    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.2.0-preview.8" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

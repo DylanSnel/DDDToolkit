@@ -353,7 +353,7 @@ A member reads the people placed at its units or below:
 [RowAccess<Seat>(RowOperations.Read)]
 public static partial class MembersReadThePeopleOfTheirUnits
 {
-    public static bool Allows(Seat seat, ICurrentUser user) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
+    public static bool Allows(Seat seat, IRowUser user) => user.SeatsInMyUnits().Contains(seat.Id);
 }
 ```
 
@@ -363,24 +363,28 @@ A seat that gives roles at an invitation's unit also reads the invitation:
 [RowAccess<Invitation>(RowOperations.Read)]
 public static partial class GrantsManagersReadTheInvitationsAtTheirUnits
 {
-    public static bool Allows(Invitation invitation, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId);
+    public static bool Allows(Invitation invitation, IRowUser user)
+        => user.UnitsWhereIHold(TenancyPermissions.GrantsManage).Contains(invitation.UnitId);
 }
 ```
 
-The building blocks are the methods of [`TenancyRowAccess`](reference/queries.md#tenancyrowaccess) and the columns
-of your class. Each method runs once per statement.
+The building blocks are the questions of [`TenancyRowAccess`](reference/queries.md#tenancyrowaccess) and the columns
+of your class. A rule asks each question of its `IRowUser`, and each question runs once per statement. A project of a
+module that declares Tenancy's classes, or that says which ids are Tenancy's with
+`[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`, asks without type arguments. The generic form
+keeps working in any project: `user.CurrentSeatId<SeatId>()`. `user.CurrentSeat<Seat>()` keeps its type argument,
+because the generator needs the row's type to name its columns.
 
 | You mean | Your rule says |
 |---|---|
-| In the caller's tenant | `seat.TenantId == TenancyRowAccess.CurrentTenant<TenantId>()` |
-| The caller itself | `seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>()` |
-| A field of the caller's own seat | `TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee` |
-| The people on the projects the caller is on | `PeopleOnMyProjects.Ids().Contains(seat.Id)` ([below](#restrictive-rules)) |
+| In the caller's tenant | `seat.TenantId == user.CurrentTenant()` |
+| The caller itself | `seat.Id == user.CurrentSeatId()` |
+| A field of the caller's own seat | `user.CurrentSeat<Seat>().Kind == SeatKind.Employee` |
+| The people on the projects the caller is on | `user.FellowMembers<ProjectId, SeatId>().Contains(seat.Id)` ([below](#restrictive-rules)) |
 | The person's own seats, in every tenant | `seat.Identity == user.Id` |
-| The seats placed at or below the caller's units (for a seat at the root, every placed seat) | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` |
-| Where the caller holds a permission | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(permission).Contains(invitation.UnitId)` |
-| A permission held anywhere, or for the whole tenant | `TenancyRowAccess.HoldsPermission(permission)`, `TenancyRowAccess.HoldsAtTenant(permission)` |
+| The seats placed at or below the caller's units (for a seat at the root, every placed seat) | `user.SeatsInMyUnits().Contains(seat.Id)` |
+| Where the caller holds a permission | `user.UnitsWhereIHold(permission).Contains(invitation.UnitId)` |
+| A permission held anywhere, or for the whole tenant | `user.HoldsPermission(permission)`, `user.HoldsAtTenant(permission)` |
 
 The export joins your rule, limited to the tenant, with OR to the reads Tenancy keeps. The seats' read policy with
 `MembersReadThePeopleOfTheirUnits`, shortened:
@@ -430,8 +434,8 @@ public sealed partial class Seat
 [RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
 public static partial class OnlyEmployeesReadTheOrganization
 {
-    public static bool Allows(Organization organization, ICurrentUser user)
-        => TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee;
+    public static bool Allows(Organization organization, IRowUser user)
+        => user.CurrentSeat<Seat>().Kind == SeatKind.Employee;
 }
 ```
 
@@ -466,29 +470,22 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
   `ListUnitsAsync` returns no units to that seat.
 
 Add a [read rule on your seat class](#default-read-policies-for-seats-and-invitations) too, and an external seat
-reads only the people on its projects. The projects' module publishes that set as a contract, from its
+reads only the people on its projects. A rule asks for that set by the project's id, from the projects'
 [Membership](../membership/postgres.md) members:
 
 ```csharp
-// Projects.Contracts: the seats of the people on the caller's projects
-[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]
-public static partial class PeopleOnMyProjects
-{
-    public static partial AccessSet<SeatId> Ids();
-}
-
 // Tenants.Infrastructure: a read rule on the seats that replaces the default
 [RowAccess<Seat>(RowOperations.Read)]
 public static partial class EmployeesReadEveryoneExternalsTheirProjects
 {
-    public static bool Allows(Seat seat, ICurrentUser user)
-        => TenancyRowAccess.CurrentSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id);
+    public static bool Allows(Seat seat, IRowUser user)
+        => user.CurrentSeat<Seat>().Kind == SeatKind.Employee || user.FellowMembers<ProjectId, SeatId>().Contains(seat.Id);
 }
 ```
 
 Tenancy's access file runs before the projects' access file, which creates the function the rule calls. So the
 export writes the rule through a function of Tenancy's that calls the projects' function at run time
-([A rule that asks a module that asks back](../row-level-security.md#resource-access-contracts)).
+([A rule that asks a module that asks back](../row-level-security.md#asking-about-a-resource-by-its-id)).
 
 ## Tenancy's SQL functions
 
@@ -525,16 +522,17 @@ The policies and your rules call these SQL functions:
 
 [Who reads Tenancy's tables](#who-reads-tenancys-tables) lists the other functions with their readers.
 
-A module's rule calls these functions through [`TenancyRowAccess`](reference/queries.md#tenancyrowaccess), in
-`DDDToolkit.Supporting.Tenancy`. So the module needs no reference to the Postgres package. `anon` may not run the
-functions, so write such a rule for signed-in users:
+A module's rule asks these functions through [`TenancyRowAccess`](reference/queries.md#tenancyrowaccess), in the
+`DDDToolkit.Supporting.Tenancy` package and in the namespace of `IRowUser`, `DDDToolkit.Abstractions.Access`. So the
+module needs no reference to the Postgres package. `anon` may not run the functions, so write such a rule for signed-in
+users:
 
 ```csharp
 [RowAccess<Project>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class ProjectsAreReadWhereThePermissionIsHeld
 {
-    public static bool Allows(Project project, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.Read).Contains(project.UnitId);
+    public static bool Allows(Project project, IRowUser user)
+        => user.UnitsWhereIHold(ProjectPermissionNames.Read).Contains(project.UnitId);
 }
 ```
 
@@ -639,9 +637,9 @@ instead:
 [AccessFunction<Project>("projects.readable_in_tenant")]
 public static partial class ProjectIsReadableInTenant
 {
-    public static bool Allows(Project project, ICurrentUser user, TenantId tenant)
+    public static bool Allows(Project project, IRowUser user, TenantId tenant)
         => project.TenantId == tenant
-           && TenancyRowAccess.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, ProjectPermissionNames.Read).Contains(project.UnitId);
+           && user.UnitsWhereIHoldInTenant(tenant, ProjectPermissionNames.Read).Contains(project.UnitId);
 }
 ```
 
@@ -820,8 +818,8 @@ tenant. Its column rule states the same rule to the database. The job title has 
 [RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.DisplayName)])]
 public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 {
-    public static bool Allows(Seat seat, ICurrentUser user)
-        => seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
+    public static bool Allows(Seat seat, IRowUser user)
+        => seat.Id == user.CurrentSeatId() || user.HoldsAtTenant(RenameSeat.RequiredPermission);
 }
 ```
 

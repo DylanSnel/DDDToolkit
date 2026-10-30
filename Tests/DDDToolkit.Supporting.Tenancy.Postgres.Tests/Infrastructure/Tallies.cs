@@ -55,8 +55,8 @@ public sealed partial class Tally
 [RowAccess<Tally>(RowOperations.All, To = [RowAccessRoles.User])]
 public static partial class TalliesAreKeptWhereWidgetsAreChanged
 {
-    public static bool Allows(Tally tally, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetChange).Contains(tally.UnitId);
+    public static bool Allows(Tally tally, IRowUser user)
+        => user.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetChange).Contains(tally.UnitId);
 }
 
 /// <summary>
@@ -66,7 +66,7 @@ public static partial class TalliesAreKeptWhereWidgetsAreChanged
 [RowAccess<Tally>(RowOperations.All, To = [TallyRules.Operators])]
 public static partial class OperatorsWorkOnSharedTallies
 {
-    public static bool Allows(Tally tally, ICurrentUser user) => tally.Shared;
+    public static bool Allows(Tally tally, IRowUser user) => tally.Shared;
 }
 
 /// <summary>The tallies' rules, as a script is written from them.</summary>

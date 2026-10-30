@@ -233,7 +233,7 @@ public class ModuleFromTheBuildTests
                 [AccessFunction<Order>("is_public")]
                 public static partial class PublicOrders
                 {
-                    public static bool Allows(Order order, ICurrentUser user) => order.IsPublic;
+                    public static bool Allows(Order order, IRowUser user) => order.IsPublic;
                 }
                 """)
             .WithModuleFromTheBuild("Ordering")

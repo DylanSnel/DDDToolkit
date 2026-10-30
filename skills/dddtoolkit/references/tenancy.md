@@ -293,7 +293,7 @@ On Postgres, `services.AddTenancyPostgres()`, with the catalogue marked `[Tenanc
 roles `[TenancyOperators]`), which the Supabase export writes Tenancy's policies from because the exporting project
 references the package: no class and no `UseRowAccessContribution` line for it,
 puts the same rules in row level security under the application's checks, and brings the `TenancyPostgresChecks`
-as start-up checks, which `services.RunStartupChecks()` runs with the others. A module's rule asks through `TenancyRowAccess.UnitsWhereIHold<TUnitId>(permission)`, which is
+as start-up checks, which `services.RunStartupChecks()` runs with the others. A module's rule asks through `user.UnitsWhereIHold<TUnitId>(permission)`, which is
 set-shaped: once per statement, never per row. There a seat reads its own rights and grants, and another seat's
 grants only at the units where it holds `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage`,
 or all of them with `tenancy.roles.manage` for the whole tenant; `db.Tenancy().SeatsHoldingPermissionAt` returns by the
@@ -306,10 +306,9 @@ Who reads the seats, and who besides the seats managers reads an invitation, are
 or invitation class, `[RowAccess<Seat>(RowOperations.Read)]` (without `To` it is for signed-in users, as the
 default is), takes the place of one, held to the tenant, beside what Tenancy's own work reads (a person's own seats;
 every seat of the tenant to a seat that manages seats, grants or units anywhere, or roles for the whole tenant),
-which no rule takes away. Write it with `TenancyRowAccess`'s functions (`CurrentSeatId`, `CurrentTenant`,
-`UnitsWhereIHold`, `SeatsInMyUnits`: the seats placed at or below the caller's units; `CurrentSeat<Seat>().Kind`, a
-field of the caller's own seat), or a module's `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]`
-(declaring `static partial AccessSet<SeatId> Ids();`), the people on the caller's projects. It changes what a read of the
+which no rule takes away. Write it with the questions Tenancy adds to the rule's `IRowUser` (`user.CurrentSeatId()`, `user.CurrentTenant()`,
+`user.UnitsWhereIHold(permission)`, `user.SeatsInMyUnits()`: the seats placed at or below the caller's units; `user.CurrentSeat<Seat>().Kind`, a
+field of the caller's own seat), or `user.FellowMembers<ProjectId, SeatId>()`, the people on the caller's projects. It changes what a read of the
 seats returns, a direct read, the managers' reads, `tenant_seats()` and `db.Tenancy().Seats()`, so Membership's
 member manager then admits only seats the caller reads (`member-not-active` otherwise); never Tenancy's queries about
 the caller and rights, the placements (every member still reads each seat's id and units), or who writes. A read

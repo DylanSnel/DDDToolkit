@@ -4,18 +4,23 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// Marks a <c>static partial class</c> of questions only the database can answer, which row access rules and
 /// access functions ask: its <see cref="AccessSetAttribute"/> and <see cref="AccessScalarAttribute"/> methods.
 /// Each is declared without a body, and the generator writes one that throws
-/// <see cref="Access.DatabaseOnlyException"/>, because the answer is an SQL function's:
+/// <see cref="Access.DatabaseOnlyException"/>, because the answer is an SQL function's. Each is an extension method on
+/// <see cref="Access.IRowUser"/>, so it cannot be called where there is no rule:
 /// <code>
 /// [AccessFunctions(Owner = "desk")]
 /// public static partial class DeskQuestions
 /// {
 ///     [AccessSet("tickets_i_watch")]
-///     public static partial AccessSet&lt;TicketId&gt; TicketsIWatch();
+///     public static partial AccessSet&lt;TicketId&gt; TicketsIWatch(this IRowUser user);
 ///
 ///     [AccessScalar("current_team")]
-///     public static partial string CurrentTeam();
+///     public static partial string CurrentTeam(this IRowUser user);
 /// }
+///
+/// // in a rule
+/// =&gt; user.TicketsIWatch().Contains(ticket.Id) || ticket.Team == user.CurrentTeam();
 /// </code>
+/// The class is a top-level class, as a class of extension methods is.
 /// </summary>
 /// <remarks>
 /// A question's name without a schema is relative to its owner: <c>tickets_i_watch</c> above is

@@ -15,7 +15,7 @@ namespace DDDToolkit.Analyzers;
 /// Translates each <c>[RowAccess&lt;TAggregate&gt;]</c> rule's <c>Allows</c> method into SQL, and writes it
 /// into the rule as the constant <c>RowAccessSql</c>, where the Supabase export finds it.
 /// <code>
-/// public static bool Allows(Order order, ICurrentUser user)
+/// public static bool Allows(Order order, IRowUser user)
 ///     =&gt; order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 /// // (({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {user:uid}))
 /// </code>
@@ -50,12 +50,15 @@ namespace DDDToolkit.Analyzers;
 /// A question only the database answers, an <c>[AccessSet]</c> or <c>[AccessScalar]</c> method of an
 /// <c>[AccessFunctions]</c> class, or the <c>Ids</c> of a set-shaped access function, is asked once per
 /// statement: <c>set.Contains(e)</c> is <c>(e = ANY (ARRAY(SELECT {fn:name}(...))))</c>, and a scalar
-/// question <c>(SELECT {fn:name}(...))</c>.
+/// question <c>(SELECT {fn:name}(...))</c>. Each is asked of the rule's user, which adds nothing to the SQL: it is
+/// the receiver of <c>user.Question(...)</c>, or an argument of <c>Questions.Question(user, ...)</c>,
+/// <c>Function.Ids(user, ...)</c> and <c>Function.Allows(key, user, ...)</c>. Asked of anything else it is DDD00039.
 /// </para>
 /// <para>
-/// The <c>Ids</c> of a <c>[ResourceAccessContract&lt;TKey&gt;]</c> names no function: it is asked by the resource's
-/// id and the set, <c>{fn:@Projects.Contracts.ProjectId/seen}</c>, which the export resolves to the function a
-/// contribution says answers that set for that resource, whatever it is called.
+/// <c>user.Sees&lt;ProjectId&gt;()</c>, <c>user.Holds&lt;ProjectId&gt;(permission)</c> and
+/// <c>user.FellowMembers&lt;ProjectId, SeatId&gt;()</c> name no function: each is asked by the resource's id and the set,
+/// <c>{fn:@Projects.Contracts.ProjectId/seen}</c>, which the export resolves to the function a contribution says answers
+/// that set for that resource, whatever it is called.
 /// </para>
 /// <para>
 /// The translation keeps C#'s meaning rather than SQL's, so the method and the policy answer alike for the
@@ -74,6 +77,8 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     private const string DatabaseOnlyException = "global::DDDToolkit.Abstractions.Access.DatabaseOnlyException";
 
     private const string AccessSetType = "global::DDDToolkit.Abstractions.Access.AccessSet";
+
+    private const string RowUserType = "global::" + KnownTypes.RowUser;
 
     private const string ShapeType = "global::" + KnownTypes.AttributesNamespace + ".AccessFunctionShape";
 
@@ -98,11 +103,6 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             predicate: static (node, _) => node is ClassDeclarationSyntax,
             transform: static (syntaxContext, _) => Declare(syntaxContext));
 
-        var resourceContracts = context.SyntaxProvider.ForAttributeWithMetadataName(
-            KnownTypes.ResourceAccessContractAttribute,
-            predicate: static (node, _) => node is ClassDeclarationSyntax,
-            transform: static (syntaxContext, _) => DeclareResourceAccess(syntaxContext));
-
         var questions = context.SyntaxProvider.ForAttributeWithMetadataName(
             KnownTypes.AccessFunctionsAttribute,
             predicate: static (node, _) => node is ClassDeclarationSyntax,
@@ -124,13 +124,12 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             transform: static (syntaxContext, _) => Outside(syntaxContext));
 
         // The ids a package's switch writes into this project, [assembly: GenerateTenancyIds] say: no type yet to this
-        // generator, so a resource access contract keyed by one, and a rule that asks it, wait for the switch's plan.
+        // generator, so a rule that asks about a resource by one waits for the switch's plan.
         var writtenIds = context.TemplateDefaultsPlan().Select(static (plan, _) => WrittenIdsOf(plan));
 
         context.RegisterSourceOutput(rules.Combine(writtenIds), static (production, rule) => Produce(production, WithWrittenIds(rule.Left, rule.Right), ".RowAccess"));
         context.RegisterSourceOutput(functions.Combine(writtenIds), static (production, function) => Produce(production, WithWrittenIds(function.Left, function.Right), ".AccessFunction"));
         context.RegisterSourceOutput(contracts, static (production, contract) => Produce(production, contract, ".AccessFunctionContract"));
-        context.RegisterSourceOutput(resourceContracts.Combine(writtenIds), static (production, contract) => Produce(production, WithWrittenIds(contract.Left, contract.Right), ".ResourceAccessContract"));
         context.RegisterSourceOutput(questions, static (production, declared) => Produce(production, declared, ".AccessFunctions"));
         context.RegisterSourceOutput(setsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
         context.RegisterSourceOutput(scalarsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
@@ -155,8 +154,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// <summary>
     /// A definition with the ids it waited for put in: each resource key no type of the compilation answered is the id
     /// of that name a switch of this project writes, top-level in its root namespace, and is named by its full name
-    /// where the definition held a stand-in. A key no switch writes is said as it was before the switch was asked, and
-    /// nothing is added.
+    /// where the definition held a stand-in. A key no switch writes is DDD00039 on the question, and nothing is added.
     /// </summary>
     private static RowAccessDefinition WithWrittenIds(RowAccessDefinition definition, EquatableArray<WrittenId> written)
     {
@@ -171,10 +169,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         {
             if (written.FirstOrDefault(id => id.Name == pending.Name) is { } id)
             {
-                members = members.Select(member => member
-                        .Replace("@" + ResourceKey.StandIn(pending.Name) + "/", "@" + id.RuntimeName + "/")
-                        .Replace("global::" + ResourceKey.StandIn(pending.Name), "global::" + id.RuntimeName))
-                    .ToList();
+                members = members.Select(member => member.Replace("@" + ResourceKey.StandIn(pending.Name) + "/", "@" + id.RuntimeName + "/")).ToList();
             }
             else
             {
@@ -249,13 +244,13 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             || method.ReturnType.SpecialType != SpecialType.System_Boolean
             || (isFunction ? method.Parameters.Length < 2 : method.Parameters.Length != 2)
             || !SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type.OriginalDefinition, aggregate.OriginalDefinition)
-            || method.Parameters[1].Type.ToDisplayString() != KnownTypes.CurrentUser)
+            || !IsRowUser(method.Parameters[1].Type))
         {
             diagnostics.Add(DiagnosticInfo.Create(
                 DiagnosticDescriptors.RowAccessRuleShape,
                 LocationInfo.From(declaration?.Identifier ?? syntax.Identifier),
                 symbol.Name,
-                $"one method 'public static bool Allows({aggregate.Name} {Camel(aggregate.Name)}, ICurrentUser user)' whose body is a single expression"
+                $"one method 'public static bool Allows({aggregate.Name} {Camel(aggregate.Name)}, IRowUser user)' whose body is a single expression"
                 + (isFunction ? ", and may take strings, numbers, flags, Guids and ids after the user" : "")));
             return RowAccessDefinition.Failed(type, diagnostics);
         }
@@ -311,17 +306,18 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             members.Add(NameConstant(logical, contract: false));
             members.Add(FunctionConstants(resolved.Owner, string.Join(", ", sqlTypes), shape));
 
-            // The C# parameters the generated question takes after the key: those of Allows after the user.
+            // The C# parameters the generated question takes after the user: those of Allows after the user.
             var parameters = extras.Select(extra => extra.Type.ToDisplayString(TypeFormat) + " " + Identifier(extra.Name)).ToList();
             var names = extras.Select(extra => extra.Name).ToList();
+            var userName = method.Parameters[1].Name;
             if (shape == Shape.Set)
             {
-                members.Add(IdsMethod(logical, key!.Value.Type, parameters, names, "public", partial: false));
+                members.Add(IdsMethod(logical, key!.Value.Type, userName, parameters, names, "public", partial: false));
             }
             else if (key is { } byKey)
             {
-                var keyName = names.Contains(byKey.Parameter) ? "key" : byKey.Parameter;
-                members.Add(AllowsMethod(logical, byKey.Type, keyName, parameters, names, "public", partial: false));
+                var keyName = names.Contains(byKey.Parameter) || byKey.Parameter == userName ? "key" : byKey.Parameter;
+                members.Add(AllowsMethod(logical, byKey.Type, keyName, userName, parameters, names, "public", partial: false));
             }
         }
 
@@ -508,19 +504,6 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AccessFunctionContractAttribute`1" } contract
             && contract.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
 
-    /// <summary>The <c>[ResourceAccessContract&lt;TKey&gt;]</c> on <paramref name="type"/>, or null.</summary>
-    private static AttributeData? ResourceAccessContractOf(ITypeSymbol type)
-        => type.GetAttributes().FirstOrDefault(static attribute =>
-            attribute.AttributeClass?.OriginalDefinition is { MetadataName: "ResourceAccessContractAttribute`1" } contract
-            && contract.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
-
-    /// <summary>
-    /// The set a <c>[ResourceAccessContract&lt;TKey&gt;]</c> publishes, as <c>ResourceAccessSet</c> numbers it: 0 for the
-    /// resources seen, 1 for those held on; null for a number the enum does not have.
-    /// </summary>
-    private static int? ResourceAccessSetOf(AttributeData attribute)
-        => attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int set && set is ResourceSeen or ResourceHeldOn or ResourceFellowMembers ? set : null;
-
     /// <summary>What <c>ResourceAccessSet.Seen</c> is: the resources the caller sees.</summary>
     private const int ResourceSeen = 0;
 
@@ -532,7 +515,8 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
     /// <summary>
     /// The name a rule asks a resource access set by: <c>@</c>, the full name of the resource's id as the runtime
-    /// spells it, <c>Projects.Contracts.ProjectId</c>, and the set, <c>/seen</c> or <c>/held_on</c>. No owner is
+    /// spells it, <c>Projects.Contracts.ProjectId</c>, and the set, <c>/seen</c>, <c>/held_on</c> or
+    /// <c>/fellow_members</c>. No owner is
     /// written so, so it never meets a function's logical name. The export resolves it to the function a
     /// contribution says answers that set for the resource with that id, as <c>ResourceAccessAnswer.NameOf</c>
     /// spells the same name from the id's type: a test keeps the two together.
@@ -541,23 +525,17 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         => "@" + key.RuntimeName + "/" + (set switch { ResourceHeldOn => "held_on", ResourceFellowMembers => "fellow_members", _ => "seen" });
 
     /// <summary>
-    /// The id a resource access contract is keyed by: its full name as the runtime spells it, which the set's name
-    /// is made of, and as C# names it, for the <c>AccessSet</c> its <c>Ids</c> returns.
+    /// The id a rule asks about a resource by: its full name as the runtime spells it, which the set's name is made of.
     /// </summary>
     /// <param name="RuntimeName">The id's full name, <c>Type.FullName</c>: <c>Projects.Contracts.ProjectId</c>.</param>
-    /// <param name="TypeName">The id as generated code names it: <c>global::Projects.Contracts.ProjectId</c>.</param>
-    /// <param name="Generated">
-    /// Whether it is the id the toolkit writes beside an aggregate root declared with a value,
-    /// <c>[AggregateRoot&lt;Guid&gt;]</c>, in this very compilation.
-    /// </param>
-    private sealed record ResourceKey(string RuntimeName, string TypeName, bool Generated)
+    private sealed record ResourceKey(string RuntimeName)
     {
         /// <summary>
         /// The key named <paramref name="name"/> that no type of the compilation answers, which may be an id a
         /// package's switch writes: a stand-in, which no name of a type or a function has, takes the place of the
         /// id's full name until the switch's plan says it (<see cref="WithWrittenIds"/>).
         /// </summary>
-        public static ResourceKey Awaiting(string name) => new(StandIn(name), "global::" + StandIn(name), Generated: true);
+        public static ResourceKey Awaiting(string name) => new(StandIn(name));
 
         /// <summary>What stands in for the full name of the id named <paramref name="name"/> while it is awaited.</summary>
         public static string StandIn(string name) => "?" + name + "?";
@@ -571,14 +549,14 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// toolkit writes from <c>[AggregateRoot&lt;Guid&gt;]</c> in this compilation is no type yet to this generator,
     /// since no generator sees what another one writes, so an unknown <c>BoardId</c> is the id written beside the
     /// one aggregate root here named <c>Board</c> and declared with a value, as an access function's key is: the
-    /// short way to declare an aggregate keys a contract as the long one does. Null where no such aggregate root,
-    /// or more than one, could be meant.
+    /// short way to declare an aggregate is asked about as the long one is. Null for a type that is no id, and where
+    /// no such aggregate root, or more than one, could be meant.
     /// </summary>
     private static ResourceKey? ResourceKeyOf(ITypeSymbol key, Compilation compilation)
     {
         if (key.TypeKind != TypeKind.Error)
         {
-            return RuntimeName(key) is { } runtime ? new ResourceKey(runtime, key.ToDisplayString(TypeFormat), Generated: false) : null;
+            return IsId(key) && RuntimeName(key) is { } runtime ? new ResourceKey(runtime) : null;
         }
 
         const string Suffix = "Id";
@@ -606,39 +584,10 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             }
 
             // The id is declared where the aggregate is, nesting included: Shop.Desk+Board has Shop.Desk+BoardId.
-            var typeName = aggregate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            found = new ResourceKey(
-                runtime.Substring(0, runtime.Length - aggregate.MetadataName.Length) + key.Name,
-                typeName.Substring(0, typeName.Length - aggregate.Name.Length) + key.Name,
-                Generated: true);
+            found = new ResourceKey(runtime.Substring(0, runtime.Length - aggregate.MetadataName.Length) + key.Name);
         }
 
         return found;
-    }
-
-    /// <summary>
-    /// Whether <paramref name="declared"/>, the type a declared <c>Ids</c> returns a set of, is the contract's key: the
-    /// same type, or, for an id the toolkit writes in this compilation, a type of the same name it cannot see either.
-    /// </summary>
-    private static bool IsTheKey(ITypeSymbol declared, ITypeSymbol key)
-        => SymbolEqualityComparer.Default.Equals(declared, key)
-           || (key.TypeKind == TypeKind.Error && declared.TypeKind == TypeKind.Error && declared.Name == key.Name);
-
-    /// <summary>
-    /// The module that owns <paramref name="key"/>, when <paramref name="contract"/> is declared outside it: the
-    /// module the id's assembly declares, where that is another assembly than the contract's, of another module or
-    /// of none. Null where the contract is the owning module's, or the id belongs to no module.
-    /// </summary>
-    private static string? OtherOwnerOf(ITypeSymbol key, INamedTypeSymbol contract)
-    {
-        if (key.ContainingAssembly is not { } assembly || SymbolEqualityComparer.Default.Equals(assembly, contract.ContainingAssembly))
-        {
-            return null;
-        }
-
-        return ModuleBoundary.ModuleOf(assembly) is { } owner && !string.Equals(owner, ModuleBoundary.ModuleOf(contract.ContainingAssembly), System.StringComparison.Ordinal)
-            ? owner
-            : null;
     }
 
     /// <summary>
@@ -820,6 +769,9 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     private static bool IsEntityIdInterface(ITypeSymbol type)
         => type.ToDisplayString() == KnownTypes.EntityIdInterface || type.OriginalDefinition.MetadataName == "IEntityId`1";
 
+    /// <summary>Whether <paramref name="type"/> is what a rule asks about: <c>IRowUser</c>.</summary>
+    private static bool IsRowUser(ITypeSymbol type) => type.ToDisplayString() == KnownTypes.RowUser;
+
     /// <summary>Whether <paramref name="type"/> is <c>AccessSet&lt;T&gt;</c>.</summary>
     private static bool IsAccessSet(ITypeSymbol type)
         => type is INamedTypeSymbol { IsGenericType: true } named
@@ -889,12 +841,13 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
            + "public const " + ShapeType + " RowAccessShape = " + ShapeType + "." + shape + ";";
 
     /// <summary>
-    /// <c>Allows(key, ...)</c>: the function asked by a key a rule holds, which only the database answers.
-    /// A contract declares it, and gets it implemented with <paramref name="partial"/>.
+    /// <c>Allows(key, user, ...)</c>: the function asked by a key a rule holds, which only the database answers.
+    /// A contract declares it, and gets it implemented with <paramref name="partial"/>. The user adds nothing to the
+    /// SQL, and is there so it can only be asked where a rule has one.
     /// </summary>
-    private static string AllowsMethod(string function, string keyType, string keyName, IReadOnlyList<string> parameters, IReadOnlyList<string> names, string accessibility, bool partial)
+    private static string AllowsMethod(string function, string keyType, string keyName, string userName, IReadOnlyList<string> parameters, IReadOnlyList<string> names, string accessibility, bool partial)
     {
-        List<string> all = [keyType + " " + Identifier(keyName), .. parameters];
+        List<string> all = [keyType + " " + Identifier(keyName), RowUserType + " " + Identifier(userName), .. parameters];
         List<string> asked = [keyName, .. names];
         return "/// <summary>\n"
                + "/// This function asked about the aggregate with <paramref name=\"" + keyName + "\"/>, from a row access rule of any\n"
@@ -906,21 +859,27 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                + "(" + SymbolDisplay.FormatLiteral(function + "(" + string.Join(", ", asked) + ")", quote: true) + ");";
     }
 
-    /// <summary><c>Ids(...)</c>: the keys of every aggregate the function allows, which only the database answers.</summary>
-    private static string IdsMethod(string function, string keyType, IReadOnlyList<string> parameters, IReadOnlyList<string> names, string accessibility, bool partial)
-        => "/// <summary>\n"
-           + "/// The keys of every aggregate this function allows, which a row access rule asks with <c>Contains</c>:\n"
-           + "/// <c>(key = ANY (ARRAY(SELECT " + function + "(...))))</c> in its policy, once per statement. Only the\n"
-           + "/// database can answer it, so called in C# it throws.\n"
-           + "/// </summary>\n"
-           + "/// <exception cref=\"" + DatabaseOnlyException + "\">Always: the question is the database's.</exception>\n"
-           + accessibility + " static " + (partial ? "partial " : "") + AccessSetType + "<" + keyType + "> Ids(" + string.Join(", ", parameters) + ") => throw new " + DatabaseOnlyException
-           + "(" + SymbolDisplay.FormatLiteral(function + "(" + string.Join(", ", names) + ")", quote: true) + ");";
+    /// <summary>
+    /// <c>Ids(user, ...)</c>: the keys of every aggregate the function allows, which only the database answers. The user
+    /// adds nothing to the SQL, and is there so it can only be asked where a rule has one.
+    /// </summary>
+    private static string IdsMethod(string function, string keyType, string userName, IReadOnlyList<string> parameters, IReadOnlyList<string> names, string accessibility, bool partial)
+    {
+        List<string> all = [RowUserType + " " + Identifier(userName), .. parameters];
+        return "/// <summary>\n"
+               + "/// The keys of every aggregate this function allows, which a row access rule asks with <c>Contains</c>:\n"
+               + "/// <c>(key = ANY (ARRAY(SELECT " + function + "(...))))</c> in its policy, once per statement. Only the\n"
+               + "/// database can answer it, so called in C# it throws.\n"
+               + "/// </summary>\n"
+               + "/// <exception cref=\"" + DatabaseOnlyException + "\">Always: the question is the database's.</exception>\n"
+               + accessibility + " static " + (partial ? "partial " : "") + AccessSetType + "<" + keyType + "> Ids(" + string.Join(", ", all) + ") => throw new " + DatabaseOnlyException
+               + "(" + SymbolDisplay.FormatLiteral(function + "(" + string.Join(", ", names) + ")", quote: true) + ");";
+    }
 
     /// <summary>
     /// An <c>[AccessFunctionContract&lt;TKey&gt;]</c>: the published side of an access function, whose
-    /// <c>Name</c> and <c>Allows(TKey)</c>, or <c>Ids()</c>, the generator writes so other modules' rules ask
-    /// it typed. A contract whose function takes more than the key declares its question, and the generator
+    /// <c>Name</c> and <c>Allows(TKey, IRowUser)</c>, or <c>Ids(IRowUser)</c>, the generator writes so other modules' rules
+    /// ask it typed. A contract whose function takes more than the key declares its question, and the generator
     /// implements it.
     /// </summary>
     private static RowAccessDefinition Declare(GeneratorAttributeSyntaxContext attributed)
@@ -967,15 +926,15 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         List<string> members = [NameConstant(logical, contract: true)];
         members.Add(question
             ?? (shape == Shape.Set
-                ? IdsMethod(logical, keyType, [], [], "public", partial: false)
-                : AllowsMethod(logical, keyType, Camel(key.Name), [], [], "public", partial: false)));
+                ? IdsMethod(logical, keyType, "user", [], [], "public", partial: false)
+                : AllowsMethod(logical, keyType, Camel(key.Name) == "user" ? "key" : Camel(key.Name), "user", [], [], "public", partial: false)));
 
         return new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members));
     }
 
     /// <summary>
-    /// The implementation of the question a contract declares, <c>static partial bool Allows(TKey key, ...)</c>
-    /// or <c>static partial AccessSet&lt;TKey&gt; Ids(...)</c>, or null with a diagnostic when it has another shape.
+    /// The implementation of the question a contract declares, <c>static partial bool Allows(TKey key, IRowUser user, ...)</c>
+    /// or <c>static partial AccessSet&lt;TKey&gt; Ids(IRowUser user, ...)</c>, or null with a diagnostic when it has another shape.
     /// </summary>
     private static string? DeclaredQuestion(
         INamedTypeSymbol contract,
@@ -989,19 +948,21 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     {
         var isSet = method.Name == "Ids";
         var expected = isSet
-            ? $"'static partial AccessSet<{key.Name}> Ids(...)' or 'static partial bool Allows({key.Name} key, ...)', declared without a body for the generator to implement, taking strings, numbers, flags, Guids and ids"
-            : $"'static partial bool Allows({key.Name} key, ...)' or 'static partial AccessSet<{key.Name}> Ids(...)', declared without a body for the generator to implement, taking strings, numbers, flags, Guids and ids";
+            ? $"'static partial AccessSet<{key.Name}> Ids(IRowUser user, ...)' or 'static partial bool Allows({key.Name} key, IRowUser user, ...)', declared without a body for the generator to implement, taking strings, numbers, flags, Guids and ids after the user"
+            : $"'static partial bool Allows({key.Name} key, IRowUser user, ...)' or 'static partial AccessSet<{key.Name}> Ids(IRowUser user, ...)', declared without a body for the generator to implement, taking strings, numbers, flags, Guids and ids after the user";
 
         var location = LocationInfo.From(method);
-        var parameters = isSet ? method.Parameters : method.Parameters.Skip(1).ToImmutableArrayOrEmpty();
+        var userAt = isSet ? 0 : 1;
+        var parameters = method.Parameters.Skip(userAt + 1).ToImmutableArrayOrEmpty();
         if (!method.IsStatic
             || !method.IsPartialDefinition
             || method.PartialImplementationPart is not null
             || method.IsGenericMethod
+            || method.Parameters.Length <= userAt
+            || !IsRowUser(method.Parameters[userAt].Type)
             || (isSet
                 ? !IsAccessSet(method.ReturnType) || !SymbolEqualityComparer.Default.Equals(((INamedTypeSymbol)method.ReturnType).TypeArguments[0], key)
                 : method.ReturnType.SpecialType != SpecialType.System_Boolean
-                  || method.Parameters.Length == 0
                   || !SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, key))
             || parameters.Any(parameter => parameter.RefKind != RefKind.None || parameter.IsParams || SqlTypeOf(parameter.Type) is null))
         {
@@ -1023,179 +984,16 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         shape = declaredShape;
         var typed = parameters.Select(parameter => parameter.Type.ToDisplayString(TypeFormat) + " " + Identifier(parameter.Name)).ToList();
         var names = parameters.Select(parameter => parameter.Name).ToList();
+        var userName = method.Parameters[userAt].Name;
         return isSet
-            ? IdsMethod(function, keyType, typed, names, Accessibility(method), partial: true)
-            : AllowsMethod(function, keyType, method.Parameters[0].Name, typed, names, Accessibility(method), partial: true);
+            ? IdsMethod(function, keyType, userName, typed, names, Accessibility(method), partial: true)
+            : AllowsMethod(function, keyType, method.Parameters[0].Name, userName, typed, names, Accessibility(method), partial: true);
     }
-
-    /// <summary>
-    /// A <c>[ResourceAccessContract&lt;TKey&gt;]</c>: one set the access to a resource answers, published by the
-    /// resource's id. The generator writes its <c>Name</c>, which the export resolves to the function a contribution
-    /// says answers that set for the resource, and its <c>Ids</c>: <c>Ids()</c> for the resources seen,
-    /// <c>Ids(string permission)</c> for those a permission is held on. A contract that declares its <c>Ids</c> itself, to document
-    /// it, gets that one implemented.
-    /// </summary>
-    private static RowAccessDefinition DeclareResourceAccess(GeneratorAttributeSyntaxContext attributed)
-    {
-        var symbol = (INamedTypeSymbol)attributed.TargetSymbol;
-        var syntax = (TypeDeclarationSyntax)attributed.TargetNode;
-        var type = DefinitionFactory.CreateTypeInfo(symbol, syntax);
-        var diagnostics = new List<DiagnosticInfo>();
-
-        var attribute = attributed.Attributes[0];
-        if (attribute.AttributeClass?.TypeArguments.FirstOrDefault() is not { } key)
-        {
-            return RowAccessDefinition.Nothing(type);
-        }
-
-        var location = LocationInfo.From(syntax.Identifier);
-        if (!symbol.IsStatic || !syntax.Modifiers.Any(SyntaxKind.PartialKeyword))
-        {
-            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, symbol.Name, "to be a static partial class, so the generator can add its Ids method"));
-        }
-
-        var resource = ResourceKeyOf(key, attributed.SemanticModel.Compilation);
-        var pending = EquatableArray<PendingResourceKey>.Empty;
-        if (resource is null && key.TypeKind == TypeKind.Error)
-        {
-            // No type to this generator yet, and no id written beside an aggregate root: an id a package's switch writes
-            // into this project, [assembly: GenerateTenancyIds] in a contracts project say, which only its plan names.
-            resource = ResourceKey.Awaiting(key.Name);
-            pending = new EquatableArray<PendingResourceKey>(new[] { new PendingResourceKey(key.Name, UnknownKey(location, symbol.Name, key.Name)) });
-        }
-        else if (resource is null || (!resource.Generated && !IsId(key)))
-        {
-            diagnostics.Add(DiagnosticInfo.Create(
-                DiagnosticDescriptors.RowAccessRuleShape,
-                location,
-                symbol.Name,
-                $"the id of the resource's aggregate as its key, such as ProjectId: the export finds the resource by the type of its id, and {key.ToDisplayString()} is no id"));
-        }
-        else if (!resource.Generated && OtherOwnerOf(key, symbol) is { } owner)
-        {
-            // What a module publishes of its resources is its own to say: another module asks the contract it publishes.
-            diagnostics.Add(DiagnosticInfo.Create(
-                DiagnosticDescriptors.RowAccessRuleShape,
-                location,
-                symbol.Name,
-                $"to be declared in the module that owns {key.Name}, {owner}, such as in its contracts beside the id: a module publishes the sets of its own resources, and another module's rules ask the contract it publishes"));
-        }
-
-        var set = ResourceAccessSetOf(attribute);
-        if (set is null)
-        {
-            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, symbol.Name, "ResourceAccessSet.Seen, ResourceAccessSet.HeldOn or ResourceAccessSet.FellowMembers as the set it publishes"));
-        }
-
-        var heldOn = set == ResourceHeldOn;
-        var fellows = set == ResourceFellowMembers;
-        var expected = heldOn
-            ? $"nothing, or 'static partial AccessSet<{key.Name}> Ids(string permission)' without a body for the generator to implement: the resources a permission is held on are asked with the permission"
-            : fellows
-                ? "'static partial AccessSet<TMemberId> Ids()' without a body for the generator to implement, with the id the members are known by, such as SeatId: the set holds the members' ids, which the resource's id does not say, and is asked without arguments"
-                : $"nothing, or 'static partial AccessSet<{key.Name}> Ids()' without a body for the generator to implement: the resources seen are asked without arguments";
-
-        IMethodSymbol? declared = null;
-        foreach (var member in symbol.GetMembers().OfType<IMethodSymbol>().Where(static method => method.MethodKind == MethodKind.Ordinary))
-        {
-            var fits = declared is null
-                && member.Name == "Ids"
-                && member.IsStatic
-                && member.IsPartialDefinition
-                && member.PartialImplementationPart is null
-                && !member.IsGenericMethod
-                && IsAccessSet(member.ReturnType)
-                && (fellows || IsTheKey(((INamedTypeSymbol)member.ReturnType).TypeArguments[0], key))
-                && member.Parameters.Length == (heldOn ? 1 : 0)
-                && member.Parameters.All(static parameter => parameter.RefKind == RefKind.None && !parameter.IsParams && parameter.Type.SpecialType == SpecialType.System_String);
-            if (fits)
-            {
-                declared = member;
-            }
-            else if (member.Name is "Ids" or "Allows")
-            {
-                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, LocationInfo.From(member), symbol.Name, expected));
-            }
-        }
-
-        // The members' ids are no resource's: only the contract can say what they are.
-        if (fellows && declared is null)
-        {
-            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, symbol.Name, expected));
-        }
-
-        if (diagnostics.HasErrorsIn() || set is not { } published || resource is null)
-        {
-            return RowAccessDefinition.Failed(type, diagnostics) with { Pending = pending };
-        }
-
-        var name = ResourceAccessName(resource, published);
-        var keyName = declared?.Parameters.FirstOrDefault()?.Name ?? "permission";
-        List<string> parameters = heldOn ? ["string " + Identifier(keyName)] : [];
-        List<string> names = heldOn ? [keyName] : [];
-        var element = fellows ? ((INamedTypeSymbol)declared!.ReturnType).TypeArguments[0] : null;
-        List<string> members =
-        [
-            ResourceAccessNameConstant(name, key.Name, published),
-            ResourceAccessIdsMethod(
-                name,
-                element?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? resource.TypeName,
-                element?.Name ?? key.Name,
-                parameters,
-                names,
-                published,
-                declared is null ? "public" : Accessibility(declared),
-                partial: declared is not null),
-        ];
-
-        return new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members)) { Pending = pending };
-    }
-
-    /// <summary>
-    /// DDD00038 for a resource access contract whose key nothing answers: no type the generator sees, no id written
-    /// beside an aggregate root of the project, and no id a switch of the project writes.
-    /// </summary>
-    private static DiagnosticInfo UnknownKey(LocationInfo? location, string contract, string key)
-        => DiagnosticInfo.Create(
-            DiagnosticDescriptors.RowAccessRuleShape,
-            location,
-            contract,
-            $"an id the generator can find as its key: {key} is no type it sees, nor the id the toolkit writes beside one aggregate root of this project declared with a value, such as [AggregateRoot<Guid>], nor one a package's switch writes into this project, such as [assembly: GenerateTenancyIds]. Declare the id itself: [EntityId<Guid>] public readonly partial record struct {key};");
-
-    /// <summary>A resource access contract's <c>Name</c>: what a rule asks the set by, and SQL a contribution writes too.</summary>
-    private static string ResourceAccessNameConstant(string name, string key, int set)
-        => "/// <summary>\n"
-           + "/// The name rules ask this set by: " + (set switch
-           {
-               ResourceHeldOn => "the resources the caller holds a permission on, by their id,",
-               ResourceFellowMembers => "the members of the resources the caller is a member of, by the resources' id,",
-               _ => "the resources the caller sees, by their id,",
-           }) + "\n"
-           + "/// <c>" + key + "</c>. The export writes it as the function that answers the set for that resource, whatever the\n"
-           + "/// package that keeps the resource's access calls it; SQL a contribution writes asks it as <c>{fn:...}</c> too.\n"
-           + "/// </summary>\n"
-           + "public const string Name = " + SymbolDisplay.FormatLiteral(name, quote: true) + ";";
-
-    /// <summary><c>Ids()</c> or <c>Ids(string permission)</c>: the ids of the resources in a resource access set, which only the database answers.</summary>
-    private static string ResourceAccessIdsMethod(string name, string keyType, string key, IReadOnlyList<string> parameters, IReadOnlyList<string> names, int set, string accessibility, bool partial)
-        => "/// <summary>\n"
-           + (set switch
-           {
-               ResourceHeldOn => "/// The ids, each a <c>" + key + "</c>, of the resources the caller holds <paramref name=\"" + names[0] + "\"/> on, which a row access\n",
-               ResourceFellowMembers => "/// The ids, each a <c>" + key + "</c>, of the members of every resource the caller is a member of now, which a row access\n",
-               _ => "/// The ids, each a <c>" + key + "</c>, of the resources the caller sees, which a row access\n",
-           })
-           + "/// rule asks with <c>Contains</c>: <c>(id = ANY (ARRAY(SELECT ...)))</c> in its policy, once per statement, with\n"
-           + "/// the function that answers the set for the resource. Only the database can answer it, so called in C# it throws.\n"
-           + "/// </summary>\n"
-           + (set == ResourceHeldOn ? "/// <param name=\"" + names[0] + "\">A permission.</param>\n" : "")
-           + "/// <exception cref=\"" + DatabaseOnlyException + "\">Always: the question is the database's.</exception>\n"
-           + accessibility + " static " + (partial ? "partial " : "") + AccessSetType + "<" + keyType + "> Ids(" + string.Join(", ", parameters) + ") => throw new " + DatabaseOnlyException
-           + "(" + SymbolDisplay.FormatLiteral(name + "(" + string.Join(", ", names) + ")", quote: true) + ");";
 
     /// <summary>
     /// An <c>[AccessFunctions]</c> class: each of its <c>[AccessSet]</c>, <c>[AccessScalar]</c> and <c>[AccessRow]</c>
-    /// methods gets a body that throws, because only the SQL function of its name answers it.
+    /// methods gets a body that throws, because only the SQL function of its name answers it. Each declares
+    /// <c>this IRowUser user</c> first, so it can only be asked where a rule has one.
     /// </summary>
     private static RowAccessDefinition DeclareQuestions(GeneratorAttributeSyntaxContext attributed)
     {
@@ -1232,16 +1030,18 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
             var reason = !method.IsStatic || !method.IsPartialDefinition || method.PartialImplementationPart is not null
                 ? "to be a static partial method without a body, which the generator writes"
+                : !method.IsExtensionMethod || !IsRowUser(method.Parameters[0].Type)
+                    ? "'this IRowUser user' as its first parameter: only a rule has a user, so a question only the database answers cannot be called where there is no rule"
                 : row is not null && !IsRowType(method.ReturnType)
                     ? "to return the class a table is mapped to, or a type parameter constrained to class, whose row its function answers with"
-                : row is not null && method.Parameters.Length > 0
-                    ? "no parameters: a row question is asked about the caller, once per statement"
+                : row is not null && method.Parameters.Length > 1
+                    ? "no parameters after the user: a row question is asked about the caller, once per statement"
                 : isSet && !IsAccessSet(method.ReturnType)
                     ? "to return AccessSet<T>, the set its function answers with"
                     : !isSet && (method.ReturnsVoid || IsAccessSet(method.ReturnType))
                         ? "to return the one value its function answers with; a set-shaped question is an [AccessSet]"
-                        : method.Parameters.FirstOrDefault(parameter => parameter.RefKind != RefKind.None || parameter.IsParams || SqlTypeOf(parameter.Type, typeParameters: true) is null) is { } refused
-                            ? $"parameters its function can take: '{refused.Name}' is {refused.Type.ToDisplayString()}, and a parameter is a string, bool, int, long, Guid, an id, or a type parameter constrained to IEntityId"
+                        : method.Parameters.Skip(1).FirstOrDefault(parameter => parameter.RefKind != RefKind.None || parameter.IsParams || SqlTypeOf(parameter.Type, typeParameters: true) is null) is { } refused
+                            ? $"parameters after the user its function can take: '{refused.Name}' is {refused.Type.ToDisplayString()}, and a parameter is a string, bool, int, long, Guid, an id, or a type parameter constrained to IEntityId"
                             : null;
 
             if (reason is not null)
@@ -1261,11 +1061,14 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             : new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members));
     }
 
-    /// <summary>The body of a question, which throws: the implementing part of its partial method.</summary>
+    /// <summary>
+    /// The body of a question, which throws: the implementing part of its partial method, which says <c>this</c> too, since
+    /// both parts of a partial extension method have to.
+    /// </summary>
     private static string QuestionBody(IMethodSymbol method, string function, bool isSet, bool isRow = false)
     {
         var typeParameters = method.TypeParameters.Length == 0 ? "" : "<" + string.Join(", ", method.TypeParameters.Select(static parameter => parameter.Name)) + ">";
-        var parameters = string.Join(", ", method.Parameters.Select(parameter => parameter.Type.ToDisplayString(TypeFormat) + " " + Identifier(parameter.Name)));
+        var parameters = string.Join(", ", method.Parameters.Select((parameter, position) => (position == 0 ? "this " : "") + parameter.Type.ToDisplayString(TypeFormat) + " " + Identifier(parameter.Name)));
 
         return "/// <summary>\n"
                + "/// Answered by the SQL function <c>" + function + "</c>, "
@@ -1413,8 +1216,8 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         private readonly HashSet<ISymbol> _unbound = new(SymbolEqualityComparer.Default);
 
         /// <summary>
-        /// The resource access contracts of this compilation asked by a key no type answers yet, which an id a switch
-        /// of the project writes may: the SQL names each by a stand-in until the switch's plan says it.
+        /// The resources asked about by a key no type answers yet, which an id a switch of the project writes may: the
+        /// SQL names each by a stand-in until the switch's plan says it.
         /// </summary>
         public List<PendingResourceKey> Pending { get; } = [];
 
@@ -1512,7 +1315,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                     : Translate(side);
 
         /// <summary>
-        /// A property of what an <c>[AccessRow]</c> question answers, <c>TenancyRowAccess.CurrentSeat&lt;Seat&gt;().Kind</c>:
+        /// A property of what an <c>[AccessRow]</c> question answers, <c>user.CurrentSeat&lt;Seat&gt;().Kind</c>:
         /// <c>{row:name:plain:Type:q1}{col:q1:Kind}{/row}</c>, which the export writes as
         /// <c>(SELECT q1."Kind" FROM schema.name() q1)</c>, the column the model maps the property to on the type's table.
         /// Null where the expression is no such property.
@@ -1522,6 +1325,11 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             if (RowPathOf(expression) is not { } row)
             {
                 return null;
+            }
+
+            if (row.Question.Asked is null)
+            {
+                return Fail(expression);
             }
 
             var alias = "q" + (++_rows).ToString(CultureInfo.InvariantCulture);
@@ -1591,8 +1399,13 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 && Unwrapped(contains.Expression) is InvocationExpressionSyntax receiver
                 && SetOf(receiver) is { } set)
             {
+                if (set.Asked is not { } asking)
+                {
+                    return Fail(receiver);
+                }
+
                 return invocation.ArgumentList.Arguments.Count == 1
-                    ? "(" + Translate(invocation.ArgumentList.Arguments[0].Expression) + " = ANY (ARRAY(SELECT " + Asked(set, receiver.ArgumentList.Arguments, [], perRow: false) + ")))"
+                    ? "(" + Translate(invocation.ArgumentList.Arguments[0].Expression) + " = ANY (ARRAY(SELECT " + Asked(set, asking, [], perRow: false) + ")))"
                     : Fail(invocation);
             }
 
@@ -1604,7 +1417,12 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
             if (ScalarOf(invocation) is { } scalar)
             {
-                var arguments = invocation.ArgumentList.Arguments.Select(argument => Translate(argument.Expression)).ToList();
+                if (scalar.Asked is not { } asking)
+                {
+                    return Fail(invocation);
+                }
+
+                var arguments = asking.Select(argument => Translate(argument.Expression)).ToList();
                 var call = Call(scalar, arguments);
                 return arguments.Any(ReadsTheRow) ? call : "(SELECT " + call + ")";
             }
@@ -1640,16 +1458,52 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         /// <summary>
-        /// The name a set-shaped question is asked by, or null when the invocation is none: an
-        /// <c>[AccessSet]</c> method of an <c>[AccessFunctions]</c> class, or the <c>Ids</c> of a set-shaped
-        /// access function or its contract. <c>Ids</c> may be one this generator is writing in this very
-        /// compilation, which the compiler cannot place yet, so the class is enough.
+        /// A method as it was declared: an extension method called on its receiver is reduced, and the attributes and the
+        /// containing type are read off what it was reduced from.
+        /// </summary>
+        private static IMethodSymbol DeclarationOf(IMethodSymbol method) => (method.ReducedFrom ?? method).OriginalDefinition;
+
+        /// <summary>
+        /// The arguments a question declared with <c>this IRowUser user</c> is asked with, without the user, which adds
+        /// nothing to the SQL: all of them in <c>user.Question(...)</c>, where the user is the receiver, and those after the
+        /// first in <c>Questions.Question(user, ...)</c>. Null where it is not the rule's own user that is asked. Told from
+        /// the syntax, since the call may not bind yet: a wrapper of the same name that takes no type arguments is another
+        /// generator's output, which this one does not see.
+        /// </summary>
+        private IReadOnlyList<ArgumentSyntax>? AskedOfTheUser(InvocationExpressionSyntax invocation)
+        {
+            var arguments = invocation.ArgumentList.Arguments;
+            if (invocation.Expression is MemberAccessExpressionSyntax access && model.GetSymbolInfo(access.Expression).Symbol is not ITypeSymbol)
+            {
+                return IsTheUser(access.Expression) ? arguments.ToList() : null;
+            }
+
+            return arguments.Count > 0 && IsTheUser(arguments[0].Expression) ? arguments.Skip(1).ToList() : null;
+        }
+
+        /// <summary>Whether an expression is the rule's own user.</summary>
+        private bool IsTheUser(ExpressionSyntax expression) => IsParameter(Unwrapped(expression), user);
+
+        /// <summary>
+        /// The name a set-shaped question is asked by, or null when the invocation is none: a question of
+        /// <c>ResourceQuestions</c>, an <c>[AccessSet]</c> method of an <c>[AccessFunctions]</c> class, or the
+        /// <c>Ids</c> of a set-shaped access function or its contract. <c>Ids</c> may be one this generator is writing
+        /// in this very compilation, which the compiler cannot place yet, so the class is enough.
         /// </summary>
         private Question? SetOf(InvocationExpressionSyntax invocation)
         {
-            if (MethodOf(invocation) is { } method && AttributeOf(method.OriginalDefinition, KnownTypes.AccessSetAttribute) is { } set)
+            if (MethodOf(invocation) is { } method)
             {
-                return QuestionOf(method, set, invocation);
+                var declaration = DeclarationOf(method);
+                if (ResourceSetOf(declaration) is { } asked)
+                {
+                    return ResourceQuestionOf(invocation, asked);
+                }
+
+                if (AttributeOf(declaration, KnownTypes.AccessSetAttribute) is { } set)
+                {
+                    return QuestionOf(method, set, invocation);
+                }
             }
 
             if (invocation.Expression is not MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Ids" } access)
@@ -1663,46 +1517,75 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 return null;
             }
 
-            // A resource access contract names no function: the set is asked by the resource's id, and the export
-            // finds the function that answers it.
-            if (ResourceAccessContractOf(owner) is { } resource)
-            {
-                if (resource.AttributeClass?.TypeArguments.FirstOrDefault() is not { } key || ResourceAccessSetOf(resource) is not { } published)
-                {
-                    return null;
-                }
-
-                if (ResourceKeyOf(key, model.Compilation) is { } resolved)
-                {
-                    return new Question(ResourceAccessName(resolved, published), access.Expression + ".Ids", Plain: false);
-                }
-
-                if (key.TypeKind != TypeKind.Error)
-                {
-                    return null;
-                }
-
-                // A contract of this compilation keyed by an id a switch of the project may write: asked by a stand-in
-                // until the switch's plan names it, and untranslatable, as before, where no switch writes it.
-                Pending.Add(new PendingResourceKey(key.Name, DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleUntranslatable, LocationInfo.From(invocation), invocation.ToString())));
-                return new Question(ResourceAccessName(ResourceKey.Awaiting(key.Name), published), access.Expression + ".Ids", Plain: false);
-            }
-
             if ((AccessFunctionOf(owner) ?? AccessFunctionContractOf(owner)) is not { } declared)
             {
                 return null;
             }
 
+            // Ids(user, ...): the user first, and what the function takes after it.
+            var arguments = invocation.ArgumentList.Arguments;
             return NameOf(FunctionNameOf(declared), OwnerOf(owner)).Logical is { } logical
-                ? new Question(logical, access.Expression + ".Ids", Plain: false)
+                ? new Question(logical, access.Expression + ".Ids", Plain: false, arguments.Count > 0 && IsTheUser(arguments[0].Expression) ? arguments.Skip(1).ToList() : null)
                 : null;
+        }
+
+        /// <summary>
+        /// Which set a method of <c>ResourceQuestions</c> asks, as <c>ResourceAccessSet</c> numbers it; null for another
+        /// method.
+        /// </summary>
+        private static int? ResourceSetOf(IMethodSymbol declaration)
+            => declaration.ContainingType.ToDisplayString() == KnownTypes.ResourceQuestions
+                ? declaration.Name switch
+                {
+                    "Sees" => ResourceSeen,
+                    "Holds" => ResourceHeldOn,
+                    "FellowMembers" => ResourceFellowMembers,
+                    _ => null,
+                }
+                : null;
+
+        /// <summary>
+        /// A question of <c>ResourceQuestions</c>, which names no function: the set is asked by the resource's id, and the
+        /// export finds the function that answers it. The id is read from the call's type argument, since it may be one a
+        /// generator writes in this very compilation, which is no type yet: the one written beside an
+        /// <c>[AggregateRoot&lt;Guid&gt;]</c>, or one a package's switch writes, which only the switch's plan names. A type
+        /// that is no id is null, as is a call without a type argument.
+        /// </summary>
+        private Question? ResourceQuestionOf(InvocationExpressionSyntax invocation, int set)
+        {
+            var generic = invocation.Expression switch
+            {
+                MemberAccessExpressionSyntax { Name: GenericNameSyntax named } => named,
+                GenericNameSyntax named => named,
+                _ => null,
+            };
+
+            if (generic is not { TypeArgumentList.Arguments: { Count: > 0 } typeArguments } || model.GetTypeInfo(typeArguments[0]).Type is not { } key)
+            {
+                return null;
+            }
+
+            var display = invocation.Expression.ToString();
+            if (ResourceKeyOf(key, model.Compilation) is { } resolved)
+            {
+                return new Question(ResourceAccessName(resolved, set), display, Plain: false, AskedOfTheUser(invocation));
+            }
+
+            if (key.TypeKind != TypeKind.Error)
+            {
+                return null;
+            }
+
+            // Asked by a stand-in until the switch's plan names the id, and untranslatable where no switch writes it.
+            Pending.Add(new PendingResourceKey(key.Name, DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleUntranslatable, LocationInfo.From(invocation), invocation.ToString())));
+            return new Question(ResourceAccessName(ResourceKey.Awaiting(key.Name), set), display, Plain: false, AskedOfTheUser(invocation));
         }
 
         /// <summary>The name an <c>[AccessScalar]</c> question is asked by, or null when the invocation is none.</summary>
         private Question? ScalarOf(ExpressionSyntax? expression)
             => expression is InvocationExpressionSyntax invocation
                && MethodOf(invocation) is { } method
-               && AttributeOf(method.OriginalDefinition, KnownTypes.AccessScalarAttribute) is { } scalar
+               && AttributeOf(DeclarationOf(method), KnownTypes.AccessScalarAttribute) is { } scalar
                 ? QuestionOf(method, scalar, invocation)
                 : null;
 
@@ -1710,7 +1593,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         private Question? RowOf(ExpressionSyntax? expression)
             => expression is InvocationExpressionSyntax invocation
                && MethodOf(invocation) is { } method
-               && AttributeOf(method.OriginalDefinition, KnownTypes.AccessRowAttribute) is { } row
+               && AttributeOf(DeclarationOf(method), KnownTypes.AccessRowAttribute) is { } row
                 ? QuestionOf(method, row, invocation)
                 : null;
 
@@ -1719,11 +1602,11 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         /// creates itself, called as it is, like <c>Sql.Call</c>; one named relative to its owner is asked by its
         /// logical name, which the export resolves to the function an access function or a contribution writes.
         /// </summary>
-        private static Question? QuestionOf(IMethodSymbol method, AttributeData attribute, InvocationExpressionSyntax invocation)
+        private Question? QuestionOf(IMethodSymbol method, AttributeData attribute, InvocationExpressionSyntax invocation)
         {
             var name = NameOf(FunctionNameOf(attribute), OwnerOf(method.ContainingType));
             return name.Logical is { } logical
-                ? new Question(logical, invocation.Expression.ToString(), Plain: name.Qualified)
+                ? new Question(logical, invocation.Expression.ToString(), Plain: name.Qualified, AskedOfTheUser(invocation))
                 : null;
         }
 
@@ -1883,7 +1766,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             }
 
             var more = arguments.Skip(2).ToList();
-            var question = new Question(name, invocation.Expression.ToString(), Plain: false);
+            var question = new Question(name, invocation.Expression.ToString(), Plain: false, more);
             if (ShapeOf(function) == Shape.Set)
             {
                 return "({key} = ANY (ARRAY(SELECT " + Asked(question, more, [], perRow: false) + ")))";
@@ -1893,10 +1776,10 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         /// <summary>
-        /// <c>ProjectMembership.Allows(task.ProjectId)</c>: an access function asked by key, from its definition or
-        /// from its contract, as <c>{fn:projects.is_member}(...)</c>, with anything the rule passes after the key.
-        /// The method may be one this generator is writing in this very compilation, which the compiler cannot
-        /// place yet, so the class is enough. Null when the call is not one.
+        /// <c>ProjectMembership.Allows(task.ProjectId, user)</c>: an access function asked by key, from its definition or
+        /// from its contract, as <c>{fn:projects.is_member}(...)</c>, with anything the rule passes after the user, who
+        /// adds nothing to the SQL. The method may be one this generator is writing in this very compilation, which the
+        /// compiler cannot place yet, so the class is enough. Null when the call is not one.
         /// </summary>
         private string? ByKey(InvocationExpressionSyntax invocation, IMethodSymbol? called)
         {
@@ -1915,8 +1798,8 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 return null;
             }
 
-            return NameOf(FunctionNameOf(declared), OwnerOf(owner)).Logical is { } name
-                ? "{fn:" + name + "}(" + string.Join(", ", arguments.Select(argument => Translate(argument.Expression))) + ")"
+            return arguments.Count > 1 && IsTheUser(arguments[1].Expression) && NameOf(FunctionNameOf(declared), OwnerOf(owner)).Logical is { } name
+                ? "{fn:" + name + "}(" + string.Join(", ", arguments.Where((_, position) => position != 1).Select(argument => Translate(argument.Expression))) + ")"
                 : Fail(invocation);
         }
 
@@ -2249,10 +2132,11 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
     /// <summary>
     /// A question only the database answers, as a rule asks it: the function's name, logical or with its
-    /// schema; how the rule names it, for a diagnostic; and whether it is called as it is, a function of the
-    /// host's own, rather than by a name the export resolves.
+    /// schema; how the rule names it, for a diagnostic; whether it is called as it is, a function of the
+    /// host's own, rather than by a name the export resolves; and the arguments it is asked with, without the user,
+    /// null where it is not the rule's own user that is asked.
     /// </summary>
-    private sealed record Question(string Name, string Display, bool Plain);
+    private sealed record Question(string Name, string Display, bool Plain, IReadOnlyList<ArgumentSyntax>? Asked);
 }
 
 /// <summary>

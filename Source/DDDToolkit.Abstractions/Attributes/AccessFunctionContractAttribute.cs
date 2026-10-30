@@ -3,7 +3,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <summary>
 /// Publishes an access function a module defines, so the rules of other modules ask it by their
 /// aggregate's key, typed, without the function's name in a string. Apply, in the module's contracts, to
-/// an empty <c>static partial class</c>; the generator adds <c>Name</c> and <c>Allows(<typeparamref name="TKey"/>)</c>:
+/// an empty <c>static partial class</c>; the generator adds <c>Name</c> and <c>Allows(<typeparamref name="TKey"/>, IRowUser)</c>:
 /// <code>
 /// // Projects.Contracts
 /// [AccessFunctionContract&lt;ProjectId&gt;("projects.is_member")]
@@ -13,7 +13,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// [AccessFunction&lt;Project&gt;(ProjectMembers.Name)]
 /// public static partial class ProjectMembership
 /// {
-///     public static bool Allows(Project project, ICurrentUser user)
+///     public static bool Allows(Project project, IRowUser user)
 ///         =&gt; project.Members.Any(member =&gt; member.UserId == user.Id);
 /// }
 ///
@@ -21,7 +21,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// [RowAccess&lt;ProjectTask&gt;(RowOperations.All)]
 /// public static partial class ProjectMembersWorkOnItsTasks
 /// {
-///     public static bool Allows(ProjectTask task, ICurrentUser user) =&gt; ProjectMembers.Allows(task.ProjectId);
+///     public static bool Allows(ProjectTask task, IRowUser user) =&gt; ProjectMembers.Allows(task.ProjectId, user);
 /// }
 /// </code>
 /// </summary>
@@ -32,11 +32,12 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// </para>
 /// <para>
 /// A function that takes more than the key declares its question here, and the generator implements it:
-/// <c>static partial bool Allows(ProjectId key, string role);</c> for one that answers about one
-/// aggregate, or <c>static partial AccessSet&lt;ProjectId&gt; Ids(string role);</c> for one that answers
+/// <c>static partial bool Allows(ProjectId key, IRowUser user, string role);</c> for one that answers about one
+/// aggregate, or <c>static partial AccessSet&lt;ProjectId&gt; Ids(IRowUser user, string role);</c> for one that answers
 /// with the keys of every aggregate it allows. A contract that declares nothing gets
-/// <c>Allows(<typeparamref name="TKey"/>)</c>, or <c>Ids()</c> with <see cref="Shape"/> set to
-/// <see cref="AccessFunctionShape.Set"/>.
+/// <c>Allows(<typeparamref name="TKey"/>, IRowUser)</c>, or <c>Ids(IRowUser)</c> with <see cref="Shape"/> set to
+/// <see cref="AccessFunctionShape.Set"/>. The user adds nothing to the SQL. It is there because the question is asked
+/// for the caller, and only a rule has one.
 /// </para>
 /// <para>
 /// A name without a schema is relative to the module whose contracts declare it: <c>is_member</c> in the

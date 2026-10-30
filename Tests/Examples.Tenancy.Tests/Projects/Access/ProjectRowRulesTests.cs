@@ -1,4 +1,6 @@
-using Examples.Tenancy.Projects.Contracts.RowAccess;
+using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.EntityFramework.Postgres;
+using Examples.Tenancy.Projects.Contracts.ValueObjects;
 using Examples.Tenancy.Projects.Infrastructure.Access;
 using FluentAssertions;
 
@@ -14,21 +16,21 @@ namespace Examples.Tenancy.Tests.Projects.Access;
 public sealed class ProjectRowRulesTests
 {
     [Fact]
-    public void Projects_publishes_what_a_seat_sees_and_holds_by_the_project_s_id_and_names_no_function()
+    public void A_rule_asks_what_a_seat_sees_and_holds_by_the_project_s_id_and_names_no_function()
     {
         // What a rule asks by: the project's id and the set. The export writes it as the function the Membership
         // package writes from the projects' rules, under whatever name those rules give it.
-        ProjectsISee.Name.Should().Be("@Examples.Tenancy.Projects.Contracts.ValueObjects.ProjectId/seen");
-        ProjectsWhereIHold.Name.Should().Be("@Examples.Tenancy.Projects.Contracts.ValueObjects.ProjectId/held_on");
+        ResourceAccessAnswer.NameOf(typeof(ProjectId), ResourceAccessSet.Seen).Should().Be("@Examples.Tenancy.Projects.Contracts.ValueObjects.ProjectId/seen");
+        ResourceAccessAnswer.NameOf(typeof(ProjectId), ResourceAccessSet.HeldOn).Should().Be("@Examples.Tenancy.Projects.Contracts.ValueObjects.ProjectId/held_on");
     }
 
     [Fact]
     public void A_seat_reads_the_projects_it_sees()
     {
         // One set, asked once per statement: the function the Membership package writes from the projects' rules,
-        // which answers the crew, the owner and the organization at once, asked through the module's own contract.
+        // which answers the crew, the owner and the organization at once, asked by the project's id.
         SeatsSeeTheProjectsTheyReach.RowAccessSql.Should().Be(
-            $"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{ProjectsISee.Name}}}())))");
+            $"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{ResourceAccessAnswer.NameOf(typeof(ProjectId), ResourceAccessSet.Seen)}}}())))");
     }
 
     [Fact]
@@ -36,7 +38,7 @@ public sealed class ProjectRowRulesTests
     {
         // Each permission a command of the module asks on a project, through the same function, and opening a project at
         // a unit, which Tenancy answers.
-        var held = "{fn:" + ProjectsWhereIHold.Name + "}";
+        var held = "{fn:" + ResourceAccessAnswer.NameOf(typeof(ProjectId), ResourceAccessSet.HeldOn) + "}";
         SeatsChangeTheProjectsTheyWorkOn.RowAccessSql.Should().Be(
             $"((((({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.edit'))))"
             + $" OR ({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.close')))))"

@@ -908,13 +908,13 @@ The primary constructor: the type's summary says what it makes.
 
 ## Row access
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
-
 ### `TenancyFunctions`
 
 ```csharp
 public static class TenancyFunctions
 ```
+
+Namespace `DDDToolkit.Supporting.Tenancy.Access`.
 
 Tenancy's functions in a database that answers the questions itself, as another package names them: the rules of a resource with members, say, whose own functions ask Tenancy's.
 
@@ -926,9 +926,9 @@ Each is named by its owner, [`TenancyRowAccess.Owner`](#tenancyrowaccess), and i
 
 | Member | Summary |
 |---|---|
-| `static DatabaseFunction CurrentSeat { get; }` | Answers the calling seat: the active seat of the caller's verified identity in the tenant the connection names, or `NULL` for a caller without one. As [`TenancyRowAccess.CurrentSeatId<TSeatId>`](#currentseatid). |
-| `static DatabaseFunction UnitsWhereIHold { get; }` | Answers, for a permission, the units the calling seat's hold of it reaches: where it is held, and every unit below. As [`TenancyRowAccess.UnitsWhereIHold<TUnitId>`](#unitswhereiholdstring-1). |
-| `static DatabaseFunction RolesWithPermission { get; }` | Answers, for a permission, the roles of the caller's tenant in use that give it. As [`TenancyRowAccess.RolesWithPermission<TRoleId>`](#roleswithpermissionstring-1). |
+| `static DatabaseFunction CurrentSeat { get; }` | Answers the calling seat: the active seat of the caller's verified identity in the tenant the connection names, or `NULL` for a caller without one. As [`TenancyRowAccess.CurrentSeatId<TSeatId>`](#currentseatidirowuser). |
+| `static DatabaseFunction UnitsWhereIHold { get; }` | Answers, for a permission, the units the calling seat's hold of it reaches: where it is held, and every unit below. As [`TenancyRowAccess.UnitsWhereIHold<TUnitId>`](#unitswhereiholdirowuser-string). |
+| `static DatabaseFunction RolesWithPermission { get; }` | Answers, for a permission, the roles of the caller's tenant in use that give it. As [`TenancyRowAccess.RolesWithPermission<TRoleId>`](#roleswithpermissionirowuser-string). |
 
 ### `TenancyRowAccess`
 
@@ -936,47 +936,51 @@ Each is named by its owner, [`TenancyRowAccess.Owner`](#tenancyrowaccess), and i
 public static class TenancyRowAccess
 ```
 
-Tenancy's questions as a row access rule asks them, so a module writes its rules on the seats, units and roles Tenancy keeps without referencing anything of a database:
+Namespace `DDDToolkit.Abstractions.Access`.
+
+Tenancy's questions as a row access rule asks them, of its user, so a module writes its rules on the seats, units and roles Tenancy keeps without referencing anything of a database:
 
 ```csharp
 [RowAccess<Report>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class ReportsAreReadWhereThePermissionIsHeld
 {
-    public static bool Allows(Report report, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>("reports.read").Contains(report.UnitId);
+    public static bool Allows(Report report, IRowUser user)
+        => user.UnitsWhereIHold("reports.read").Contains(report.UnitId);
 }
 ```
+
+The class is in the namespace of `IRowUser`, so the `using` a rule has for its user is the only one it needs. Each question is generic over the application's ids, and a question whose type parameters are all ids has a wrapper without type arguments in every project of a module that declares Tenancy's classes, or says which of its ids are Tenancy's with `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`. The generic form keeps working: `user.UnitsWhereIHold<OrganizationUnitId>(permission)`.
 
 Only the database answers them: the SQL functions of the same names, which `DDDToolkit.Supporting.Tenancy.Postgres` writes into the schema of the context that maps Tenancy's tables, for the caller whose identity and tenant the connection carries. Called in C#, each throws. In C#, ask [`ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>`](#itenancyqueriesttenantid-tseatid-tunitid-troleid), which gives the same answers to a seat.
 
 The functions answer for a seat: a signed-in user's, found from the verified identity and the tenant. A suspended or deactivated seat holds nothing, and neither does any seat of a suspended or closed tenant; a question about the caller answers `NULL` for someone without an active seat there, which no comparison passes. A rule for anonymous callers that asks one is refused when the policies are written. System work in a tenant has no seat, so every question answers nothing for it, where the C# questions answer the whole tenant: the policies Tenancy writes keep system work to its tenant themselves, so a rule for it asks none of these.
 
-The same questions say who reads Tenancy's own seats and invitations, where the application replaces Tenancy's default with a read rule on its class: `seat.TenantId == CurrentTenant<TenantId>()` for the caller's tenant, `seat.Id == CurrentSeatId<SeatId>()` for the caller itself, `UnitsWhereIHold<OrganizationUnitId>(permission).Contains(invitation.UnitId)` for where it holds a permission, [`HoldsPermission`](#holdspermissionstring) and [`HoldsAtTenant`](#holdsattenantstring), and [`SeatsInMyUnits<TSeatId>`](#seatsinmyunits) for the seats placed where it is placed, or below.
+The same questions say who reads Tenancy's own seats and invitations, where the application replaces Tenancy's default with a read rule on its class: `seat.TenantId == user.CurrentTenant()` for the caller's tenant, `seat.Id == user.CurrentSeatId()` for the caller itself, `user.UnitsWhereIHold(permission).Contains(invitation.UnitId)` for where it holds a permission, [`HoldsPermission`](#holdspermissionirowuser-string) and [`HoldsAtTenant`](#holdsattenantirowuser-string), and [`SeatsInMyUnits<TSeatId>`](#seatsinmyunitsirowuser) for the seats placed where it is placed, or below.
 
 The questions named `...InTenant` take the tenant as an argument, and read no setting of the connection: for a policy that runs where the application's connection is not the one asking, such as one on the path of a stored file or on a channel, whose tenant is in the path or the channel's name. They answer for the seat the caller's verified identity has in that tenant, while that seat and the tenant are active, and nothing to anyone else. A set-shaped one is worked out once per statement, so its tenant comes from the parameters of an access function of the module's own, which a policy then asks about each row.
 
 | Member | Summary |
 |---|---|
 | `Owner = "tenancy"` | The owner the functions are named relative to: `tenancy/units_where_i_hold_permission`, whatever schema the application gives Tenancy's tables. |
-| [`UnitsWhereIHold(string)`](#unitswhereiholdstring-1) | Answered by the SQL function `tenancy/units_where_i_hold_permission`, a set a row access rule asks with `Contains`, once per statement. |
-| [`ReadableUnits()`](#readableunits-1) | Answered by the SQL function `tenancy/readable_units`, a set a row access rule asks with `Contains`, once per statement. |
-| [`SeatsInMyUnits()`](#seatsinmyunits) | Answered by the SQL function `tenancy/seats_in_my_units`, a set a row access rule asks with `Contains`, once per statement. |
-| [`RolesWithPermission(string)`](#roleswithpermissionstring-1) | Answered by the SQL function `tenancy/roles_with_permission`, a set a row access rule asks with `Contains`, once per statement. |
-| [`CurrentSeatId()`](#currentseatid) | Answered by the SQL function `tenancy/current_seat`, one value a row access rule compares, once per statement when no argument reads the row. |
-| [`CurrentSeat()`](#currentseat) | Answered by the SQL function `tenancy/current_seat_row`, one row whose properties a row access rule reads, once per statement. |
-| [`CurrentTenant()`](#currenttenant) | Answered by the SQL function `tenancy/current_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
-| [`HoldsPermission(string)`](#holdspermissionstring) | Answered by the SQL function `tenancy/holds_permission`, one value a row access rule compares, once per statement when no argument reads the row. |
-| [`HoldsAtTenant(string)`](#holdsattenantstring) | Answered by the SQL function `tenancy/holds_at_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
-| [`SeatInTenant(TTenantId)`](#seatintenantttenantid) | Answered by the SQL function `tenancy/seat_in_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
-| [`SeatedInTenant(TTenantId)`](#seatedintenantttenantid) | Answered by the SQL function `tenancy/seated_in_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
-| [`HoldsPermissionInTenant(TTenantId, string)`](#holdspermissionintenantttenantid-string) | Answered by the SQL function `tenancy/holds_permission_in_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
-| [`UnitsWhereIHoldInTenant(TTenantId, string)`](#unitswhereiholdintenantttenantid-string) | Answered by the SQL function `tenancy/units_where_i_hold_permission_in_tenant`, a set a row access rule asks with `Contains`, once per statement. |
-| [`RolesWithPermissionInTenant(TTenantId, string)`](#roleswithpermissionintenantttenantid-string) | Answered by the SQL function `tenancy/roles_with_permission_in_tenant`, a set a row access rule asks with `Contains`, once per statement. |
+| [`UnitsWhereIHold(IRowUser, string)`](#unitswhereiholdirowuser-string) | Answered by the SQL function `tenancy/units_where_i_hold_permission`, a set a row access rule asks with `Contains`, once per statement. |
+| [`ReadableUnits(IRowUser)`](#readableunitsirowuser) | Answered by the SQL function `tenancy/readable_units`, a set a row access rule asks with `Contains`, once per statement. |
+| [`SeatsInMyUnits(IRowUser)`](#seatsinmyunitsirowuser) | Answered by the SQL function `tenancy/seats_in_my_units`, a set a row access rule asks with `Contains`, once per statement. |
+| [`RolesWithPermission(IRowUser, string)`](#roleswithpermissionirowuser-string) | Answered by the SQL function `tenancy/roles_with_permission`, a set a row access rule asks with `Contains`, once per statement. |
+| [`CurrentSeatId(IRowUser)`](#currentseatidirowuser) | Answered by the SQL function `tenancy/current_seat`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`CurrentSeat(IRowUser)`](#currentseatirowuser) | Answered by the SQL function `tenancy/current_seat_row`, one row whose properties a row access rule reads, once per statement. |
+| [`CurrentTenant(IRowUser)`](#currenttenantirowuser) | Answered by the SQL function `tenancy/current_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`HoldsPermission(IRowUser, string)`](#holdspermissionirowuser-string) | Answered by the SQL function `tenancy/holds_permission`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`HoldsAtTenant(IRowUser, string)`](#holdsattenantirowuser-string) | Answered by the SQL function `tenancy/holds_at_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`SeatInTenant(IRowUser, TTenantId)`](#seatintenantirowuser-ttenantid) | Answered by the SQL function `tenancy/seat_in_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`SeatedInTenant(IRowUser, TTenantId)`](#seatedintenantirowuser-ttenantid) | Answered by the SQL function `tenancy/seated_in_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`HoldsPermissionInTenant(IRowUser, TTenantId, string)`](#holdspermissionintenantirowuser-ttenantid-string) | Answered by the SQL function `tenancy/holds_permission_in_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`UnitsWhereIHoldInTenant(IRowUser, TTenantId, string)`](#unitswhereiholdintenantirowuser-ttenantid-string) | Answered by the SQL function `tenancy/units_where_i_hold_permission_in_tenant`, a set a row access rule asks with `Contains`, once per statement. |
+| [`RolesWithPermissionInTenant(IRowUser, TTenantId, string)`](#roleswithpermissionintenantirowuser-ttenantid-string) | Answered by the SQL function `tenancy/roles_with_permission_in_tenant`, a set a row access rule asks with `Contains`, once per statement. |
 
-#### `UnitsWhereIHold(string)`
+#### `UnitsWhereIHold(IRowUser, string)`
 
 ```csharp
-public static AccessSet<TUnitId> UnitsWhereIHold<TUnitId>(string permission)
+public static AccessSet<TUnitId> UnitsWhereIHold<TUnitId>(this IRowUser user, string permission)
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
 
@@ -986,10 +990,10 @@ Answered by the SQL function `tenancy/units_where_i_hold_permission`, a set a ro
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `ReadableUnits()`
+#### `ReadableUnits(IRowUser)`
 
 ```csharp
-public static AccessSet<TUnitId> ReadableUnits<TUnitId>()
+public static AccessSet<TUnitId> ReadableUnits<TUnitId>(this IRowUser user)
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
 
@@ -999,10 +1003,10 @@ Answered by the SQL function `tenancy/readable_units`, a set a row access rule a
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `SeatsInMyUnits()`
+#### `SeatsInMyUnits(IRowUser)`
 
 ```csharp
-public static AccessSet<TSeatId> SeatsInMyUnits<TSeatId>()
+public static AccessSet<TSeatId> SeatsInMyUnits<TSeatId>(this IRowUser user)
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
@@ -1012,10 +1016,10 @@ Answered by the SQL function `tenancy/seats_in_my_units`, a set a row access rul
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `RolesWithPermission(string)`
+#### `RolesWithPermission(IRowUser, string)`
 
 ```csharp
-public static AccessSet<TRoleId> RolesWithPermission<TRoleId>(string permission)
+public static AccessSet<TRoleId> RolesWithPermission<TRoleId>(this IRowUser user, string permission)
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
@@ -1025,10 +1029,10 @@ Answered by the SQL function `tenancy/roles_with_permission`, a set a row access
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `CurrentSeatId()`
+#### `CurrentSeatId(IRowUser)`
 
 ```csharp
-public static TSeatId CurrentSeatId<TSeatId>()
+public static TSeatId CurrentSeatId<TSeatId>(this IRowUser user)
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
@@ -1038,10 +1042,10 @@ Answered by the SQL function `tenancy/current_seat`, one value a row access rule
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `CurrentSeat()`
+#### `CurrentSeat(IRowUser)`
 
 ```csharp
-public static TSeat CurrentSeat<TSeat>()
+public static TSeat CurrentSeat<TSeat>(this IRowUser user)
     where TSeat : class
 ```
 
@@ -1051,10 +1055,10 @@ Answered by the SQL function `tenancy/current_seat_row`, one row whose propertie
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `CurrentTenant()`
+#### `CurrentTenant(IRowUser)`
 
 ```csharp
-public static TTenantId CurrentTenant<TTenantId>()
+public static TTenantId CurrentTenant<TTenantId>(this IRowUser user)
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
 ```
 
@@ -1064,10 +1068,10 @@ Answered by the SQL function `tenancy/current_tenant`, one value a row access ru
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `HoldsPermission(string)`
+#### `HoldsPermission(IRowUser, string)`
 
 ```csharp
-public static bool HoldsPermission(string permission)
+public static bool HoldsPermission(this IRowUser user, string permission)
 ```
 
 Answered by the SQL function `tenancy/holds_permission`, one value a row access rule compares, once per statement when no argument reads the row. Only the database can answer it, so called in C# it throws.
@@ -1076,10 +1080,10 @@ Answered by the SQL function `tenancy/holds_permission`, one value a row access 
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `HoldsAtTenant(string)`
+#### `HoldsAtTenant(IRowUser, string)`
 
 ```csharp
-public static bool HoldsAtTenant(string permission)
+public static bool HoldsAtTenant(this IRowUser user, string permission)
 ```
 
 Answered by the SQL function `tenancy/holds_at_tenant`, one value a row access rule compares, once per statement when no argument reads the row. Only the database can answer it, so called in C# it throws.
@@ -1088,10 +1092,10 @@ Answered by the SQL function `tenancy/holds_at_tenant`, one value a row access r
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `SeatInTenant(TTenantId)`
+#### `SeatInTenant(IRowUser, TTenantId)`
 
 ```csharp
-public static TSeatId SeatInTenant<TSeatId, TTenantId>(TTenantId tenant)
+public static TSeatId SeatInTenant<TSeatId, TTenantId>(this IRowUser user, TTenantId tenant)
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
 ```
@@ -1102,10 +1106,10 @@ Answered by the SQL function `tenancy/seat_in_tenant`, one value a row access ru
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `SeatedInTenant(TTenantId)`
+#### `SeatedInTenant(IRowUser, TTenantId)`
 
 ```csharp
-public static bool SeatedInTenant<TTenantId>(TTenantId tenant)
+public static bool SeatedInTenant<TTenantId>(this IRowUser user, TTenantId tenant)
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
 ```
 
@@ -1115,10 +1119,13 @@ Answered by the SQL function `tenancy/seated_in_tenant`, one value a row access 
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `HoldsPermissionInTenant(TTenantId, string)`
+#### `HoldsPermissionInTenant(IRowUser, TTenantId, string)`
 
 ```csharp
-public static bool HoldsPermissionInTenant<TTenantId>(TTenantId tenant, string permission)
+public static bool HoldsPermissionInTenant<TTenantId>(
+    this IRowUser user,
+    TTenantId tenant,
+    string permission)
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
 ```
 
@@ -1128,10 +1135,11 @@ Answered by the SQL function `tenancy/holds_permission_in_tenant`, one value a r
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `UnitsWhereIHoldInTenant(TTenantId, string)`
+#### `UnitsWhereIHoldInTenant(IRowUser, TTenantId, string)`
 
 ```csharp
 public static AccessSet<TUnitId> UnitsWhereIHoldInTenant<TUnitId, TTenantId>(
+    this IRowUser user,
     TTenantId tenant,
     string permission)
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -1144,10 +1152,11 @@ Answered by the SQL function `tenancy/units_where_i_hold_permission_in_tenant`, 
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
-#### `RolesWithPermissionInTenant(TTenantId, string)`
+#### `RolesWithPermissionInTenant(IRowUser, TTenantId, string)`
 
 ```csharp
 public static AccessSet<TRoleId> RolesWithPermissionInTenant<TRoleId, TTenantId>(
+    this IRowUser user,
     TTenantId tenant,
     string permission)
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
@@ -1165,6 +1174,8 @@ Answered by the SQL function `tenancy/roles_with_permission_in_tenant`, a set a 
 ```csharp
 public static class TenancySaveCheck
 ```
+
+Namespace `DDDToolkit.Supporting.Tenancy.Access`.
 
 The rule every write of a tenant's row passes, whatever wrote it: a seat and system work in a tenant only write their own tenant's rows, and nobody writes any. The storage applies it to every changed row that belongs to a tenant, before anything is written, so a handler that loaded the wrong row cannot save it.
 

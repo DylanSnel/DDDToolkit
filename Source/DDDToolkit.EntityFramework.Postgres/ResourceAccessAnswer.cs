@@ -4,8 +4,9 @@ using DDDToolkit.Abstractions.Attributes;
 namespace DDDToolkit.EntityFramework.Postgres;
 
 /// <summary>
-/// The set a <see cref="ContributedFunction"/> answers for one resource: what a rule asks through a
-/// <c>[ResourceAccessContract&lt;TKey&gt;]</c>, by the resource's id and the set, with no function's name. A script
+/// The set a <see cref="ContributedFunction"/> answers for one resource: what a rule asks with
+/// <c>user.Sees&lt;TKey&gt;()</c>, <c>user.Holds&lt;TKey&gt;(permission)</c> or
+/// <c>user.FellowMembers&lt;TKey, TMemberId&gt;()</c>, by the resource's id and the set, with no function's name. A script
 /// writes such a rule with this function, whatever the contribution calls it.
 /// <code>
 /// new ContributedFunction("documents_i_see", "", "SETOF uuid", body, SecurityDefiner: true, GrantTo: [RowAccessRoles.User],
@@ -25,7 +26,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// lists that package's contribution has nothing more to say.
 /// </para>
 /// </remarks>
-/// <param name="Key">The type of the resource's id, as the model maps it: what the rule's contract is declared with.</param>
+/// <param name="Key">The type of the resource's id, as the model maps it: what the rule asks the question with.</param>
 /// <param name="Set">The set the function answers.</param>
 public sealed record ResourceAccessAnswer(Type Key, ResourceAccessSet Set)
 {
@@ -47,8 +48,8 @@ public sealed record ResourceAccessAnswer(Type Key, ResourceAccessSet Set)
 
     /// <summary>
     /// The name a rule asks a resource access set by, in its SQL as <c>{fn:...}</c>: <c>@</c>, the full name of the
-    /// resource's id, and the set, <c>@Projects.Contracts.ProjectId/seen</c> or <c>.../held_on</c>. It is what a
-    /// contract's generated <c>Name</c> says, so SQL a contribution writes asks the set the same way.
+    /// resource's id, and the set, <c>@Projects.Contracts.ProjectId/seen</c> or <c>.../held_on</c>. It is what the
+    /// generator writes for a rule that asks the set, so SQL a contribution writes asks the set the same way.
     /// </summary>
     /// <param name="key">The type of the resource's id.</param>
     /// <param name="set">The set.</param>

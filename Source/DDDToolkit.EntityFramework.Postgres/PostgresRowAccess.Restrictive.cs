@@ -81,7 +81,7 @@ public static partial class PostgresRowAccess
                 {
                     throw new InvalidOperationException(
                         $"The restrictive rule '{rule.Name}' reads a row of {root.ClrType.Name}, and {follower.DisplayName()} follows {root.ClrType.Name} without being one of its entities in the model, " +
-                        $"so it has no row of {root.ClrType.Name} to ask about. Say it about the caller alone, as TenancyRowAccess.CurrentSeat<TSeat>() does, or narrow {root.ClrType.Name}'s own table with a rule of its own.");
+                        $"so it has no row of {root.ClrType.Name} to ask about. Say it about the caller alone, as user.CurrentSeat<TSeat>() does, or narrow {root.ClrType.Name}'s own table with a rule of its own.");
                 }
 
                 narrowed.Add((follower, [.. FollowingCommands.Where(each => (rule.Operations & each.Operations) != 0).Select(each => (each.Command, Condition: condition))]));

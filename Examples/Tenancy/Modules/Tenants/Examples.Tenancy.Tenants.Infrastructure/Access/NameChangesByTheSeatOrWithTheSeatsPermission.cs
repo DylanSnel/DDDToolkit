@@ -1,6 +1,5 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Examples.Tenancy.Tenants.Application.Seats.Commands;
 
 namespace Examples.Tenancy.Tenants.Infrastructure.Access;
@@ -30,6 +29,6 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Access;
 public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 {
     /// <summary>Whether <paramref name="seat"/> is the calling seat, or the calling seat manages seats for the whole tenant.</summary>
-    public static bool Allows(Seat seat, ICurrentUser user)
-        => seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
+    public static bool Allows(Seat seat, IRowUser user)
+        => seat.Id == user.CurrentSeatId() || user.HoldsAtTenant(RenameSeat.RequiredPermission);
 }

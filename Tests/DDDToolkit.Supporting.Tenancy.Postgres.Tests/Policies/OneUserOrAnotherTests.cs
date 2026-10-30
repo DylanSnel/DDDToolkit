@@ -151,7 +151,7 @@ public sealed class OneUserOrAnotherTests(TenancyPostgres postgres)
 public static partial class OperatorsReadEveryTally
 {
     /// <summary>Every tally.</summary>
-    public static bool Allows(Tally tally, ICurrentUser user) => true;
+    public static bool Allows(Tally tally, IRowUser user) => true;
 }
 
 /// <summary>
@@ -162,5 +162,5 @@ public static partial class OperatorsReadEveryTally
 public static partial class SeatManagersReadTheTallies
 {
     /// <summary>Whether the calling seat manages seats for the whole tenant.</summary>
-    public static bool Allows(Tally tally, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
+    public static bool Allows(Tally tally, IRowUser user) => user.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }

@@ -142,15 +142,15 @@ package and Tenancy's markers package. Boards' context uses the Entity Framework
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.7" />
-    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.7" />
+    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.8" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
@@ -160,9 +160,9 @@ package and Tenancy's markers package. Boards' context uses the Entity Framework
 </Project>
 ```
 
-**The contracts project.** **Why:** other modules may store a board's id. Step 4 adds the contracts that row access
-rules, including other modules' rules, use to ask about boards. Like Tenancy's contracts project, it references only
-the toolkit's core package.
+**The contracts project.** **Why:** other modules may store a board's id. That id is all a module's contracts publish
+of its boards: a row access rule of any module asks about a board by its id. Like Tenancy's contracts project, it
+references only the toolkit's core package.
 
 **`src/Modules/Boards/Harbor.Boards.Contracts/Harbor.Boards.Contracts.csproj`**
 
@@ -690,16 +690,18 @@ lock on the member rows and on the owner column.
 
 ### The idea: a rule in C#, a policy in the database
 
-- **Row access rule**: a static class with `[RowAccess<T>(...)]` and one method, `Allows(row, caller)`. Your
+- **Row access rule**: a static class with `[RowAccess<T>(...)]` and one method, `Allows(row, user)`. Your
   application never calls this method. The export translates it into a policy, and Postgres applies the policy to
   every query.
-- **Asking about boards**: a policy calls the functions that Membership writes from the rules. The functions take a
-  board's id. A rule refers to them through a **contract**: a one-line class in the contracts project, so other
-  modules' rules can use it too. Harbor uses two kinds:
-  - `ResourceAccessSet.Seen`: the boards the caller sees;
-  - `ResourceAccessSet.HeldOn`: the boards the caller holds a given permission on.
-- **Asking about the organization**: a rule calls Tenancy's functions, such as `TenancyRowAccess.UnitsWhereIHold(...)`
-  and `CurrentSeatId()`.
+- **The rule's user**: `Allows` takes an `IRowUser`. Everything a rule asks, it asks of that user. A handler has no
+  `IRowUser`, so what only the database answers cannot be called from a handler.
+- **Asking about boards**: a policy calls the functions that Membership writes from the rules. A rule asks by the
+  board's id, so it names no function, and the module's contracts need to hold nothing but `BoardId`. Harbor asks two
+  questions:
+  - `user.Sees<BoardId>()`: the boards the caller sees;
+  - `user.Holds<BoardId>(permission)`: the boards the caller holds a given permission on.
+- **Asking about the organization**: a rule asks Tenancy's questions of the same user, such as
+  `user.UnitsWhereIHold(...)` and `user.CurrentSeatId()`.
 - **A policy cannot see the command.** Adding a member raises the board's version, so it updates the board row. So
   the rule for changing a board allows anyone who may edit the board or manage its members. The check before the
   handler tells the two commands apart.
@@ -722,48 +724,18 @@ Harbor's rules:
 
 ### What you write
 
-**The two contracts.** **Why:** a rule asks about boards by their id and never names a database function. The export
-finds the function.
-
-**`Harbor.Boards.Contracts/RowAccess/BoardsISee.cs`**
-
-```csharp {7-8}
-using DDDToolkit.Abstractions.Attributes;
-using Harbor.Boards.Contracts.ValueObjects;
-
-namespace Harbor.Boards.Contracts.RowAccess;
-
-// The boards the caller sees, by their id: a question a row access rule asks of the database.
-[ResourceAccessContract<BoardId>(ResourceAccessSet.Seen)]
-public static partial class BoardsISee;
-```
-
-**`Harbor.Boards.Contracts/RowAccess/BoardsWhereIHold.cs`**
-
-```csharp {7-8}
-using DDDToolkit.Abstractions.Attributes;
-using Harbor.Boards.Contracts.ValueObjects;
-
-namespace Harbor.Boards.Contracts.RowAccess;
-
-// The boards the caller holds a permission on, by their id.
-[ResourceAccessContract<BoardId>(ResourceAccessSet.HeldOn)]
-public static partial class BoardsWhereIHold;
-```
-
 **The rules on boards.** **Why:** your application decides what a seat may read and change on a board. Membership
-writes no policy on your board table.
+writes no policy on your board table. A rule asks about boards by their id and never names a database function. The
+export finds the function.
 
 **`Harbor.Boards.Infrastructure/Access/BoardRowRules.cs`**
 
-```csharp {12,15,19,23-24,28,32-33}
+```csharp {10,13,17,21-22,26,30-31}
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Harbor.Boards.Application.Access;
-using Harbor.Boards.Contracts.RowAccess;
+using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
-using Harbor.Tenancy.Contracts.ValueObjects;
 
 namespace Harbor.Boards.Infrastructure.Access;
 
@@ -771,25 +743,25 @@ namespace Harbor.Boards.Infrastructure.Access;
 [RowAccess<Board>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsReadTheBoardsTheySee
 {
-    public static bool Allows(Board board, ICurrentUser user) => BoardsISee.Ids().Contains(board.Id);
+    public static bool Allows(Board board, IRowUser user) => user.Sees<BoardId>().Contains(board.Id);
 }
 
 // A seat opens a board where it holds boards.create, and as its own.
 [RowAccess<Board>(RowOperations.Create, To = [RowAccessRoles.User])]
 public static partial class SeatsOpenBoardsWhereTheyMay
 {
-    public static bool Allows(Board board, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(BoardPermissions.Create).Contains(board.UnitId)
-            && board.OwnerSeatId == TenancyRowAccess.CurrentSeatId<SeatId>();
+    public static bool Allows(Board board, IRowUser user)
+        => user.UnitsWhereIHold(BoardPermissions.Create).Contains(board.UnitId)
+            && board.OwnerSeatId == user.CurrentSeatId();
 }
 
 // A seat changes a board it may edit, or whose members it may manage: adding a member raises the board's version.
 [RowAccess<Board>(RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class SeatsChangeTheBoardsTheyWorkOn
 {
-    public static bool Allows(Board board, ICurrentUser user)
-        => BoardsWhereIHold.Ids(BoardPermissions.Edit).Contains(board.Id)
-            || BoardsWhereIHold.Ids(BoardPermissions.ManageMembers).Contains(board.Id);
+    public static bool Allows(Board board, IRowUser user)
+        => user.Holds<BoardId>(BoardPermissions.Edit).Contains(board.Id)
+            || user.Holds<BoardId>(BoardPermissions.ManageMembers).Contains(board.Id);
 }
 ```
 
@@ -798,13 +770,11 @@ limits who may write a role row.
 
 **`Harbor.Boards.Infrastructure/Access/BoardRoleRowRules.cs`**
 
-```csharp {11,14,18,21}
+```csharp {9,12,16,19}
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Harbor.Boards.Application.Access;
 using Harbor.Boards.Domain.Aggregates.BoardRoles;
-using Harbor.Tenancy.Contracts.ValueObjects;
 
 namespace Harbor.Boards.Infrastructure.Access;
 
@@ -812,14 +782,14 @@ namespace Harbor.Boards.Infrastructure.Access;
 [RowAccess<BoardRole>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsReadTheirTenantsBoardRoles
 {
-    public static bool Allows(BoardRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CurrentTenant<TenantId>();
+    public static bool Allows(BoardRole role, IRowUser user) => role.TenantId == user.CurrentTenant();
 }
 
 // A role's row decides what everybody who holds it may do: only who manages the roles of boards writes one.
 [RowAccess<BoardRole>(RowOperations.Create | RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class RoleManagersWriteBoardRoles
 {
-    public static bool Allows(BoardRole role, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(BoardPermissions.ManageRoles);
+    public static bool Allows(BoardRole role, IRowUser user) => user.HoldsAtTenant(BoardPermissions.ManageRoles);
 }
 ```
 
@@ -861,17 +831,22 @@ database.
 
 ### What it does
 
-- `[ResourceAccessContract<BoardId>(...)]` on an empty `static partial class`: the generator adds the class's `Ids()`
-  method. `BoardsISee.Ids()` takes no argument. `BoardsWhereIHold.Ids(permission)` takes the permission.
+- `IRowUser`: the rule's user, from `DDDToolkit.Abstractions.Access`. That `using` is the only one the questions need.
+- `Harbor.Boards.Contracts` holds only `BoardId`. A rule of any module sees the id, asks the question, and the question
+  answers only for the caller. So a module has no class to publish per question. A question that nothing answers is
+  refused when the export writes the access file.
+- `user.Sees<BoardId>()` takes no argument. `user.Holds<BoardId>(permission)` takes the permission.
+- `user.UnitsWhereIHold(permission)` and `user.CurrentSeatId()` take no type argument. The generator closes Tenancy's
+  questions over the ids of the `TenancyIds` line of step 2, in each project of the module.
 - `RowOperations`: the statements a rule allows. The values are `Read`, `Create`, `Change`, `Remove` and `All`.
   Combine them with `|`, as the role rule does with `Create | Change`. Harbor has no `Remove` rule, so a signed-in
   caller's `DELETE` on these tables removes no row.
 - `To = [RowAccessRoles.User]`: the rule is for signed-in callers, the database role `authenticated`. Another value
   is `RowAccessRoles.Anonymous`, for callers without a user (`anon`).
-- `BoardsISee.Ids().Contains(board.Id)` becomes a subquery in the policy. The subquery calls the boards function once
+- `user.Sees<BoardId>().Contains(board.Id)` becomes a subquery in the policy. The subquery calls the boards function once
   per statement.
 - The create rule makes the database check the same thing as the command: the owner is the caller's seat.
-- `TenancyRowAccess.CurrentTenant<TenantId>()`: the tenant of the caller's seat. `HoldsAtTenant(permission)`: whether
+- `user.CurrentTenant()`: the tenant of the caller's seat. `user.HoldsAtTenant(permission)`: whether
   the caller's seat holds the permission now, at the root, so for the whole tenant.
 - `ManagesMembers`: the member manager adds, changes and removes members only for a caller who holds
   `boards.members.manage` on the board. In the database, a member row is written only on such a board.

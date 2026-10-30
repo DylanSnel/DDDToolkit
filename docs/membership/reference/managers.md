@@ -2117,83 +2117,109 @@ Holds the caller to `requirement`: returns when the caller meets it, and throws 
 - `ConcurrencyConflictException`: The resource is not at the version the request expects.
 - `InvalidOperationException`: The requirement is not one of this check's cases.
 
-## Resource access contracts
+## Asking about a resource by its id
 
-From `DDDToolkit.Abstractions`: how the module that owns a resource with members publishes the sets its access answers, for the row access rules of any module to ask by the resource's id.
+From `DDDToolkit.Abstractions`: the questions a row access rule of any module asks about a resource with members, by the resource's id, and the sets its access answers.
 
-Namespace `DDDToolkit.Abstractions.Attributes`.
-
-### `ResourceAccessContractAttribute<TKey>`
+### `ResourceQuestions`
 
 ```csharp
-[AttributeUsage(AttributeTargets.Class, Inherited = false)]
-public sealed class ResourceAccessContractAttribute<TKey> : Attribute
+public static class ResourceQuestions
 ```
 
-Publishes one set the access to a resource answers, the resources the caller sees or those it holds a permission on, or the members of the resources it is a member of, for row access rules to ask by the resource's id, typed, with no function's name anywhere. Apply, in the contracts of the module that owns the resource, to an empty `static partial class`; the generator adds `Name` and `Ids(...)`:
+Namespace `DDDToolkit.Abstractions.Access`.
+
+The questions a row access rule asks about a resource, by the resource's id. A module publishes the id in its contracts, and that is all a rule of any module needs:
 
 ```csharp
-// Projects.Contracts
-[ModuleContract]
-[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)]
-public static partial class ProjectsISee;
-
-[ModuleContract]
-[ResourceAccessContract<ProjectId>(ResourceAccessSet.HeldOn)]
-public static partial class ProjectsWhereIHold;
-
-// The people on the projects the caller works on: their ids are the members', so the contract says which
-[ModuleContract]
-[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]
-public static partial class PeopleOnMyProjects
-{
-    public static partial AccessSet<SeatId> Ids();
-}
-
-// A rule of Inspections, and one of Projects' own, alike
-public static bool Allows(Inspection inspection, ICurrentUser user) => ProjectsISee.Ids().Contains(inspection.ProjectId);
-public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
-
-// A read rule on the application's seat class
-public static bool Allows(Seat seat, ICurrentUser user) => PeopleOnMyProjects.Ids().Contains(seat.Id);
+public static bool Allows(Checklist checklist, IRowUser user) => user.Sees<BoardId>().Contains(checklist.BoardId);
+public static bool Allows(Board board, IRowUser user) => user.Holds<BoardId>(BoardPermissions.Edit).Contains(board.Id);
+public static bool Allows(Seat seat, IRowUser user) => user.FellowMembers<BoardId, SeatId>().Contains(seat.Id);
 ```
-
-**Type parameters**
-
-- `TKey`: The id of the resource's aggregate: what the set holds, but for the members' set, and how the export finds the resource. One declared with `[EntityId<T>]`, or, in the project that declares the aggregate, the one the toolkit writes for an aggregate root declared with a value, `BoardId` for `[AggregateRoot<Guid>] public partial class Board`.
 
 **Remarks**
 
-Which SQL function answers is not the contract's to say. The function is written by the package that keeps the resource's access, under the name that package gives it: the Membership package writes the functions of a resource with members under the names of its rules, which are taken from the resource's name unless the rules keep names a database already has. The export finds the function that answers the set for the resource whose id is `TKey`, and writes the policy with its name. So the name is said in one place or in none, and a rule that asks a set no package answers is refused when its access file is written, naming the rule.
+Each question names no function. The generator writes it as the resource's id and the set, `{fn:@Boards.Contracts.BoardId/seen}`, and the export resolves that to the function a contribution says answers the set for that resource, under whatever name the package that keeps the resource's access gives it. A rule that asks a set no contribution answers is refused when its access file is written, naming the rule.
 
-A rule of another module asks the contract, and so references neither the owning module's aggregate nor the package that answers: what the owning module publishes is that its projects are seen and held, and how is its own. Its own rules ask the same contract, so a question has one name in every module. And only the owning module declares one: a contract of an id whose assembly declares another module is DDD00038, so what a module publishes of its resources stays its own to say, and another module asks what it publishes.
-
-The class may declare its question itself, to write its own documentation on it, and the generator implements it: `static partial AccessSet<ProjectId> Ids();` for [`ResourceAccessSet.Seen`](#resourceaccessset), and `static partial AccessSet<ProjectId> Ids(string permission);` for [`ResourceAccessSet.HeldOn`](#resourceaccessset). For [`ResourceAccessSet.FellowMembers`](#resourceaccessset) it declares it, always, with the id its members are known by: `static partial AccessSet<SeatId> Ids();`. Called in C#, `Ids` throws: only the database answers it.
+Each question answers only for the caller of the connection, so anyone who sees the id may ask it. Only the database answers. Called in C#, each throws `DatabaseOnlyException`. They are extension methods on `IRowUser`, so they cannot be called where there is no rule.
 
 | Member | Summary |
 |---|---|
-| [`ResourceAccessContractAttribute(ResourceAccessSet)`](#resourceaccesscontractattributeresourceaccessset) | The primary constructor: the type's summary says what it makes. |
-| `ResourceAccessSet Set { get; }` | Which set the contract publishes. |
+| [`Sees(IRowUser)`](#seesirowuser) | The ids of the resources the caller sees. |
+| [`Holds(IRowUser, string)`](#holdsirowuser-string) | The ids of the resources on which the caller holds `permission`. |
+| [`FellowMembers(IRowUser)`](#fellowmembersirowuser) | The ids of the members of every resource the caller is a member of now, the caller among them: the people on the projects a seat works on, which a read rule on the application's seat class asks to let a seat read who it works with. |
 
-#### `ResourceAccessContractAttribute(ResourceAccessSet)`
+#### `Sees(IRowUser)`
 
 ```csharp
-public ResourceAccessContractAttribute(ResourceAccessSet set)
+public static AccessSet<TKey> Sees<TKey>(this IRowUser user)
+    where TKey : struct, IEntityId
 ```
 
-The primary constructor: the type's summary says what it makes.
+The ids of the resources the caller sees. A resource with members is seen by its members, by its owner, and, where its rules let a permission held above reach it, by whoever holds the permission that sees it there.
 
 **Parameters**
 
-- `set`: Which set the contract publishes.
+- `user`: The rule's user.
 
-**Remarks**
+**Type parameters**
 
-Which SQL function answers is not the contract's to say. The function is written by the package that keeps the resource's access, under the name that package gives it: the Membership package writes the functions of a resource with members under the names of its rules, which are taken from the resource's name unless the rules keep names a database already has. The export finds the function that answers the set for the resource whose id is `TKey`, and writes the policy with its name. So the name is said in one place or in none, and a rule that asks a set no package answers is refused when its access file is written, naming the rule.
+- `TKey`: The id of the resource's aggregate.
 
-A rule of another module asks the contract, and so references neither the owning module's aggregate nor the package that answers: what the owning module publishes is that its projects are seen and held, and how is its own. Its own rules ask the same contract, so a question has one name in every module. And only the owning module declares one: a contract of an id whose assembly declares another module is DDD00038, so what a module publishes of its resources stays its own to say, and another module asks what it publishes.
+**Returns**: Nothing in C#. A rule asks the answer's `Contains`, in SQL.
 
-The class may declare its question itself, to write its own documentation on it, and the generator implements it: `static partial AccessSet<ProjectId> Ids();` for [`ResourceAccessSet.Seen`](#resourceaccessset), and `static partial AccessSet<ProjectId> Ids(string permission);` for [`ResourceAccessSet.HeldOn`](#resourceaccessset). For [`ResourceAccessSet.FellowMembers`](#resourceaccessset) it declares it, always, with the id its members are known by: `static partial AccessSet<SeatId> Ids();`. Called in C#, `Ids` throws: only the database answers it.
+**Exceptions**
+
+- `DatabaseOnlyException`: Always, since the question is the database's.
+
+#### `Holds(IRowUser, string)`
+
+```csharp
+public static AccessSet<TKey> Holds<TKey>(this IRowUser user, string permission)
+    where TKey : struct, IEntityId
+```
+
+The ids of the resources on which the caller holds `permission`. On a resource with members a permission is held through a role, by being a member for the permission that being one gives, by owning the resource, or from above.
+
+**Parameters**
+
+- `user`: The rule's user.
+- `permission`: A permission.
+
+**Type parameters**
+
+- `TKey`: The id of the resource's aggregate.
+
+**Returns**: Nothing in C#. A rule asks the answer's `Contains`, in SQL.
+
+**Exceptions**
+
+- `DatabaseOnlyException`: Always, since the question is the database's.
+
+#### `FellowMembers(IRowUser)`
+
+```csharp
+public static AccessSet<TMemberId> FellowMembers<TKey, TMemberId>(this IRowUser user)
+    where TKey : struct, IEntityId
+    where TMemberId : struct, IEntityId
+```
+
+The ids of the members of every resource the caller is a member of now, the caller among them: the people on the projects a seat works on, which a read rule on the application's seat class asks to let a seat read who it works with.
+
+**Parameters**
+
+- `user`: The rule's user.
+
+**Type parameters**
+
+- `TKey`: The id of the resource's aggregate.
+- `TMemberId`: The id the members are known by, such as `SeatId`, which the resource's id does not say.
+
+**Returns**: Nothing in C#. A rule asks the answer's `Contains`, in SQL.
+
+**Exceptions**
+
+- `DatabaseOnlyException`: Always, since the question is the database's.
 
 ### `ResourceAccessSet`
 
@@ -2201,7 +2227,9 @@ The class may declare its question itself, to write its own documentation on it,
 public enum ResourceAccessSet
 ```
 
-Which set a [`ResourceAccessContractAttribute<TKey>`](#resourceaccesscontractattributetkey) publishes: one of the questions the access to a resource answers for the caller of the connection, with the ids of the resources it answers yes for, or, for [`FellowMembers`](#resourceaccessset), with the ids of the members it finds.
+Namespace `DDDToolkit.Abstractions.Attributes`.
+
+One of the questions the access to a resource answers for the caller of the connection, with the ids of the resources it answers yes for, or, for [`FellowMembers`](#resourceaccessset), with the ids of the members it finds. A row access rule asks each through [`ResourceQuestions`](#resourcequestions), by the resource's id.
 
 **Remarks**
 
@@ -2209,6 +2237,6 @@ The package that keeps the resource's access writes the function that answers ea
 
 | Member | Summary |
 |---|---|
-| `Seen = 0` | The resources the caller sees, asked without arguments: `Ids()`. A resource with members is seen by its members, by its owner, and, where its rules let a permission held above reach it, by whoever holds the permission that sees it there. |
-| `HeldOn = 1` | The resources the caller holds a permission on, asked with the permission: `Ids(string permission)`. On a resource with members a permission is held through a role, by being a member for the permission that being one gives, by owning the resource, or from above. |
-| `FellowMembers = 2` | The members of every resource the caller is a member of now, the caller among them, asked without arguments: `Ids()`. Its ids are the members', not the resources': the people on the projects a seat works on, say, which a read rule on the application's seat class asks to let a seat read who it works with. The contract declares its `Ids` itself, with the id its members are known by, `static partial AccessSet<SeatId> Ids();`, since the resource's id does not say it. |
+| `Seen = 0` | The resources the caller sees, asked without arguments: `user.Sees<TKey>()`. A resource with members is seen by its members, by its owner, and, where its rules let a permission held above reach it, by whoever holds the permission that sees it there. |
+| `HeldOn = 1` | The resources the caller holds a permission on, asked with the permission: `user.Holds<TKey>(permission)`. On a resource with members a permission is held through a role, by being a member for the permission that being one gives, by owning the resource, or from above. |
+| `FellowMembers = 2` | The members of every resource the caller is a member of now, the caller among them, asked without arguments: `user.FellowMembers<TKey, TMemberId>()`. Its ids are the members', not the resources': the people on the projects a seat works on, say, which a read rule on the application's seat class asks to let a seat read who it works with. |

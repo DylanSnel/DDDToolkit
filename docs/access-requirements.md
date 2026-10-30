@@ -326,8 +326,8 @@ refused every caller without an id, so the handler writes no check of its own.
 - **`IsAuthenticated` narrows `Id`.** Where both cases happen, such as behind `[AllowAnonymous]`, test
   `user.IsAuthenticated`. After it is true, the compiler knows that `user.Id` has a value, so `user.Id.Value` gives
   no warning CS8629. `CurrentUserSnapshot.IsAuthenticated` does the same for a snapshot.
-- **A row access rule compares `user.Id`.** `RequireId()` has no SQL, so a rule that calls it gets
-  [DDD00039](diagnostics.md#ddd00039).
+- **A row access rule compares `user.Id`.** A rule's user is an
+  [`IRowUser`](row-level-security.md#row-access-rules-written-in-c), which has no `RequireId()`.
 
 ```csharp
 // Behind [SignedIn], the access check let only a signed-in user through.
@@ -1084,13 +1084,13 @@ public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : I
 [RowAccess<AuditEntry>(RowOperations.Read, To = [RowAccessRoles.TokenPrefix + "operator"])]
 public static partial class OperatorsReadTheAuditLog
 {
-    public static bool Allows(AuditEntry entry, ICurrentUser user) => true;
+    public static bool Allows(AuditEntry entry, IRowUser user) => true;
 }
 
 [RowAccess<AuditEntry>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatManagersReadTheAuditLog
 {
-    public static bool Allows(AuditEntry entry, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
+    public static bool Allows(AuditEntry entry, IRowUser user) => user.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }
 ```
 
@@ -1119,7 +1119,7 @@ policy, and uses it to find the policy again.
 The same applies to the caller's own. `RenameSeat` lets a seat rename itself, or any seat with the permission. The
 Tenancy sample's column rule on the seat's name, `NameChangesByTheSeatOrWithTheSeatsPermission`, repeats both
 alternatives for each row:
-`seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission)`.
+`seat.Id == user.CurrentSeatId() || user.HoldsAtTenant(RenameSeat.RequiredPermission)`.
 
 ## System work
 

@@ -29,23 +29,26 @@ public class TenancyReadRuleGeneratorTests
         """;
 
     [Theory]
-    [InlineData("seat.TenantId == TenancyRowAccess.CurrentTenant<TenantId>()", "({col:TenantId} = (SELECT {fn:tenancy/current_tenant}()))")]
-    [InlineData("seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>()", "({col:Id} = (SELECT {fn:tenancy/current_seat}()))")]
-    [InlineData("TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}())))")]
-    [InlineData("TenancyRowAccess.HoldsPermission(TenancyPermissions.SeatsManage)", "(SELECT {fn:tenancy/holds_permission}('tenancy.seats.manage'))")]
-    [InlineData("TenancyRowAccess.HoldsAtTenant(TenancyPermissions.RolesManage)", "(SELECT {fn:tenancy/holds_at_tenant}('tenancy.roles.manage'))")]
+    [InlineData("seat.TenantId == user.CurrentTenant<TenantId>()", "({col:TenantId} = (SELECT {fn:tenancy/current_tenant}()))")]
+    [InlineData("seat.Id == user.CurrentSeatId<SeatId>()", "({col:Id} = (SELECT {fn:tenancy/current_seat}()))")]
+    [InlineData("user.SeatsInMyUnits<SeatId>().Contains(seat.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}())))")]
+    [InlineData("seat.TenantId == user.CurrentTenant()", "({col:TenantId} = (SELECT {fn:tenancy/current_tenant}()))")]
+    [InlineData("seat.Id == user.CurrentSeatId()", "({col:Id} = (SELECT {fn:tenancy/current_seat}()))")]
+    [InlineData("user.SeatsInMyUnits().Contains(seat.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}())))")]
+    [InlineData("user.HoldsPermission(TenancyPermissions.SeatsManage)", "(SELECT {fn:tenancy/holds_permission}('tenancy.seats.manage'))")]
+    [InlineData("user.HoldsAtTenant(TenancyPermissions.RolesManage)", "(SELECT {fn:tenancy/holds_at_tenant}('tenancy.roles.manage'))")]
     [InlineData("seat.Identity == user.Id", "({col:Identity} IS NOT DISTINCT FROM {user:uid})")]
     public void A_building_block_in_a_read_rule_on_the_seat_class_is_asked_once_per_statement(string expression, string sql)
         => RuleSqlOf("Seat", "seat", expression).Should().Be(sql);
 
     [Fact]
     public void Where_the_caller_holds_a_key_is_a_set_an_invitation_rule_asks_by_the_invitations_unit()
-        => RuleSqlOf("Invitation", "invitation", "TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId)")
+        => RuleSqlOf("Invitation", "invitation", "user.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId)")
             .Should().Be("({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold_permission}('tenancy.grants.manage'))))");
 
     [Fact]
     public void The_building_blocks_combine_as_any_conditions_do()
-        => RuleSqlOf("Seat", "seat", "seat.Id == TenancyRowAccess.CurrentSeatId<SeatId>() || TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)")
+        => RuleSqlOf("Seat", "seat", "seat.Id == user.CurrentSeatId<SeatId>() || user.SeatsInMyUnits<SeatId>().Contains(seat.Id)")
             .Should().Be("(({col:Id} = (SELECT {fn:tenancy/current_seat}())) OR ({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}()))))");
 
     /// <summary>
@@ -62,7 +65,6 @@ public class TenancyReadRuleGeneratorTests
                 using DDDToolkit.Abstractions.Access;
                 using DDDToolkit.Abstractions.Attributes;
                 using DDDToolkit.Supporting.Tenancy;
-                using DDDToolkit.Supporting.Tenancy.Access;
                 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
                 namespace Campus.Tenants;
@@ -70,7 +72,7 @@ public class TenancyReadRuleGeneratorTests
                 [RowAccess<{{aggregate}}>(RowOperations.Read, To = [RowAccessRoles.User])]
                 public static partial class TheRule
                 {
-                    public static bool Allows({{aggregate}} {{parameter}}, ICurrentUser user) => {{expression}};
+                    public static bool Allows({{aggregate}} {{parameter}}, IRowUser user) => {{expression}};
                 }
                 """,
                 "TheRule.cs")

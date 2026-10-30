@@ -1,6 +1,5 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
 namespace Examples.Tenancy.Projects.Infrastructure.Access;
@@ -16,5 +15,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class RoleManagersChangeTheProjectRoles
 {
     /// <summary>Whether the seat holds the permission that manages the tenant's roles at its root.</summary>
-    public static bool Allows(ProjectRole role, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.RolesManage);
+    public static bool Allows(ProjectRole role, IRowUser user) => user.HoldsAtTenant(TenancyPermissions.RolesManage);
 }

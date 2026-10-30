@@ -1,6 +1,5 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy.Access;
 
 namespace Examples.Tenancy.Projects.Infrastructure.Access;
 
@@ -19,8 +18,8 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class SeatsOpenProjectsWhereTheyMay
 {
     /// <summary>Whether the calling seat may open <paramref name="project"/> at the unit it names, for the owner it names.</summary>
-    public static bool Allows(Project project, ICurrentUser user)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.Open).Contains(project.UnitId)
-           && (project.OwnerSeatId == TenancyRowAccess.CurrentSeatId<SeatId>()
-               || TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.ChangeOwner).Contains(project.UnitId));
+    public static bool Allows(Project project, IRowUser user)
+        => user.UnitsWhereIHold(ProjectPermissionNames.Open).Contains(project.UnitId)
+           && (project.OwnerSeatId == user.CurrentSeatId()
+               || user.UnitsWhereIHold(ProjectPermissionNames.ChangeOwner).Contains(project.UnitId));
 }

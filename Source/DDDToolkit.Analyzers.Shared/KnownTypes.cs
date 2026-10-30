@@ -91,12 +91,6 @@ internal static class KnownTypes
     /// <summary>An access function published in a module's contracts, asked by key: <c>[AccessFunctionContract&lt;TKey&gt;]</c>.</summary>
     public const string AccessFunctionContractAttribute = AttributesNamespace + ".AccessFunctionContractAttribute`1";
 
-    /// <summary>
-    /// A set the access to a resource answers, published in a module's contracts and asked by the resource's id:
-    /// <c>[ResourceAccessContract&lt;TKey&gt;]</c>.
-    /// </summary>
-    public const string ResourceAccessContractAttribute = AttributesNamespace + ".ResourceAccessContractAttribute`1";
-
     /// <summary>A class of questions only the database answers, and the owner of the functions it names: <c>[AccessFunctions]</c>.</summary>
     public const string AccessFunctionsAttribute = AttributesNamespace + ".AccessFunctionsAttribute";
 
@@ -113,7 +107,10 @@ internal static class KnownTypes
     public const string AccessSet = "DDDToolkit.Abstractions.Access.AccessSet`1";
 
     /// <summary>Who is asking, as a row access rule sees them.</summary>
-    public const string CurrentUser = "DDDToolkit.Abstractions.Access.ICurrentUser";
+    public const string RowUser = "DDDToolkit.Abstractions.Access.IRowUser";
+
+    /// <summary>The questions a row access rule asks about a resource, by the resource's id: <c>user.Sees&lt;TKey&gt;()</c> and the others.</summary>
+    public const string ResourceQuestions = "DDDToolkit.Abstractions.Access.ResourceQuestions";
 
     /// <summary>SQL written into a row access rule as it is: <c>Sql.Call</c> and <c>Sql.Raw</c>.</summary>
     public const string SqlEscape = "DDDToolkit.Abstractions.Access.Sql";

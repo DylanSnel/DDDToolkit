@@ -3,7 +3,6 @@ using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using Examples.Tenancy.Projects.Application.Access;
 using Examples.Tenancy.Projects.Contracts.Permissions;
-using Examples.Tenancy.Projects.Contracts.RowAccess;
 using Examples.Tenancy.Projects.Domain.Aggregates.Projects;
 using Examples.Tenancy.Projects.Infrastructure.Access;
 using Microsoft.EntityFrameworkCore;
@@ -94,7 +93,8 @@ public sealed class UnitChangesWithItsPermissions : IRowAccessContribution
         // What the application's own checks ask, as the policies ask it: Tenancy's set of units where the calling
         // seat holds a permission, and the projects' set of projects it holds one on, however it holds it.
         string HeldAt(string permission, string where) => $"{where} = ANY (ARRAY(SELECT {{fn:tenancy/units_where_i_hold_permission}}({RowAccessModel.Literal(permission)})))";
-        string HeldOn(string permission, string project) => $"{project} = ANY (ARRAY(SELECT {{fn:{ProjectsWhereIHold.Name}}}({RowAccessModel.Literal(permission)})))";
+        var heldOn = ResourceAccessAnswer.NameOf(typeof(ProjectId), ResourceAccessSet.HeldOn);
+        string HeldOn(string permission, string project) => $"{project} = ANY (ARRAY(SELECT {{fn:{heldOn}}}({RowAccessModel.Literal(permission)})))";
         // Refused as the toolkit's own access guards refuse, with its hint and the trigger's name: a save the trigger
         // refuses is access.refused to the caller, a 403, and the warning in the log names the trigger.
         string Refusal(string message) => RowAccessModel.Refusal(Trigger, message);

@@ -17,7 +17,8 @@ namespace DDDToolkit.Abstractions.Access;
 /// as a user with claims of its own.
 /// <para>
 /// A snapshot has the members <see cref="ICurrentUser"/> has, with the same answers. Postgres is given the same
-/// answer on each connection a context opens, so a row access rule answers the same in a handler as in a policy.
+/// answer on each connection a context opens, so a row access rule run in C# with <see cref="RowUser.From"/> answers the
+/// same as its policy.
 /// </para>
 /// <para>
 /// <c>FromClaims</c> makes a user of a validated access token's claims. <c>DDDToolkit.Auth.Supabase</c> does

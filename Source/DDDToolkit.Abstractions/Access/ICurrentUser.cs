@@ -46,10 +46,8 @@ namespace DDDToolkit.Abstractions.Access;
 /// started inside, and back to the user before it when the result is disposed.
 /// </para>
 /// <para>
-/// <b>Row access rules.</b> A rule takes it as its second parameter, <c>Allows(Order order, ICurrentUser user)</c>. The
-/// generator translates <see cref="Id"/>, <see cref="IsAuthenticated"/>, <see cref="Role"/> and
-/// <see cref="FindClaim"/> into SQL, so a rule answers the same in C# as in the database. A rule that uses another
-/// member, such as <see cref="RequireId"/> or <see cref="RequireSystemWork"/>, gets DDD00039.
+/// <b>Row access rules.</b> A rule does not take this interface. It takes <see cref="IRowUser"/>, which holds what the
+/// generator translates, and on which the questions only the database answers are extension methods.
 /// </para>
 /// <para>
 /// The toolkit's implementation is <c>CurrentUser</c> in the <c>DDDToolkit</c> package, which every registration of the
@@ -66,8 +64,7 @@ public interface ICurrentUser
 
     /// <summary>
     /// The signed-in user's id, the <c>sub</c> of their token. <see langword="null"/> for system work, for somebody who
-    /// has not signed in, and for a token whose <c>sub</c> is no <see cref="Guid"/>. In a row access rule it is
-    /// <c>auth.uid()</c>.
+    /// has not signed in, and for a token whose <c>sub</c> is no <see cref="Guid"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <c>NoCurrentUserException</c>: nothing began a user for the work, and the host requires every flow of work to begin one.
@@ -75,8 +72,7 @@ public interface ICurrentUser
     Guid? Id { get; }
 
     /// <summary>
-    /// Whether a user signed in. It is true when <see cref="Id"/> has a value. In a row access rule it is
-    /// <c>auth.uid() IS NOT NULL</c>.
+    /// Whether a user signed in. It is true when <see cref="Id"/> has a value.
     /// <para>
     /// After it answers true, the compiler treats <see cref="Id"/> as not null, so <c>user.Id.Value</c> gives no
     /// warning. A handler behind <c>[SignedIn]</c> reads the id with <see cref="RequireId"/> instead.
@@ -110,8 +106,7 @@ public interface ICurrentUser
 
     /// <summary>
     /// The role the user's token carries: <c>authenticated</c>, <c>anon</c>, or a role that the identity provider gave
-    /// the user. <see langword="null"/> for system work, and for a token without a role claim. In a row access rule it
-    /// is <c>auth.role()</c>.
+    /// the user. <see langword="null"/> for system work, and for a token without a role claim.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <c>NoCurrentUserException</c>: nothing began a user for the work, and the host requires every flow of work to begin one.
@@ -136,8 +131,7 @@ public interface ICurrentUser
 
     /// <summary>
     /// A claim of the user's token, as text, or <see langword="null"/> when the token has no such claim.
-    /// <c>FindClaim("email")</c> reads a top-level claim, and <c>FindClaim("app_metadata.role")</c> a nested one. In a row
-    /// access rule it is <c>auth.jwt() -&gt;&gt; 'email'</c> and <c>auth.jwt() #&gt;&gt; '{app_metadata,role}'</c>.
+    /// <c>FindClaim("email")</c> reads a top-level claim, and <c>FindClaim("app_metadata.role")</c> a nested one.
     /// </summary>
     /// <param name="path">The claim's name, or a path of names separated by dots.</param>
     /// <exception cref="InvalidOperationException">
@@ -158,8 +152,6 @@ public interface ICurrentUser
     /// Anyone else is refused with <c>access.not-signed-in</c>, as <c>[SignedIn]</c> refuses them. So a handler that
     /// runs without the access check refuses such a caller in the same way. Where both cases happen, such as behind
     /// <c>[AllowAnonymous]</c>, code tests <see cref="IsAuthenticated"/> and then reads <see cref="Id"/>.
-    /// A row access rule cannot call it. The generator reports DDD00039 on the call, and a rule compares
-    /// <see cref="Id"/> instead.
     /// </summary>
     /// <returns>The value of <see cref="Id"/>.</returns>
     /// <exception cref="Exception">

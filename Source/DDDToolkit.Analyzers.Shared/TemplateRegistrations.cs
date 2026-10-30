@@ -92,6 +92,11 @@ namespace DDDToolkit.Analyzers.Common;
 /// module below it has: the class the container makes, which the registration registers. Where there is none, it is
 /// filled with the package's class itself, closed over them.
 /// </para>
+/// <para>
+/// A method marked <c>[TemplateRegistration(Shorthand = true)]</c> only saves the type arguments of a call, and may be
+/// called from any project: Tenancy's questions, which a row access rule asks. Each project of a module that sees it gets
+/// its own wrapper, and it reports nothing when it cannot be closed, since the generic method answers just the same.
+/// </para>
 /// </summary>
 internal static class TemplateRegistrations
 {
@@ -205,7 +210,17 @@ internal static class TemplateRegistrations
     /// <param name="templateMetadataName">The template attribute's metadata name, <c>Namespace.MemberAttribute`4</c>.</param>
     /// <param name="cancellationToken">Stops the work.</param>
     public static bool Registers(Compilation compilation, string templateMetadataName, CancellationToken cancellationToken)
-        => MethodsIn(compilation, cancellationToken).Any(method => TakesOf(method) is { } takes && takes.Any(take => take?.MetadataName == templateMetadataName));
+        => MethodsIn(compilation, cancellationToken).Any(method => !IsShorthand(method) && TakesOf(method) is { } takes && takes.Any(take => take?.MetadataName == templateMetadataName));
+
+    /// <summary>
+    /// Whether a method's <c>[TemplateRegistration]</c> says its wrapper only saves type arguments: every project it
+    /// concerns gets one, and it says nothing when it cannot be closed.
+    /// </summary>
+    private static bool IsShorthand(IMethodSymbol method)
+        => method.GetAttributes().Any(static attribute =>
+            attribute.AttributeClass is { } attributeClass
+            && EntityDeclarations.Is(attributeClass, KnownTypes.TemplateRegistrationAttribute)
+            && attribute.NamedArguments.Any(static named => named.Key == "Shorthand" && named.Value.Value is true));
 
     /// <summary>
     /// What the files report, said once for the project, where the methods of several files would each say the
@@ -328,7 +343,11 @@ internal static class TemplateRegistrations
                 }
 
                 relevant = true;
-                diagnostics.AddRange(outcome.Diagnostics);
+                if (!IsShorthand(method))
+                {
+                    diagnostics.AddRange(outcome.Diagnostics);
+                }
+
                 wrappers.AddRange(outcome.Wrappers);
             }
 
@@ -644,7 +663,7 @@ internal static class TemplateRegistrations
             return null;
         }
 
-        if (module is not null && HeldBelow(method, sources, module, compilation, cancellationToken))
+        if (module is not null && !IsShorthand(method) && HeldBelow(method, sources, module, compilation, cancellationToken))
         {
             return null;
         }
