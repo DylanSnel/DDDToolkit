@@ -2504,7 +2504,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   names, descriptions or ids of your own. Where no constructor fits, or the role id has no `Create()`, `makeRole` is required,
   with no default, so the failure shows at the call. No diagnostic fires on the role class. A member that holds the tenant's
   own roles, or named roles, gets nothing of this.
-- **`CurrentTenant.RequireSeat()`** beside `Require()`, answering a new `SeatInTenant<TTenantId, TSeatId>(Id, Seat, BySystem)`
+- **`CurrentTenant.RequireSeat()`** beside `Require()`, answering a new `SeatInScope<TTenantId, TSeatId>(Id, Seat, BySystem)`
   with a `Seat` that is not nullable. A user who is nobody gets the refusal `Require()` gives. System work in the tenant acting
   for a seat answers that seat, with `BySystem` true. System work acting for no seat is an `InvalidOperationException` that
   names the overload of `BeginSystemIn` that takes a seat.

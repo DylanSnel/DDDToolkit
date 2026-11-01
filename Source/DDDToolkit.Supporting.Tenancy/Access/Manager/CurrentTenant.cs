@@ -88,7 +88,7 @@ public sealed class CurrentTenant<TTenantId, TSeatId>
     /// </summary>
     /// <returns>
     /// The tenant and the seat: the user's seat, or for system work in the tenant the seat it acts for, with
-    /// <see cref="SeatInTenant{TTenantId, TSeatId}.BySystem"/> set.
+    /// <see cref="SeatInScope{TTenantId, TSeatId}.BySystem"/> set.
     /// </returns>
     /// <exception cref="Exceptions.RefusalException">
     /// The user is nobody, with the refusal <see cref="Require"/> gives: <c>tenancy.tenant-required</c>,
@@ -105,11 +105,11 @@ public sealed class CurrentTenant<TTenantId, TSeatId>
     /// var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, scope.Seat, clock.GetUtcNow());
     /// </code>
     /// </example>
-    public SeatInTenant<TTenantId, TSeatId> RequireSeat()
+    public SeatInScope<TTenantId, TSeatId> RequireSeat()
     {
         var tenant = Require();
         return tenant.Seat is { } seat
-            ? new SeatInTenant<TTenantId, TSeatId>(tenant.Id, seat, tenant.BySystem)
+            ? new SeatInScope<TTenantId, TSeatId>(tenant.Id, seat, tenant.BySystem)
             : throw new InvalidOperationException(
                 "System work in tenant " + tenant.Id + " acts for no seat, and this work needs one. Begin it with the overload that takes a seat: access.BeginSystemIn(tenant, actingSeat).");
     }

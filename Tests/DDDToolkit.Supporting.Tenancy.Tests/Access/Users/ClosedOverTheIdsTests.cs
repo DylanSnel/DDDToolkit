@@ -178,7 +178,7 @@ public class ClosedOverTheIdsTests
         {
             var scope = Access.CurrentTenant.RequireSeat();
 
-            scope.Should().Be(new SeatInTenant<TenantId, SeatId>(Harbor, Ada, BySystem: false));
+            scope.Should().Be(new SeatInScope<TenantId, SeatId>(Harbor, Ada, BySystem: false));
             SeatId seat = scope.Seat;
             seat.Should().Be(Ada);
         }
@@ -200,7 +200,7 @@ public class ClosedOverTheIdsTests
     {
         using (Access.BeginSystemIn(Harbor, Ada))
         {
-            Access.CurrentTenant.RequireSeat().Should().Be(new SeatInTenant<TenantId, SeatId>(Harbor, Ada, BySystem: true));
+            Access.CurrentTenant.RequireSeat().Should().Be(new SeatInScope<TenantId, SeatId>(Harbor, Ada, BySystem: true));
         }
     }
 

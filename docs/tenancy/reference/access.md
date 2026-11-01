@@ -406,7 +406,7 @@ var board = Board.Open(BoardId.Create(), current.Id, command.Name, openedBy: cur
 #### `RequireSeat()`
 
 ```csharp
-public SeatInTenant<TTenantId, TSeatId> RequireSeat()
+public SeatInScope<TTenantId, TSeatId> RequireSeat()
 ```
 
 The tenant the current work acts in, with the seat, for work that a seat does. It reads nothing. A user who is nobody gets the refusal [`Require`](#require) gives.
@@ -492,10 +492,10 @@ The ids of the active and the suspended tenants, in no order. The read is no sea
 
 - `ArgumentException`: `scope` is not a scope. Nothing is read then.
 
-### `SeatInTenant<TTenantId, TSeatId>`
+### `SeatInScope<TTenantId, TSeatId>`
 
 ```csharp
-public readonly record struct SeatInTenant<TTenantId, TSeatId>
+public readonly record struct SeatInScope<TTenantId, TSeatId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
