@@ -627,6 +627,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `netstandard2.0` build of `DDDToolkit.Abstractions` declares the attribute internally. The docs, the Tenancy
   tutorial, the samples and the skill read the id with `RequireId()` where they threw on a missing id behind
   `[SignedIn]`. See [The id of the signed-in user](docs/access-requirements.md#the-id-of-the-signed-in-user).
+- **DDD00107 names why a call to an access behavior's registration does not compile.** The compiler reports only
+  CS1061 at `services.AddBillingAccessBehavior()`. An analyzer now reports the error DDD00107 beside it, at the same
+  call. The generator declares the registration in the namespace of the `[AccessRequests]` interface, and the message
+  names the `using` that a file outside that namespace needs. A registration class one namespace up is such a file. The
+  generator writes the registration only in a project that references the Mediator library, and the message names the
+  project that lacks `Mediator.Abstractions`. A project without the library that asks
+  `AccessChecks<TRequests>.RequireAsync` itself writes no such call, so nothing is reported there. The docs now say
+  where the registration is declared. See [DDD00107](docs/diagnostics.md#ddd00107).
 
 #### Entity Framework and row level security
 

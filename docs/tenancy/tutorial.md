@@ -625,7 +625,8 @@ public static class TenancyModule
   request interface derives from it.
 - `partial`: the generator adds a `RequiredAccess` property to `ITenancyRequest`, with one line for each request.
 - `AddTenancyAccessBehavior()` is generated for `ITenancyRequest`. It registers the behavior that runs the check before
-  each handler.
+  each handler. It is in the namespace of `ITenancyRequest`, one namespace below `TenancyApplication`, so the
+  `global using` of `Harbor.Tenancy.Application.Access` is what makes the call compile.
 - `AddDDDToolkitEntityFramework(...)` registers the toolkit's Entity Framework services. `UseDDDToolkit` needs it.
   Every module may call it, and each call adds to the same options.
 - `UseOutbox` and `AddTenancyDomainEvents()`: Tenancy's events are saved in the same transaction as the change.

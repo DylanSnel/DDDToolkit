@@ -162,7 +162,7 @@ public sealed class GeneratorTestHost
     public static IIncrementalGenerator[] TenancyGenerators() => [new TenancyPermissionsGenerator()];
 
     /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
-    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new DirectHandlerCallAnalyzer(), new ApplicationMarkAnalyzer()];
+    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new AccessBehaviorCallAnalyzer(), new DirectHandlerCallAnalyzer(), new ApplicationMarkAnalyzer()];
 
     /// <summary>The diagnostic analyzers in DDDToolkit.EntityFramework.Analyzers, as opposed to its generators.</summary>
     public static DiagnosticAnalyzer[] EntityFrameworkAnalyzers() => [new EfDesignTimeFactoryAnalyzer()];

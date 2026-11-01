@@ -970,7 +970,8 @@ global using Mediator;
 ```
 
 **The application's registration.** **Why:** the generator writes the behavior next to `IBoardsRequest`, in this
-project.
+project. `AddBoardsAccessBehavior` is in the namespace of `IBoardsRequest`, one namespace below this class, so the
+`global using` of `Harbor.Boards.Application.Access` above is what makes the call compile.
 
 **`Harbor.Boards.Application/BoardsApplication.cs`**
 

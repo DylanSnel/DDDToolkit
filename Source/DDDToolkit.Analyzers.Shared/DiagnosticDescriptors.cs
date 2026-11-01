@@ -926,4 +926,13 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         description: "For a class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], whose member list the toolkit writes, the toolkit also writes the member manager, a class named after the member class with Manager after it, BoardMemberManager for BoardMember, in the global namespace, and for each class declared with its role template, [CustomRole<TRoleId, TResource>], the role manager, BoardRoleManager for BoardRole. The resource's registration registers both. A resource whose list is not written gets no manager, and DDD00059 or DDD00060 says why. This says why a manager is not written where the list is: a type of the manager's name that the project declares in a namespace, which the manager in the global namespace would hide in every file that imports that namespace; two member or role classes of one name, whose managers would be one class; an owner property the manager cannot set when it names another owner; or a resource whose id cannot be told. A type of the name in the global namespace keeps the manager out without a word: the project wrote its own. A role class whose resource is declared in another project gets no role manager either, since the resource's registration cannot name it.");
+
+    public static readonly DiagnosticDescriptor AccessBehaviorRegistrationNotFound = Create(
+        id: "DDD00107",
+        title: "The registration of an access behavior is written and in scope where it is called",
+        messageFormat: "'{0}', the registration of the access behavior of '{1}', cannot be called here. {2}.",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "For an interface marked [AccessRequests], the generator writes an access behavior and the method that registers it. The method is declared in the namespace of the interface, so code outside that namespace needs a using directive for it. The generator writes the method only in a project that references the Mediator library. In both cases the compiler reports CS1061, which names neither cause. This diagnostic is reported beside CS1061, at the same call, and names the cause. A project without the library may also remove the call and ask AccessChecks<TRequests>.RequireAsync itself. Such a project writes no call, so nothing is reported there.");
 }

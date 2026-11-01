@@ -58,7 +58,8 @@ namespace DDDToolkit.Analyzers;
 /// <para>
 /// The behavior is named after the interface, <c>IBillingRequest</c> giving <c>BillingAccessBehavior</c>, is
 /// declared in the interface's namespace and is as visible as the interface. The registration is written
-/// only where the project can see <c>IServiceCollection</c>, which the toolkit's own package brings.
+/// only where the project can see <c>IServiceCollection</c>, which the toolkit's own package brings. A call to a
+/// registration that the compiler cannot find is DDD00107.
 /// </para>
 /// <para>
 /// <b>What a request requires, from its attributes.</b> A request says what it requires of its caller with an attribute
@@ -659,7 +660,7 @@ internal sealed record AccessRequestsInterface(
     /// nothing else, <c>IRequest</c>, keeps that word. The two endings differ in their last word but one, so
     /// two interfaces give each other's names only where they are named after the same.
     /// </summary>
-    private static string NamedAfter(string name)
+    internal static string NamedAfter(string name)
     {
         if (name.Length > 1 && name[0] == 'I' && char.IsUpper(name[1]))
         {
