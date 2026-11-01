@@ -112,7 +112,7 @@ public static class SampleCatalogue
     public const string PeopleOffice = "people-office";
 
     /// <summary>
-    /// The project roles every tenant's crews start with, made once when a tenant is set up: the crew lead's, which
+    /// The project roles every tenant's crews start with, made once when a tenant is provisioned: the crew lead's, which
     /// a former owner usually stays on the crew in, a surveyor's, who records inspections, and an observer's. The tenant's own to
     /// rename, give other permissions and archive afterwards, and to add to. Each gives the permissions that act on a project, of whichever
     /// module asks them, which is why the application says them and not the Projects module.

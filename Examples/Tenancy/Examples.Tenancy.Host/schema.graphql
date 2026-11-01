@@ -503,8 +503,8 @@ type ProjectReopenPayload {
 
 type ProjectRole {
   description: String!
-  id: UUID!
   fromStarterRole: String
+  id: UUID!
   name: String!
   permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   status: ProjectRoleStatus!

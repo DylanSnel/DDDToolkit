@@ -16,8 +16,9 @@ namespace Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles;
 /// There are two kinds of role in this application, each kept where it belongs. A role of the organization is
 /// Tenancy's: given at a unit, it counts for every project there and below. A project role is this one: given on
 /// one project's crew, it counts there and nowhere else. A tenant starts with the starter roles the application
-/// declares (a crew lead's, a surveyor's, an observer's), made once when the tenant is set up, and makes, renames,
-/// archives and gives other permissions to its own from then on.
+/// declares (a crew lead's, a surveyor's, an observer's), made once when the tenant is provisioned, and makes, renames,
+/// archives and gives other permissions to its own from then on. Each role made from a starter role follows it at every
+/// start of the host: what the starter role gains or loses reaches the role, and what the tenant changed itself stays.
 /// <para>
 /// Declared with the Membership package's role template, which keeps what a role is: its name and description,
 /// its permissions, chosen from what the rules let a crew role give, whether it is archived, and which starter role it

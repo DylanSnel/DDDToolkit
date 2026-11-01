@@ -79,7 +79,6 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new RenameProjectRole(ProjectRoleId.CreateSequential(), "Rigger", null), TenancyAccess.AtTenant(TenancyPermissions.RolesManage)),
         (new SetProjectRolePermissions(ProjectRoleId.CreateSequential(), []), TenancyAccess.AtTenant(TenancyPermissions.RolesManage)),
         (new ArchiveProjectRole(ProjectRoleId.CreateSequential()), TenancyAccess.AtTenant(TenancyPermissions.RolesManage)),
-        (new SetUpProjectRoles(), TenancyAccess.InTenant()),
         (new SeatsOfMine(), AccessRequirement.SignedIn()),
         (new OverviewOfMine(), TenancyAccess.InTenant()),
         (new OrganizationUnits(), TenancyAccess.InTenant()),
@@ -257,8 +256,8 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
             .ToList();
 
         takingIt.Should().BeEquivalentTo(
-            [typeof(PermissionsHeldAtRoot), typeof(TenantProjectRoles), typeof(ProjectRolesById), typeof(SetUpProjectRoles)],
-            "the queries any seat may send and the set-up system work sends, each a request of Projects that states nothing of its own");
+            [typeof(PermissionsHeldAtRoot), typeof(TenantProjectRoles), typeof(ProjectRolesById)],
+            "the queries any seat may send, each a request of Projects that states nothing of its own");
         foreach (var type in takingIt)
         {
             DeclaredBy(Declared.Single(row => row.Request.GetType() == type).Request).Should().Be(TenancyAccess.InTenant(), "{0} takes its module's default", type.Name);
@@ -363,13 +362,12 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     [Fact]
     public void Nothing_requires_system_work_and_what_only_it_may_do_is_sent_by_a_caller_in_the_tenant()
     {
-        // System work is a scope the seeding begins around what it sends, never a requirement. The two commands only it
-        // sends say who may send them, a caller in the tenant, and their handlers refuse everyone but system work. The
+        // System work is a scope the seeding begins around what it sends, never a requirement. The command only it
+        // sends says who may send it, a caller in the tenant, and its handler refuses everyone but system work. The
         // core's cases are about who is calling, the owner of what a request names among them, or combine cases: none of
         // them is about the work.
         typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name).Should().BeEquivalentTo(["Anyone", "SignedInUser", "Owned`1", "OwnedAggregate`1", "Combined", "AllOf", "AnyOf"]);
         DeclaredBy(new MarkTenantAsDemo()).Should().Be(TenancyAccess.InTenant());
-        DeclaredBy(new SetUpProjectRoles()).Should().Be(TenancyAccess.InTenant());
     }
 
     [Fact]

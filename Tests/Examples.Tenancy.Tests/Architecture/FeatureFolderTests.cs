@@ -226,14 +226,14 @@ public sealed class FeatureFolderTests
         }
 
         // Nothing is served that is not sent: a request is reached through the routes of its own feature, or it
-        // has no route: the two commands that are system work, the query that only a mutation's answer asks, the
+        // has no route: the command that is system work, the query that only a mutation's answer asks, the
         // queries a loader asks for the ids of a whole request, a lookup's and the project roles a crew names, and
         // the two that ask about many projects at once, which only the data loaders of a project's fields send.
         var routed = served.Where(type => type.Namespace!.EndsWith("." + SampleLayout.Rest, StringComparison.Ordinal)).ToList();
         var byRoute = routed.SelectMany(endpoints => TypeScan.From(TypeScan.WithNested(endpoints)).Uses.Select(use => use.Type)).Where(requests.ContainsKey).ToHashSet();
         requests.Keys.Except(byRoute).Select(request => request.Name)
             .Should().BeSubsetOf(
-                [nameof(MarkTenantAsDemo), nameof(SetUpProjectRoles), nameof(InspectionDetail), nameof(ProjectsById), nameof(ProjectRolesById), nameof(InspectionsOfProjects), nameof(ProjectsOpenToRecording)],
+                [nameof(MarkTenantAsDemo), nameof(InspectionDetail), nameof(ProjectsById), nameof(ProjectRolesById), nameof(InspectionsOfProjects), nameof(ProjectsOpenToRecording)],
                 "every other use case of {0} has a route", module);
 
         // And every command a route sends, a mutation sends too: the two APIs offer the same changes.

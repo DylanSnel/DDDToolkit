@@ -2,8 +2,8 @@ namespace Examples.Tenancy.Projects.Application.Access;
 
 /// <summary>
 /// One of the project roles every tenant starts with, as the application declares it: what a tenant's project
-/// roles are made from when the tenant is set up, and nothing after that. The tenant renames what was made, gives it other
-/// permissions and archives it as it likes.
+/// roles are made from when the tenant is provisioned, and what they follow at every start of the host. The tenant renames
+/// what was made, gives it other permissions and archives it as it likes, and those changes stay.
 /// </summary>
 /// <remarks>
 /// The application declares them, not this module, because a crew role gives permissions of every module that acts on a

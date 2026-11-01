@@ -63,7 +63,7 @@ public sealed class ProjectMembership
         ArgumentNullException.ThrowIfNull(starterRoles);
 
         // A name is used once among a tenant's project roles, which an index holds where they are stored. Two
-        // starter roles of one name would be refused there, when the first tenant is set up, and not here, where
+        // starter roles of one name would be refused there, when the first tenant is provisioned, and not here, where
         // the application declares them.
         if (starterRoles.GroupBy(role => role.Name, StringComparer.Ordinal).FirstOrDefault(named => named.Count() > 1) is { } twice)
         {

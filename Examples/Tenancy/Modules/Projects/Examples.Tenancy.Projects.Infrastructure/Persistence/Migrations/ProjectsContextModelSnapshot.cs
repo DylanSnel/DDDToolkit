@@ -221,7 +221,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence.Migrations
 
                     b.ToTable((string)null);
 
-                    b.ToFunction("caller_permissions");
+                    b.ToFunction("current_permissions");
 
                     b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "TenantId");
                 });
@@ -272,7 +272,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.Property<string>("MadeFrom")
+                    b.Property<string>("FromStarterRole")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -283,6 +283,9 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence.Migrations
 
                     b.PrimitiveCollection<string[]>("Permissions")
                         .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.PrimitiveCollection<string[]>("PermissionsFromStarterRole")
                         .HasColumnType("text[]");
 
                     b.Property<string>("Status")
@@ -299,7 +302,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "MadeFrom")
+                    b.HasIndex("TenantId", "FromStarterRole")
                         .IsUnique();
 
                     b.HasIndex("TenantId", "Name")

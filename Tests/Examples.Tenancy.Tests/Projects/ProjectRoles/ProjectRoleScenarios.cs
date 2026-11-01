@@ -5,12 +5,13 @@ using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Examples.Tenancy.Tests.Projects.ProjectRoles;
 
 /// <summary>
 /// The roles a tenant's crews hold are its project roles, the Projects module's own: every tenant starts with the
-/// starter roles, made once when it is set up, and makes, renames, re-permissions and archives its own from then on.
+/// starter roles, made once when it is provisioned, and makes, renames, re-permissions and archives its own from then on.
 /// Whoever manages the tenant's roles does that; anybody who works in it reads what they are called.
 /// </summary>
 /// <remarks>
@@ -219,22 +220,19 @@ public sealed class ProjectRoleScenarios(SampleHosts sample) : IClassFixture<Sam
     }
 
     [Fact]
-    public async Task A_tenant_made_while_the_application_runs_is_set_up_with_the_starter_roles_once()
+    public async Task A_tenant_made_while_the_application_runs_has_the_starter_roles_right_after_it_is_provisioned()
     {
         await using var host = await sample.StartAsync();
 
-        // Provisioned as an operator's command or a sign-up would, and set up as whatever made it does next: the
-        // starter project roles, as system work in the new tenant, under the database's policies.
+        // Provisioned as an operator's command or a sign-up would. Provisioning makes the starter project roles, as system
+        // work in the new tenant, under the database's policies, with the names and descriptions the application gives them.
         var quarry = await SampleTenants.ProvisionAsync(host, "quarry", "Quarry");
-        (await SampleTenants.AskAsSystemAsync(host, quarry.Tenant, new TenantProjectRoles())).Should().BeEmpty("nothing is made before the tenant is set up");
-
-        await SampleTenants.SendAsSystemAsync(host, quarry.Tenant, new SetUpProjectRoles());
         var made = await SampleTenants.AskAsSystemAsync(host, quarry.Tenant, new TenantProjectRoles());
         made.Select(role => (role.FromStarterRole, role.Name, role.Description, role.Status, Keys: string.Join(" ", role.Permissions!)))
             .Should().BeEquivalentTo(SampleCatalogue.ProjectRoles.Select(starter => ((string?)starter.Key, starter.Name, starter.Description, CustomRoleStatus.Active, string.Join(" ", starter.Permissions.Order(StringComparer.Ordinal)))));
 
-        // Once: set up again, it makes nothing.
-        await SampleTenants.SendAsSystemAsync(host, quarry.Tenant, new SetUpProjectRoles());
+        // Once: a sync of the starter roles makes nothing more.
+        await host.Services.GetRequiredService<IStarterRoleSync>().SyncAsync(Cancellation);
         (await SampleTenants.AskAsSystemAsync(host, quarry.Tenant, new TenantProjectRoles())).Select(role => role.Id).Should().BeEquivalentTo(made.Select(role => role.Id));
 
         // And it opens projects: the owner is on the crew, holding no role, as in a tenant with no project roles.

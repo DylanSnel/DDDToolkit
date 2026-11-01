@@ -2,7 +2,6 @@ using Examples.Tenancy.Projects.Application.Access;
 using Examples.Tenancy.Projects.Application.Crew.Commands;
 using Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 using Examples.Tenancy.Projects.Application.Overview.Queries;
-using Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 using Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Roles.Queries;
@@ -18,8 +17,8 @@ namespace Examples.Tenancy.Host.Seeding;
 
 /// <summary>
 /// Seeds the demonstration (<see cref="DemoData"/>) when <c>Sample:SeedDemoData</c> is on: both tenants, their
-/// units, every seat, placement and grant, the state changes, the starter project roles, and the projects with
-/// their crews, through the same use cases a request goes through.
+/// units, every seat, placement and grant, the state changes, and the projects with their crews, through the same
+/// use cases a request goes through.
 /// </summary>
 /// <remarks>
 /// It is a plain hosted service that awaits all of the seeding inside <see cref="StartAsync"/>, so the host
@@ -31,10 +30,11 @@ namespace Examples.Tenancy.Host.Seeding;
 /// Provisioning is system work outside any tenant, the only thing such work may do; everything after it is
 /// system work inside the tenant, acting for its first administrator, which holds every permission there and nothing
 /// anywhere else. Each command is a unit of work of its own, in a scope of its own, as it would be in a request.
-/// Within a tenant the first step is setting it up, which a tenant made at any time goes through as well: the
-/// starter project roles its crews begin with. Then units, seats, placements, grants, state changes, and then
-/// projects and crews: a suspended seat was placed and granted like any other before it was suspended, and a
-/// project's owner and crew are seats with their places in the organization when the project is opened.
+/// Provisioning a tenant makes its starter project roles as well, under the fixed ids of the demonstration
+/// (<see cref="DemoData.ProjectRoleIdOf"/>), as it does for a tenant made at any time. Then units, seats, placements,
+/// grants, state changes, and then projects and crews: a suspended seat was placed and granted like any other before
+/// it was suspended, and a project's owner and crew are seats with their places in the organization when the project
+/// is opened.
 /// </para>
 /// <para>
 /// What a request could ask for goes the way a request does: as a command or a query, sent through the mediator.
@@ -237,14 +237,10 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
 
     }
 
-    /// <summary>The project roles and the projects of one tenant, as Projects' system work there.</summary>
+    /// <summary>The projects of one tenant, as Projects' system work there.</summary>
     private async Task SeedProjectsAsync(DemoTenant tenant, CancellationToken cancellationToken)
     {
-        // Setting the tenant up for projects: the starter project roles every tenant's crews begin with. System work
-        // in the tenant, as for any tenant made, with the demonstration's fixed ids.
-        await SendAsync(new SetUpProjectRoles(tenant.ProjectRoles), cancellationToken);
-
-        // Then the projects. Each owner goes on the crew holding no project role, since it holds what an owner does
+        // Each owner goes on the crew holding no project role, since it holds what an owner does
         // by owning the project; the rest of the crew each hold the project role made from their starter role, all
         // for good. System work names the owner, and is recorded as the administrator it acts for. The commands are
         // the ones a request sends; the project's id is the one thing only system work may say.

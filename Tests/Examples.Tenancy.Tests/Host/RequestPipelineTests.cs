@@ -1152,7 +1152,6 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             // project roles, each ask again what they declared. So the seat is refused before the handler looks for
             // the role, which is not there.
             (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(ToolkitRefusals.SystemOnly);
-            (await RefusalOfAsync(host, new SetUpProjectRoles())).Code.Should().Be(ToolkitRefusals.SystemOnly);
             (await RefusalOfAsync(host, new MakeProjectRole("Rigger", null, []))).Code.Should().Be(TenancyRefusals.NotPermitted);
             (await RefusalOfAsync(host, new RenameProjectRole(role, "Rigger", null))).Code.Should().Be(TenancyRefusals.NotPermitted);
             (await RefusalOfAsync(host, new SetProjectRolePermissions(role, []))).Code.Should().Be(TenancyRefusals.NotPermitted);

@@ -107,7 +107,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
         {
             using var administrator = await sample.ClientAsync(tenant.Administrator.Person.Key, tenant.Slug);
 
-            // The project roles a tenant's crews begin with, made once when it was set up, with the ids the
+            // The project roles a tenant's crews begin with, made once when it was provisioned, with the ids the
             // demonstration gives them, the names and permissions of the starter roles, and in use.
             (await administrator.ProjectRolesAsync())
                 .Select(role => (
@@ -246,7 +246,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
     public void A_demonstration_seeded_before_a_crew_held_project_roles_is_named_by_them()
     {
         // A file seeded before a crew held project roles: every seat, role of the organization and project is in
-        // it, and its tenants were never set up for projects, so none of them can open one. That is what it lacks.
+        // it, and no project role is. That is what it lacks.
         var harbor = DemoData.Harbor;
         var seats = harbor.Seats.Select(seat => seat.Id).Append(harbor.Administrator.Id).ToHashSet();
         var roles = harbor.Roles.Values.ToHashSet();
