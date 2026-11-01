@@ -28,8 +28,8 @@ public sealed class RoleClassMappingTests
         (role.GetTableName(), role.GetSchema()).Should().Be(("PlotRoles", GardenContext.Schema));
         role.FindOwnership().Should().BeNull("a role is an aggregate beside the plot, not a part of one");
         role.GetProperties().Select(property => property.Name).Should().BeEquivalentTo(
-            ["Id", "Name", "Description", "Permissions", "Status", "FromStarterRole", "GardenId", "Version"],
-            "the package's six, the host's garden, and the version every aggregate has");
+            ["Id", "Name", "Description", "Permissions", "Status", "FromStarterRole", "PermissionsFromStarterRole", "GardenId", "Version"],
+            "the package's seven, the host's garden, and the version every aggregate has");
 
         role.FindProperty("Id")!.ValueGenerated.Should().Be(ValueGenerated.Never, "the host makes a role's id");
         role.FindProperty("Name")!.GetMaxLength().Should().Be(CustomRoleAggregate<PlotRoleId>.MaxNameLength).And.Be(120);
@@ -40,6 +40,8 @@ public sealed class RoleClassMappingTests
         // The status as its name, and the permissions as one collection in one column, read inside a statement.
         role.FindProperty("Status")!.GetProviderClrType().Should().Be(typeof(string));
         role.FindProperty("Permissions")!.IsPrimitiveCollection.Should().BeTrue();
+        role.FindProperty("PermissionsFromStarterRole")!.IsPrimitiveCollection.Should().BeTrue();
+        role.FindProperty("PermissionsFromStarterRole")!.IsNullable.Should().BeTrue("a role a garden made itself remembers nothing of a starter role");
 
         // What is the host's: the two indexes over its garden, and the rule about which roles a request reads.
         role.GetIndexes().Select(index => string.Join("+", index.Properties.Select(property => property.Name)) + (index.IsUnique ? " once" : string.Empty))

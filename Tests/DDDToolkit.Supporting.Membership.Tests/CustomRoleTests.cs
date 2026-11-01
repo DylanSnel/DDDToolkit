@@ -33,7 +33,7 @@ public sealed class CustomRoleTests
         // What the host added is the host's: the plots' roles are a garden's, and the package has no such column.
         typeof(PlotRole).GetProperty(nameof(PlotRole.GardenId))!.DeclaringType.Should().Be(typeof(PlotRole));
         typeof(CustomRoleAggregate<>).GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly).Select(property => property.Name)
-            .Should().BeEquivalentTo("Name", "Description", "Permissions", "Status", "FromStarterRole");
+            .Should().BeEquivalentTo("Name", "Description", "Permissions", "Status", "FromStarterRole", "PermissionsFromStarterRole");
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class CustomRoleTests
             .Where(method => !method.IsSpecialName)
             .Select(method => method.Name)
             .Should().BeSubsetOf(
-                ["Gives", "Rename", "SetPermissions", "Archive", "EnsureInvariants", "EnsureOwnInvariants", "GetInvariantViolations", "GetOwnInvariantViolations"],
+                ["Gives", "Rename", "SetPermissions", "FollowStarterRole", "Archive", "EnsureInvariants", "EnsureOwnInvariants", "GetInvariantViolations", "GetOwnInvariantViolations"],
                 "a role is renamed, given permissions and archived, says what it gives, and, as the generator writes for every aggregate, answers about its rules");
 
         parent.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)

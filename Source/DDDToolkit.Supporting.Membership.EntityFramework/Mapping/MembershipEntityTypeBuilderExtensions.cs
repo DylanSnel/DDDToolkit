@@ -207,7 +207,7 @@ public static class MembershipEntityTypeBuilderExtensions
     /// What it maps is the package's part of a role: the id, which the application makes; the name, the
     /// description and the starter role it was made from, each no longer than the role allows; the status as
     /// its name; and the permissions as a collection of texts in one column, which is what the access questions and
-    /// the database's functions read. The id is stored by the application's generated converter, like the ids
+    /// the database's functions read, with what the starter role gave the role in a second such column. The id is stored by the application's generated converter, like the ids
     /// of its other entities. The starter role a role was made from is fixed once the row is there
     /// (<c>IsFixedAfterInsert</c>): the starter roles a customer lacks are found by it, so a save that changed it is refused, and
     /// the privileges a Postgres export writes leave the column out of what a caller may update.
@@ -291,6 +291,9 @@ public static class MembershipEntityTypeBuilderExtensions
         // One column: an array where the database has arrays, a JSON text where it has none. Read inside a
         // statement either way, which is what lets "the roles that give this permission" stay a subquery.
         role.PrimitiveCollection(row => row.Permissions);
+
+        // What the starter role gave the role when the role last followed it. Null for a role a customer made.
+        role.PrimitiveCollection(row => row.PermissionsFromStarterRole);
 
         // A role of a class that marks the organization its rows are of: a name once there, and each starter role once there.
         OrganizationRoleIndexes.Add<TRole, TRoleId>(role);

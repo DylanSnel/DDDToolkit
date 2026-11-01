@@ -8,7 +8,7 @@ namespace DDDToolkit.Supporting.Membership.Managers;
 
 /// <summary>
 /// The roles a customer makes for one kind of resource: making them, the starter roles among them, renaming them,
-/// setting their permissions and archiving them, and reading them. Your code takes it as <c>BoardRoleManager</c>, a class
+/// setting their permissions, archiving them, following their starter roles, and reading them. Your code takes it as <c>BoardRoleManager</c>, a class
 /// the package's generator writes for your role class, closed over it and the resource, and the container makes per
 /// scope.
 /// <code>
@@ -143,6 +143,90 @@ public class CustomRoleManager<TRole, TRoleId, TResource>
 
         await _store.SaveAsync(cancellationToken).ConfigureAwait(false);
         return made;
+    }
+
+    /// <summary>
+    /// Makes the starter roles the rules declare that the roles there are for the caller do not have yet, each through
+    /// <paramref name="make"/>, and makes every other role made from a starter role follow it
+    /// (<see cref="CustomRoleAggregate{TRoleId}.FollowStarterRole"/>), in one save. A permission the starter role gained is
+    /// added, a permission it lost is taken out, and what the customer changed stays. An archived role follows nothing and
+    /// is not made again. A renamed role follows.
+    /// <para>
+    /// System work alone runs it, in any scope: what a starter role holds is the application's decision. In an application
+    /// joined to an organization's package, that package runs it when it makes a customer and at every start of the host,
+    /// through the class the generator writes for the role class. It saves only when something changed, so a second run in a
+    /// row reads and writes nothing. A starter role whose name a customer already gave another role fails the save of a role
+    /// class with a unique index on the name, and with it the rest of that customer's roles, until that role is renamed.
+    /// </para>
+    /// <para>
+    /// An application with no such package calls <see cref="CreateStarterRolesAsync"/>, or this, itself: the toolkit cannot
+    /// know when one of its scopes begins.
+    /// </para>
+    /// </summary>
+    /// <param name="make">Makes a role of your class from a starter role's draft: its name, its permissions and the starter role it is made from.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <param name="scope">The roles of one scope of your own, for a role class kept per that scope; left out, every role there is for the caller.</param>
+    /// <returns>The roles it made, the roles whose permissions changed, and the roles whose starter role the rules no longer declare.</returns>
+    /// <exception cref="RefusalException"><c>access.system-only</c> for anyone but begun system work.</exception>
+    /// <example>
+    /// <code>
+    /// using (access.BeginSystem("gardens"))
+    /// {
+    ///     var followed = await roles.FollowStarterRolesAsync(draft =&gt; new PlotRole(PlotRoleId.Create(), garden, draft), cancellationToken, scope: role =&gt; role.GardenId == garden);
+    /// }
+    /// </code>
+    /// </example>
+    public async Task<StarterRolesFollowed<TRole, TRoleId>> FollowStarterRolesAsync(
+        Func<CustomRoleDraft, TRole> make,
+        CancellationToken cancellationToken,
+        Expression<Func<TRole, bool>>? scope = null)
+    {
+        ArgumentNullException.ThrowIfNull(make);
+
+        _user.RequireSystemWork();
+
+        var existing = await _store.ListAsync(scope, tracked: true, cancellationToken).ConfigureAwait(false);
+        var missing = StarterRoles.Missing(Rules, existing);
+
+        var changed = new List<TRoleId>();
+        var gone = new List<TRoleId>();
+        var saves = false;
+        foreach (var role in existing.Where(role => role.FromStarterRole is not null && role.Status == CustomRoleStatus.Active).OrderBy(role => role.FromStarterRole, StringComparer.Ordinal))
+        {
+            if (!Rules.Knows(new NamedRole(role.FromStarterRole!)))
+            {
+                gone.Add(role.Id);
+                continue;
+            }
+
+            // A role whose permissions changed called its hook. One that saves only what it remembers of its starter role, or
+            // its permissions in the order a role keeps them, is saved and counted as nothing changed.
+            var before = role.Permissions.ToHashSet(StringComparer.Ordinal);
+            if (role.FollowStarterRole(Rules))
+            {
+                saves = true;
+                if (!before.SetEquals(role.Permissions))
+                {
+                    changed.Add(role.Id);
+                }
+            }
+        }
+
+        var made = new List<TRole>(missing.Count);
+        foreach (var draft in missing)
+        {
+            var role = make(draft) ?? throw new InvalidOperationException("The role made for the starter role '" + draft.FromStarterRole + "' is null. Make one with your class's constructor.");
+            _store.Add(role);
+            made.Add(role);
+            saves = true;
+        }
+
+        if (saves)
+        {
+            await _store.SaveAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return new StarterRolesFollowed<TRole, TRoleId>(made, changed, gone);
     }
 
     /// <summary>Renames a role and says again what it is for. The same name and description again change nothing.</summary>

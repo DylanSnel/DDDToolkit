@@ -34,6 +34,12 @@ namespace DDDToolkit.Supporting.Membership;
 /// resource holds no role.
 /// </para>
 /// <para>
+/// A role made from a starter role follows it (<see cref="FollowStarterRole"/>). It remembers what the starter role gave
+/// it (<see cref="PermissionsFromStarterRole"/>). A permission the starter role gains later is added to it, a permission
+/// the starter role loses is taken out, and what the customer changed itself stays. The manager's
+/// <c>FollowStarterRolesAsync</c> runs that for every role of a customer. Nothing else changes a role behind the customer's back.
+/// </para>
+/// <para>
 /// The class is the application's. Whose a role is, a customer's say, is a property the application adds
 /// and sets in its own constructor, and keeping one customer's roles from another's is its own rule on its
 /// own rows, as for any aggregate. That a name is not used twice is an index it declares over that
@@ -81,6 +87,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
         Description = ValidDescription(draft.Description, codes);
         Permissions = ValidKeys(draft.Permissions, rules);
         FromStarterRole = StarterNamed(draft.FromStarterRole, rules);
+        PermissionsFromStarterRole = StarterRolePermissions(FromStarterRole, rules);
         Status = CustomRoleStatus.Active;
     }
 
@@ -102,6 +109,15 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// outlasts a new name.
     /// </summary>
     public string? FromStarterRole { get; private set; }
+
+    /// <summary>
+    /// The permissions the starter role gave the role, as the rules declared them when the role was made from it or last
+    /// followed it. <see cref="FollowStarterRole"/> compares the starter role with this list, to tell a permission the
+    /// starter role gained or lost from one the customer added or took out. Distinct and in ordinal order. It holds the
+    /// starter role's permissions, whatever permissions the draft had. <see langword="null"/> for a role a customer made,
+    /// and for a role made before roles remembered this. Such a role follows as if the starter role had given it nothing yet.
+    /// </summary>
+    public IReadOnlyList<string>? PermissionsFromStarterRole { get; private set; }
 
     /// <summary>
     /// Whether the role gives <paramref name="permission"/> to a member that holds it: it is in use, it holds the
@@ -174,6 +190,75 @@ public abstract partial class CustomRoleAggregate<TRoleId>
         }
 
         return set;
+    }
+
+    /// <summary>
+    /// Follows the starter role the role was made from, as <paramref name="rules"/> declare it now. What the starter role
+    /// gave the role the last time (<see cref="PermissionsFromStarterRole"/>) is compared with what the starter role holds
+    /// now. A permission the starter role gained is added to the role, and a permission it lost is taken out. What the
+    /// customer changed stays: a permission it took out stays out while the starter role still holds it, and a permission it
+    /// added stays while the starter role never held it. The starter role's permissions are remembered for the next time.
+    /// <para>
+    /// Four cases are settled this way, the same as for a role of an organization's package:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>A permission the customer added that the starter role gains later belongs to the starter role from then on. It
+    /// goes when the starter role loses it.</item>
+    /// <item>A permission the customer took out that the starter role loses and gains again later comes back, as a permission
+    /// the starter role gained.</item>
+    /// <item>A permission the rules no longer let a member's role give is never taken out. It stays on the role, and
+    /// <see cref="Gives"/> answers <see langword="false"/> for it, because <see cref="Gives"/> asks the rules each time.
+    /// If the rules allow it again, the role gives it again. <see cref="SetPermissions"/> refuses such a permission, so a
+    /// customer that sets the role's permissions has to leave it out.</item>
+    /// <item>A role with no record yet, made before roles remembered this, follows as if the starter role had given it
+    /// nothing. It gets every permission the starter role holds that it lacks, and loses none.</item>
+    /// </list>
+    /// <para>
+    /// The class's <c>OnPermissionsSet(set)</c> is called when a permission came in or went out.
+    /// </para>
+    /// </summary>
+    /// <param name="rules">The rules of the resource the role is of, as the application runs with them now.</param>
+    /// <returns>
+    /// Whether the role changed: its permissions, or only what it remembers of its starter role, or the order its permissions
+    /// were stored in. <see langword="false"/> for a role a customer made, a role whose starter role the rules no longer
+    /// declare, and a role that follows its starter role already.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rules"/> is null.</exception>
+    /// <exception cref="RefusalException"><c>role-archived</c>, under the resource's codes: an archived role follows nothing.</exception>
+    public bool FollowStarterRole(MembershipRules rules)
+    {
+        RequireInUse(CodesOf(rules));
+
+        if (StarterRolePermissions(FromStarterRole, rules) is not { } now)
+        {
+            return false;
+        }
+
+        var given = PermissionsFromStarterRole ?? [];
+        var held = new HashSet<string>(Permissions, StringComparer.Ordinal);
+        held.UnionWith(now.Except(given, StringComparer.Ordinal));
+        held.ExceptWith(given.Except(now, StringComparer.Ordinal).Where(rules.RolePermissions.Allows));
+        string[] next = [.. held.Order(StringComparer.Ordinal)];
+
+        var remembered = PermissionsFromStarterRole is { } record && record.SequenceEqual(now, StringComparer.Ordinal);
+        PermissionsFromStarterRole = now;
+
+        var before = Permissions;
+        var sorted = next.SequenceEqual(before, StringComparer.Ordinal);
+        Permissions = next;
+
+        // Compared as sets: a row may hold the permissions in another order than a role keeps them, and only a permission
+        // that came in or went out is a change the hook tells.
+        var set = new RolePermissionsSet(
+            [.. next.Except(before, StringComparer.Ordinal)],
+            [.. before.Except(next, StringComparer.Ordinal).Order(StringComparer.Ordinal)]);
+        if (!set.Changed)
+        {
+            return !remembered || !sorted;
+        }
+
+        (this as ICustomRoleHooks)?.PermissionsSet(set);
+        return true;
     }
 
     /// <summary>
@@ -260,4 +345,13 @@ public abstract partial class CustomRoleAggregate<TRoleId>
                 + "Make the starter roles with the role manager's CreateStarterRolesAsync, and leave FromStarterRole out of a draft for a role a customer makes.",
                 "draft");
     }
+
+    /// <summary>
+    /// The permissions of the starter role <paramref name="starterRole"/> as the rules declare it, the ones the rules let a
+    /// member's role give, distinct and in ordinal order. <see langword="null"/> for no starter role, or one the rules do not declare.
+    /// </summary>
+    private static string[]? StarterRolePermissions(string? starterRole, MembershipRules rules)
+        => starterRole is not null && rules.Knows(new NamedRole(starterRole))
+            ? [.. rules.PermissionsOf(new NamedRole(starterRole)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)]
+            : null;
 }
