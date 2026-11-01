@@ -47,7 +47,7 @@ public sealed class ProjectRoleScenarios(SampleHosts sample) : IClassFixture<Sam
         var recorder = new ProjectRoleId((await made.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid());
 
         var listed = (await ada.ProjectRolesAsync()).Single(role => role.GetProperty("id").GetGuid() == recorder.Value);
-        (listed.Text("name"), listed.Text("description"), listed.Text("madeFrom"), listed.Text("status")).Should().Be(("Recorder", "Records what is found", null, "active"));
+        (listed.Text("name"), listed.Text("description"), listed.Text("fromStarterRole"), listed.Text("status")).Should().Be(("Recorder", "Records what is found", null, "active"));
         listed.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()).Should().Equal([InspectionPermissionNames.Record, ProjectPermissionNames.View], "the permissions are kept in the order of their text");
 
         // Leo manages Pier 7's crew, and gives it to Vic there, next to the observer's role he has: he records.
@@ -146,10 +146,10 @@ public sealed class ProjectRoleScenarios(SampleHosts sample) : IClassFixture<Sam
         await using var host = await sample.StartAsync();
         using var maud = await host.ClientAsync("maud", Harbor.Slug);
 
-        var made = await maud.GraphQLDataAsync("""mutation { projectRoleCreate(input: { name: "Rigger", description: "Rigs the hoists", permissions: ["projects.view"] }) { projectRole { name madeFrom status permissions } } }""");
+        var made = await maud.GraphQLDataAsync("""mutation { projectRoleCreate(input: { name: "Rigger", description: "Rigs the hoists", permissions: ["projects.view"] }) { projectRole { name fromStarterRole status permissions } } }""");
 
         var role = made.GetProperty("projectRoleCreate").GetProperty("projectRole");
-        (role.Text("name"), role.Text("madeFrom"), role.Text("status")).Should().Be(("Rigger", null, "active"));
+        (role.Text("name"), role.Text("fromStarterRole"), role.Text("status")).Should().Be(("Rigger", null, "active"));
         role.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()).Should().Equal(ProjectPermissionNames.View);
         (await maud.ProjectRolesAsync()).Select(listed => listed.Text("name")).Should().Contain("Rigger");
     }
@@ -230,7 +230,7 @@ public sealed class ProjectRoleScenarios(SampleHosts sample) : IClassFixture<Sam
 
         await SampleTenants.SendAsSystemAsync(host, quarry.Tenant, new SetUpProjectRoles());
         var made = await SampleTenants.AskAsSystemAsync(host, quarry.Tenant, new TenantProjectRoles());
-        made.Select(role => (role.MadeFrom, role.Name, role.Description, role.Status, Keys: string.Join(" ", role.Permissions!)))
+        made.Select(role => (role.FromStarterRole, role.Name, role.Description, role.Status, Keys: string.Join(" ", role.Permissions!)))
             .Should().BeEquivalentTo(SampleCatalogue.ProjectRoles.Select(starter => ((string?)starter.Key, starter.Name, starter.Description, CustomRoleStatus.Active, string.Join(" ", starter.Permissions.Order(StringComparer.Ordinal)))));
 
         // Once: set up again, it makes nothing.

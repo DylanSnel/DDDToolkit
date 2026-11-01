@@ -2274,8 +2274,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the one the calls by hand build, to the last annotation.
 - **A role of a tenant has a name and a starter role once per tenant, with no line in its context.** Membership's
   mapping of a role class, by convention or by `IsCustomRole()`, adds two unique indexes where the class marks its
-  tenant with Tenancy's `[OfTenant]`: the tenant and `Name`, and the tenant and `MadeFrom`. Entity Framework names
-  them as it names the indexes a context wrote by hand, `IX_{table}_TenantId_Name` and `IX_{table}_TenantId_MadeFrom`,
+  tenant with Tenancy's `[OfTenant]`: the tenant and `Name`, and the tenant and `FromStarterRole`. Entity Framework names
+  them as it names the indexes a context wrote by hand, `IX_{table}_TenantId_Name` and `IX_{table}_TenantId_FromStarterRole`,
   so an application's migrations stay as they are. The marker is read by its name, and no Membership package
   references Tenancy. A context gives the name's index a refusal of its own on the same index,
   `role.HasIndex(row => new { row.TenantId, row.Name }).RefusesAs(code, message)`. A role class kept to a customer of
@@ -2406,11 +2406,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   are read; a name is trimmed and not empty; an archived role gives nothing from then on, is not given again and stays
   on the members that hold it. No role is the owner's, so every role is archived alike. Its refusals come with it, under
   the resource's codes, in English and Dutch. The starter roles: the role manager's `CreateStarterRolesAsync(make)`
-  makes the ones a scope does not have yet, each made once and told by what it was made from (`MadeFrom`). Whose a role is, is
+  makes the ones a scope does not have yet, each made once and told by what it was made from (`FromStarterRole`). Whose a role is, is
   the application's: it adds its own column, keeps the rows apart by its own rule, and declares its own unique indexes
-  over that column with `Name` and with `MadeFrom`. The package assumes no customer, except that it adds the two indexes
+  over that column with `Name` and with `FromStarterRole`. The package assumes no customer, except that it adds the two indexes
   itself where the role class marks its tenant with Tenancy's `[OfTenant]` (above). `IsCustomRole()` maps the package's
-  part of the role class, with `MadeFrom` fixed once the row is there (`IsFixedAfterInsert`: a save that changed it is
+  part of the role class, with `FromStarterRole` fixed once the row is there (`IsFixedAfterInsert`: a save that changed it is
   refused, and the privileges an export writes leave it out of what a caller may update), and marks whose roles they
   are, so `services.AddPlotMembership<TContext>(rules)` registers the resource as before and nothing is registered for
   the roles. A role's permissions are read from its row inside the one statement that reads the members, and on Postgres

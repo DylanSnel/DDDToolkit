@@ -38,7 +38,7 @@ the context's `ConfigureConventions` finds the marker and adds both checks. The 
   application is refused while its model is built, and the message names the package to reference.
 - **A role class of Membership.** A class declared with `[CustomRole<…>]` that marks its tenant also gets two unique
   indexes from Membership's mapping: a name once per tenant, and a starter role once per tenant. Entity Framework names
-  them `IX_{table}_TenantId_Name` and `IX_{table}_TenantId_MadeFrom`. A refusal of your own for a name used twice goes
+  them `IX_{table}_TenantId_Name` and `IX_{table}_TenantId_FromStarterRole`. A refusal of your own for a name used twice goes
   on the same index: `role.HasIndex(row => new { row.TenantId, row.Name }).RefusesAs(code, message)`.
 
 For a class without the marker, or a tenant that the context reads from another property, call `ScopeToTenant` in

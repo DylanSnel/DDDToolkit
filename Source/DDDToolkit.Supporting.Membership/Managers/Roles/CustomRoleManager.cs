@@ -136,7 +136,7 @@ public class CustomRoleManager<TRole, TRoleId, TResource>
         var made = new List<TRole>(missing.Count);
         foreach (var draft in missing)
         {
-            var role = make(draft) ?? throw new InvalidOperationException("The role made for the starter role '" + draft.MadeFrom + "' is null. Make one with your class's constructor.");
+            var role = make(draft) ?? throw new InvalidOperationException("The role made for the starter role '" + draft.FromStarterRole + "' is null. Make one with your class's constructor.");
             _store.Add(role);
             made.Add(role);
         }

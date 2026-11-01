@@ -29,7 +29,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// <para>
 /// An archived role gives nothing from then on and is not given again. It stays, and stays on the members
 /// that hold it, so what they held still has a name. A role made from a starter role remembers which
-/// (<see cref="MadeFrom"/>), and only when it is made: that is how the starter roles a customer has not made yet
+/// (<see cref="FromStarterRole"/>), and only when it is made: that is how the starter roles a customer has not made yet
 /// are found, whatever it has called the ones it has. A role called "owner" is a role like any other: the owner of a
 /// resource holds no role.
 /// </para>
@@ -80,7 +80,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
         Name = ValidName(draft.Name, codes);
         Description = ValidDescription(draft.Description, codes);
         Permissions = ValidKeys(draft.Permissions, rules);
-        MadeFrom = StarterNamed(draft.MadeFrom, rules);
+        FromStarterRole = StarterNamed(draft.FromStarterRole, rules);
         Status = CustomRoleStatus.Active;
     }
 
@@ -101,7 +101,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// <see langword="null"/> for a role a customer made. Set when the role is made and never after, so it
     /// outlasts a new name.
     /// </summary>
-    public string? MadeFrom { get; private set; }
+    public string? FromStarterRole { get; private set; }
 
     /// <summary>
     /// Whether the role gives <paramref name="permission"/> to a member that holds it: it is in use, it holds the
@@ -246,18 +246,18 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     }
 
     /// <summary>The starter role a draft names, which is one the rules declare, or <see langword="null"/> when it names none.</summary>
-    private static string? StarterNamed(string? madeFrom, MembershipRules rules)
+    private static string? StarterNamed(string? fromStarterRole, MembershipRules rules)
     {
-        if (string.IsNullOrWhiteSpace(madeFrom))
+        if (string.IsNullOrWhiteSpace(fromStarterRole))
         {
             return null;
         }
 
-        return rules.Knows(new NamedRole(madeFrom))
-            ? madeFrom
+        return rules.Knows(new NamedRole(fromStarterRole))
+            ? fromStarterRole
             : throw new ArgumentException(
-                "The draft says the role is made from the starter role '" + madeFrom + "', and the rules '" + rules.Name + "' declare no role of that name. "
-                + "Make the starter roles with the role manager's CreateStarterRolesAsync, and leave MadeFrom out of a draft for a role a customer makes.",
+                "The draft says the role is made from the starter role '" + fromStarterRole + "', and the rules '" + rules.Name + "' declare no role of that name. "
+                + "Make the starter roles with the role manager's CreateStarterRolesAsync, and leave FromStarterRole out of a draft for a role a customer makes.",
                 "draft");
     }
 }

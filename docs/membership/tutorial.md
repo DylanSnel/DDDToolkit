@@ -543,7 +543,7 @@ rules for the export.
   holds. The board owns both tables, and they are saved with the board. The owner is the property marked `[Owner]`.
   `HasMembers(row => row.People, names)` in `OnModelCreating` does the same by hand, for table names of your own.
 - **The role**: Membership maps the columns it adds to a role row: name, description, permissions, status, and the
-  starter role the role was made from (`MadeFrom`). The role marks its tenant, so Membership also adds two unique
+  starter role the role was made from (`FromStarterRole`). The role marks its tenant, so Membership also adds two unique
   indexes. One allows each role name once per tenant. The other allows each starter role once per tenant.
 - **The tenant filter and the save check**: Tenancy's convention adds both to every class with a property marked
   `[OfTenant]`, here the board and the role. A query returns only the rows of the caller's tenant. The save check
@@ -673,7 +673,7 @@ dotnet ef migrations add Boards --project src/Modules/Boards/Harbor.Boards.Infra
 - The migration creates the schema `boards` with four tables: `Boards`, `BoardPeople` (the members, named after the
   board and its collection), `BoardMemberRoles` and `BoardRoles`. It creates none of Tenancy's tables.
 - The role's two unique indexes are in the migration too, as `IX_BoardRoles_TenantId_Name` and
-  `IX_BoardRoles_TenantId_MadeFrom`.
+  `IX_BoardRoles_TenantId_FromStarterRole`.
 
 > **Going further.** Your own table and column names: [Several kinds of resource](resources-and-members.md#several-kinds-of-resource).
 
@@ -1778,7 +1778,7 @@ public static class BoardsModule
 - `AddMember` and `RenameBoard` return the board as the change left it. Their routes answer it with `Describe` from
   step 6.
 - `roles.CreateStarterRolesAsync(draft => ...)`: the role manager passes your function a `CustomRoleDraft` for each
-  starter role the tenant does not have, and saves the roles it returns. It compares `MadeFrom`, so a renamed role
+  starter role the tenant does not have, and saves the roles it returns. It compares `FromStarterRole`, so a renamed role
   still counts as made.
 - The role manager refuses a caller without `boards.roles.manage` for the whole tenant with `tenancy.not-permitted`.
   The request's check refuses that caller first.

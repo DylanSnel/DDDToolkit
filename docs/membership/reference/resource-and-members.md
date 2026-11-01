@@ -1003,7 +1003,7 @@ A role is made, renamed, given permissions and archived, and the role says each 
 
 Its permissions are held to the resource's rules: a role gives only permissions the rules let a member's role give ([`MembershipRules.RolePermissions`](rules.md#membershiprules)), the permissions marked `InRoles`, and one that would give another is refused. The rules are handed to everything that changes the role, as the one declaration the application has of them, and a refusal carries the code those rules give it.
 
-An archived role gives nothing from then on and is not given again. It stays, and stays on the members that hold it, so what they held still has a name. A role made from a starter role remembers which ([`MadeFrom`](#customrole-customroleaggregatetroleid)), and only when it is made: that is how the starter roles a customer has not made yet are found, whatever it has called the ones it has. A role called "owner" is a role like any other: the owner of a resource holds no role.
+An archived role gives nothing from then on and is not given again. It stays, and stays on the members that hold it, so what they held still has a name. A role made from a starter role remembers which ([`FromStarterRole`](#customrole-customroleaggregatetroleid)), and only when it is made: that is how the starter roles a customer has not made yet are found, whatever it has called the ones it has. A role called "owner" is a role like any other: the owner of a resource holds no role.
 
 The class is the application's. Whose a role is, a customer's say, is a property the application adds and sets in its own constructor, and keeping one customer's roles from another's is its own rule on its own rows, as for any aggregate. That a name is not used twice is an index it declares over that property and [`Name`](#customrole-customroleaggregatetroleid).
 
@@ -1021,7 +1021,7 @@ The class is the application's. Whose a role is, a customer's say, is a property
 | `string Description { get; }` | What the role is for; empty when nobody said. |
 | `IReadOnlyList<string> Permissions { get; }` | The permissions the role holds: distinct and in ordinal order. What it gives a member is asked of [`Gives`](#givesstring-membershiprules). |
 | `CustomRoleStatus Status { get; }` | Whether the role is in use. An archived role gives nothing. |
-| `string? MadeFrom { get; }` | The name of the starter role this one was made from, as the resource's rules declare it, or `null` for a role a customer made. Set when the role is made and never after, so it outlasts a new name. |
+| `string? FromStarterRole { get; }` | The name of the starter role this one was made from, as the resource's rules declare it, or `null` for a role a customer made. Set when the role is made and never after, so it outlasts a new name. |
 | [`Gives(string, MembershipRules)`](#givesstring-membershiprules) | Whether the role gives `permission` to a member that holds it: it is in use, it holds the permission, and the resource's rules let a member's role give that permission. |
 | [`Rename(string, string?, MembershipRules)`](#renamestring-string-membershiprules) | Renames the role and says again what it is for, and calls the class's `OnRenamed()` when that changed anything. |
 | [`SetPermissions(IReadOnlyCollection<string>, MembershipRules)`](#setpermissionsireadonlycollectionstring-membershiprules) | Sets the permissions the role gives, for every member that holds it. |
@@ -1222,7 +1222,7 @@ What a new role of a resource is made from.
 | `string Name { get; init; }` | The role's name, 1 to [`CustomRoleAggregate.MaxNameLength`](#customrole-customroleaggregatetroleid) characters; white space around it is dropped. |
 | `string? Description { get; init; }` | What the role is for, at most [`CustomRoleAggregate.MaxDescriptionLength`](#customrole-customroleaggregatetroleid) characters, or nothing. |
 | `IReadOnlyCollection<string> Permissions { get; init; }` | The permissions it gives: each one a permission the resource's rules let a member's role give. |
-| `string? MadeFrom { get; init; }` | The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync`); a draft made from what a customer entered leaves it out. |
+| `string? FromStarterRole { get; init; }` | The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync`); a draft made from what a customer entered leaves it out. |
 
 #### `CustomRoleDraft(string, string?, IReadOnlyCollection<string>, string?)`
 
@@ -1231,7 +1231,7 @@ public CustomRoleDraft(
     string Name,
     string? Description,
     IReadOnlyCollection<string> Permissions,
-    string? MadeFrom = null)
+    string? FromStarterRole = null)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -1241,7 +1241,7 @@ The primary constructor: the type's summary says what it makes.
 - `Name`: The role's name, 1 to [`CustomRoleAggregate.MaxNameLength`](#customrole-customroleaggregatetroleid) characters; white space around it is dropped.
 - `Description`: What the role is for, at most [`CustomRoleAggregate.MaxDescriptionLength`](#customrole-customroleaggregatetroleid) characters, or nothing.
 - `Permissions`: The permissions it gives: each one a permission the resource's rules let a member's role give.
-- `MadeFrom`: The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync`); a draft made from what a customer entered leaves it out.
+- `FromStarterRole`: The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync`); a draft made from what a customer entered leaves it out.
 
 ### `RolePermissionsSet`
 

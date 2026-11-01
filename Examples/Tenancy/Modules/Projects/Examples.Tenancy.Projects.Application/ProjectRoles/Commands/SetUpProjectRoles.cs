@@ -52,7 +52,7 @@ public sealed class SetUpProjectRolesHandler(ProjectRoleManager roles, ProjectMe
         await roles.CreateStarterRolesAsync(
             draft =>
             {
-                var starter = membership.StarterRoles.Single(role => role.Key == draft.MadeFrom);
+                var starter = membership.StarterRoles.Single(role => role.Key == draft.FromStarterRole);
                 var id = command.Ids is { } ids && ids.TryGetValue(starter.Key, out var given) ? given : ProjectRoleId.Create();
                 return new ProjectRole(id, scope.Id, draft with { Name = starter.Name, Description = starter.Description }, roles.Rules);
             },

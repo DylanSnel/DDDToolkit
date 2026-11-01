@@ -61,7 +61,7 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
             // came from, is mapped by its convention. The host's part. A name is used once in a garden, and a garden has each starter role once: two
             // indexes over the host's own column, the first refusing in the host's own code.
             role.HasIndex(row => new { row.GardenId, row.Name }).IsUnique().RefusesAs(PlotMembership.RoleNameTaken, "Another role of this garden is called {Name} already.");
-            role.HasIndex(row => new { row.GardenId, row.MadeFrom }).IsUnique();
+            role.HasIndex(row => new { row.GardenId, row.FromStarterRole }).IsUnique();
 
             // And the host's rule: a request in a garden reads that garden's roles, and no other's.
             role.HasQueryFilter(row => !InAGarden || row.GardenId == Garden);
@@ -77,7 +77,7 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
         {
             // One set of roles for the whole application: a name once, and each starter role once, with no column in front.
             role.HasIndex(row => row.Name).IsUnique();
-            role.HasIndex(row => row.MadeFrom).IsUnique();
+            role.HasIndex(row => row.FromStarterRole).IsUnique();
         });
     }
 

@@ -59,7 +59,7 @@ public sealed class CustomRoleManagerTests
             await FluentActions.Awaiting(() => new ShedRoleManager(store, access, TestUser, asked).CreateStarterRolesAsync(Keeper, Cancellation)).Should().ThrowAsync<RefusalException>();
             asked.Held = true;
             var made = await new ShedRoleManager(store, access, TestUser, asked).CreateStarterRolesAsync(Keeper, Cancellation);
-            made.Select(role => role.MadeFrom).Should().Equal(ShedMembership.Keeper);
+            made.Select(role => role.FromStarterRole).Should().Equal(ShedMembership.Keeper);
             asked.Asked.Should().Equal(ShedMembership.ManageRoles, ShedMembership.ManageRoles);
         }
     }
@@ -75,7 +75,7 @@ public sealed class CustomRoleManagerTests
 
         // The starter roles the rules declare, each through the host's constructor, which says whose it is.
         var made = await roles.CreateStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), Meadow, draft), Cancellation, scope: role => role.GardenId == Meadow);
-        made.Select(role => (role.Name, role.MadeFrom, role.GardenId)).Should().Equal(
+        made.Select(role => (role.Name, role.FromStarterRole, role.GardenId)).Should().Equal(
             [(PlotMembership.Tender, PlotMembership.Tender, Meadow), (PlotMembership.Waterer, PlotMembership.Waterer, Meadow)],
             "the starter roles the rules declare, and none for the owner, which holds no role");
         made[0].Permissions.Should().Equal(PlotPermissions.Plant, PlotPermissions.See, PlotPermissions.Water);
@@ -90,7 +90,7 @@ public sealed class CustomRoleManagerTests
         var orchard = GardenId.CreateSequential();
         store.Add(new PlotRole(PlotRoleId.CreateSequential(), orchard, new CustomRoleDraft(PlotMembership.Tender, null, [PlotPermissions.See])));
         (await roles.CreateStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), orchard, draft), Cancellation, scope: role => role.GardenId == orchard))
-            .Select(role => role.MadeFrom).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer);
+            .Select(role => role.FromStarterRole).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer);
     }
 
     // ---------------------------------------------------------------- the changes

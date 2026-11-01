@@ -133,8 +133,8 @@ conventions ([step 3](tutorial.md#step-3-where-it-is-stored)), and makes the sta
   the starter roles a scope does not have yet. It passes your function a draft for each, and saves the roles your
   constructor makes from them.
 - **Each starter role is made once.** The role manager recognises a role that was made from a starter role by its
-  `MadeFrom` value. A renamed or archived role keeps that value, so it is not made again. A unique index over the
-  scope column and `MadeFrom` stops two requests at the same moment from both making it
+  `FromStarterRole` value. A renamed or archived role keeps that value, so it is not made again. A unique index over the
+  scope column and `FromStarterRole` stops two requests at the same moment from both making it
   ([Which customer a role belongs to](#which-customer-a-role-belongs-to)).
 - **No starter role is reserved for the owner.** The owner holds no role. A customer may rename, archive and change
   every starter role. A scope with no roles still has resources and owners.
@@ -175,7 +175,7 @@ var archived = await roles.ArchiveAsync(command.Role, cancellationToken);
 - **An archived role** gives nothing from then on, and nobody can give it again. It can no longer be changed
   (`boards.role-archived`). It stays on the members that hold it, so what they held keeps a name. Roles are never
   deleted.
-- **`MadeFrom` cannot change after insert** (`IsFixedAfterInsert`). A save that changes it is refused, and the
+- **`FromStarterRole` cannot change after insert** (`IsFixedAfterInsert`). A save that changes it is refused, and the
   exported privileges leave the column out of `UPDATE`.
 - **A role that is not there for the caller** is refused with `boards.role-not-found`, the same as a role that does
   not exist.
@@ -186,8 +186,8 @@ var archived = await roles.ArchiveAsync(command.Role, cancellationToken);
   constructor.
 - **With Tenancy, mark the column `[OfTenant]`**, as the tutorial's `BoardRole` does. The marker comes from
   `Supporting.Tenancy.Abstractions`. Tenancy's convention then adds the tenant filter and the save check. Membership's
-  mapping adds two unique indexes: the tenant and `Name`, and the tenant and `MadeFrom`. Entity Framework names them
-  `IX_BoardRoles_TenantId_Name` and `IX_BoardRoles_TenantId_MadeFrom`. No Membership package references Tenancy. The
+  mapping adds two unique indexes: the tenant and `Name`, and the tenant and `FromStarterRole`. Entity Framework names them
+  `IX_BoardRoles_TenantId_Name` and `IX_BoardRoles_TenantId_FromStarterRole`. No Membership package references Tenancy. The
   mapping finds the marker by its type name.
 - **A customer of another kind**, such as a garden, gets no index from the package. Keep customers apart with a query
   filter or a [row access rule](../row-level-security.md#row-access-rules-written-in-c), and declare the two indexes
@@ -197,14 +197,14 @@ var archived = await roles.ArchiveAsync(command.Role, cancellationToken);
   modelBuilder.Entity<PlotRole>(role =>
   {
       role.HasIndex(row => new { row.GardenId, row.Name }).IsUnique().RefusesAs("plots.role-name-taken", "Another role is called {Name} already.");
-      role.HasIndex(row => new { row.GardenId, row.MadeFrom }).IsUnique();
+      role.HasIndex(row => new { row.GardenId, row.FromStarterRole }).IsUnique();
   });
   ```
 
 - **The managers read through the request's context**, so your filter applies. Another customer's role does not
   exist there. Your filter also applies where a role's permissions are read
   ([Access in your own queries](checks-and-saves.md#access-in-your-own-queries)).
-- **Without customers**, there is one set of roles. Declare the two unique indexes over `Name` alone and `MadeFrom`
+- **Without customers**, there is one set of roles. Declare the two unique indexes over `Name` alone and `FromStarterRole`
   alone.
 - **To find roles another way**, register your own `IMemberRoles<TResourceId, TRoleId>` before the resource.
 - **The roles are read where they are stored.** A subquery over your role table runs inside the statement that reads

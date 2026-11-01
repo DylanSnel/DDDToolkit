@@ -121,7 +121,7 @@ classDiagram
         TenantId, marked OfTenant
         Name
         Permissions
-        MadeFrom
+        FromStarterRole
     }
     class BoardPermissions {
         on a board: view, edit, members.manage

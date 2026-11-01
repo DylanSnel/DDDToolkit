@@ -244,10 +244,10 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             .Should().Equal("Archived");
 
         // Where a role came from is written once: the application cannot save it changed.
-        var moved = await FluentActions.Awaiting(() => garden.Services.ChangeAsync(data.MeadowWaterer.Id, role => Break.Set(role, nameof(PlotRole.MadeFrom), PlotMembership.Tender)))
+        var moved = await FluentActions.Awaiting(() => garden.Services.ChangeAsync(data.MeadowWaterer.Id, role => Break.Set(role, nameof(PlotRole.FromStarterRole), PlotMembership.Tender)))
             .Should().ThrowAsync<InvalidOperationException>();
-        moved.Which.Message.Should().Contain(nameof(PlotRole.MadeFrom));
-        (await garden.Services.ReadAsync(data.MeadowWaterer.Id)).MadeFrom.Should().Be(PlotMembership.Waterer);
+        moved.Which.Message.Should().Contain(nameof(PlotRole.FromStarterRole));
+        (await garden.Services.ReadAsync(data.MeadowWaterer.Id)).FromStarterRole.Should().Be(PlotMembership.Waterer);
     }
 
     [Fact]
@@ -270,13 +270,13 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         }
 
         script.Should().MatchRegex("GRANT UPDATE \\([^)]*\"Status\"[^)]*\\) ON TABLE \"gardens\"\\.\"PlotRoles\" TO authenticated;")
-            .And.NotMatchRegex("GRANT UPDATE \\([^)]*\"MadeFrom\"[^)]*\\) ON TABLE \"gardens\"\\.\"PlotRoles\"");
+            .And.NotMatchRegex("GRANT UPDATE \\([^)]*\"FromStarterRole\"[^)]*\\) ON TABLE \"gardens\"\\.\"PlotRoles\"");
         await garden.ExecuteAsync(script);
 
         // Ben may change the meadow's roles now. Where a role came from he changes on none of them.
         await using (var ben = await garden.SessionAsync(data.Ben))
         {
-            (await FluentActions.Awaiting(() => ben.ListAsync<object>($"""UPDATE {Gardens}"PlotRoles" SET "MadeFrom" = NULL WHERE "Id" = $1""", data.MeadowTender.Id.Value))
+            (await FluentActions.Awaiting(() => ben.ListAsync<object>($"""UPDATE {Gardens}"PlotRoles" SET "FromStarterRole" = NULL WHERE "Id" = $1""", data.MeadowTender.Id.Value))
                 .Should().ThrowAsync<Npgsql.PostgresException>()).Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.InsufficientPrivilege);
         }
 
@@ -288,7 +288,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             await ben.CommitAsync();
         }
 
-        (await garden.Services.ReadAsync(data.MeadowTender.Id)).Should().Match<PlotRole>(role => role.MadeFrom == PlotMembership.Tender && role.Name == "Grower" && role.Status == CustomRoleStatus.Archived);
+        (await garden.Services.ReadAsync(data.MeadowTender.Id)).Should().Match<PlotRole>(role => role.FromStarterRole == PlotMembership.Tender && role.Name == "Grower" && role.Status == CustomRoleStatus.Archived);
     }
 
     [Fact]
@@ -386,7 +386,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         await using (var session = await garden.SessionAsync(data.Ben))
         {
             (await FluentActions.Awaiting(() => session.ListAsync<object>(
-                    $"INSERT INTO {Gardens}\"PlotRoles\" (\"Id\", \"GardenId\", \"Name\", \"Description\", \"Permissions\", \"Status\", \"MadeFrom\", \"Version\") "
+                    $"INSERT INTO {Gardens}\"PlotRoles\" (\"Id\", \"GardenId\", \"Name\", \"Description\", \"Permissions\", \"Status\", \"FromStarterRole\", \"Version\") "
                     + "SELECT pg_catalog.gen_random_uuid(), \"GardenId\", 'Everything', '', ARRAY['plots.fence'], 'Active', NULL, 1 "
                     + $"FROM {Gardens}\"PlotRoles\" WHERE \"Id\" = $1",
                     tender)).Should().ThrowAsync<Npgsql.PostgresException>())

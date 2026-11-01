@@ -103,8 +103,8 @@ public sealed class CampusScenario
             .ToList();
         CourseRoles =
         [
-            .. starters.Select(draft => new CourseRole(AlderCourseRoles[draft.MadeFrom!], Alder, draft)),
-            .. starters.Select(draft => new CourseRole(BirchCourseRoles[draft.MadeFrom!], Birch, draft)),
+            .. starters.Select(draft => new CourseRole(AlderCourseRoles[draft.FromStarterRole!], Alder, draft)),
+            .. starters.Select(draft => new CourseRole(BirchCourseRoles[draft.FromStarterRole!], Birch, draft)),
         ];
         _courseRolePermissions = CourseRoles.ToDictionary(role => role.Id, role => role.Permissions);
 

@@ -37,7 +37,7 @@ else
                             <tr class="@(role.IsActive ? null : "not-applying")">
                                 <td>@role.Name</td>
                                 <td class="small">@role.Description</td>
-                                <td class="small">@(role.MadeFrom is { } starter ? starter : T["project-roles.made-by-tenant"])</td>
+                                <td class="small">@(role.FromStarterRole is { } starter ? starter : T["project-roles.made-by-tenant"])</td>
                                 <td>@role.Status</td>
                                 <td class="small">@(role.Permissions is { } held ? string.Join(", ", held) : "–")</td>
                                 <td>

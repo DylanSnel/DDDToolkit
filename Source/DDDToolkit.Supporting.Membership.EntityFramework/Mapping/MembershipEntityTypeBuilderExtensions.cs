@@ -198,7 +198,7 @@ public static class MembershipEntityTypeBuilderExtensions
     ///
     ///     // The application's own: whose a role is, that a name is used once there, and that a starter role is made once there
     ///     role.HasIndex(row =&gt; new { row.GardenId, row.Name }).IsUnique().RefusesAs("plots.role-name-taken", "Another role is called {Name} already.");
-    ///     role.HasIndex(row =&gt; new { row.GardenId, row.MadeFrom }).IsUnique();
+    ///     role.HasIndex(row =&gt; new { row.GardenId, row.FromStarterRole }).IsUnique();
     /// });
     /// </code>
     /// The role class stays the application's aggregate: its table, its other columns, its indexes and the
@@ -223,7 +223,7 @@ public static class MembershipEntityTypeBuilderExtensions
     /// class for it, gets two unique indexes over that property from this mapping. A name is used once in an
     /// organization, and an organization has each starter role once, which also keeps two set-ups of one organization
     /// at the same moment apart. Entity Framework names them, <c>IX_{table}_{property}_Name</c> and
-    /// <c>IX_{table}_{property}_MadeFrom</c>. A context that wants a refusal of its own for a name used twice says it on
+    /// <c>IX_{table}_{property}_FromStarterRole</c>. A context that wants a refusal of its own for a name used twice says it on
     /// the same index: <c>role.HasIndex(row =&gt; new { row.OrganizationId, row.Name }).RefusesAs(...)</c>. A customer of
     /// another kind, a garden say, is a column the package knows nothing of, and its indexes are the application's to
     /// declare, as above.
@@ -283,7 +283,7 @@ public static class MembershipEntityTypeBuilderExtensions
         // Where a role came from is how the starter roles still to make are found, so it is said once, when the row is added:
         // a save that changed it is refused, and the privileges the Postgres export writes leave it out of what
         // a caller may update.
-        role.Property(row => row.MadeFrom).HasMaxLength(NamedRole.MaxLength).IsFixedAfterInsert();
+        role.Property(row => row.FromStarterRole).HasMaxLength(NamedRole.MaxLength).IsFixedAfterInsert();
 
         // As its name, so a row says what it is to whoever reads the table, and a function compares it with a word.
         role.Property(row => row.Status).HasConversion<string>().HasMaxLength(StatusLength);

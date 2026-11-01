@@ -112,7 +112,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
             (await administrator.ProjectRolesAsync())
                 .Select(role => (
                     Id: role.GetProperty("id").GetGuid(),
-                    MadeFrom: role.Text("madeFrom")!,
+                    FromStarterRole: role.Text("fromStarterRole")!,
                     Name: role.Text("name")!,
                     Status: role.Text("status"),
                     Keys: string.Join(" ", role.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()))))

@@ -349,7 +349,7 @@ modelBuilder.Entity<PlotRole>(role =>
 
     // The application's own: whose a role is, that a name is used once there, and that a starter role is made once there
     role.HasIndex(row => new { row.GardenId, row.Name }).IsUnique().RefusesAs("plots.role-name-taken", "Another role is called {Name} already.");
-    role.HasIndex(row => new { row.GardenId, row.MadeFrom }).IsUnique();
+    role.HasIndex(row => new { row.GardenId, row.FromStarterRole }).IsUnique();
 });
 ```
 
@@ -359,7 +359,7 @@ What it maps is the package's part of a role: the id, which the application make
 
 It leaves a mark on the role's entity type ([`MembershipModel`](#membershipmodel)) that names the resource the roles are of, as the class's template names it. That is how the access questions registered for the resource, and a package that writes database functions, find the roles of this resource and of no other: nothing else has to be registered for them.
 
-A class that marks the organization its rows are of, with the marker the organization's package gives a domain class for it, gets two unique indexes over that property from this mapping. A name is used once in an organization, and an organization has each starter role once, which also keeps two set-ups of one organization at the same moment apart. Entity Framework names them, `IX_{table}_{property}_Name` and `IX_{table}_{property}_MadeFrom`. A context that wants a refusal of its own for a name used twice says it on the same index: `role.HasIndex(row => new { row.OrganizationId, row.Name }).RefusesAs(...)`. A customer of another kind, a garden say, is a column the package knows nothing of, and its indexes are the application's to declare, as above.
+A class that marks the organization its rows are of, with the marker the organization's package gives a domain class for it, gets two unique indexes over that property from this mapping. A name is used once in an organization, and an organization has each starter role once, which also keeps two set-ups of one organization at the same moment apart. Entity Framework names them, `IX_{table}_{property}_Name` and `IX_{table}_{property}_FromStarterRole`. A context that wants a refusal of its own for a name used twice says it on the same index: `role.HasIndex(row => new { row.OrganizationId, row.Name }).RefusesAs(...)`. A customer of another kind, a garden say, is a column the package knows nothing of, and its indexes are the application's to declare, as above.
 
 A context that calls `AddDDDToolkitConventions()` needs no call of this: the role template names Membership's convention, which maps the class the same way. Call it for a class the context maps otherwise.
 

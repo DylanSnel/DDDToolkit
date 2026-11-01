@@ -33,7 +33,7 @@ public sealed class CustomRoleTests
         // What the host added is the host's: the plots' roles are a garden's, and the package has no such column.
         typeof(PlotRole).GetProperty(nameof(PlotRole.GardenId))!.DeclaringType.Should().Be(typeof(PlotRole));
         typeof(CustomRoleAggregate<>).GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly).Select(property => property.Name)
-            .Should().BeEquivalentTo("Name", "Description", "Permissions", "Status", "MadeFrom");
+            .Should().BeEquivalentTo("Name", "Description", "Permissions", "Status", "FromStarterRole");
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class CustomRoleTests
         role.Description.Should().Be("Lends the tools out.");
         role.Permissions.Should().Equal(ShedPermissions.Open, ShedPermissions.Stock, ToolPermissions.LendTools);
         role.Status.Should().Be(CustomRoleStatus.Active);
-        role.MadeFrom.Should().BeNull("a role a customer makes came from no starter role");
+        role.FromStarterRole.Should().BeNull("a role a customer makes came from no starter role");
         role.GetInvariantViolations().Should().BeEmpty();
         role.DomainEvents.Should().BeEmpty("the package raises nothing: what a host tells the world about its roles is the host's to say");
 
@@ -254,12 +254,12 @@ public sealed class CustomRoleTests
     {
         // The sheds' rules declare the keeper's starter role.
         var keeper = new ShedRole(ShedRoleId.CreateSequential(), Starter(Sheds, ShedMembership.Keeper));
-        (keeper.Name, keeper.MadeFrom).Should().Be((ShedMembership.Keeper, ShedMembership.Keeper));
+        (keeper.Name, keeper.FromStarterRole).Should().Be((ShedMembership.Keeper, ShedMembership.Keeper));
 
         // Renamed and given other permissions like any role, and still the one made from that starter role.
         keeper.Rename("Shed boss", "Runs the shed.", Sheds).Should().BeTrue();
         keeper.SetPermissions([ShedPermissions.Open], Sheds).Removed.Should().Equal(ShedPermissions.Stock);
-        keeper.MadeFrom.Should().Be(ShedMembership.Keeper);
+        keeper.FromStarterRole.Should().Be(ShedMembership.Keeper);
 
         // Archived like any role: an owner holds none, so no role is one every owner holds.
         keeper.Archive(Sheds);
@@ -268,13 +268,13 @@ public sealed class CustomRoleTests
         // A role made from another starter role is archived like any other: the plots' tender.
         var tender = new PlotRole(PlotRoleId.CreateSequential(), Meadow, Starter(PlotMembership.Rules, PlotMembership.Tender));
         tender.PutAway();
-        (tender.Status, tender.MadeFrom).Should().Be((CustomRoleStatus.Archived, PlotMembership.Tender));
+        (tender.Status, tender.FromStarterRole).Should().Be((CustomRoleStatus.Archived, PlotMembership.Tender));
 
         // What a role was made from is one of the roles its resource's rules declare, and a draft made from
         // what a customer entered names none.
-        FluentActions.Invoking(() => new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Boss", null, [], MadeFrom: PlotMembership.Tender)))
+        FluentActions.Invoking(() => new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Boss", null, [], FromStarterRole: PlotMembership.Tender)))
             .Should().Throw<ArgumentException>().WithMessage("*made from the starter role 'tender', and the rules 'sheds' declare no role of that name*CreateStarterRolesAsync*");
-        new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Boss", null, [], MadeFrom: " ")).MadeFrom.Should().BeNull();
+        new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Boss", null, [], FromStarterRole: " ")).FromStarterRole.Should().BeNull();
     }
 
     // ---------------------------------------------------------------- the rules it is held to

@@ -25,7 +25,7 @@ internal static partial class ProjectRoleType
     public static string GetDescription([Parent] ProjectRoleListing role) => role.Description;
 
     /// <summary>The starter role it was made from, or nothing for one the tenant made.</summary>
-    public static string? GetMadeFrom([Parent] ProjectRoleListing role) => role.MadeFrom;
+    public static string? GetFromStarterRole([Parent] ProjectRoleListing role) => role.FromStarterRole;
 
     /// <summary>Whether it can still be given.</summary>
     public static CustomRoleStatus GetStatus([Parent] ProjectRoleListing role) => role.Status;

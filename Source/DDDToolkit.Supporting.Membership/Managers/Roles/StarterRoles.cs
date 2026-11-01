@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Membership.Managers;
 /// manager asks it with the roles a scope has, and makes the missing ones through the application's constructor.
 /// <para>
 /// Asked again for the same scope, it answers nothing: a starter role is made once, and is told by what it was made
-/// from (<see cref="CustomRoleAggregate{TRoleId}.MadeFrom"/>), not by its name, so a role a customer renamed or
+/// from (<see cref="CustomRoleAggregate{TRoleId}.FromStarterRole"/>), not by its name, so a role a customer renamed or
 /// archived is not made a second time.
 /// </para>
 /// </summary>
@@ -37,7 +37,7 @@ internal static class StarterRoles
         }
 
         var made = rolesOfTheScope
-            .Select(role => role.MadeFrom)
+            .Select(role => role.FromStarterRole)
             .Where(starter => starter is not null)
             .ToHashSet(StringComparer.Ordinal);
 
