@@ -1240,7 +1240,7 @@ public interface IBoardRepository
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardRepository.cs`**
 
-```csharp {12-13,17-18}
+```csharp {13,18}
 using Harbor.Boards.Application.Boards;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -1639,7 +1639,7 @@ it.
 
 **`Harbor.Boards.Application/Boards/EditBoard/EditBoard.cs`**
 
-```csharp {5-6,8,10,16}
+```csharp {5-6,8,10,15}
 using DDDToolkit.Supporting.Membership;
 
 namespace Harbor.Boards.Application.Boards.EditBoard;
@@ -1692,7 +1692,7 @@ internal static class BoardRolesEndpoints
 **`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**: adds routes to edit a board and to add a member, next to
 the others.
 
-```csharp {1,2,6,26-29,44,46}
+```csharp {1,2,7,27-30,48,50}
 using Harbor.Boards.Application.Boards.AddMember;
 using Harbor.Boards.Application.Boards.EditBoard;
 using Harbor.Boards.Application.Boards.GetBoard;
@@ -2058,7 +2058,7 @@ public interface IBoardRepository
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardRepository.cs`**
 
-```csharp {23-28}
+```csharp {1,23-28}
 using DDDToolkit.Supporting.Membership.EntityFramework;
 using Harbor.Boards.Application.Boards;
 using Harbor.Boards.Contracts.ValueObjects;
@@ -2136,7 +2136,7 @@ per board.
 
 **`Harbor.Boards.Application/Boards/ListBoard/ListBoard.cs`**
 
-```csharp {4,6,8,12-13}
+```csharp {4,6,8,12-14}
 namespace Harbor.Boards.Application.Boards.ListBoard;
 
 [InTenant]
@@ -2160,7 +2160,7 @@ what leaves the API. The commands answer the board alone.
 
 **`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**
 
-```csharp {22,24-28,39,47}
+```csharp {22-27,39,47}
 using Harbor.Boards.Application.Boards.AddMember;
 using Harbor.Boards.Application.Boards.EditBoard;
 using Harbor.Boards.Application.Boards.GetBoard;

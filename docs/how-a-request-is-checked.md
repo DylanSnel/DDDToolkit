@@ -841,7 +841,7 @@ CREATE TRIGGER seats_displayname_column_rule BEFORE UPDATE OF "DisplayName" ON "
     EXECUTE FUNCTION "tenancy".seats_displayname_column_rule();
 ```
 
-```sql title="20261028202434_access.projects.ddd.sql, the crew and the function it asks, shortened"
+```sql title="20261101213701_access.projects.ddd.sql, the crew and the function it asks, shortened"
 CREATE OR REPLACE FUNCTION "projects".projects_where_i_hold(text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT holding.id FROM "projects".projects_as_member_with($1) AS holding(id)
