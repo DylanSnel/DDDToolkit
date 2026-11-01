@@ -2475,6 +2475,40 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   contributed functions' bodies is refused as before. See
   [A resource's access, asked by its id](docs/row-level-security.md#asking-about-a-resource-by-its-id).
 
+#### Starter roles of a resource
+
+- **A tenant's roles of a resource work as Tenancy's do.** In an application joined to Tenancy, a host writes nothing new:
+  `BoardRole` and its constructor stay, `SyncStarterRoles()` stays, `services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules)`
+  stays, and a new migration adds a column. A new tenant has `editor` right after `ProvisionAsync`. A host that starts makes
+  a starter role a tenant lacks. A permission the starter role gains or loses reaches the role. What the tenant changed
+  stays. An archived role follows nothing and is not made again, and a renamed role follows. A role with no record yet gets
+  what it lacks and loses nothing. A role whose starter role the rules no longer declare keeps its permissions, and is
+  counted. See [Starter roles with Tenancy](docs/membership/permissions-and-roles.md#starter-roles-with-tenancy).
+- **`CustomRoleAggregate.FollowStarterRole(rules)` and `PermissionsFromStarterRole`.** The same three-way comparison as
+  Tenancy's role. A change in permissions calls the existing `OnPermissionsSet` hook. A permission the rules no longer let
+  a role give stays on the row and gives nothing, as `Gives` already answers.
+- **`CustomRoleManager.FollowStarterRolesAsync(make, cancellationToken, scope)`** makes what is missing and makes the rest
+  follow, in one save, and saves only when something changed. It answers `StarterRolesFollowed<TRole, TRoleId>`, with `Made`,
+  `Changed` and `WithoutTheirStarterRole`. It is system work's alone: `access.system-only` for a seat. `CreateStarterRolesAsync`
+  stays, for an application without Tenancy, where the toolkit cannot know when a scope begins.
+- **`ITenantStarterRoles`: another module's starter roles in the tenant this work acts in.** Tenancy knows nothing of
+  Membership. `TenantManager.ProvisionAsync` runs every registered one after its save, inside the system work in the new
+  tenant, and `IStarterRoleSync` runs them for each tenant, after Tenancy's own roles. Each runs in a scope of its own, begun
+  after the user. It is not one transaction: a failure after the tenant's save does not fail `ProvisionAsync`, it is logged as
+  an error, and the next `SyncStarterRoles()` makes the role. In a sync, a failure belongs to that tenant and goes into the
+  report. `TenantStarterRolesRun.RunAsync` runs them for a host on other storage.
+- **The generator writes it for a role class kept for a resource.** For a member class whose role id belongs to a class
+  declared with `[CustomRole<TRoleId, TResource>]`, `Add{Resource}MembershipWithTenancy` registers a class that calls the role
+  class's public constructor, found by parameter types in any order: the role id, the tenant id, `CustomRoleDraft`, and
+  optionally `MembershipRules`. The new parameter `makeRole`, `Func<IServiceProvider, TTenantId, CustomRoleDraft, TRole>`, gives
+  names, descriptions or ids of your own. Where no constructor fits, or the role id has no `Create()`, `makeRole` is required,
+  with no default, so the failure shows at the call. No diagnostic fires on the role class. A member that holds the tenant's
+  own roles, or named roles, gets nothing of this.
+- **`CurrentTenant.RequireSeat()`** beside `Require()`, answering a new `SeatInTenant<TTenantId, TSeatId>(Id, Seat, BySystem)`
+  with a `Seat` that is not nullable. A user who is nobody gets the refusal `Require()` gives. System work in the tenant acting
+  for a seat answers that seat, with `BySystem` true. System work acting for no seat is an `InvalidOperationException` that
+  names the overload of `BeginSystemIn` that takes a seat.
+
 #### Samples
 
 - **The webshop's order is its customer's, in the access check too.** `Order.PlacedBy` is marked `[Owner]`, and
@@ -3150,6 +3184,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **`MadeFrom` is `FromStarterRole`**, on `CustomRoleAggregate` and on `CustomRoleDraft`, through the mapping, its indexes
+  (`IX_{table}_TenantId_FromStarterRole`), the samples, the test hosts and the docs: the word Tenancy uses. Committed
+  migrations stay as they are. A new migration renames the column. No package has users yet, so there is no alias.
+- **`StarterRoleSyncReport` counts other modules' roles too**, and has a new `RolesMade` after `Tenants`. The log line of
+  `SyncStarterRoles()` says it: "The starter roles are synced in 2 tenants: 2 roles were made, ...".
+- **`TenantManager`'s constructor** takes an optional `NewTenantStarterRoles`, which `AddTenancyCore` registers.
+- **The Tenancy sample's project roles follow their starter roles.** `SetUpProjectRoles` is gone, with its caller and its
+  tests. The sample's names and descriptions for its starter roles go through `makeRole`. The demonstration's fixed role ids
+  go through `AddProjectsModule(host, starterRoles, DemoData.ProjectRoleIdOf)`. The Projects module has a migration, and the
+  GraphQL field `madeFrom` is `fromStarterRole`.
+- **The docs tutorials match the application they build.** Handlers answer the aggregate, queries too, and the route picks
+  what leaves the API through one `Describe`. `BoardDetails`, `BoardMemberDetails`, `BoardListing` and `BoardRoleListing` are
+  gone. A list on a database with row level security is `db.Boards` with `[InTenant]`. `WhereIHold` stays for the boards a
+  caller may edit and for a database without row level security. Requests are named `<Feature>Query` and `<Feature>Command`,
+  and reading one thing is `Get`. Step 4's rules say who may do what to which rows. Step 7's `SetUpBoardRoles` is gone.
 - **Everything a row access rule asks, it asks of its user: `Allows(Board board, IRowUser user)`.** A rule takes the new
   `IRowUser`, in `DDDToolkit.Abstractions.Access`, and no longer `ICurrentUser`. It holds `Id`, `IsAuthenticated`, `Role`
   and `FindClaim`, what the generator translates, so `user.RequireId()`, `user.IsSystem` and `user.Kind` no longer compile

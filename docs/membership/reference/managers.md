@@ -687,7 +687,7 @@ public class CustomRoleManager<TRole, TRoleId, TResource>
     where TResource : class
 ```
 
-The roles a customer makes for one kind of resource: making them, the starter roles among them, renaming them, setting their permissions and archiving them, and reading them. Your code takes it as `BoardRoleManager`, a class the package's generator writes for your role class, closed over it and the resource, and the container makes per scope.
+The roles a customer makes for one kind of resource: making them, the starter roles among them, renaming them, setting their permissions, archiving them, following their starter roles, and reading them. Your code takes it as `BoardRoleManager`, a class the package's generator writes for your role class, closed over it and the resource, and the container makes per scope.
 
 ```csharp
 public sealed class RenameBoardRoleHandler(BoardRoleManager roles) : ICommandHandler<RenameBoardRole, BoardRole>
@@ -716,6 +716,7 @@ The reads answer the roles there are for the caller: what the context's own rule
 | `MembershipRules Rules { get; }` | The rules of the resource the roles are of: what a role's constructor takes. |
 | [`CreateAsync(TRole, CancellationToken)`](#createasynctrole-cancellationtoken) | Adds a role made with your class's constructor, and saves it. |
 | [`CreateStarterRolesAsync(Func<CustomRoleDraft, TRole>, CancellationToken, Expression<Func<TRole, bool>>?)`](#createstarterrolesasyncfunccustomroledraft-trole-cancellationtoken-expressionfunctrole-bool) | Makes the starter roles the rules declare that the roles there are for the caller do not have yet, each through `make`, and saves them. |
+| [`FollowStarterRolesAsync(Func<CustomRoleDraft, TRole>, CancellationToken, Expression<Func<TRole, bool>>?)`](#followstarterrolesasyncfunccustomroledraft-trole-cancellationtoken-expressionfunctrole-bool) | Makes the starter roles the rules declare that the roles there are for the caller do not have yet, each through `make`, and makes every other role made from a starter role follow it ([`CustomRoleAggregate.FollowStarterRole`](resource-and-members.md#followstarterrolemembershiprules)), in one save. |
 | [`RenameAsync(TRoleId, string, string?, CancellationToken)`](#renameasynctroleid-string-string-cancellationtoken) | Renames a role and says again what it is for. |
 | [`RenameAsync(TRole, string, string?, CancellationToken)`](#renameasynctrole-string-string-cancellationtoken) | Renames a role, as [`RenameAsync`](#renameasynctroleid-string-string-cancellationtoken) does with its id. |
 | [`SetPermissionsAsync(TRoleId, IReadOnlyCollection<string>, CancellationToken)`](#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken) | Sets the permissions a role gives, for every member that holds it. |
@@ -796,6 +797,42 @@ Makes the starter roles the rules declare that the roles there are for the calle
 
 ```csharp
 var made = await roles.CreateStarterRolesAsync(draft => new BoardRole(BoardRoleId.Create(), organization, draft), cancellationToken);
+```
+
+#### `FollowStarterRolesAsync(Func<CustomRoleDraft, TRole>, CancellationToken, Expression<Func<TRole, bool>>?)`
+
+```csharp
+public Task<StarterRolesFollowed<TRole, TRoleId>> FollowStarterRolesAsync(
+    Func<CustomRoleDraft, TRole> make,
+    CancellationToken cancellationToken,
+    Expression<Func<TRole, bool>>? scope = null)
+```
+
+Makes the starter roles the rules declare that the roles there are for the caller do not have yet, each through `make`, and makes every other role made from a starter role follow it ([`CustomRoleAggregate.FollowStarterRole`](resource-and-members.md#followstarterrolemembershiprules)), in one save. A permission the starter role gained is added, a permission it lost is taken out, and what the customer changed stays. An archived role follows nothing and is not made again. A renamed role follows.
+
+System work alone runs it, in any scope, because what a starter role holds is the application's decision. In an application joined to an organization's package, that package runs it when it makes a customer and at every start of the host, through the class the generator writes for the role class. It saves only when something changed, so a second run in a row reads and writes nothing. A starter role whose name a customer already gave another role fails the save of a role class with a unique index on the name, and with it the rest of that customer's roles, until that role is renamed.
+
+An application with no such package calls [`CreateStarterRolesAsync`](#createstarterrolesasyncfunccustomroledraft-trole-cancellationtoken-expressionfunctrole-bool), or this, itself. The toolkit cannot know when one of its scopes begins.
+
+**Parameters**
+
+- `make`: Makes a role of your class from a starter role's draft: its name, its permissions and the starter role it is made from.
+- `cancellationToken`: Cancels the work.
+- `scope`: The roles of one scope of your own, for a role class kept per that scope; left out, every role there is for the caller.
+
+**Returns**: The roles it made, the roles whose permissions changed, and the roles whose starter role the rules no longer declare.
+
+**Exceptions**
+
+- `RefusalException`: `access.system-only` for anyone but begun system work.
+
+**Example**
+
+```csharp
+using (access.BeginSystem("gardens"))
+{
+    var followed = await roles.FollowStarterRolesAsync(draft => new PlotRole(PlotRoleId.Create(), garden, draft), cancellationToken, scope: role => role.GardenId == garden);
+}
 ```
 
 #### `RenameAsync(TRoleId, string, string?, CancellationToken)`
@@ -1093,6 +1130,45 @@ Requires the caller to hold `permission` for the whole of what the roles are kep
 **Exceptions**
 
 - `RefusalException`: The caller does not hold it.
+
+### `StarterRolesFollowed<TRole, TRoleId>`
+
+```csharp
+public sealed record StarterRolesFollowed<TRole, TRoleId>
+    where TRole : CustomRoleAggregate<TRoleId>
+    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+```
+
+What following the starter roles did ([`CustomRoleManager.FollowStarterRolesAsync`](#followstarterrolesasyncfunccustomroledraft-trole-cancellationtoken-expressionfunctrole-bool)). A role that follows its starter role already, one a customer made and one that is archived are in none of the lists.
+
+**Type parameters**
+
+- `TRole`: The application's role class.
+- `TRoleId`: The role class's id.
+
+| Member | Summary |
+|---|---|
+| [`StarterRolesFollowed(IReadOnlyList<TRole>, IReadOnlyList<TRoleId>, IReadOnlyList<TRoleId>)`](#starterrolesfollowedireadonlylisttrole-ireadonlylisttroleid-ireadonlylisttroleid) | The primary constructor: the type's summary says what it makes. |
+| `IReadOnlyList<TRole> Made { get; init; }` | The roles made, in the order the rules declare their starter roles. |
+| `IReadOnlyList<TRoleId> Changed { get; init; }` | The roles whose permissions changed, each with the class's `OnPermissionsSet(set)` called. |
+| `IReadOnlyList<TRoleId> WithoutTheirStarterRole { get; init; }` | The roles made from a starter role the rules no longer declare. They keep their permissions, and follow the starter role again if the rules declare it again under the same name. |
+
+#### `StarterRolesFollowed(IReadOnlyList<TRole>, IReadOnlyList<TRoleId>, IReadOnlyList<TRoleId>)`
+
+```csharp
+public StarterRolesFollowed(
+    IReadOnlyList<TRole> Made,
+    IReadOnlyList<TRoleId> Changed,
+    IReadOnlyList<TRoleId> WithoutTheirStarterRole)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `Made`: The roles made, in the order the rules declare their starter roles.
+- `Changed`: The roles whose permissions changed, each with the class's `OnPermissionsSet(set)` called.
+- `WithoutTheirStarterRole`: The roles made from a starter role the rules no longer declare. They keep their permissions, and follow the starter role again if the rules declare it again under the same name.
 
 ## Who may be a member
 

@@ -21,7 +21,8 @@ public sealed record TenantStarterRolesRun(int RolesMade, int RolesChanged, int 
     /// Runs every <see cref="ITenantStarterRoles"/> that is registered, for the tenant the current work acts in. Begin that
     /// work first, <c>access.BeginSystemIn(tenant)</c>. Each one runs in a scope of its own, made here, so a context it
     /// takes from that scope runs as that work. A failure of one is kept in <see cref="Failed"/>, and the others go on. A
-    /// row another run changed between the reading and the save is read again, up to three times.
+    /// row another run changed between the reading and the save is read again, up to three times. A registration that
+    /// cannot be made is kept in <see cref="Failed"/> too, and ends the run, because the others cannot be told from it.
     /// </summary>
     /// <param name="scopes">Makes the scopes.</param>
     /// <param name="cancellationToken">Cancels the work, between two of them or inside one.</param>
@@ -31,18 +32,25 @@ public sealed record TenantStarterRolesRun(int RolesMade, int RolesChanged, int 
     {
         ArgumentNullException.ThrowIfNull(scopes);
 
+        int count;
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            count = scope.ServiceProvider.GetServices<ITenantStarterRoles>().Count();
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            return new TenantStarterRolesRun(0, 0, 0, [failure]);
+        }
+
         var (made, changed, gone) = (0, 0, 0);
         var failed = new List<Exception>();
-        for (var index = 0; ; index++)
+        for (var index = 0; index < count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                if (await FollowAsync(scopes, index, cancellationToken).ConfigureAwait(false) is not { } followed)
-                {
-                    return new TenantStarterRolesRun(made, changed, gone, failed);
-                }
-
+                var followed = await FollowAsync(scopes, index, cancellationToken).ConfigureAwait(false);
                 made += followed.RolesMade;
                 changed += followed.RolesChanged;
                 gone += followed.RolesWithoutTheirStarterRole;
@@ -52,22 +60,19 @@ public sealed record TenantStarterRolesRun(int RolesMade, int RolesChanged, int 
                 failed.Add(failure);
             }
         }
+
+        return new TenantStarterRolesRun(made, changed, gone, failed);
     }
 
-    /// <summary>
-    /// Runs the one at <paramref name="index"/>, in a scope of its own, tried again on a lost race;
-    /// <see langword="null"/> when there are not that many.
-    /// </summary>
-    private static async Task<TenantStarterRolesFollowed?> FollowAsync(IServiceScopeFactory scopes, int index, CancellationToken cancellationToken)
+    /// <summary>Runs the one at <paramref name="index"/>, in a scope of its own, tried again on a lost race.</summary>
+    private static async Task<TenantStarterRolesFollowed> FollowAsync(IServiceScopeFactory scopes, int index, CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
                 await using var scope = scopes.CreateAsyncScope();
-                return scope.ServiceProvider.GetServices<ITenantStarterRoles>().ElementAtOrDefault(index) is { } roles
-                    ? await roles.FollowAsync(cancellationToken).ConfigureAwait(false)
-                    : null;
+                return await scope.ServiceProvider.GetServices<ITenantStarterRoles>().ElementAt(index).FollowAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (ConcurrencyConflictException) when (attempt < Attempts)
             {

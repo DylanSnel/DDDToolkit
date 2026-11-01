@@ -161,8 +161,10 @@ public sealed class ShowDocumentHandler(FilingContext db, MembershipAccessManage
 ### The resources a caller holds a permission on
 
 `db.Documents.WhereIHold(DocumentPermissions.View)` keeps the documents the caller holds `documents.view` on. It is
-part of your query, so a list runs as one statement and fetches no ids first
-([tutorial step 6](tutorial.md#step-6-open-a-board-see-it-list-them)). On the set, `WhereIHold` finds the context. A
+part of your query, so a list runs as one statement and fetches no ids first. Use it for the documents a caller may edit,
+with `DocumentPermissions.Edit`, and for a list on a database without row level security. On a database with row level
+security, a list needs no such filter, because the read policy leaves out what the caller does not see
+([tutorial step 6](tutorial.md#step-6-open-a-board-get-it-list-them)). On the set, `WhereIHold` finds the context. A
 query that starts with a filter of yours passes the context it runs on:
 
 ```csharp

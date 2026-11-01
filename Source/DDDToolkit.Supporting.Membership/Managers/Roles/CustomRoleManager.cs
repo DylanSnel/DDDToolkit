@@ -152,14 +152,14 @@ public class CustomRoleManager<TRole, TRoleId, TResource>
     /// added, a permission it lost is taken out, and what the customer changed stays. An archived role follows nothing and
     /// is not made again. A renamed role follows.
     /// <para>
-    /// System work alone runs it, in any scope: what a starter role holds is the application's decision. In an application
-    /// joined to an organization's package, that package runs it when it makes a customer and at every start of the host,
-    /// through the class the generator writes for the role class. It saves only when something changed, so a second run in a
-    /// row reads and writes nothing. A starter role whose name a customer already gave another role fails the save of a role
-    /// class with a unique index on the name, and with it the rest of that customer's roles, until that role is renamed.
+    /// System work alone runs it, in any scope, because what a starter role holds is the application's decision. In an
+    /// application joined to an organization's package, that package runs it when it makes a customer and at every start of the
+    /// host, through the class the generator writes for the role class. It saves only when something changed, so a second run
+    /// in a row reads and writes nothing. A starter role whose name a customer already gave another role fails the save of a
+    /// role class with a unique index on the name, and with it the rest of that customer's roles, until that role is renamed.
     /// </para>
     /// <para>
-    /// An application with no such package calls <see cref="CreateStarterRolesAsync"/>, or this, itself: the toolkit cannot
+    /// An application with no such package calls <see cref="CreateStarterRolesAsync"/>, or this, itself. The toolkit cannot
     /// know when one of its scopes begins.
     /// </para>
     /// </summary>

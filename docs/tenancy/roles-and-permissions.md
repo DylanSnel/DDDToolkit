@@ -211,6 +211,7 @@ When you drop your own administrators' starter role and use the default, no tena
 
 A tenant keeps the roles that its starter roles created, whatever you change in the starter roles later. When the host
 runs `SyncStarterRoles()`, those roles follow their starter roles, in every tenant. What a tenant changed itself stays.
+Another module's starter roles run with them ([Starter roles of another module](#starter-roles-of-another-module)).
 
 ### How a role follows its starter role
 
@@ -257,6 +258,7 @@ builder.Services.SyncStarterRoles();   // once the host has started, every tenan
   starts at the same time, changes nothing more. When another change of the tenant's access commits first, the sync
   reads the tenant again, for at most three attempts.
 - The sync logs a tenant that fails as an error, and tries that tenant again at the next start.
+- After a tenant's own roles, the sync runs [another module's starter roles](#starter-roles-of-another-module) there.
 - To sync from a deployment step or an operator's endpoint, leave out the call and run
   [`IStarterRoleSync`](reference/catalogue.md#istarterrolesync) yourself. `AddTenancy` registers it.
 - To sync one tenant for an operator, write a command marked `[Operator]` that names the tenant with a `[ForTenant]`
@@ -294,6 +296,28 @@ public sealed class FollowStarterRolesInHandler(RoleManager roles)
 ```
 
 </details>
+
+### Starter roles of another module
+
+Tenancy knows nothing of another module. A module registers an `ITenantStarterRoles`, for "this module's starter roles in
+the tenant the current work acts in", and Tenancy runs every one that is registered. Membership's generator writes one for a
+role class kept for a resource, and `AddBoardMembershipWithTenancy` registers it
+([Starter roles with Tenancy](../membership/permissions-and-roles.md#starter-roles-with-tenancy)).
+
+- `TenantManager.ProvisionAsync` runs them after its save, as system work in the new tenant.
+- `IStarterRoleSync` runs them for each tenant, after Tenancy's own roles, as system work in that tenant.
+- Each one runs in a scope of its own, which begins after that system work. So a context it takes from that scope runs as
+  that work.
+- It is not one transaction. A module has its own context, so the tenant is saved first. A failure after the save does not
+  fail `ProvisionAsync`. It is logged as an error, the tenant is returned, and the next `SyncStarterRoles()` makes the role.
+- In a sync, a failure belongs to that tenant, and `StarterRoleSyncReport.Failed` names it. The other modules and the other
+  tenants go on.
+- `StarterRoleSyncReport` counts them with Tenancy's own: `RolesMade`, `RolesChanged` and `RolesWithoutTheirStarterRole`.
+  `RolesMade` is always another module's, because Tenancy's sync makes no role of its own.
+
+To write one yourself, register it per scope with `TryAddEnumerable`, and make it save only when something changed, because
+it runs again at every start. A host on other storage runs them in its own `IStarterRoleSync` with
+`TenantStarterRolesRun.RunAsync(scopes, cancellationToken)`.
 
 ### Telling the tenant's administrators
 

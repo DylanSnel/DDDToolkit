@@ -55,7 +55,7 @@ The organization's name is the tenant's name, and `OrganizationManager.RenameAsy
 | Member | Summary |
 |---|---|
 | `MostPerPage = 200` | How many tenants a page of [`ListAsync`](#listasyncstring-int-cancellationtoken) holds at most. |
-| [`TenantManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, ICurrentUser, IStarterRoleTexts?)`](#tenantmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider-tenancyoptionsttenantid-tseatid-tunitid-troleid-icurrentuser-istarterroletexts) | The primary constructor: the type's summary says what it makes. |
+| [`TenantManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, ICurrentUser, IStarterRoleTexts?, NewTenantStarterRoles?)`](#tenantmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider-tenancyoptionsttenantid-tseatid-tunitid-troleid-icurrentuser-istarterroletexts-newtenantstarterroles) | The primary constructor: the type's summary says what it makes. |
 | [`ProvisionAsync(TenantToProvision<TTenant, TTenantId, TUnit, TUnitId, TSeat, TSeatId, TRoleId>, CancellationToken)`](#provisionasynctenanttoprovisionttenant-ttenantid-tunit-tunitid-tseat-tseatid-troleid-cancellationtoken) | Provisions a tenant, in one save: the tenant, its organization with the root, a role copied from every starter role seeded for its shape, and a first seat for the administrator's identity, placed at the root and granted the administrators' role there with no end. |
 | [`ChangeShapeAsync(TenantShape, IReadOnlyDictionary<string, TRoleId>?, CultureInfo?, CancellationToken)`](#changeshapeasynctenantshape-ireadonlydictionarystring-troleid-cultureinfo-cancellationtoken) | Changes a flat tenant into a hierarchical one, and gives it a copy of every starter role seeded for the new shape it has no copy of yet. |
 | [`SuspendAsync(string, CancellationToken)`](#suspendasyncstring-cancellationtoken) | Suspends the caller's tenant: system work in that tenant only. |
@@ -63,7 +63,7 @@ The organization's name is the tenant's name, and `OrganizationManager.RenameAsy
 | [`CloseAsync(string, CancellationToken)`](#closeasyncstring-cancellationtoken) | Closes the caller's tenant for good: system work in that tenant only. |
 | [`ListAsync(string?, int, CancellationToken)`](#listasyncstring-int-cancellationtoken) | A page of the tenants of the application, for its operators, by slug: those after the last tenant of the page before, or the first ones. |
 
-#### `TenantManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, ICurrentUser, IStarterRoleTexts?)`
+#### `TenantManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, ICurrentUser, IStarterRoleTexts?, NewTenantStarterRoles?)`
 
 ```csharp
 public TenantManager(
@@ -72,7 +72,8 @@ public TenantManager(
     TimeProvider clock,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
     ICurrentUser user,
-    IStarterRoleTexts? starterRoleTexts = null)
+    IStarterRoleTexts? starterRoleTexts = null,
+    NewTenantStarterRoles? otherModules = null)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -85,6 +86,7 @@ The primary constructor: the type's summary says what it makes.
 - `options`: Which token roles are operators', for the tenants an operator lists.
 - `user`: Who is calling, as the toolkit says: the operator that lists the tenants.
 - `starterRoleTexts`: The starter roles' names and descriptions in a tenant's language, when the application registered some; otherwise every role made from a starter role gets the catalogue's texts, but the role of the default administrators' starter role, which the package adds, gets the package's own texts in that language, English or Dutch.
+- `otherModules`: Runs another module's starter roles after a tenant is provisioned ([`ITenantStarterRoles`](catalogue.md#itenantstarterroles)). Without it, none run.
 
 #### `ProvisionAsync(TenantToProvision<TTenant, TTenantId, TUnit, TUnitId, TSeat, TSeatId, TRoleId>, CancellationToken)`
 
@@ -101,6 +103,8 @@ The roles are named as the catalogue names its starter roles, or, with a languag
 Only system work outside any tenant provisions one, and it does not do so with that power: once it knows the new tenant's id, everything else, the check that the slug is free and the save included, runs as system work inside the new tenant ([`TenancyWork.BeginSystemIn<TTenantId, TSeatId>`](access.md#beginsysteminttenantid-tseatid-string-1)), so it writes that tenant's rows and nothing else. On a database that keeps tenants apart by itself, such as Postgres with row level security, the slug check then sees no other tenant, and the unique index on the slug is what refuses one that is taken.
 
 The organization, the first seat and the roles belong to the tenant, and are read through the other managers by a request that names the new tenant. Imports and seeding that need fixed ids pass them in the command.
+
+After the save, still as system work in the new tenant, every registered [`ITenantStarterRoles`](catalogue.md#itenantstarterroles) runs, each in a scope of its own: another module's starter roles. This is not one transaction. A module has its own context, so the tenant is saved first. A failure there does not fail provisioning: it is logged as an error, the tenant is returned, and the next `services.SyncStarterRoles()` makes the role.
 
 **Parameters**
 
@@ -3094,7 +3098,7 @@ A module declares its permissions once, as the constants of a static class marke
 public static IServiceCollection SyncStarterRoles(this IServiceCollection services)
 ```
 
-Brings every tenant's roles up to the starter roles they were made from, in the background, once the host has started: after its start-up checks, when it runs them, and after every hosted service has started. A role made from a starter role gets the permissions the starter role gained since the role was made or last followed it, a module's new permissions in an administrators' starter role that lists none among them, and loses the permissions the starter role lost; what the tenant changed itself stays. Each role that changes raises [`RoleFollowedItsStarterRole<TTenantId, TRoleId, TSeatId>`](aggregates.md#rolefolloweditsstarterrolettenantid-troleid-tseatid), for the host to tell the tenant's administrators; the package sends no message itself.
+Brings every tenant's roles up to the starter roles they were made from, in the background, once the host has started: after its start-up checks, when it runs them, and after every hosted service has started. A role made from a starter role gets the permissions the starter role gained since the role was made or last followed it, a module's new permissions in an administrators' starter role that lists none among them, and loses the permissions the starter role lost; what the tenant changed itself stays. Each role that changes raises [`RoleFollowedItsStarterRole<TTenantId, TRoleId, TSeatId>`](aggregates.md#rolefolloweditsstarterrolettenantid-troleid-tseatid), for the host to tell the tenant's administrators; the package sends no message itself. Every registered [`ITenantStarterRoles`](catalogue.md#itenantstarterroles) runs as well, in each tenant, so another module's roles follow the same way and a role a tenant lacks is made.
 
 ```csharp
 builder.Services.RunStartupChecks();

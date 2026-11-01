@@ -21,7 +21,7 @@
       "everyMember": true,
       "inRoles": true,
       "fromAbove": true,
-      "request": { "name": "SeeBoard", "route": "GET /boards/{board}" }
+      "request": { "name": "GetBoardQuery", "route": "GET /boards/{board}" }
     },
     {
       "name": "boards.edit",
@@ -31,7 +31,7 @@
       "everyMember": false,
       "inRoles": true,
       "fromAbove": true,
-      "request": { "name": "RenameBoard", "route": "PUT /boards/{board}/name" }
+      "request": { "name": "EditBoardCommand", "route": "PUT /boards/{board}" }
     },
     {
       "name": "boards.members.manage",
@@ -41,7 +41,7 @@
       "everyMember": false,
       "inRoles": false,
       "fromAbove": true,
-      "request": { "name": "AddMember", "route": "POST /boards/{board}/members" }
+      "request": { "name": "AddMemberCommand", "route": "POST /boards/{board}/members" }
     }
   ],
   "boardRoles": [{ "name": "editor", "permissions": ["boards.view", "boards.edit"] }],

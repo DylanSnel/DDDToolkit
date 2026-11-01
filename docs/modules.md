@@ -671,7 +671,7 @@ Projects/
     Ownership/
       Commands/                   ChangeProjectOwner.cs
     ProjectRoles/
-      Commands/                   MakeProjectRole.cs, RenameProjectRole.cs, SetProjectRolePermissions.cs, ArchiveProjectRole.cs, SetUpProjectRoles.cs
+      Commands/                   MakeProjectRole.cs, RenameProjectRole.cs, SetProjectRolePermissions.cs, ArchiveProjectRole.cs
       Queries/                    TenantProjectRoles.cs, ProjectRolesById.cs
       ProjectRoleListing.cs       the result type of both
     StoredProjects/               IProjectStore.cs, IProjectReads.cs, IProjectReading.cs: the ports several features share

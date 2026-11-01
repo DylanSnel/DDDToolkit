@@ -500,6 +500,7 @@ using (access.BeginSystemIn(tenant, administrator))
 }
 
 var tenant = access.CurrentTenant.Id;                 // null outside any tenant
+var scope = access.CurrentTenant.RequireSeat();       // the tenant and a seat that is never null, for work a seat does
 
 // In another module: the line, once, in its application project
 [assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]

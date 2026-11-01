@@ -365,13 +365,15 @@ The role manager changes the roles a customer makes, `Roles.Custom(...)`
 |---|---|
 | `CreateAsync(role)` | adds a role your constructor made, and saves it |
 | `CreateStarterRolesAsync(make)` | makes the starter roles the customer does not have yet, each with your function, and saves them |
+| `FollowStarterRolesAsync(make)` | makes what is missing and makes the rest follow their starter roles, in one save. System work alone. |
 | `RenameAsync(role, name, description)` | renames a role and describes it again |
 | `SetPermissionsAsync(role, permissions)` | sets what a role gives |
 | `ArchiveAsync(role)` | archives a role: it gives nothing from then on |
 | `ListAsync()`, `ByIdAsync(roles)` | the roles there are for the caller, archived ones included |
 
 - **Every change requires the permission the rules name in `managedWith`.** System work needs none. Rules without
-  `managedWith` let only system work change the roles.
+  `managedWith` let only system work change the roles. `FollowStarterRolesAsync` is system work's alone
+  ([Starter roles with Tenancy](permissions-and-roles.md#starter-roles-with-tenancy)).
 - **Who holds that permission** is answered by `ICustomRoleAccess<TResource>`. With Tenancy, the join registers it,
   and the caller must hold the permission for the whole tenant. Without Tenancy, register your own, or keep the role
   changes to system work.
@@ -414,7 +416,7 @@ refusal.
 - **Invariants catch code that changed the collection another way.** Write invariants that call
   [`OneMembershipPerMember()`](reference/resource-and-members.md#onemembershippermember) and `OwnerStays()`.
 - **For a screen of members**, the member manager's `ListAsync` returns the owner first, then the other members by
-  start ([tutorial step 6](tutorial.md#step-6-open-a-board-see-it-list-them)).
+  start ([tutorial step 6](tutorial.md#step-6-open-a-board-get-it-list-them)).
 
 ## Several kinds of resource
 

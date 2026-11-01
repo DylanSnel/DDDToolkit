@@ -196,8 +196,8 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// Follows the starter role the role was made from, as <paramref name="rules"/> declare it now. What the starter role
     /// gave the role the last time (<see cref="PermissionsFromStarterRole"/>) is compared with what the starter role holds
     /// now. A permission the starter role gained is added to the role, and a permission it lost is taken out. What the
-    /// customer changed stays: a permission it took out stays out while the starter role still holds it, and a permission it
-    /// added stays while the starter role never held it. The starter role's permissions are remembered for the next time.
+    /// customer changed stays. A permission it took out stays out while the starter role still holds it, and a permission it
+    /// added stays while the starter role never held it. The role remembers the starter role's permissions for the next time.
     /// <para>
     /// Four cases are settled this way, the same as for a role of an organization's package:
     /// </para>
@@ -219,7 +219,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// </summary>
     /// <param name="rules">The rules of the resource the role is of, as the application runs with them now.</param>
     /// <returns>
-    /// Whether the role changed: its permissions, or only what it remembers of its starter role, or the order its permissions
+    /// Whether the role changed. That is its permissions, what it remembers of its starter role, or the order its permissions
     /// were stored in. <see langword="false"/> for a role a customer made, a role whose starter role the rules no longer
     /// declare, and a role that follows its starter role already.
     /// </returns>

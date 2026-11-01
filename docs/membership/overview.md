@@ -69,7 +69,7 @@ handlers take too:
 - a member holds roles, each for a period;
 - each role is one of the tenant's board roles;
 - the member manager changes the members through the board's member list;
-- the role manager makes the board roles, from your starter roles, and changes them;
+- the role manager reads and changes the board roles, and what the generator writes makes them from your starter roles;
 - the rules read your permissions;
 - the access manager answers questions about the caller and boards, by the rules.
 
@@ -101,7 +101,7 @@ classDiagram
     }
     class BoardRoleManager {
         generated
-        CreateStarterRolesAsync()
+        FollowStarterRolesAsync()
         RenameAsync()
         SetPermissionsAsync()
         ListAsync()
@@ -122,6 +122,7 @@ classDiagram
         Name
         Permissions
         FromStarterRole
+        PermissionsFromStarterRole
     }
     class BoardPermissions {
         on a board: view, edit, members.manage
@@ -163,8 +164,8 @@ classDiagram
 | **Owner** (`[Owner]`) | One per resource, and always a member. The owner holds no role. The owner holds every permission marked for the owner. | Rhea |
 | **Role** | A named set of permissions, given to a member on one resource. | editor |
 | **Role hold** (`MemberRole`) | One role held by one member. It starts at a set time, and ends at a set time or never. It counts only while the membership lasts. | Leo holds editor on Crane schedule |
-| **Custom role** (`BoardRole`) | A role stored as a row of the tenant. The tenant can rename it and change its permissions. A **starter role** is one every tenant gets a copy of. | The tenant's editor, made from the starter role `editor` |
-| **Role manager** (`BoardRoleManager`) | The class your handlers make and change custom roles through. It requires the permission the rules name in `managedWith`. The generator writes it, named after the role class. | `CreateStarterRolesAsync(...)`, for Harbor Works |
+| **Custom role** (`BoardRole`) | A role stored as a row of the tenant. The tenant can rename it and change its permissions. A **starter role** is one every tenant gets a copy of, and the copy follows it. | The tenant's editor, made from the starter role `editor` |
+| **Role manager** (`BoardRoleManager`) | The class your handlers make and change custom roles through. It requires the permission the rules name in `managedWith`. The generator writes it, named after the role class. | `ListAsync()`, for the roles of Harbor Works |
 | **Permission** and its **level** | One thing a caller may do, as a string, with the level where the check asks for it: on one resource (`[On<Board>]`), at a unit (`[AtUnit]`), or for the whole tenant (`[AtTenant]`). | `boards.edit` on a board, `boards.create` at North |
 | **Rules** (`MembershipRules`) | One declaration per kind of resource: where the roles come from, and whether a permission held above reaches the resource. The C# check and the database functions read the same rules. | `BoardMembership.Rules` |
 | **Access manager** (`MembershipAccessManager<Board>`) | The service your handlers ask what the current caller holds on one kind of resource. Each question takes the resource, or its id. | `PermissionsOnAsync([board], ...)`, for the buttons of a board's screen |

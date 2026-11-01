@@ -571,7 +571,7 @@ sample page, in [Who may do what, in the sample](../docs/tenancy/the-sample.md#w
 four of its requests and its seeded people from the attribute on a request to the policies of the rows it touches.
 
 A crew is the Membership package's: its members are seats, and the roles they hold are project roles, which
-each tenant keeps for its crews, starting from three starter roles made when the tenant is set up, and makes,
+each tenant keeps for its crews, starting from three starter roles made when the tenant is provisioned, and makes,
 renames and archives on the UI's Crew roles page, which sets their permissions too. A role of the organization goes on no crew, and
 the Tenants module says nothing of crews any more. The four functions the database asks about a crew keep
 their names, and the package writes them, with the lock that holds a crew's rows and a project's owner to the

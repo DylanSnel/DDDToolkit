@@ -52,13 +52,16 @@ each resource. It also keeps a resource reachable after its owner has left, so s
 
 ## With Tenancy
 
-The two packages do not reference each other. In a project that references both, Membership's generator writes two
-things for each member class whose members are seats: a class that returns what the rules and the managers need from
-Tenancy, and the registration `Add{Resource}MembershipWithTenancy`. The tutorial uses both throughout:
+The two packages do not reference each other. In a project that references both, Membership's generator writes these
+for each member class whose members are seats: a class that returns what the rules and the managers need from Tenancy, the
+registration `Add{Resource}MembershipWithTenancy`, and, for a role class kept for the resource, a class that makes the
+tenant's starter roles ([Starter roles with Tenancy](permissions-and-roles.md#starter-roles-with-tenancy)). The tutorial uses
+them throughout:
 
 - the member class over `SeatId` ([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles));
 - the context ([step 3](tutorial.md#step-3-where-it-is-stored));
 - the registration ([step 5](tutorial.md#step-5-the-modules-registration-and-the-host));
+- a tenant's starter roles ([step 7](tutorial.md#step-7-members));
 - reach from above ([step 8](tutorial.md#step-8-reach-from-above));
 - the access manager over seats ([step 9](tutorial.md#step-9-what-the-caller-may-do-on-a-board)).
 
@@ -128,10 +131,13 @@ roles instead:
 - **Without that line**, the generator cannot tell which ids are Tenancy's, or a seat id from another id. So each
   member class of the module gets the registration, and the registration takes the tenant, unit and role id types.
   The role id type is left out where members hold the tenant's roles. Call the registration only for a resource whose
-  members are seats:
+  members are seats. For a role class kept for the resource, `makeRole` is required, because the generator does not know
+  the tenant id:
 
   ```csharp
-  services.AddBoardMembershipWithTenancy<BoardsContext, TenantId, OrganizationUnitId, RoleId>(BoardMembership.Rules);
+  services.AddBoardMembershipWithTenancy<BoardsContext, TenantId, OrganizationUnitId, RoleId>(
+      BoardMembership.Rules,
+      makeRole: (provider, tenant, draft) => new BoardRole(BoardRoleId.Create(), tenant, draft, BoardMembership.Rules));
   ```
 
 ### What you still write
@@ -150,10 +156,11 @@ roles instead:
 - **The tenant on your rows.** Membership stores no tenant. Mark the tenant property of the resource and of your role
   class `[OfTenant]`, from `Supporting.Tenancy.Abstractions`. Tenancy's convention keeps both classes inside their
   tenant, and Membership's mapping gives the role class its two unique indexes per tenant
-  ([Which customer a role belongs to](permissions-and-roles.md#which-customer-a-role-belongs-to)). You make the
-  starter roles with the role manager when you set up a tenant.
+  ([Which customer a role belongs to](permissions-and-roles.md#which-customer-a-role-belongs-to)). The generator writes
+  what makes a tenant's starter roles
+  ([Starter roles with Tenancy](permissions-and-roles.md#starter-roles-with-tenancy)).
 - **Handlers that need the caller's tenant or seat** take Tenancy's access manager, `TenancyAccessManager`, as the
-  tutorial's `OpenBoard` does. It also begins system work in the module's scope
+  tutorial's `OpenBoardHandler` does. It also begins system work in the module's scope
   ([System work](checks-and-saves.md#system-work)).
 - **On Postgres**, the export writes Tenancy's contribution (from your `[TenancyCatalogue]`) and each resource's
   contribution together. So a resource's function finds Tenancy's functions in any schema. A function name that

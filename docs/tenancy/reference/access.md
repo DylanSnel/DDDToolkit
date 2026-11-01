@@ -332,6 +332,7 @@ board.AddMember(command.Seat, command.Role, MemberPeriod.Open(now), now, addedBy
 | [`Id`](#id) | The tenant the current work acts in; `null` when it acts in none. |
 | [`Seat`](#seat) | The user's seat in the tenant. |
 | [`Require()`](#require) | The tenant the current work acts in, with the seat, for work that only makes sense inside one. |
+| [`RequireSeat()`](#requireseat) | The tenant the current work acts in, with the seat, for work that a seat does. |
 
 #### `IsAvailable`
 
@@ -402,6 +403,28 @@ var current = access.CurrentTenant.Require();
 var board = Board.Open(BoardId.Create(), current.Id, command.Name, openedBy: current.Seat);
 ```
 
+#### `RequireSeat()`
+
+```csharp
+public SeatInTenant<TTenantId, TSeatId> RequireSeat()
+```
+
+The tenant the current work acts in, with the seat, for work that a seat does. It reads nothing. A user who is nobody gets the refusal [`Require`](#require) gives.
+
+**Returns**: The tenant and the seat: the user's seat, or for system work in the tenant the seat it acts for, with [`SeatInTenant.BySystem`](#seatintenantttenantid-tseatid) set.
+
+**Exceptions**
+
+- `RefusalException`: The user is nobody, with the refusal [`Require`](#require) gives: `tenancy.tenant-required`, `tenancy.not-seated`, `tenancy.tenant-inactive` or `tenancy.seat-suspended`. Outside any request, `tenancy.not-seated`.
+- `InvalidOperationException`: The work is system work that acts for no seat: begin it with the overload of `BeginSystemIn` that takes a seat. Or it is system work outside any tenant; or the current user was made with other id types.
+
+**Example**
+
+```csharp
+var scope = access.CurrentTenant.RequireSeat();
+var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, scope.Seat, clock.GetUtcNow());
+```
+
 ### `TenantInScope<TTenantId, TSeatId>`
 
 ```csharp
@@ -468,6 +491,37 @@ The ids of the active and the suspended tenants, in no order. The read is no sea
 **Exceptions**
 
 - `ArgumentException`: `scope` is not a scope. Nothing is read then.
+
+### `SeatInTenant<TTenantId, TSeatId>`
+
+```csharp
+public readonly record struct SeatInTenant<TTenantId, TSeatId>
+    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+    where TSeatId : struct, IEntityId, IEquatable<TSeatId>
+```
+
+The tenant a caller acts in and its seat, as [`CurrentTenant.RequireSeat`](#requireseat) answers them.
+
+| Member | Summary |
+|---|---|
+| [`SeatInTenant(TTenantId, TSeatId, bool)`](#seatintenantttenantid-tseatid-bool) | The primary constructor: the type's summary says what it makes. |
+| `TTenantId Id { get; init; }` | The tenant. |
+| `TSeatId Seat { get; init; }` | The caller's seat, or the seat system work acts for. |
+| `bool BySystem { get; init; }` | Whether this is system work in the tenant rather than a seat. |
+
+#### `SeatInTenant(TTenantId, TSeatId, bool)`
+
+```csharp
+public SeatInTenant(TTenantId Id, TSeatId Seat, bool BySystem)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `Id`: The tenant.
+- `Seat`: The caller's seat, or the seat system work acts for.
+- `BySystem`: Whether this is system work in the tenant rather than a seat.
 
 ## Users
 

@@ -1,8 +1,8 @@
 namespace DDDToolkit.Supporting.Tenancy;
 
 /// <summary>
-/// The starter roles of another module in the tenant the current work acts in. Tenancy knows nothing of that module:
-/// the module registers one of these, and <c>TenantManager.ProvisionAsync</c> and <see cref="IStarterRoleSync"/> run every
+/// The starter roles of another module in the tenant the current work acts in. Tenancy knows nothing of that module. The
+/// module registers one of these, and <c>TenantManager.ProvisionAsync</c> and <see cref="IStarterRoleSync"/> run every
 /// one that is registered. Membership's generator writes it for a member class whose roles are kept per resource, and
 /// <c>AddBoardMembershipWithTenancy</c> registers it, so an application writes none for its boards.
 /// <code>
@@ -19,7 +19,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// Register it per scope, and take what it needs from the scope: <c>services.TryAddEnumerable(ServiceDescriptor.Scoped&lt;ITenantStarterRoles, ReportTemplateStarterRoles&gt;())</c>.
 /// Each one runs as system work in the tenant, in a scope of its own that begins after that system work, so a context
 /// it takes from the scope runs as that work. It must make what is missing and change what has to change, and save only
-/// when something changed: it runs again at every start of the host.
+/// when something changed, because it runs again at every start of the host.
 /// </para>
 /// <para>
 /// It runs in another save than the tenant's. A module has its own context, so the tenant is saved first. A failure in

@@ -1005,6 +1005,8 @@ Its permissions are held to the resource's rules: a role gives only permissions 
 
 An archived role gives nothing from then on and is not given again. It stays, and stays on the members that hold it, so what they held still has a name. A role made from a starter role remembers which ([`FromStarterRole`](#customrole-customroleaggregatetroleid)), and only when it is made: that is how the starter roles a customer has not made yet are found, whatever it has called the ones it has. A role called "owner" is a role like any other: the owner of a resource holds no role.
 
+A role made from a starter role follows it ([`FollowStarterRole`](#followstarterrolemembershiprules)). It remembers what the starter role gave it ([`PermissionsFromStarterRole`](#customrole-customroleaggregatetroleid)). A permission the starter role gains later is added to it, a permission the starter role loses is taken out, and what the customer changed itself stays. The manager's `FollowStarterRolesAsync` runs that for every role of a customer. Nothing else changes a role behind the customer's back.
+
 The class is the application's. Whose a role is, a customer's say, is a property the application adds and sets in its own constructor, and keeping one customer's roles from another's is its own rule on its own rows, as for any aggregate. That a name is not used twice is an index it declares over that property and [`Name`](#customrole-customroleaggregatetroleid).
 
 **Type parameters**
@@ -1022,9 +1024,11 @@ The class is the application's. Whose a role is, a customer's say, is a property
 | `IReadOnlyList<string> Permissions { get; }` | The permissions the role holds: distinct and in ordinal order. What it gives a member is asked of [`Gives`](#givesstring-membershiprules). |
 | `CustomRoleStatus Status { get; }` | Whether the role is in use. An archived role gives nothing. |
 | `string? FromStarterRole { get; }` | The name of the starter role this one was made from, as the resource's rules declare it, or `null` for a role a customer made. Set when the role is made and never after, so it outlasts a new name. |
+| `IReadOnlyList<string>? PermissionsFromStarterRole { get; }` | The permissions the starter role gave the role, as the rules declared them when the role was made from it or last followed it. [`FollowStarterRole`](#followstarterrolemembershiprules) compares the starter role with this list, to tell a permission the starter role gained or lost from one the customer added or took out. Distinct and in ordinal order. It holds the starter role's permissions, whatever permissions the draft had. `null` for a role a customer made, and for a role made before roles remembered this. Such a role follows as if the starter role had given it nothing yet. |
 | [`Gives(string, MembershipRules)`](#givesstring-membershiprules) | Whether the role gives `permission` to a member that holds it: it is in use, it holds the permission, and the resource's rules let a member's role give that permission. |
 | [`Rename(string, string?, MembershipRules)`](#renamestring-string-membershiprules) | Renames the role and says again what it is for, and calls the class's `OnRenamed()` when that changed anything. |
 | [`SetPermissions(IReadOnlyCollection<string>, MembershipRules)`](#setpermissionsireadonlycollectionstring-membershiprules) | Sets the permissions the role gives, for every member that holds it. |
+| [`FollowStarterRole(MembershipRules)`](#followstarterrolemembershiprules) | Follows the starter role the role was made from, as `rules` declare it now. |
 | [`Archive(MembershipRules)`](#archivemembershiprules) | Archives the role: it stays, on every member that holds it, gives nothing from now on, and is not given again. |
 | [`GetOwnInvariantViolations()`](#getowninvariantviolations-1) | Runs the rules and `CheckInvariants()` seam of this aggregate, and returns every rule that is broken, without throwing. |
 | [`EnsureOwnInvariants()`](#ensureowninvariants-1) | Runs the rules and `CheckInvariants()` seam of this aggregate, and throws when it finds something broken. |
@@ -1124,6 +1128,34 @@ Sets the permissions the role gives, for every member that holds it. Every permi
 - `ArgumentNullException`: `permissions` or `rules` is null.
 - `RefusalException`: `role-archived`; `permission-not-for-members`, naming every permission the rules do not let a member's role give. Under the resource's codes.
 
+#### `FollowStarterRole(MembershipRules)`
+
+```csharp
+public bool FollowStarterRole(MembershipRules rules)
+```
+
+Follows the starter role the role was made from, as `rules` declare it now. What the starter role gave the role the last time ([`PermissionsFromStarterRole`](#customrole-customroleaggregatetroleid)) is compared with what the starter role holds now. A permission the starter role gained is added to the role, and a permission it lost is taken out. What the customer changed stays. A permission it took out stays out while the starter role still holds it, and a permission it added stays while the starter role never held it. The role remembers the starter role's permissions for the next time.
+
+Four cases are settled this way, the same as for a role of an organization's package:
+
+- A permission the customer added that the starter role gains later belongs to the starter role from then on. It goes when the starter role loses it.
+- A permission the customer took out that the starter role loses and gains again later comes back, as a permission the starter role gained.
+- A permission the rules no longer let a member's role give is never taken out. It stays on the role, and [`Gives`](#givesstring-membershiprules) answers `false` for it, because [`Gives`](#givesstring-membershiprules) asks the rules each time. If the rules allow it again, the role gives it again. [`SetPermissions`](#setpermissionsireadonlycollectionstring-membershiprules) refuses such a permission, so a customer that sets the role's permissions has to leave it out.
+- A role with no record yet, made before roles remembered this, follows as if the starter role had given it nothing. It gets every permission the starter role holds that it lacks, and loses none.
+
+The class's `OnPermissionsSet(set)` is called when a permission came in or went out.
+
+**Parameters**
+
+- `rules`: The rules of the resource the role is of, as the application runs with them now.
+
+**Returns**: Whether the role changed. That is its permissions, what it remembers of its starter role, or the order its permissions were stored in. `false` for a role a customer made, a role whose starter role the rules no longer declare, and a role that follows its starter role already.
+
+**Exceptions**
+
+- `ArgumentNullException`: `rules` is null.
+- `RefusalException`: `role-archived`, under the resource's codes: an archived role follows nothing.
+
 #### `Archive(MembershipRules)`
 
 ```csharp
@@ -1222,7 +1254,7 @@ What a new role of a resource is made from.
 | `string Name { get; init; }` | The role's name, 1 to [`CustomRoleAggregate.MaxNameLength`](#customrole-customroleaggregatetroleid) characters; white space around it is dropped. |
 | `string? Description { get; init; }` | What the role is for, at most [`CustomRoleAggregate.MaxDescriptionLength`](#customrole-customroleaggregatetroleid) characters, or nothing. |
 | `IReadOnlyCollection<string> Permissions { get; init; }` | The permissions it gives: each one a permission the resource's rules let a member's role give. |
-| `string? FromStarterRole { get; init; }` | The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync`); a draft made from what a customer entered leaves it out. |
+| `string? FromStarterRole { get; init; }` | The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync` and `FollowStarterRolesAsync`); a draft made from what a customer entered leaves it out. |
 
 #### `CustomRoleDraft(string, string?, IReadOnlyCollection<string>, string?)`
 
@@ -1241,7 +1273,7 @@ The primary constructor: the type's summary says what it makes.
 - `Name`: The role's name, 1 to [`CustomRoleAggregate.MaxNameLength`](#customrole-customroleaggregatetroleid) characters; white space around it is dropped.
 - `Description`: What the role is for, at most [`CustomRoleAggregate.MaxDescriptionLength`](#customrole-customroleaggregatetroleid) characters, or nothing.
 - `Permissions`: The permissions it gives: each one a permission the resource's rules let a member's role give.
-- `FromStarterRole`: The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync`); a draft made from what a customer entered leaves it out.
+- `FromStarterRole`: The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync` and `FollowStarterRolesAsync`); a draft made from what a customer entered leaves it out.
 
 ### `RolePermissionsSet`
 

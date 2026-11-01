@@ -68,7 +68,7 @@ internal sealed class EfStarterRoleSync<TTenant, TTenantId, TOrganization, TUnit
                 failed.Add((tenant.ToString() ?? string.Empty, failure));
             }
 
-            // Tenancy knows nothing of the other modules, and their roles do not depend on Tenancy's: they run whatever became of those.
+            // The other modules' roles do not depend on Tenancy's, so they run whatever became of those.
             using (TenancyWork.BeginSystemIn<TTenantId, TSeatId>(tenant))
             {
                 var others = await TenantStarterRolesRun.RunAsync(scopes, cancellationToken).ConfigureAwait(false);

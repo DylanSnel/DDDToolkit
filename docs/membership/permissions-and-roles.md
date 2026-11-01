@@ -123,21 +123,103 @@ return await staff.AddAsync(command.Folder, command.Staff, command.Role, command
 
 A custom role is given on one resource and counts there alone. The tutorial writes the role class
 ([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles)), leaves its mapping and unique indexes to the
-conventions ([step 3](tutorial.md#step-3-where-it-is-stored)), and makes the starter roles through the role manager
-([step 7](tutorial.md#step-7-members)).
+conventions ([step 3](tutorial.md#step-3-where-it-is-stored)), and gets the starter roles from what the generator writes
+for `AddBoardMembershipWithTenancy` ([step 7](tutorial.md#step-7-members)).
 
 ### Starter roles
 
 - **Starter roles are the roles a scope begins with.** You name them in `Roles.Custom(starters: [...])`. A scope is a
-  tenant, a customer of yours, or the whole application. The role manager's `CreateStarterRolesAsync(make)` makes
-  the starter roles a scope does not have yet. It passes your function a draft for each, and saves the roles your
-  constructor makes from them.
+  tenant, a customer of yours, or the whole application.
 - **Each starter role is made once.** The role manager recognises a role that was made from a starter role by its
   `FromStarterRole` value. A renamed or archived role keeps that value, so it is not made again. A unique index over the
   scope column and `FromStarterRole` stops two requests at the same moment from both making it
   ([Which customer a role belongs to](#which-customer-a-role-belongs-to)).
 - **No starter role is reserved for the owner.** The owner holds no role. A customer may rename, archive and change
   every starter role. A scope with no roles still has resources and owners.
+
+### Starter roles with Tenancy
+
+In an application joined to Tenancy, the toolkit knows when a tenant exists. So you write no request for the starter
+roles. `BoardRole` and its constructor stay as they are, and so do `builder.Services.SyncStarterRoles()` and
+`services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules)`. A new migration adds the column
+`PermissionsFromStarterRole`.
+
+| What changes | Effect on the tenant's role |
+|---|---|
+| A new tenant is provisioned | It has `editor` right after `ProvisionAsync`. |
+| A host starts, and a tenant lacks a starter role | The role is made. |
+| The starter role gains a permission | The role gains it. |
+| The starter role loses a permission | The role loses it. |
+| The tenant took a permission out, and the starter role still holds it | It stays out. |
+| The tenant added a permission itself | It stays. |
+| A role with no record yet, made before this column existed | It gets what it lacks and loses nothing. |
+| The tenant archived the role | It follows nothing, and is not made again. |
+| The tenant renamed the role | It follows. |
+| The rules no longer declare the starter role | The role keeps its permissions, and the report counts it. |
+
+The rules are the same as for a role of Tenancy
+([How a role follows its starter role](../tenancy/roles-and-permissions.md#how-a-role-follows-its-starter-role)). A role
+stores what the starter role gave it in `PermissionsFromStarterRole`, and `FollowStarterRole(rules)` compares that list with
+the rules:
+
+- A permission the rules no longer let a role give (`InRoles`) stays on the row. `Gives` answers `false` for it, because
+  `Gives` asks the rules each time. If the rules allow it again, the role gives it again. `SetPermissions` refuses that
+  permission, so a customer that sets the role's permissions leaves it out.
+- A permission whose starter role lost it, and that the customer took out earlier, comes back if the starter role gains it
+  again.
+- `OnPermissionsSet(set)` runs when a permission came in or went out. A change of the stored list alone runs no hook.
+
+**How the role is made.** The generator writes a class for a member whose role id belongs to a class declared with
+`[CustomRole<TRoleId, TResource>]`, and the registration adds it.
+
+- It calls the role class's public constructor, found by its parameter types in any order: the role id, the tenant id,
+  `CustomRoleDraft`, and optionally `MembershipRules`. It makes the id with `BoardRoleId.Create()`.
+- The optional parameter `makeRole` of the registration takes over, for names, descriptions or ids of your own:
+
+  ```csharp
+  services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules, makeRole: (provider, tenant, draft) =>
+      new BoardRole(BoardRoleId.Create(), tenant, draft with { Name = "Editor", Description = "Edits a board" }, BoardMembership.Rules));
+  ```
+
+- Where no constructor fits, or the role id has no `Create()`, `makeRole` is a required parameter, so the compiler reports
+  it at the call. A module without the `TenancyIds` line names the tenant id at the call, so the generator cannot match the
+  constructor, and `makeRole` is required there too.
+- A member that holds the tenant's own roles, or named roles, gets none of this. Rules with no starter roles do nothing.
+- The role manager reads the roles through the role class's own filter. So a role class kept per tenant marks its tenant
+  `[OfTenant]`. Without the marker, the roles of every tenant count as the current tenant's.
+
+**When it runs.** Tenancy runs it through
+[`ITenantStarterRoles`](../tenancy/roles-and-permissions.md#starter-roles-of-another-module), as system work in the tenant,
+in a scope of its own.
+
+- It saves in another transaction than the tenant. A failure after the tenant's save does not fail `ProvisionAsync`. It is
+  logged as an error, and the next `SyncStarterRoles()` makes the role.
+- Making and following are one save per tenant. A starter role whose name the tenant already gave another role fails that
+  save, because of the unique index on the name. The report names the tenant at each start, until the tenant renames that
+  role.
+- On Postgres, Tenancy's policy "System work in its tenant" lets this work read and write the role table. Your rules on the
+  table are for signed-in callers.
+- A seat with the permission that manages the roles can write `PermissionsFromStarterRole` with its own SQL statement, since
+  the export grants the column with the others. It gains nothing that way, because that seat can set the role's permissions
+  already.
+
+### Starter roles without Tenancy
+
+The toolkit cannot know when one of your scopes begins, so your code says it.
+
+- `CreateStarterRolesAsync(make)` makes the starter roles a scope does not have yet. It passes your function a draft for
+  each, and saves the roles your constructor makes from them. It requires the permission the rules name in `managedWith`.
+- `FollowStarterRolesAsync(make)` does that and makes the rest follow, in one save, and saves only when something changed.
+  Only system work runs it. A seat gets `access.system-only`. It answers `Made`, `Changed` and `WithoutTheirStarterRole`.
+  Both take `scope`, for a role class kept per a scope of your own:
+
+  ```csharp
+  using (access.BeginSystem("gardens"))
+  {
+      var followed = await roles.FollowStarterRolesAsync(
+          draft => new PlotRole(PlotRoleId.Create(), garden, draft), cancellationToken, scope: role => role.GardenId == garden);
+  }
+  ```
 
 ### Changing a role
 
