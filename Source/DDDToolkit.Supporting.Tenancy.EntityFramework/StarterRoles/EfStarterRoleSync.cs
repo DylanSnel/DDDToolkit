@@ -13,12 +13,13 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <see cref="IStarterRoleSync"/> over Tenancy's context: the tenants to visit are read across tenants
 /// (<see cref="TenancySystemReads.TenantsToSweepAsync{TTenant, TTenantId}"/>), and each tenant's roles follow their
 /// starter roles through <c>RoleManager.FollowStarterRolesAsync</c>, as Tenancy's system work in that tenant, in a scope of its own.
+/// After that, every registered <see cref="ITenantStarterRoles"/> runs in the tenant, as system work there, each in a scope of its own.
 /// </summary>
 /// <remarks>
 /// A tenant that another run, or an administrator, changed between this run's reading and its save fails on the
 /// tenant's access revision, and is tried again, up to <see cref="Attempts"/> times in all: the next attempt reads
 /// what the other committed, and changes only what is still to change. Any other failure is the tenant's alone: it
-/// is reported, and the run goes on with the next tenant.
+/// is reported, and the run goes on with the next part of the tenant, and then with the next tenant.
 /// </remarks>
 internal sealed class EfStarterRoleSync<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>(
     IServiceScopeFactory scopes,
@@ -44,7 +45,7 @@ internal sealed class EfStarterRoleSync<TTenant, TTenantId, TOrganization, TUnit
     {
         var tenants = await TenantsAsync(cancellationToken).ConfigureAwait(false);
 
-        var (changed, kept, gone) = (0, 0, 0);
+        var (made, changed, kept, gone) = (0, 0, 0, 0);
         var failed = new List<(string Tenant, Exception Error)>();
         foreach (var tenant in tenants)
         {
@@ -66,9 +67,25 @@ internal sealed class EfStarterRoleSync<TTenant, TTenantId, TOrganization, TUnit
             {
                 failed.Add((tenant.ToString() ?? string.Empty, failure));
             }
+
+            // Tenancy knows nothing of the other modules, and their roles do not depend on Tenancy's: they run whatever became of those.
+            using (TenancyWork.BeginSystemIn<TTenantId, TSeatId>(tenant))
+            {
+                var others = await TenantStarterRolesRun.RunAsync(scopes, cancellationToken).ConfigureAwait(false);
+                made += others.RolesMade;
+                changed += others.RolesChanged;
+                gone += others.RolesWithoutTheirStarterRole;
+                failed.AddRange(others.Failed.Select(failure => (tenant.ToString() ?? string.Empty, failure)));
+                _logger.LogDebug(
+                    "Tenant {Tenant}: other modules made {Made} roles, {Changed} roles followed their starter roles, {WithoutTheirStarterRole} have no starter role.",
+                    tenant,
+                    others.RolesMade,
+                    others.RolesChanged,
+                    others.RolesWithoutTheirStarterRole);
+            }
         }
 
-        return new StarterRoleSyncReport(tenants.Count, changed, kept, gone, failed);
+        return new StarterRoleSyncReport(tenants.Count, made, changed, kept, gone, failed);
     }
 
     /// <summary>

@@ -62,8 +62,9 @@ internal sealed class StarterRoleSyncService(IServiceProvider services, IHostApp
         }
 
         _logger.LogInformation(
-            "The starter roles are synced in {Tenants} tenants: {Changed} roles followed their starter roles, and {WithoutTheirStarterRole} were made from starter roles the catalogue no longer has and kept their permissions.",
+            "The starter roles are synced in {Tenants} tenants: {Made} roles were made, {Changed} roles followed their starter roles, and {WithoutTheirStarterRole} were made from starter roles that are no longer declared and kept their permissions.",
             report.Tenants,
+            report.RolesMade,
             report.RolesChanged,
             report.RolesWithoutTheirStarterRole);
     }

@@ -82,6 +82,9 @@ public static class TenancyServiceCollectionExtensions
             serviceProvider.GetServices<PermissionContribution>().SelectMany(contribution => contribution.Permissions)));
         services.TryAddScoped<TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>>();
 
+        // What runs another module's starter roles once a tenant is provisioned: none, until a module registers some.
+        services.TryAddSingleton<NewTenantStarterRoles>();
+
         // What a request about the caller's own seat compares its seat with, [OrOwn] SeatId: the caller's seat in the
         // tenant. A host that says it otherwise registered its own already, with AddOwnedByCurrentUser, and that one stays.
         services.TryAddSingleton<IOwnedByCurrentUser<TSeatId>, CurrentUserSeat<TTenantId, TSeatId>>();
@@ -201,7 +204,8 @@ public static class TenancyServiceCollectionExtensions
     /// permissions in an administrators' starter role that lists none among them, and loses the permissions the starter role lost; what the
     /// tenant changed itself stays. Each role that changes raises
     /// <see cref="RoleFollowedItsStarterRole{TTenantId, TRoleId, TSeatId}"/>, for the host to tell the tenant's
-    /// administrators; the package sends no message itself.
+    /// administrators; the package sends no message itself. Every registered <see cref="ITenantStarterRoles"/> runs as well, in
+    /// each tenant, so another module's roles follow the same way and a role a tenant lacks is made.
     /// <code>
     /// builder.Services.RunStartupChecks();
     /// builder.Services.SyncStarterRoles();

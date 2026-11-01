@@ -46,7 +46,7 @@ public class SyncStarterRolesTests
     [Fact]
     public async Task A_tenant_that_could_not_be_synced_is_logged_with_the_rest_of_the_report()
     {
-        var report = new StarterRoleSyncReport(3, 2, 1, 0, [("7", new InvalidOperationException("locked"))]);
+        var report = new StarterRoleSyncReport(3, 4, 2, 1, 0, [("7", new InvalidOperationException("locked"))]);
         var (hosted, lifetime, log) = Host(services => services.AddSingleton<IStarterRoleSync>(new CountingSync(report: report)).SyncStarterRoles());
 
         await hosted.StartAsync(Cancellation);
@@ -57,7 +57,7 @@ public class SyncStarterRolesTests
         log.Select(entry => (entry.Level, entry.Message)).Should().BeEquivalentTo([
             (LogLevel.Error, "The roles of tenant 7 could not follow their starter roles. The host's next start tries again."),
             (LogLevel.Warning, "1 roles were left as they are, because following their starter roles would leave their tenants without an administrator. They follow once those tenants have another."),
-            (LogLevel.Information, "The starter roles are synced in 3 tenants: 2 roles followed their starter roles, and 0 were made from starter roles the catalogue no longer has and kept their permissions."),
+            (LogLevel.Information, "The starter roles are synced in 3 tenants: 4 roles were made, 2 roles followed their starter roles, and 0 were made from starter roles that are no longer declared and kept their permissions."),
         ]);
     }
 
@@ -114,7 +114,7 @@ public class SyncStarterRolesTests
         {
             Interlocked.Increment(ref _runs);
             Ran.TrySetResult(true);
-            return failure is null ? Task.FromResult(report ?? new StarterRoleSyncReport(0, 0, 0, 0, [])) : Task.FromException<StarterRoleSyncReport>(failure);
+            return failure is null ? Task.FromResult(report ?? new StarterRoleSyncReport(0, 0, 0, 0, 0, [])) : Task.FromException<StarterRoleSyncReport>(failure);
         }
     }
 
