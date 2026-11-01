@@ -543,9 +543,10 @@ rules for the export.
 - **The members**: the board's collection of `BoardMember` becomes two tables: the members, and the roles each member
   holds. The board owns both tables, and they are saved with the board. The owner is the property marked `[Owner]`.
   `HasMembers(row => row.People, names)` in `OnModelCreating` does the same by hand, for table names of your own.
-- **The role**: Membership maps the columns it adds to a role row: name, description, permissions, status, and the
-  starter role the role was made from (`FromStarterRole`). The role marks its tenant, so Membership also adds two unique
-  indexes. One allows each role name once per tenant. The other allows each starter role once per tenant.
+- **The role**: Membership maps the columns it adds to a role row: name, description, permissions, status, the starter
+  role the role was made from (`FromStarterRole`), and what that starter role gave it (`PermissionsFromStarterRole`). The
+  role marks its tenant, so Membership also adds two unique indexes. One allows each role name once per tenant. The other
+  allows each starter role once per tenant.
 - **The tenant filter and the save check**: Tenancy's convention adds both to every class with a property marked
   `[OfTenant]`, here the board and the role. A query returns only the rows of the caller's tenant. The save check
   refuses a row of another tenant.
