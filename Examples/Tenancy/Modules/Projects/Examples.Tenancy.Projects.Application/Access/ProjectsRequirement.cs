@@ -20,8 +20,9 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// <para>
 /// A closed set: the constructor is private, so the cases below are all there are, and each is a record, so two
 /// requirements that say the same are equal. A case combines with the packages' cases at the door: moving a project
-/// needs the permission on it and this one at the destination, <c>AccessRequirement.All</c>, and naming somebody else as the
-/// owner of a new project needs the caller's own seat or this one with the owner's permission, <c>AccessRequirement.Any</c>.
+/// needs the permission on it and this one at the destination, <c>AccessRequirement.All</c>, which the module's own marker
+/// says on the request (<see cref="AtProjectUnitAttribute"/>), and naming somebody else as the owner of a new project needs
+/// the caller's own seat or this one with the owner's permission, <c>AccessRequirement.Any</c>.
 /// What no requirement can say, because it is about the tenant's state rather than the caller's rights, stays in the
 /// handler, in plain sight: that the unit takes anything new.
 /// </para>
@@ -31,6 +32,11 @@ public abstract record ProjectsRequirement : AccessRequirement
     private ProjectsRequirement()
     {
     }
+
+    /// <summary>The case <see cref="AtProjectUnitAttribute"/> on a request's unit stands for: <see cref="AtUnit"/>.</summary>
+    /// <param name="permission">The permission the request needs at the unit.</param>
+    /// <param name="unit">The unit, from the request.</param>
+    public static AtUnit HeldAt(string permission, OrganizationUnitId unit) => new(permission, unit);
 
     /// <summary>
     /// <paramref name="Permission"/> is held by the caller at <paramref name="Unit"/>, there or above it: for what is asked

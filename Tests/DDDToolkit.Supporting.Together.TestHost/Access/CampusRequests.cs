@@ -25,17 +25,14 @@ public static class CampusRequests
 {
     /// <summary>
     /// Gives a course at another unit: the grading permission on the course, through its members or from above, and the same permission
-    /// at the unit it moves to, both, the course's first. A permission of Membership's and a permission of Tenancy's in one requirement.
+    /// at the unit it moves to, both, the course's first. A permission of Membership's and a permission of Tenancy's in one requirement,
+    /// each on the marker of where it is held.
     /// </summary>
     /// <param name="Course">The course.</param>
     /// <param name="To">The unit it is given at from now on.</param>
-    public sealed record MoveCourse(CourseId Course, OrganizationUnitId To) : ICampusRequest
-    {
-        /// <inheritdoc />
-        AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-            MemberAccess.On(CoursePermissions.Grade, Course),
-            TenancyAccess.AtUnit(CoursePermissions.Grade, To));
-    }
+    public sealed record MoveCourse(
+        [OnResource(CoursePermissions.Grade)] CourseId Course,
+        [AtUnit(CoursePermissions.Grade)] OrganizationUnitId To) : ICampusRequest;
 
     /// <summary>
     /// Takes a tutor off a course: oneself, or anybody with the permission that writes the course's outline on it. Yours, or the
@@ -43,8 +40,7 @@ public static class CampusRequests
     /// </summary>
     /// <param name="Course">The course.</param>
     /// <param name="Seat">The seat that leaves it.</param>
-    [RequiresPermission(CoursePermissions.Outline)]
-    public sealed record LeaveCourse([OnResource] CourseId Course, [OrOwn] SeatId Seat) : ICampusRequest;
+    public sealed record LeaveCourse([OnResource(CoursePermissions.Outline)] CourseId Course, [OrOwn] SeatId Seat) : ICampusRequest;
 
     /// <summary>The college's access history: one of the application's operators, or a seat that manages seats for the whole college.</summary>
     public sealed record CollegeAuditLog : ICampusRequest

@@ -26,8 +26,7 @@ namespace Examples.Tenancy.Projects.Application.Ownership.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-[RequiresPermission(RequiredPermission)]
-public sealed record ChangeProjectOwner([OnResource] ProjectId Id, SeatId Seat, ProjectRoleId? FormerOwnerRole, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
+public sealed record ChangeProjectOwner([OnResource(ChangeProjectOwner.RequiredPermission)] ProjectId Id, SeatId Seat, ProjectRoleId? FormerOwnerRole, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
     /// <summary>The permission the caller holds on the project, through the organization.</summary>
     public const string RequiredPermission = ProjectPermissionNames.ChangeOwner;

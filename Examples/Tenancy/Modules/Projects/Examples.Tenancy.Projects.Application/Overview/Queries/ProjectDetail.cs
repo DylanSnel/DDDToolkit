@@ -8,8 +8,7 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// at once, where a project out of reach is simply left out, it is <see cref="ProjectsById"/>.
 /// </remarks>
 /// <param name="Id">The project.</param>
-[RequiresPermission(RequiredPermission)]
-public sealed record ProjectDetail([OnResource] ProjectId Id) : IQuery<ProjectOverview>, IProjectsRequest
+public sealed record ProjectDetail([OnResource(ProjectDetail.RequiredPermission)] ProjectId Id) : IQuery<ProjectOverview>, IProjectsRequest
 {
     /// <summary>The permission the caller holds on the project.</summary>
     public const string RequiredPermission = ProjectPermissionNames.View;

@@ -482,6 +482,7 @@ internal sealed record RequestRequirement(
                 return new Marker(attributeClass, MarkerKind.Place, factory, method, null, idOf, argument, idOfArgument, ImpliesOf(meta), ownAlternative)
                 {
                     Permission = permission.Type is not null && !permission.IsNull ? Literal(permission) : null,
+                    Unbound = attribute.AttributeConstructor is null || attribute.ConstructorArguments.Any(static each => each.Kind == TypedConstantKind.Error),
                 };
             }
 
@@ -907,6 +908,9 @@ internal sealed record RequestRequirement(
         /// <summary>The permission a marker of where carries, as C# writes it; null where it names none.</summary>
         public string? Permission { get; init; }
 
+        /// <summary>Whether the compiler could not bind the marker's arguments: its error to report, and no line is written.</summary>
+        public bool Unbound { get; init; }
+
         /// <summary>The class the type argument of a marker names, <c>Board</c> of <c>[ExpectedVersion&lt;Board&gt;]</c>; null for the bare form.</summary>
         public INamedTypeSymbol? Resource { get; init; }
 
@@ -1048,7 +1052,8 @@ internal sealed record RequestRequirement(
             // request that only inherits its markers gets its line where the interface can name it, and is matched by its
             // base's line where it cannot.
             string? arm = null;
-            if (_errors == 0 && line && writable.Count > 0 && (statesItself || (writable.Count == 1 && CanBeNamedBy(writable[0]))))
+            if (_errors == 0 && line && writable.Count > 0 && _places.All(static each => each.Permission is not null)
+                && (statesItself || (writable.Count == 1 && CanBeNamedBy(writable[0]))))
             {
                 arm = Arm(out var requirement);
                 SameAsTheDefault(writable, requirement, answersItself);
@@ -1241,7 +1246,7 @@ internal sealed record RequestRequirement(
         private void MarkedRightly()
         {
             // A marker of where carries its permission: one without names nothing to hold there.
-            if (_places.FirstOrDefault(static each => each.Permission is null) is { } bare)
+            if (_places.FirstOrDefault(static each => each.Permission is null && !each.Unbound) is { } bare)
             {
                 Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, DeclaredHere(bare) ? bare.Location ?? _location : _location, _name,
                     (DeclaredHere(bare) ? "marks " + bare.Named : "inherits " + bare.Named + " from '" + bare.Declaring?.Name + "'")

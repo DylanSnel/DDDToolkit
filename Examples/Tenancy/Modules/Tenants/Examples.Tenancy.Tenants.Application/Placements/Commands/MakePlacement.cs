@@ -14,8 +14,7 @@ namespace Examples.Tenancy.Tenants.Application.Placements.Commands;
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit, which must be active.</param>
 /// <param name="Primary">Whether this becomes the seat's primary placement.</param>
-[RequiresPermission(TenancyPermissions.SeatsManage)]
-public sealed record MakePlacement(SeatId Seat, [AtUnit] OrganizationUnitId Unit, bool Primary) : ICommand<Seat>, ITenantsRequest;
+public sealed record MakePlacement(SeatId Seat, [AtUnit(TenancyPermissions.SeatsManage)] OrganizationUnitId Unit, bool Primary) : ICommand<Seat>, ITenantsRequest;
 
 /// <summary>Handles <see cref="MakePlacement"/> with the Tenancy package's manager, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's seat manager.</param>
