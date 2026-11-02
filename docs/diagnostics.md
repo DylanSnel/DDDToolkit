@@ -79,12 +79,12 @@ problem, and the fix.
 | [DDD00077](#ddd00077) | Error | A request says what it requires of its caller |
 | [DDD00078](#ddd00078) | Error | A request says what it requires in one way |
 | [DDD00079](#ddd00079) | Error | [AllowAnonymous] goes with no other requirement attribute |
-| [DDD00080](#ddd00080) | Error | A marker on a request carries its permission, and an argument goes with one marker |
+| [DDD00080](#ddd00080) | Error | A permission marker names its permission, and a marker argument belongs to one marker |
 | [DDD00081](#ddd00081) | Error | A marker is on a member of the id it marks |
 | [DDD00082](#ddd00082) | Error | A requirement for queries only is on a query |
 | [DDD00083](#ddd00083) | Error | A request's requirement attributes are read where its module's interface is partial |
 | [DDD00084](#ddd00084) | Warning | A requirement attribute beside another adds what that one does not require already |
-| [DDD00085](#ddd00085) | Error | [OrOwn] pairs with one permission, and [Own] goes with [OwnOnly] |
+| [DDD00085](#ddd00085) | Error | [OrOwn] pairs with one permission, and [Own] needs [OwnOnly] |
 | [DDD00086](#ddd00086) | Error | [OrOwn] and [Own] mark a member of a type something says the caller's own of |
 | [DDD00087](#ddd00087) | Error | [Owner] marks the one owner of an aggregate root |
 | [DDD00088](#ddd00088) | Error | [Owner] marks a property of a type the caller has an own of |
@@ -3074,7 +3074,7 @@ its neighbour already requires is [DDD00084](#ddd00084), a warning.
 
 ## DDD00080
 
-**A marker on a request carries its permission, and an argument goes with one marker.**
+**A permission marker names its permission, and a marker argument belongs to one marker.**
 
 ```csharp
 [SignedIn]
@@ -3290,7 +3290,7 @@ Examples:
 
 ## DDD00085
 
-**`[OrOwn]` pairs with one permission, and `[Own]` goes with `[OwnOnly]`.**
+**`[OrOwn]` pairs with one permission, and `[Own]` needs `[OwnOnly]`.**
 
 ```csharp
 [InTenant]

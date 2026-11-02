@@ -26,7 +26,7 @@ public class RequirementAttributeDiagnosticTests
         result.ShouldHaveExactlyDiagnostics("DDD00077");
         Message(result, "DDD00077", at: "CloseInvoice").Should()
             .Contain("'CloseInvoice' implements 'IBillingRequest' and says nothing of what it requires of its caller")
-            .And.Contain("[AllowAnonymous] where anyone may send it");
+            .And.Contain("Use [AllowAnonymous] only where anyone may send it");
         result.ShouldHaveDiagnostic("DDD00077", at: "CloseInvoice").Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
     }
 
