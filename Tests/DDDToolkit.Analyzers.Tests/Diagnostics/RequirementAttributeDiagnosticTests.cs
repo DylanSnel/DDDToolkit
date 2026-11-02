@@ -212,6 +212,20 @@ public class RequirementAttributeDiagnosticTests
         result.ShouldNotContain("BillingAccessBehavior.", "OpenLedger", "no line is written for a marker that names nothing to hold");
     }
 
+    [Theory]
+    [InlineData("public sealed record ReadDocument([OnResource] DocumentId Document) : IBillingRequest;", "CS7036")]
+    [InlineData("public sealed record OpenLedger([AtUnit(RequiredPermission)] OrganizationUnitId Unit) : IBillingRequest { public const string RequiredPermission = \"billing.open\"; }", "CS0103")]
+    public void A_marker_whose_permission_the_compiler_cannot_bind_is_the_compiler_s_to_report(string request, string error)
+    {
+        // A bare [OnResource] has no constructor to bind, and a record's own constant is out of scope on its positional
+        // parameter: the compiler says it, and the generator says nothing more and writes no line.
+        var result = Run(request);
+
+        result.ShouldHaveExactlyDiagnostics();
+        result.CompilationErrors.Select(each => each.Id).Should().Contain(error);
+        result.ShouldNotContain("BillingAccessBehavior.", "request =>", "no line is written for a marker the compiler could not bind");
+    }
+
     [Fact]
     public void A_marker_without_its_permission_is_DDD00080_on_an_abstract_shape_and_where_it_is_inherited()
     {

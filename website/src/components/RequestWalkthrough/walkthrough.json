@@ -1401,8 +1401,7 @@
     "write.add-unit": {
       "language": "csharp",
       "lines": [
-        "[RequiresPermission(TenancyPermissions.UnitsManage)]",
-        "public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;"
+        "public sealed record AddOrganizationUnit([AtUnit(TenancyPermissions.UnitsManage)] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;"
       ]
     },
     "write.rename-seat": {
@@ -1418,8 +1417,7 @@
     "write.add-crew-member": {
       "language": "csharp",
       "lines": [
-        "[RequiresPermission(RequiredPermission)]",
-        "public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest",
+        "public sealed record AddCrewMember([OnResource(AddCrewMember.RequiredPermission)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest",
         "{",
         "    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;",
         "}"

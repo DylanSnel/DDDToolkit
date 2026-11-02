@@ -34,8 +34,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </para>
 /// <para>
 /// The toolkit's generator turns it into <c>TenancyAccess.Operator(...)</c> at compile time, in the module's request
-/// interface (<c>[AccessRequests]</c>, declared <c>partial</c>). Beside it, <c>[InTenant]</c> and <c>[RequiresPermission]</c>
-/// refuse every operator (DDD00104). <c>FromRequest</c> beside a <c>[ForTenant]</c> member names two tenants (DDD00103).
+/// interface (<c>[AccessRequests]</c>, declared <c>partial</c>). Beside it, <c>[InTenant]</c>, <c>[RequiresPermission]</c> and a
+/// marker that carries a permission refuse every operator (DDD00104). <c>FromRequest</c> beside a <c>[ForTenant]</c> member names two tenants (DDD00103).
 /// <c>Tenant</c> or <c>Scope</c> on a query says nothing (DDD00105).
 /// </para>
 /// </remarks>

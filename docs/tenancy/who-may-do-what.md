@@ -140,7 +140,7 @@ var abilities = await (
 Every request states what it requires of its caller, and a check tests it before the handler runs. The mechanism
 belongs to the toolkit core ([Access requirements](../access-requirements.md),
 [How a request is checked](../how-a-request-is-checked.md)). This section lists Tenancy's cases. The generator turns
-each attribute into the call in the comment beside it:
+each attribute and marker into the call in the comment beside it:
 
 ```csharp
 [AccessRequests]
@@ -149,17 +149,17 @@ public partial interface IBillingRequest : IRequireAccess;      // one interface
 [RequiresPermission(BillingPermissions.CloseTheBooks)]          // TenancyAccess.AtTenant(BillingPermissions.CloseTheBooks)
 public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
-[RequiresPermission(BillingPermissions.OpenLedger)]             // TenancyAccess.AtUnit(BillingPermissions.OpenLedger, request.Unit)
-public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
+public sealed record OpenLedger(                                // TenancyAccess.AtUnit(BillingPermissions.OpenLedger, request.Unit)
+    string Name, [AtUnit(BillingPermissions.OpenLedger)] OrganizationUnitId Unit) : IBillingRequest;
 ```
 
 | A request requires | Its attribute | The same, computed | Lets through | Refuses with |
 |---|---|---|---|---|
 | a caller in the tenant | `[InTenant]` | `TenancyAccess.InTenant()` | a seat in the request's tenant, and system work in that tenant | the caller's refusal code, such as `tenancy.not-seated` |
 | a permission for the whole tenant | `[RequiresPermission(p)]` | `TenancyAccess.AtTenant(p)` | a caller who holds `p` at the root now, and system work in the tenant | `tenancy.not-permitted` |
-| a permission at a unit | `[RequiresPermission(p)]`, with `[AtUnit]` on the unit | `TenancyAccess.AtUnit(p, unit)` | a caller who holds `p` at the unit now, from a grant there or above, and system work in the tenant | `tenancy.not-permitted`, with the unit |
+| a permission at a unit | `[AtUnit(p)]` on the unit | `TenancyAccess.AtUnit(p, unit)` | a caller who holds `p` at the unit now, from a grant there or above, and system work in the tenant | `tenancy.not-permitted`, with the unit |
 | an operator | `[Operator]`, with `[ForTenant]` on the tenant of a command that acts in one | `TenancyAccess.Operator()`, `TenancyAccess.Operator(tenant)` | an [operator](operators-and-history.md#operators). On a command, the handler then runs as operator work. | `tenancy.operators-only`, also for seats and system work. `tenancy.tenant-mismatch` when the request names another tenant than `[ForTenant]`. |
-| the caller's seat, or a permission | `[RequiresPermission(p)]`, with `[OrOwn]` on the seat | `AccessRequirement.Any(TenancyAccess.Own(seat), ...)` | the named seat when it is the caller's seat, and a caller who holds `p` | one `access.refused`, with both reasons |
+| the caller's seat, or a permission | `[OrOwn]` on the seat, beside the request's one permission, such as `[RequiresPermission(p)]` | `AccessRequirement.Any(TenancyAccess.Own(seat), ...)` | the named seat when it is the caller's seat, and a caller who holds `p` | one `access.refused`, with both reasons |
 | the caller's seat only | `[OwnOnly]`, with `[Own]` on the seat | `TenancyAccess.Own(seat)` | the named seat when it is the caller's seat. System work has no seat, so it is refused. | `access.not-own` |
 
 - **Cost.** `AtTenant` and `AtUnit` each run one SQL statement. The other cases read nothing from the database,
@@ -167,10 +167,12 @@ public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) :
   [Requirements](reference/access.md#requirements) lists every case in full.
 - **Level.** A permission's level is declared once, on its constant, with `[AtTenant]` or `[AtUnit]`
   ([Declaring a module's permissions](roles-and-permissions.md#declaring-a-modules-permissions)).
-- **`[AtUnit]`** marks the unit of a command that acts at a unit it names. Two kinds of command need it. The first
-  kind calls a manager method that checks the unit, such as placing a seat or giving a role there. The second kind
-  creates something at a unit before anything exists there to hold a permission on, such as opening a project.
-- `[AtUnit]` goes on a member of your unit id type, the id of your `[OrganizationUnit<TUnitId>]` class. On a member
+- **`[AtUnit(p)]`** marks the unit of a command that acts at a unit it names, and carries the permission held there.
+  Two kinds of command need it. The first kind calls a manager method that checks the unit, such as placing a seat or
+  giving a role there. The second kind creates something at a unit before anything exists there to hold a permission
+  on, such as opening a project. Bare, `[AtUnit]` is the level of a permission constant, and on a request's member it
+  is [DDD00080](../diagnostics.md#ddd00080).
+- `[AtUnit(p)]` goes on a member of your unit id type, the id of your `[OrganizationUnit<TUnitId>]` class. On a member
   of another type it is [DDD00081](../diagnostics.md#ddd00081). A module that sees only your ids cannot get that
   error. There, the check throws an `InvalidOperationException` when the request is sent. The sample's
   `AccessDeclarationTests` catches this mistake by comparing every request with the requirement it should declare.
@@ -188,10 +190,13 @@ public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) :
   [What goes together](../access-requirements.md#valid-combinations-of-attributes) lists the other pairs that clash or add nothing.
 - `[AllowAnonymous]` and `[SignedIn]` (a user who has no seat yet) belong to the toolkit core
   ([the vocabulary](../access-requirements.md#requirements-and-their-attributes)).
-- Combine cases with `AccessRequirement.All` and `Any`
-  ([Requirements that combine](../access-requirements.md#requirements-that-combine)). Example: moving a seat requires
-  the permission at both units, `All(TenancyAccess.AtUnit(p, From), TenancyAccess.AtUnit(p, To))`. The handler then
-  moves the seat from `From` and from no other unit.
+- **Two units.** A marker on each unit requires the permission at both. Moving a seat requires the permission at the
+  unit it leaves and at the unit it moves to:
+  `MoveSeat(SeatId Seat, [AtUnit(p)] OrganizationUnitId From, [AtUnit(p)] OrganizationUnitId To)` is
+  `All(TenancyAccess.AtUnit(p, From), TenancyAccess.AtUnit(p, To))`. The handler then moves the seat from `From` and
+  from no other unit.
+- Combine other cases with `AccessRequirement.All` and `Any`
+  ([Requirements that combine](../access-requirements.md#requirements-that-combine)).
 - A module can keep things at a unit and give permissions on each thing. A permission on one of those things is a
   requirement case of that module ([What answers it](../access-requirements.md#what-answers-it)).
   [Membership](../membership/overview.md) ships these cases.
@@ -201,8 +206,8 @@ public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) :
 A request whose handler calls one of Tenancy's managers declares the permission that the manager checks first.
 Examples:
 
-- `MakeGrant`, whose handler calls `SeatManager.GrantAsync`, declares
-  `[RequiresPermission(TenancyPermissions.GrantsManage)]` with `[AtUnit]` on the unit.
+- `MakeGrant`, whose handler calls `SeatManager.GrantAsync`, declares `[AtUnit(TenancyPermissions.GrantsManage)]` on
+  the unit.
 - A request that makes a role declares `[RequiresPermission(TenancyPermissions.RolesManage)]`.
 - A query that calls a manager's read, such as `SeatManager.WhoAmIAsync` or `OrganizationManager.ListUnitsAsync`,
   declares `[InTenant]`.
@@ -211,8 +216,7 @@ When the manager's first check needs data from the database, the request declare
 a unit requires `tenancy.units.manage` at the unit's parent, and only the manager loads the parent.
 
 ```csharp
-[RequiresPermission(TenancyPermissions.GrantsManage)]
-public sealed record MakeGrant(SeatId Seat, RoleId Role, [AtUnit] OrganizationUnitId Unit) : ICommand<Seat>, ITenantsRequest;
+public sealed record MakeGrant(SeatId Seat, RoleId Role, [AtUnit(TenancyPermissions.GrantsManage)] OrganizationUnitId Unit) : ICommand<Seat>, ITenantsRequest;
 
 public sealed class MakeGrantHandler(SeatManager seats) : ICommandHandler<MakeGrant, Seat>
 {

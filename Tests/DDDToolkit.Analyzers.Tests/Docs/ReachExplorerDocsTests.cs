@@ -133,12 +133,12 @@ public partial class ReachExplorerDocsTests
             var constant = typeof(TenancyPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .First(field => field.IsLiteral && (string?)field.GetRawConstantValue() == permission.Name).Name;
             var request = permission.Request;
-            var declaration = new Regex(@"\[RequiresPermission\(TenancyPermissions\." + constant + @"\)\]\npublic sealed record " + request.Name + @"\((?<parameters>[^)]*)\)")
-                .Match(tutorial);
-            declaration.Success.Should().BeTrue("the tutorial's {0} requires {1}", request.Name, permission.Name);
+            var forTheTenant = new Regex(@"\[RequiresPermission\(TenancyPermissions\." + constant + @"\)\]\npublic sealed record " + request.Name + @"\(").IsMatch(tutorial);
+            var atAUnit = new Regex(@"public sealed record " + request.Name + @"\([^\n]*\[AtUnit\(TenancyPermissions\." + constant + @"\)\]").IsMatch(tutorial);
+            (forTheTenant || atAUnit).Should().BeTrue("the tutorial's {0} requires {1}", request.Name, permission.Name);
 
-            // Where the permission is checked: at a unit with [AtUnit], for the whole tenant without it.
-            request.At.Should().Be(declaration.Groups["parameters"].Value.Contains("[AtUnit]", StringComparison.Ordinal) ? "unit" : "tenant", "{0} checks {1} where its declaration says", request.Name, permission.Name);
+            // Where the permission is checked: at a unit with [AtUnit(permission)] on the unit, for the whole tenant with [RequiresPermission].
+            request.At.Should().Be(atAUnit ? "unit" : "tenant", "{0} checks {1} where its declaration says", request.Name, permission.Name);
             if (request.At == "unit")
             {
                 request.Where.Should().EndWith("or above it", "a permission held above a unit counts at the unit");

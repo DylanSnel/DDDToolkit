@@ -1195,9 +1195,9 @@ that lists the units a seat can read.
 
 ### The idea: a permission, and where it must be held
 
-- `[RequiresPermission(...)]`: the caller must hold that permission.
-- **Where**: without a marker, the caller must hold it for the whole tenant. With `[AtUnit]` on a parameter, the
-  caller must hold it at that unit or above it.
+- `[RequiresPermission(...)]` on the request: the caller must hold that permission for the whole tenant.
+- `[AtUnit(...)]` on a parameter: the caller must hold that permission at that unit or above it. The marker carries
+  the permission, so the request needs no other attribute.
 - Tenancy's manager checks the permission again where it acts, and adds its own rules. So the check before the
   handler is the first check, and the manager runs a second one.
 - Harbor has a rule of its own: "no two units with the same name below one parent". Harbor's handler checks this rule
@@ -1207,15 +1207,14 @@ that lists the units a seat can read.
 
 **`Harbor.Tenancy.Application/Units/AddUnit/AddUnit.cs`**
 
-```csharp {3,7-8,15-23,25}
+```csharp {3,7,14-22,24}
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Harbor.Tenancy.Domain;
 
 namespace Harbor.Tenancy.Application.Units.AddUnit;
 
-[RequiresPermission(TenancyPermissions.UnitsManage)]
-public sealed record AddUnitCommand([AtUnit] OrganizationUnitId Parent, string Name) : ICommand<OrganizationUnit>, ITenancyRequest;
+public sealed record AddUnitCommand([AtUnit(TenancyPermissions.UnitsManage)] OrganizationUnitId Parent, string Name) : ICommand<OrganizationUnit>, ITenancyRequest;
 
 public sealed class AddUnitHandler(OrganizationManager organization)
     : ICommandHandler<AddUnitCommand, OrganizationUnit>
@@ -1396,8 +1395,8 @@ public static class TenancyModule
 
 - `TenancyPermissions` holds the names of Tenancy's own permissions: `UnitsManage` is `tenancy.units.manage`,
   `SeatsManage` is `tenancy.seats.manage`, and so on.
-- `[AtUnit] Parent`: Ada needs `tenancy.units.manage` at the parent unit or above it. She holds it at the root, so she
-  may add a unit anywhere.
+- `[AtUnit(TenancyPermissions.UnitsManage)] Parent`: Ada needs `tenancy.units.manage` at the parent unit or above
+  it. She holds it at the root, so she may add a unit anywhere.
 - `OrganizationManager` and `SeatManager`: Tenancy's managers of the organization with its units, and of seats.
 - `AddUnitAsync` writes the unit and its rows in `OrganizationUnitPaths` in one save, and returns the new unit,
   your `OrganizationUnit` class. The command returns the unit, and the route answers its id, its parent and its name.
@@ -1474,14 +1473,13 @@ public sealed class CreateRoleHandler(RoleManager roles) : ICommandHandler<Creat
 
 **`Harbor.Tenancy.Application/Grants/GrantRole/GrantRole.cs`**
 
-```csharp {2,6-7,11-12}
+```csharp {2,6,10-11}
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Harbor.Tenancy.Domain.Aggregates.Seats;
 
 namespace Harbor.Tenancy.Application.Grants.GrantRole;
 
-[RequiresPermission(TenancyPermissions.GrantsManage)]
-public sealed record GrantRoleCommand(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role) : ICommand<Seat>, ITenancyRequest;
+public sealed record GrantRoleCommand(SeatId Seat, [AtUnit(TenancyPermissions.GrantsManage)] OrganizationUnitId Unit, RoleId Role) : ICommand<Seat>, ITenancyRequest;
 
 public sealed class GrantRoleHandler(SeatManager seats) : ICommandHandler<GrantRoleCommand, Seat>
 {
