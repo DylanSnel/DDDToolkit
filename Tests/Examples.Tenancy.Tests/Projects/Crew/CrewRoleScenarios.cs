@@ -627,12 +627,12 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
     }
 
     [Fact]
-    public async Task A_project_opens_in_a_tenant_without_project_roles_with_its_owner_on_the_crew()
+    public async Task A_project_opens_in_a_new_tenant_with_its_owner_on_the_crew_holding_no_role()
     {
         await using var host = await sample.StartAsync();
 
-        // A tenant made while the application runs, and not set up for projects: it has no project role yet, and a
-        // project needs none, since its owner holds what an owner does by owning it.
+        // A tenant made while the application runs. A project's owner holds no project role, since it holds what an owner
+        // does by owning the project.
         var quarry = await SampleTenants.ProvisionAsync(host, "quarry", "Quarry");
 
         var opened = await SampleTenants.SendAsSystemAsync(host, quarry.Tenant, new OpenProject("P-100", "Harbor wall", quarry.RootUnit, quarry.AdminSeat));

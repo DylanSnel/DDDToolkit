@@ -17,7 +17,7 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles;
 /// <param name="Id">The role.</param>
 /// <param name="Name">Its name.</param>
 /// <param name="Description">What it is for; empty when nobody said.</param>
-/// <param name="MadeFrom">The starter role it was made from, such as <c>crew-lead</c>, or <see langword="null"/> for one the tenant made.</param>
+/// <param name="FromStarterRole">The starter role it was made from, such as <c>crew-lead</c>, or <see langword="null"/> for one the tenant made.</param>
 /// <param name="Status">Whether it can still be given.</param>
 /// <param name="Permissions">
 /// The permissions it gives on a crew, in the order of their text, or <see langword="null"/> for a caller who does not
@@ -27,7 +27,7 @@ public sealed record ProjectRoleListing(
     ProjectRoleId Id,
     string Name,
     string Description,
-    string? MadeFrom,
+    string? FromStarterRole,
     CustomRoleStatus Status,
     IReadOnlyList<string>? Permissions)
 {

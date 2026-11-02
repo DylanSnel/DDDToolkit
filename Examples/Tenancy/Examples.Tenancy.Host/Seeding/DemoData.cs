@@ -27,6 +27,16 @@ public static class DemoData
     /// <summary>Both tenants, in the order they are seeded.</summary>
     public static IReadOnlyList<DemoTenant> Tenants { get; } = [Harbor, Meadow];
 
+    /// <summary>
+    /// The fixed id of the project role made from <paramref name="starterRole"/> in <paramref name="tenant"/>, for a tenant of the
+    /// demonstration; <see langword="null"/> for any other tenant, whose role gets a new id. The Projects module asks it
+    /// when provisioning makes a tenant's starter project roles, so the seeder, the tests and the try-it presets name the same rows.
+    /// </summary>
+    /// <param name="tenant">The tenant the role is made in.</param>
+    /// <param name="starterRole">The key of the starter role it is made from.</param>
+    public static ProjectRoleId? ProjectRoleIdOf(TenantId tenant, string starterRole)
+        => Tenants.FirstOrDefault(demo => demo.Id == tenant)?.ProjectRoles.TryGetValue(starterRole, out var id) == true ? id : null;
+
     private static DemoTenant CreateHarbor()
     {
         var root = Unit(1, 1);

@@ -142,15 +142,15 @@ package and Tenancy's markers package. Boards' context uses the Entity Framework
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.8" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.8" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.8" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.8" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.8" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.8" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.8" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.8" />
-    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.8" />
+    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.9" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.9" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.9" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.9" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.9" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.9" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.9" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.9" />
+    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.9" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
@@ -298,7 +298,8 @@ public sealed partial class Board
 ```
 
 **The role class.** **Why:** a role belongs to a tenant, so it has a `TenantId`, marked `[OfTenant]`. The constructor
-takes the rules, so a role cannot give a permission that the rules do not allow in a role.
+takes the rules, so a role cannot give a permission that the rules do not allow in a role. Step 7 shows who calls it for
+the tenant's first roles.
 
 **`Harbor.Boards.Domain/Aggregates/BoardRoles/BoardRole.cs`**
 
@@ -345,7 +346,7 @@ dotnet build Harbor.slnx
 - `[CustomRole<...>]`: `BoardRole` derives from the role template. The template checks a new role's name and
   permissions against the rules passed to the constructor.
 - `CustomRoleDraft` holds what a new role is made from: a name, a description, the permissions, and the starter role
-  it is made from, if any. Step 7 gets drafts from the rules.
+  it is made from, if any. Step 7 shows where the drafts of the starter roles come from.
 
 - The generator writes `BoardMemberManager` and `BoardRoleManager` in the global namespace. Each has one
   constructor, and the registration of step 5 adds both to the container.
@@ -398,7 +399,7 @@ declaration: each tenant has its own board roles, starts with one role called `e
   | External | another system that stores roles, such as Tenancy | `Roles.External(...)` |
 
   Harbor's roles are custom. Every tenant starts with a copy of each **starter role**, and the tenant can change its
-  copy. Harbor has one starter role, `editor`, with `boards.view` and `boards.edit`.
+  copy. Harbor has one starter role, `editor`, with `boards.view` and `boards.edit`. Step 7 shows when the copy is made.
 - **Who changes the custom roles**: `managedWith` names the permission that makes, renames, changes and archives
   them. Harbor names `boards.roles.manage`, a permission for the whole tenant. Without `managedWith`, only system work
   changes the roles.
@@ -477,7 +478,7 @@ public static class BoardPermissions
     [AtUnit(Description = "Open a board at a unit")]
     public const string Create = "boards.create";
 
-    [AtTenant(Description = "Set up the roles of boards")]
+    [AtTenant(Description = "Make and change the roles of boards")]
     public const string ManageRoles = "boards.roles.manage";
 }
 ```
@@ -542,9 +543,10 @@ rules for the export.
 - **The members**: the board's collection of `BoardMember` becomes two tables: the members, and the roles each member
   holds. The board owns both tables, and they are saved with the board. The owner is the property marked `[Owner]`.
   `HasMembers(row => row.People, names)` in `OnModelCreating` does the same by hand, for table names of your own.
-- **The role**: Membership maps the columns it adds to a role row: name, description, permissions, status, and the
-  starter role the role was made from (`MadeFrom`). The role marks its tenant, so Membership also adds two unique
-  indexes. One allows each role name once per tenant. The other allows each starter role once per tenant.
+- **The role**: Membership maps the columns it adds to a role row: name, description, permissions, status, the starter
+  role the role was made from (`FromStarterRole`), and what that starter role gave it (`PermissionsFromStarterRole`). The
+  role marks its tenant, so Membership also adds two unique indexes. One allows each role name once per tenant. The other
+  allows each starter role once per tenant.
 - **The tenant filter and the save check**: Tenancy's convention adds both to every class with a property marked
   `[OfTenant]`, here the board and the role. A query returns only the rows of the caller's tenant. The save check
   refuses a row of another tenant.
@@ -673,7 +675,7 @@ dotnet ef migrations add Boards --project src/Modules/Boards/Harbor.Boards.Infra
 - The migration creates the schema `boards` with four tables: `Boards`, `BoardPeople` (the members, named after the
   board and its collection), `BoardMemberRoles` and `BoardRoles`. It creates none of Tenancy's tables.
 - The role's two unique indexes are in the migration too, as `IX_BoardRoles_TenantId_Name` and
-  `IX_BoardRoles_TenantId_MadeFrom`.
+  `IX_BoardRoles_TenantId_FromStarterRole`.
 
 > **Going further.** Your own table and column names: [Several kinds of resource](resources-and-members.md#several-kinds-of-resource).
 
@@ -711,16 +713,20 @@ lock on the member rows and on the owner column.
 - **The lock.** The member tables follow the board's rules. Without a lock, Leo, who may edit a board, could write its
   member rows with his own SQL statement, or make himself the owner. From the two marks, Membership also writes a
   policy on the member tables and a trigger on the owner column.
+- **The name of a rule** says who may do what to which rows: `MembersSeeTheirBoards`. The export names the policy after
+  the class, so a name such as `BoardRead` tells a reader of the database nothing.
+- **System work.** `To = [RowAccessRoles.User]` makes a rule for signed-in callers. Tenancy's own policy lets system work
+  read and write the rows of the tenant it acts in, on every table marked `[OfTenant]`. Step 7 relies on that.
 
 Harbor's rules:
 
-| Table | Operation | Allowed when |
-|---|---|---|
-| `Boards` | read | the caller sees the board |
-| `Boards` | create | the caller holds `boards.create` at the board's unit, and owns it |
-| `Boards` | change | the caller holds `boards.edit` or `boards.members.manage` on it |
-| `BoardRoles` | read | the role is of the caller's tenant |
-| `BoardRoles` | create, change | the caller holds `boards.roles.manage` for the whole tenant |
+| Rule | Table | Operation | Allowed when |
+|---|---|---|---|
+| `MembersSeeTheirBoards` | `Boards` | read | the caller sees the board |
+| `CreatorsOpenTheirOwnBoards` | `Boards` | create | the caller holds `boards.create` at the board's unit, and owns it |
+| `EditorsAndManagersChangeBoards` | `Boards` | change | the caller holds `boards.edit` or `boards.members.manage` on it |
+| `SeatsReadTheirTenantsBoardRoles` | `BoardRoles` | read | the role is of the caller's tenant |
+| `RoleManagersWriteBoardRoles` | `BoardRoles` | create, change | the caller holds `boards.roles.manage` for the whole tenant |
 
 ### What you write
 
@@ -730,7 +736,7 @@ export finds the function.
 
 **`Harbor.Boards.Infrastructure/Access/BoardRowRules.cs`**
 
-```csharp {10,13,17,21-22,26,30-31}
+```csharp {9,12,15,19-20,24,28-29}
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using Harbor.Boards.Application.Access;
@@ -739,25 +745,23 @@ using Harbor.Boards.Domain.Aggregates.Boards;
 
 namespace Harbor.Boards.Infrastructure.Access;
 
-// A seat reads the boards it sees.
 [RowAccess<Board>(RowOperations.Read, To = [RowAccessRoles.User])]
-public static partial class SeatsReadTheBoardsTheySee
+public static partial class MembersSeeTheirBoards
 {
     public static bool Allows(Board board, IRowUser user) => user.Sees<BoardId>().Contains(board.Id);
 }
 
-// A seat opens a board where it holds boards.create, and as its own.
 [RowAccess<Board>(RowOperations.Create, To = [RowAccessRoles.User])]
-public static partial class SeatsOpenBoardsWhereTheyMay
+public static partial class CreatorsOpenTheirOwnBoards
 {
     public static bool Allows(Board board, IRowUser user)
         => user.UnitsWhereIHold(BoardPermissions.Create).Contains(board.UnitId)
             && board.OwnerSeatId == user.CurrentSeatId();
 }
 
-// A seat changes a board it may edit, or whose members it may manage: adding a member raises the board's version.
+// ManageMembers is here because adding a member raises the board's version, which updates the board's row.
 [RowAccess<Board>(RowOperations.Change, To = [RowAccessRoles.User])]
-public static partial class SeatsChangeTheBoardsTheyWorkOn
+public static partial class EditorsAndManagersChangeBoards
 {
     public static bool Allows(Board board, IRowUser user)
         => user.Holds<BoardId>(BoardPermissions.Edit).Contains(board.Id)
@@ -770,7 +774,7 @@ limits who may write a role row.
 
 **`Harbor.Boards.Infrastructure/Access/BoardRoleRowRules.cs`**
 
-```csharp {9,12,16,19}
+```csharp {8,11,14,17}
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using Harbor.Boards.Application.Access;
@@ -778,14 +782,12 @@ using Harbor.Boards.Domain.Aggregates.BoardRoles;
 
 namespace Harbor.Boards.Infrastructure.Access;
 
-// A seat reads the board roles of its tenant.
 [RowAccess<BoardRole>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsReadTheirTenantsBoardRoles
 {
     public static bool Allows(BoardRole role, IRowUser user) => role.TenantId == user.CurrentTenant();
 }
 
-// A role's row decides what everybody who holds it may do: only who manages the roles of boards writes one.
 [RowAccess<BoardRole>(RowOperations.Create | RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class RoleManagersWriteBoardRoles
 {
@@ -821,7 +823,7 @@ public static class BoardPermissions
     [AtUnit(Description = "Open a board at a unit")]
     public const string Create = "boards.create";
 
-    [AtTenant(Description = "Set up the roles of boards")]
+    [AtTenant(Description = "Make and change the roles of boards")]
     public const string ManageRoles = "boards.roles.manage";
 }
 ```
@@ -871,7 +873,7 @@ and policies.
   `[AccessRequests]`. The generator writes the behavior that runs the checks before each handler.
 - **Two checks**, both registered for `IBoardsRequest`, decide the requirements:
   - Tenancy's check decides: in the tenant, a permission at a unit, and a permission for the whole tenant;
-  - Membership's check decides: a permission on one board, and which boards a list shows.
+  - Membership's check decides: a permission on one board.
 
   When no registered check decides a requirement, the behavior refuses every caller.
 - **The generator joins Membership to Tenancy.** The project references both packages, so the generator writes
@@ -880,8 +882,10 @@ and policies.
   step 2 names Tenancy's ids, and the member class names the seat id, so the call names only the context.
 - **The access manager and the managers of boards.** `AddBoardMembershipWithTenancy` also registers
   `MembershipAccessManager<Board>`, `BoardMemberManager` and `BoardRoleManager` per scope. A handler takes the access
-  manager to ask what the caller holds on a board (step 9), and the managers to change members and roles (steps 6
+  manager to ask what the caller holds on a board (step 9), and the managers to change members and read roles (steps 6
   and 7).
+- **Each tenant's starter roles.** `AddBoardMembershipWithTenancy` also registers what makes a tenant's `editor` role.
+  Step 7 explains it.
 - **Ada's role lacks the new permissions.** Her Administrator role was made from Tenancy's default administrators'
   starter role when Harbor Works was provisioned, before boards existed. That starter role holds every permission in
   the catalogue. `SyncStarterRoles()` in the host adds the board permissions to her role when the host starts.
@@ -893,13 +897,13 @@ what the checks of this step do. `[RequiresPermission(BoardPermissions.Edit)]` a
 
 ```csharp
 [RequiresPermission(BoardPermissions.Edit)]                       // what the caller needs: boards.edit
-public sealed record RenameBoard([OnResource] BoardId Board, string Name)  // [OnResource]: on this board
+public sealed record EditBoardCommand([OnResource] BoardId Board, string Name)  // [OnResource]: on this board
     : ICommand<Board>, IBoardsRequest;                             // IBoardsRequest: the behavior checks it
 
-public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandler<RenameBoard, Board>
+public sealed class EditBoardHandler(IBoardRepository boards) : ICommandHandler<EditBoardCommand, Board>
 {
     // Runs only for a caller who holds boards.edit on this board.
-    public async ValueTask<Board> Handle(RenameBoard command, CancellationToken cancellationToken)
+    public async ValueTask<Board> Handle(EditBoardCommand command, CancellationToken cancellationToken)
     {
         var board = await boards.FindAsync(command.Board, cancellationToken)
             ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
@@ -914,9 +918,9 @@ What happens when a route sends it. Purple is the check, green is the path to th
 
 ```mermaid
 flowchart LR
-    route["<b>PUT /boards/{id}/name</b><br/><small>sends RenameBoard</small>"]
+    route["<b>PUT /boards/{id}</b><br/><small>sends EditBoardCommand</small>"]
     check["<b>Membership's check</b><br/><small>boards.edit on this board?</small>"]
-    handler["<b>RenameBoardHandler</b><br/><small>runs</small>"]
+    handler["<b>EditBoardHandler</b><br/><small>runs</small>"]
     hidden["<b>boards.not-found</b><br/><small>the caller does not see the board</small>"]
     lacks["<b>boards.not-permitted</b><br/><small>sees it, lacks boards.edit</small>"]
     route --> check
@@ -966,7 +970,8 @@ global using Mediator;
 ```
 
 **The application's registration.** **Why:** the generator writes the behavior next to `IBoardsRequest`, in this
-project.
+project. `AddBoardsAccessBehavior` is in the namespace of `IBoardsRequest`, one namespace below this class, so the
+`global using` of `Harbor.Boards.Application.Access` above is what makes the call compile.
 
 **`Harbor.Boards.Application/BoardsApplication.cs`**
 
@@ -1160,47 +1165,58 @@ dotnet sln Harbor.slnx add --solution-folder src/Modules/Boards src/Modules/Boar
    log shows:
 
    ```text
-   The starter roles are synced in 2 tenants: 2 roles followed their starter roles, ...
+   The starter roles are synced in 2 tenants: 2 roles were made, 2 roles followed their starter roles, ...
    ```
 
    The Administrator role of both tenants now holds the board permissions: Ada's in Harbor Works and Tove's in
-   Meadow Gardens.
+   Meadow Gardens. Each tenant also has a role `editor` now. Step 7 explains where it came from.
 
-## Step 6: open a board, see it, list them
+## Step 6: open a board, get it, list them
 
 **Where we are.** The module is registered and has no routes.
 
 **Why now.** A member needs a board, so the board comes first.
 
-**What we want.** Rhea opens a board at North, sees it, and finds it in her list. Ada is not on the board, so she does
+**What we want.** Rhea opens a board at North, gets it, and finds it in her list. Ada is not on the board, so she does
 not see it yet.
 
-### The idea: three requirements, each on its request
+### The idea: three requests, and what each one answers
 
 - Each request states what it requires. The check before the handler enforces it:
 
   | Request | Requires | Checked by |
   |---|---|---|
-  | `OpenBoard` | `[RequiresPermission(boards.create)]`, with `[AtUnit]` on its unit | Tenancy, at that unit or above. The board does not exist yet, so nobody is a member of it. |
-  | `SeeBoard` | `[RequiresPermission(boards.view)]`, with `[OnResource]` on its board | Membership, on that board |
-  | `ListBoards` | `[SeenWith<BoardId>(boards.view)]` | Membership. It refuses nobody for lacking the permission. The list contains only the boards the caller holds `boards.view` on. |
+  | `OpenBoardCommand` | `[RequiresPermission(boards.create)]`, with `[AtUnit]` on its unit | Tenancy, at that unit or above. The board does not exist yet, so nobody is a member of it. |
+  | `GetBoardQuery` | `[RequiresPermission(boards.view)]`, with `[OnResource]` on its board | Membership, on that board |
+  | `ListBoardQuery` | `[InTenant]` | Tenancy: the caller works in the tenant. The read policy of step 4 decides which boards the list holds. |
 
+- **Request names.** A request is `<Feature>Query` or `<Feature>Command`, and its handler is `<Feature>Handler`. The
+  file and the folder carry the feature's name, so `Boards/ListBoard/ListBoard.cs` holds `ListBoardQuery` and
+  `ListBoardHandler`. Reading one thing is `Get`. A list is singular: `ListBoardQuery`.
 - **Hidden boards**: for a board the caller does not see, the answer is `404`, `boards.not-found`. An id that is not a
   board gets the same answer, so a caller cannot find out that a board exists.
-- **The boards I hold a permission on**: `db.Boards.WhereIHold(BoardPermissions.View)` keeps the boards on which the
-  caller holds `boards.view`. It is part of the Entity Framework query, so the list is one SQL statement. The code
-  never loads the ids first. `WhereIHold` finds the context from the set, and the rules from the context's services.
+- **A list does not filter again.** Harbor runs every query as its caller. The read policy `MembersSeeTheirBoards` of
+  step 4 already leaves out the boards the caller does not see. So a list is `db.Boards`, and the request says
+  `[InTenant]`.
+- **`WhereIHold` answers another question.** `db.Boards.WhereIHold(BoardPermissions.Edit)` keeps the boards on which the
+  caller holds `boards.edit`: the boards a caller may edit, from among those it sees. On a database without row level
+  security, `db.Boards.WhereIHold(BoardPermissions.View)` with `[SeenWith<BoardId>(BoardPermissions.View)]` on the
+  request is what keeps a list to the caller's boards. Harbor needs neither in this step.
+- **Handlers answer the aggregate, queries too.** All three requests answer `Board`. The route picks what leaves the API,
+  in one method, `Describe`. A client that wants other fields changes that method, and no handler changes.
 - **Repository**: the handlers read boards, and save a change to the board itself, through `IBoardRepository`. The
-  interface is in the application project, and the infrastructure project implements it. The repository calls
-  `WhereIHold`, because `WhereIHold` is part of an Entity Framework query.
+  interface is in the application project, and the infrastructure project implements it. The repository loads a board
+  whole, with `Include(board => board.People).ThenInclude(member => member.Roles)`, because `Describe` reads the members
+  and their roles.
 - **Opening through the member manager**: `BoardMemberManager.OpenAsync(board)` checks that the owner may be a
   member, adds the board and saves it. With Tenancy, the owner must be an active seat of the tenant. The manager asks
   no permission for a new board, because the request's check asked `boards.create` at the unit.
 - **The owner is the caller**: the handler takes `TenancyAccessManager`, Tenancy's access manager. Its
-  `CurrentTenant.Require()` returns the caller's tenant and seat. The create rule of step 4 makes the database check
+  `CurrentTenant.RequireSeat()` returns the caller's tenant and seat. The create rule of step 4 makes the database check
   the same.
-- **Who is on a board**: `BoardMemberManager.ListAsync(board)` reads the members of a board the caller sees. The owner
-  comes first, then the others by when each membership starts. Each member comes with its roles.
+- **The order of the members**: `Include` sets no order, so `board.People` lists the members in the order the database
+  returns them. `BoardMemberManager.ListAsync(board)` returns the owner first, then the others by when each membership
+  starts. Use it for a screen that needs that order.
 
 ### What you write
 
@@ -1217,7 +1233,7 @@ public interface IBoardRepository
 {
     Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<Board>> ListAsync(CancellationToken cancellationToken);
 
     Task SaveAsync(CancellationToken cancellationToken);
 }
@@ -1225,9 +1241,7 @@ public interface IBoardRepository
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardRepository.cs`**
 
-```csharp {16}
-using DDDToolkit.Supporting.Membership.EntityFramework;
-using Harbor.Boards.Application.Access;
+```csharp {13,18}
 using Harbor.Boards.Application.Boards;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -1235,13 +1249,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Harbor.Boards.Infrastructure.Persistence;
 
+// A board comes whole: with the people on it and the roles each holds. Which boards a caller reads is the read policy's.
 internal sealed class BoardRepository(BoardsContext db) : IBoardRepository
 {
     public Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken)
-        => db.Boards.SingleOrDefaultAsync(board => board.Id == id, cancellationToken);
+        => db.Boards
+            .Include(board => board.People).ThenInclude(member => member.Roles)
+            .SingleOrDefaultAsync(board => board.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken)
-        => await db.Boards.WhereIHold(BoardPermissions.View).OrderBy(board => board.Name).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<Board>> ListAsync(CancellationToken cancellationToken)
+        => await db.Boards
+            .Include(board => board.People).ThenInclude(member => member.Roles)
+            .OrderBy(board => board.Name)
+            .ToListAsync(cancellationToken);
 
     public Task SaveAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }
@@ -1291,96 +1311,76 @@ caller becomes the owner.
 
 **`Harbor.Boards.Application/Boards/OpenBoard/OpenBoard.cs`**
 
-```csharp {3-4,7,14-15,18-19}
+```csharp {3-4,7,14,17-18}
 namespace Harbor.Boards.Application.Boards.OpenBoard;
 
 [RequiresPermission(BoardPermissions.Create)]
-public sealed record OpenBoard([AtUnit] OrganizationUnitId Unit, string Name) : ICommand<Board>, IBoardsRequest;
+public sealed record OpenBoardCommand([AtUnit] OrganizationUnitId Unit, string Name) : ICommand<Board>, IBoardsRequest;
 
 public sealed class OpenBoardHandler(
     BoardMemberManager members,
     TenancyAccessManager access,
-    TimeProvider clock) : ICommandHandler<OpenBoard, Board>
+    TimeProvider clock) : ICommandHandler<OpenBoardCommand, Board>
 {
-    public async ValueTask<Board> Handle(OpenBoard command, CancellationToken cancellationToken)
+    public async ValueTask<Board> Handle(OpenBoardCommand command, CancellationToken cancellationToken)
     {
         // The caller's tenant and seat: the board is the tenant's, and the caller owns it.
-        var scope = access.CurrentTenant.Require();
-        var owner = scope.Seat ?? throw new InvalidOperationException("A board is opened by a seat.");
+        var scope = access.CurrentTenant.RequireSeat();
 
         // The member manager checks the owner's seat with the tenant, adds the board and saves it.
-        var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, owner, clock.GetUtcNow());
+        var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, scope.Seat, clock.GetUtcNow());
         return await members.OpenAsync(board, cancellationToken);
     }
 }
 ```
 
-**Seeing one board.** **Why:** the request requires a permission on that board. The response lists the board's
-members, the owner first.
+**Getting one board.** **Why:** the request requires a permission on that board. It answers the board.
 
-**`Harbor.Boards.Application/Boards/SeeBoard/SeeBoard.cs`**
+**`Harbor.Boards.Application/Boards/GetBoard/GetBoard.cs`**
 
-```csharp {5-6,8,13,16-18,22,24}
+```csharp {5-6,8,10-12}
 using DDDToolkit.Supporting.Membership;
 
-namespace Harbor.Boards.Application.Boards.SeeBoard;
+namespace Harbor.Boards.Application.Boards.GetBoard;
 
 [RequiresPermission(BoardPermissions.View)]
-public sealed record SeeBoard([OnResource] BoardId Board) : IQuery<BoardDetails>, IBoardsRequest;
+public sealed record GetBoardQuery([OnResource] BoardId Board) : IQuery<Board>, IBoardsRequest;
 
-public sealed class SeeBoardHandler(IBoardRepository boards, BoardMemberManager members) : IQueryHandler<SeeBoard, BoardDetails>
+public sealed class GetBoardHandler(IBoardRepository boards) : IQueryHandler<GetBoardQuery, Board>
 {
-    public async ValueTask<BoardDetails> Handle(SeeBoard query, CancellationToken cancellationToken)
-    {
-        var board = await boards.FindAsync(query.Board, cancellationToken)
+    public async ValueTask<Board> Handle(GetBoardQuery query, CancellationToken cancellationToken)
+        => await boards.FindAsync(query.Board, cancellationToken)
             ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
-
-        // The owner first, then by when each membership starts, each with its roles.
-        var people = await members.ListAsync(board, cancellationToken);
-        return new BoardDetails(board.Id, board.Name, board.UnitId, board.Version, board.OwnerSeatId,
-            [.. people.Select(member => new BoardMemberDetails(member.MemberId, member.StartsAt, member.EndsAt, [.. member.Roles.Select(role => role.RoleId)]))]);
-    }
 }
-
-public sealed record BoardDetails(BoardId Id, string Name, OrganizationUnitId Unit, long Version, SeatId Owner, IReadOnlyList<BoardMemberDetails> Members);
-
-public sealed record BoardMemberDetails(SeatId Seat, DateTimeOffset StartsAt, DateTimeOffset? EndsAt, IReadOnlyList<BoardRoleId> Roles);
 ```
 
-**Listing the caller's boards.** **Why:** a list request refuses nobody for lacking the permission. `WhereIHold` in
-the repository's query decides which boards the list contains.
+**Listing the boards.** **Why:** the read policy of step 4 decides which boards the list holds, so the request and the
+repository filter nothing.
 
-**`Harbor.Boards.Application/Boards/ListBoards/ListBoards.cs`**
+**`Harbor.Boards.Application/Boards/ListBoard/ListBoard.cs`**
 
-```csharp {3-4,12}
-namespace Harbor.Boards.Application.Boards.ListBoards;
+```csharp {3-4,8-9}
+namespace Harbor.Boards.Application.Boards.ListBoard;
 
-[SeenWith<BoardId>(BoardPermissions.View)]
-public sealed record ListBoards : IQuery<IReadOnlyList<BoardListing>>, IBoardsRequest;
+[InTenant]
+public sealed record ListBoardQuery : IQuery<IReadOnlyList<Board>>, IBoardsRequest;
 
-public sealed class ListBoardsHandler(IBoardRepository boards)
-    : IQueryHandler<ListBoards, IReadOnlyList<BoardListing>>
+public sealed class ListBoardHandler(IBoardRepository boards) : IQueryHandler<ListBoardQuery, IReadOnlyList<Board>>
 {
-    public async ValueTask<IReadOnlyList<BoardListing>> Handle(ListBoards query, CancellationToken cancellationToken)
-    {
-        // The boards the caller holds boards.view on. The repository's query reads them in one statement.
-        var found = await boards.ListVisibleAsync(cancellationToken);
-        return [.. found.Select(board => new BoardListing(board.Id, board.Name, board.UnitId, board.OwnerSeatId))];
-    }
+    public async ValueTask<IReadOnlyList<Board>> Handle(ListBoardQuery query, CancellationToken cancellationToken)
+        => await boards.ListAsync(cancellationToken);
 }
-
-public sealed record BoardListing(BoardId Id, string Name, OrganizationUnitId Unit, SeatId Owner);
 ```
 
 **The routes.** **Why:** each route only sends its request. The behavior checks the request before the handler runs.
-A command returns the board, and the route decides which of its fields leave the API.
+Every handler answers the board, and `Describe` decides which of its fields leave the API.
 
 **`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**
 
-```csharp {5,18-23,28-35}
-using Harbor.Boards.Application.Boards.ListBoards;
+```csharp {5,18-23,28-37}
+using Harbor.Boards.Application.Boards.GetBoard;
+using Harbor.Boards.Application.Boards.ListBoard;
 using Harbor.Boards.Application.Boards.OpenBoard;
-using Harbor.Boards.Application.Boards.SeeBoard;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -1395,22 +1395,24 @@ internal static class BoardsEndpoints
 {
     public static IEndpointRouteBuilder MapBoardsEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/boards", async (NewBoard body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(Describe(await sender.Send(new OpenBoard(body.Unit, body.Name), cancellationToken))));
         routes.MapGet("/boards", async (ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(await sender.Send(new ListBoards(), cancellationToken)));
+            => Results.Ok((await sender.Send(new ListBoardQuery(), cancellationToken)).Select(Describe)));
         routes.MapGet("/boards/{board}", async (BoardId board, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(await sender.Send(new SeeBoard(board), cancellationToken)));
+            => Results.Ok(Describe(await sender.Send(new GetBoardQuery(board), cancellationToken))));
+        routes.MapPost("/boards", async (NewBoard body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new OpenBoardCommand(body.Unit, body.Name), cancellationToken))));
 
         return routes;
     }
 
-    // The board as a command returns it: its id, its name, its unit, and each member with the roles it holds.
+    // The handlers answer the board whole. What leaves the API is chosen here.
     private static object Describe(Board board) => new
     {
         board = board.Id,
         name = board.Name,
         unit = board.UnitId,
+        owner = board.OwnerSeatId,
+        version = board.Version,
         members = board.People.Select(member => new { seat = member.MemberId, roles = member.Roles.Select(role => role.RoleId) }),
     };
 
@@ -1444,27 +1446,25 @@ public static class BoardsModule
 
 - `[AtUnit] Unit`: Rhea needs `boards.create` at that unit or above it, from a Tenancy role.
 - `TenancyAccessManager`: the class the generator wrote into this project from the `TenancyIds` line. It is the same
-  access manager the Tenancy module's handlers take. `access.CurrentTenant.Require()` returns the caller's tenant,
-  with its `Id` and the caller's `Seat`. A caller without a tenant gets the refusal its request got. `Seat` is `null`
-  for system work in the tenant that acts for no seat. In Harbor only a seat opens a board, so the handler throws in
-  that case.
+  access manager the Tenancy module's handlers take.
+- `access.CurrentTenant.RequireSeat()` returns the caller's tenant, as `Id`, and the caller's seat, as `Seat`, which is
+  never `null`. A caller without a tenant gets the refusal its request got. System work in the tenant answers the seat it
+  acts for. System work that acts for no seat gets an `InvalidOperationException`, which names the overload of
+  `BeginSystemIn` that takes a seat.
 - `TimeProvider`: .NET's clock. Tenancy registers `TimeProvider.System` unless the host registered another one, such
   as a fixed clock in a test. The handler passes `clock.GetUtcNow()` to the board, because the board reads no clock.
 - `BoardId.Create()` makes the new board's id in code, before the save.
 - `members.OpenAsync(board)` refuses an owner whose seat is not active in the tenant with `boards.member-not-active`.
   Otherwise it adds the board, saves it and returns it.
-- `OpenBoard` returns the new board. The route answers it with `Describe`: the board's id, its name, its unit, and
-  each member row with its roles.
 - `[OnResource] Board`: before the handler runs, the check reads that board. It refuses a caller who does not see the
   board, and a caller who sees it without the permission.
 - `Board.Codes.Refuse(MembershipRefusals.NotFound)`: for a board deleted between the check and the load. The refusal
   uses the board's code, `boards.not-found`.
-- `members.ListAsync(board)` reads the members in one statement, and returns your `BoardMember` rows in the standard
-  order: the owner first, then by the start of each membership. A membership that has ended is in the list too.
-  `member.AppliesAt(now)` says whether it counts at a moment.
-- `board.Version`: the board's version, which every save that changes the board or its members raises.
-- `db.Boards.WhereIHold(BoardPermissions.View)` adds the boards Rhea holds `boards.view` on as a subquery, in the same
-  statement.
+- `[InTenant]`: Tenancy's check lets through a seat of the tenant. `db.Boards` then returns the rows the policies leave.
+- `Include(board => board.People).ThenInclude(member => member.Roles)`: the query loads the two member tables with the
+  boards. A membership that has ended is in the list too. `member.AppliesAt(now)` says whether it counts at a moment.
+- `Describe`: `board.Version` is the board's version, which every save that changes the board or its members raises.
+  `.Select(Describe)` calls the same method for each board of a list.
 
 ### Try it
 
@@ -1486,9 +1486,9 @@ Content-Type: application/json
 3. As Rhea: `POST /boards` at the root: `403`, `tenancy.not-permitted`, "You lack the permission boards.create."
 4. As Rhea: `GET /boards`: Crane schedule, with her seat as its owner.
 5. As Rhea: `GET /boards/<id>`: `version` 1, `owner` Rhea's seat, and one member, Rhea, with no roles.
-6. As Ada: `GET /boards`: `[]`. `GET /boards/<id>`: `404`, `boards.not-found`. Ada holds `boards.view` at the root,
-   and Rhea holds it at North. Until step 8, a permission held at a unit does not count on a board. Only the board's
-   owner and members hold permissions on it.
+6. As Ada: `GET /boards`: `[]`. The read policy leaves the board out. `GET /boards/<id>`: `404`, `boards.not-found`. Ada
+   holds `boards.view` at the root, and Rhea holds it at North. Until step 8, a permission held at a unit does not count
+   on a board. Only the board's owner and members hold permissions on it.
 
 > **Going further.** A command that names the version its caller read, `[ExpectedVersion]`, and what stops a change
 > between the check and the save: [From the check to the save](checks-and-saves.md#from-the-check-to-the-save). A
@@ -1497,22 +1497,48 @@ Content-Type: application/json
 
 ## Step 7: members
 
-**Where we are.** Rhea owns a board and is alone on it. Leo has no seat.
+**Where we are.** Rhea owns a board and is alone on it. Leo has no seat. Harbor Works has a role `editor` since step 5.
 
 **Why now.** This step shows the main feature of Membership: a person gets access to one board by being a member of
 it.
 
-**What we want.** Harbor Works gets its starter role, `editor`. Rhea adds Leo to her board as an editor. Leo can edit
-that board, and may not add members to it.
+**What we want.** Rhea adds Leo to her board as an editor. Leo can edit that board, and may not add members to it.
 
-### The idea: who may add a member, and what a role gives
+### The idea: where `editor` came from, who may add a member, and what a role gives
 
-- **Starter roles are made per tenant**, when your application decides. `BoardRoleManager.CreateStarterRolesAsync`
-  makes the starter roles the tenant does not have yet, with your role's constructor, and saves them. A role made from
-  a starter role before is not made again, even if the tenant renamed it. In Harbor, an administrator sends a request
-  once to make them. A real application sends this request when it sets up a tenant.
-- **The role manager checks `managedWith`.** Every change to a board role requires `boards.roles.manage`, the
-  permission the rules of step 2 name. Joined to Tenancy, the caller must hold it for the whole tenant.
+- **A tenant's starter roles work as Tenancy's do.** The rules of step 2 declare `editor`, and
+  `AddBoardMembershipWithTenancy` of step 5 registers what makes the tenant's copy. You write no command and no route
+  for it:
+
+  | What changes | What happens to the tenant's role |
+  |---|---|
+  | A new tenant is provisioned | It has `editor` right after `ProvisionAsync`. |
+  | A host starts, and a tenant lacks `editor` | `SyncStarterRoles()` makes the role. Harbor Works and Meadow Gardens got theirs this way in step 5. |
+  | `editor` gains a permission in the rules | The next start adds it to the role. |
+  | `editor` loses a permission in the rules | The next start takes it out of the role. |
+  | The tenant took a permission out of its role | It stays out, while `editor` still holds it. |
+  | The tenant added a permission to its role | It stays. |
+  | The tenant renamed the role | The role still follows `editor`. |
+  | The tenant archived the role | The role follows nothing, and is not made again. |
+
+- **The generator calls your constructor.** It finds the public constructor of `BoardRole` by its parameter types, in any
+  order: the role id, the tenant id, `CustomRoleDraft`, and optionally `MembershipRules`. It makes the id with
+  `BoardRoleId.Create()`. The registration has an optional parameter `makeRole`, for names, descriptions or ids of your
+  own:
+
+  ```csharp
+  services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules, makeRole: (provider, tenant, draft) =>
+      new BoardRole(BoardRoleId.Create(), tenant, draft with { Name = "Editor", Description = "Edits a board" }, BoardMembership.Rules));
+  ```
+
+  Where no constructor fits, `makeRole` is required, so the compiler reports it at the call.
+- **It runs as system work in the tenant**, in a scope of its own. Tenancy's policy of step 4 lets that work write the
+  tenant's rows, so `RoleManagersWriteBoardRoles` does not apply to it.
+- **It is not one transaction.** Boards has its own context, so the tenant is saved first. A failure after that does not
+  fail `ProvisionAsync`. It is logged as an error, and the next `SyncStarterRoles()` makes the role.
+- **The role manager checks `managedWith`.** Every change a request makes to a board role requires
+  `boards.roles.manage`, the permission the rules of step 2 name. Joined to Tenancy, the caller must hold it for the whole
+  tenant.
 - **The member manager checks the permission marked `ManagesMembers`.** `BoardMemberManager.AddAsync` requires
   `boards.members.manage` on the board. The owner holds it, and no role can give it. The request's check asks the
   same permission on the same board, so the manager uses that answer and asks nothing again.
@@ -1573,48 +1599,21 @@ public sealed partial class Board
 }
 ```
 
-**Setting up the starter roles.** **Why:** the roles are rows of the tenant, so a request must make them once per
-tenant. The rules say which roles to make, and your role's constructor makes each one.
-
-**`Harbor.Boards.Application/BoardRoles/SetUpBoardRoles/SetUpBoardRoles.cs`**
-
-```csharp {3-4,7,12-15}
-namespace Harbor.Boards.Application.BoardRoles.SetUpBoardRoles;
-
-[RequiresPermission(BoardPermissions.ManageRoles)]
-public sealed record SetUpBoardRoles : ICommand<IReadOnlyList<BoardRole>>, IBoardsRequest;
-
-public sealed class SetUpBoardRolesHandler(
-    BoardRoleManager roles,
-    TenancyAccessManager access) : ICommandHandler<SetUpBoardRoles, IReadOnlyList<BoardRole>>
-{
-    public async ValueTask<IReadOnlyList<BoardRole>> Handle(SetUpBoardRoles command, CancellationToken cancellationToken)
-    {
-        // The starter roles this tenant does not have yet; a role made from one before is not made again.
-        var tenant = access.CurrentTenant.Require().Id;
-        return await roles.CreateStarterRolesAsync(
-            draft => new BoardRole(BoardRoleId.Create(), tenant, draft, BoardMembership.Rules), cancellationToken);
-    }
-}
-```
-
 **Listing the roles.** **Why:** adding a member needs a role's id. Any seat of the tenant may read the roles.
 
-**`Harbor.Boards.Application/BoardRoles/ListBoardRoles/ListBoardRoles.cs`**
+**`Harbor.Boards.Application/BoardRoles/ListBoardRole/ListBoardRole.cs`**
 
-```csharp {3,6,9}
-namespace Harbor.Boards.Application.BoardRoles.ListBoardRoles;
+```csharp {3-4,8-9}
+namespace Harbor.Boards.Application.BoardRoles.ListBoardRole;
 
 [InTenant]
-public sealed record ListBoardRoles : IQuery<IReadOnlyList<BoardRoleListing>>, IBoardsRequest;
+public sealed record ListBoardRoleQuery : IQuery<IReadOnlyList<BoardRole>>, IBoardsRequest;
 
-public sealed class ListBoardRolesHandler(BoardRoleManager roles) : IQueryHandler<ListBoardRoles, IReadOnlyList<BoardRoleListing>>
+public sealed class ListBoardRoleHandler(BoardRoleManager roles) : IQueryHandler<ListBoardRoleQuery, IReadOnlyList<BoardRole>>
 {
-    public async ValueTask<IReadOnlyList<BoardRoleListing>> Handle(ListBoardRoles query, CancellationToken cancellationToken)
-        => [.. (await roles.ListAsync(cancellationToken)).Select(role => new BoardRoleListing(role.Id, role.Name, role.Permissions))];
+    public async ValueTask<IReadOnlyList<BoardRole>> Handle(ListBoardRoleQuery query, CancellationToken cancellationToken)
+        => await roles.ListAsync(cancellationToken);
 }
-
-public sealed record BoardRoleListing(BoardRoleId Id, string Name, IReadOnlyList<string> Permissions);
 ```
 
 **Adding a member.** **Why:** the request states who may send it. The member manager checks the seat and the role,
@@ -1626,35 +1625,36 @@ then loads the board, adds the member and saves.
 namespace Harbor.Boards.Application.Boards.AddMember;
 
 [RequiresPermission(BoardPermissions.ManageMembers)]
-public sealed record AddMember([OnResource] BoardId Board, SeatId Seat, BoardRoleId Role) : ICommand<Board>, IBoardsRequest;
+public sealed record AddMemberCommand([OnResource] BoardId Board, SeatId Seat, BoardRoleId Role) : ICommand<Board>, IBoardsRequest;
 
-public sealed class AddMemberHandler(BoardMemberManager members) : ICommandHandler<AddMember, Board>
+public sealed class AddMemberHandler(BoardMemberManager members) : ICommandHandler<AddMemberCommand, Board>
 {
     // From now, with no end, in the role, added by the caller's seat.
-    public async ValueTask<Board> Handle(AddMember command, CancellationToken cancellationToken)
+    public async ValueTask<Board> Handle(AddMemberCommand command, CancellationToken cancellationToken)
         => await members.AddAsync(command.Board, command.Seat, command.Role, until: null, cancellationToken);
 }
 ```
 
-**Renaming a board.** **Why:** this command requires `boards.edit`, which a role can give. The `editor` role gives
+**Editing a board.** **Why:** this command requires `boards.edit`, which a role can give. The `editor` role gives
 it.
 
-**`Harbor.Boards.Application/Boards/RenameBoard/RenameBoard.cs`**
+**`Harbor.Boards.Application/Boards/EditBoard/EditBoard.cs`**
 
-```csharp {5-6,8,10,16}
+```csharp {5-6,8,10,15}
 using DDDToolkit.Supporting.Membership;
 
-namespace Harbor.Boards.Application.Boards.RenameBoard;
+namespace Harbor.Boards.Application.Boards.EditBoard;
 
 [RequiresPermission(BoardPermissions.Edit)]
-public sealed record RenameBoard([OnResource] BoardId Board, string Name) : ICommand<Board>, IBoardsRequest;
+public sealed record EditBoardCommand([OnResource] BoardId Board, string Name) : ICommand<Board>, IBoardsRequest;
 
-public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandler<RenameBoard, Board>
+public sealed class EditBoardHandler(IBoardRepository boards) : ICommandHandler<EditBoardCommand, Board>
 {
-    public async ValueTask<Board> Handle(RenameBoard command, CancellationToken cancellationToken)
+    public async ValueTask<Board> Handle(EditBoardCommand command, CancellationToken cancellationToken)
     {
         var board = await boards.FindAsync(command.Board, cancellationToken)
             ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
+
         board.Rename(command.Name);
         await boards.SaveAsync(cancellationToken);
         return board;
@@ -1666,9 +1666,9 @@ public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandle
 
 **`Harbor.Boards.Api/BoardRoles/Rest/BoardRolesEndpoints.cs`**
 
-```csharp {14-20}
-using Harbor.Boards.Application.BoardRoles.ListBoardRoles;
-using Harbor.Boards.Application.BoardRoles.SetUpBoardRoles;
+```csharp {14-15,20}
+using Harbor.Boards.Application.BoardRoles.ListBoardRole;
+using Harbor.Boards.Domain.Aggregates.BoardRoles;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -1680,28 +1680,25 @@ internal static class BoardRolesEndpoints
 {
     public static IEndpointRouteBuilder MapBoardRolesEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/board-roles/starter", async (ISender sender, CancellationToken cancellationToken) =>
-        {
-            var made = await sender.Send(new SetUpBoardRoles(), cancellationToken);
-            return Results.Ok(made.Select(role => new { role = role.Id, name = role.Name, permissions = role.Permissions }));
-        });
         routes.MapGet("/board-roles", async (ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(await sender.Send(new ListBoardRoles(), cancellationToken)));
+            => Results.Ok((await sender.Send(new ListBoardRoleQuery(), cancellationToken)).Select(Describe)));
 
         return routes;
     }
+
+    private static object Describe(BoardRole role) => new { role = role.Id, name = role.Name, permissions = role.Permissions };
 }
 ```
 
-**`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**: adds routes to rename a board and to add a member, next to
+**`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**: adds routes to edit a board and to add a member, next to
 the others.
 
-```csharp {1,4,7,27-30,46,48}
+```csharp {1,2,7,27-30,48,50}
 using Harbor.Boards.Application.Boards.AddMember;
-using Harbor.Boards.Application.Boards.ListBoards;
+using Harbor.Boards.Application.Boards.EditBoard;
+using Harbor.Boards.Application.Boards.GetBoard;
+using Harbor.Boards.Application.Boards.ListBoard;
 using Harbor.Boards.Application.Boards.OpenBoard;
-using Harbor.Boards.Application.Boards.RenameBoard;
-using Harbor.Boards.Application.Boards.SeeBoard;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -1717,32 +1714,34 @@ internal static class BoardsEndpoints
 {
     public static IEndpointRouteBuilder MapBoardsEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/boards", async (NewBoard body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(Describe(await sender.Send(new OpenBoard(body.Unit, body.Name), cancellationToken))));
         routes.MapGet("/boards", async (ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(await sender.Send(new ListBoards(), cancellationToken)));
+            => Results.Ok((await sender.Send(new ListBoardQuery(), cancellationToken)).Select(Describe)));
         routes.MapGet("/boards/{board}", async (BoardId board, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(await sender.Send(new SeeBoard(board), cancellationToken)));
-        routes.MapPut("/boards/{board}/name", async (BoardId board, NewName body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(Describe(await sender.Send(new RenameBoard(board, body.Name), cancellationToken))));
+            => Results.Ok(Describe(await sender.Send(new GetBoardQuery(board), cancellationToken))));
+        routes.MapPost("/boards", async (NewBoard body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new OpenBoardCommand(body.Unit, body.Name), cancellationToken))));
+        routes.MapPut("/boards/{board}", async (BoardId board, EditedBoard body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new EditBoardCommand(board, body.Name), cancellationToken))));
         routes.MapPost("/boards/{board}/members", async (BoardId board, NewMember body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(Describe(await sender.Send(new AddMember(board, body.Seat, body.Role), cancellationToken))));
+            => Results.Ok(Describe(await sender.Send(new AddMemberCommand(board, body.Seat, body.Role), cancellationToken))));
 
         return routes;
     }
 
-    // The board as a command returns it: its id, its name, its unit, and each member with the roles it holds.
+    // The handlers answer the board whole. What leaves the API is chosen here.
     private static object Describe(Board board) => new
     {
         board = board.Id,
         name = board.Name,
         unit = board.UnitId,
+        owner = board.OwnerSeatId,
+        version = board.Version,
         members = board.People.Select(member => new { seat = member.MemberId, roles = member.Roles.Select(role => role.RoleId) }),
     };
 
     public sealed record NewBoard(OrganizationUnitId Unit, string Name);
 
-    public sealed record NewName(string Name);
+    public sealed record EditedBoard(string Name);
 
     public sealed record NewMember(SeatId Seat, BoardRoleId Role);
 }
@@ -1773,15 +1772,11 @@ public static class BoardsModule
 
 ### What it does
 
-- `ICommand<IReadOnlyList<BoardRole>>`: the command returns the roles it made. It returns an empty list for a tenant
-  that has every starter role.
-- `AddMember` and `RenameBoard` return the board as the change left it. Their routes answer it with `Describe` from
-  step 6.
-- `roles.CreateStarterRolesAsync(draft => ...)`: the role manager passes your function a `CustomRoleDraft` for each
-  starter role the tenant does not have, and saves the roles it returns. It compares `MadeFrom`, so a renamed role
-  still counts as made.
-- The role manager refuses a caller without `boards.roles.manage` for the whole tenant with `tenancy.not-permitted`.
-  The request's check refuses that caller first.
+- `AddMemberCommand` and `EditBoardCommand` answer the board as the change left it. Their routes answer it with `Describe`.
+- What the generator wrote in step 5 calls `BoardRoleManager.FollowStarterRolesAsync`. It compares `FromStarterRole`, so a
+  renamed role still counts as made. A seat that calls this method gets `access.system-only`.
+- A starter role whose name the tenant already gave another role fails that tenant's save, because of the unique index
+  on the tenant and the name. The sync reports it at each start, until the tenant renames that role.
 - `roles.ListAsync(...)`: every board role of the caller's tenant, archived ones included, ordered by name. The
   tenant filter keeps other tenants' roles out.
 - `[OnResource] Board` with `boards.members.manage`: the owner passes the check. A member fails it, whatever role the
@@ -1795,19 +1790,20 @@ public static class BoardsModule
 
 ### Try it
 
-1. As Rhea: `POST /board-roles/starter`: `403`, `tenancy.not-permitted`. She does not hold `boards.roles.manage`.
-2. As Ada: `POST /board-roles/starter`: `200`, one role, `editor`, with its id and its permissions. Again: `[]`.
-3. As Ada: `GET /board-roles`: `editor`, its id, `["boards.edit", "boards.view"]`. Keep the id.
-4. As Ada: `POST /seats` with `{ "identity": "d0000000-0000-4000-8000-000000000003", "unit": "<North's id>" }`: Leo's
+1. As Rhea: `GET /board-roles`: `editor`, its id, `["boards.edit", "boards.view"]`. Keep the id. Every seat of the tenant
+   reads the roles, and no request made this role.
+2. As Ada: `POST /dev/tenants` with `{ "slug": "quay", "name": "Quay" }`, then `GET /board-roles` with `Tenant: quay`: one
+   role, `editor`, with an id of its own. A new tenant has it right away.
+3. As Ada: `POST /seats` with `{ "identity": "d0000000-0000-4000-8000-000000000003", "unit": "<North's id>" }`: Leo's
    seat.
-5. As Rhea: `POST /boards/<id>/members` with `{ "seat": "<Leo's seat>", "role": "<editor's id>" }`: `200`, the board,
+4. As Rhea: `POST /boards/<id>/members` with `{ "seat": "<Leo's seat>", "role": "<editor's id>" }`: `200`, the board,
    with Leo and `editor` among its members.
-6. As Leo: `GET /boards`: Crane schedule. `PUT /boards/<id>/name` with `{ "name": "Crane schedule, week 44" }`: `200`,
-   the board with its new name.
-7. As Leo: `POST /boards/<id>/members` with Ada's seat: `403`, `boards.not-permitted`, "Doing this needs the permission
+5. As Leo: `GET /boards`: Crane schedule. `PUT /boards/<id>` with `{ "name": "Crane schedule, week 44" }`: `200`, the
+   board with its new name.
+6. As Leo: `POST /boards/<id>/members` with Ada's seat: `403`, `boards.not-permitted`, "Doing this needs the permission
    boards.members.manage."
-8. As Rhea: Leo again: `409`, `boards.already-member`.
-9. As Rhea: `GET /boards/<id>`: `version` 3, Rhea first as the owner, then Leo with `editor`.
+7. As Rhea: Leo again: `409`, `boards.already-member`.
+8. As Rhea: `GET /boards/<id>`: `version` 3, with Rhea, the owner, who holds no role, and Leo with `editor`.
 
 You can test the lock of step 4 without the API. Open psql in the database with
 `docker exec -it supabase_db_harbor psql -U postgres`. Then act as Leo, the same way the API sets up each connection
@@ -1829,6 +1825,7 @@ The lock's trigger refuses the second statement with the hint `ddd:access.refuse
 its owner. If he inserts a member row by hand, the lock's policy on `BoardPeople` refuses that row too.
 
 > **Going further.** A role the tenant makes itself, renames or archives: [Roles a customer makes](permissions-and-roles.md#roles-a-customer-makes).
+> Every rule of following a starter role: [Starter roles](permissions-and-roles.md#starter-roles).
 > A rule of your own, such as "never for longer than you hold it yourself": [Who may give a role](permissions-and-roles.md#who-may-give-a-role).
 > Every method of both managers, and the hooks: [The managers](resources-and-members.md#the-managers).
 
@@ -1978,8 +1975,8 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
 ### What it does
 
 - `[At]` and `reachFromAbove: true`: the boards functions call Tenancy's function for the units where the caller holds
-  a permission. They then include the boards that hang at those units or below them. `db.Boards.WhereIHold(...)` and
-  Membership's check do the same in C#.
+  a permission. They then include the boards that hang at those units or below them. So the read policy of step 4 now
+  lets those boards through too, and `db.Boards` lists them. Membership's check does the same in C#.
 - `IsFixedAfterInsert`: Entity Framework throws on a save that changes a board's unit. The export also leaves `UnitId`
   out of the columns a caller may update.
 - The tables did not change, so there is no new migration. The export writes a new `<v>_access.boards.ddd.sql`.
@@ -1994,12 +1991,12 @@ Build the host, run `npx supabase migration up --local`, and start the host agai
 2. As Ada: `POST /boards` with `{ "unit": "<North Coast's id>", "name": "Quay plan" }`: Ada owns it.
 3. As Rhea: `GET /boards`: Crane schedule and Quay plan. Her `boards.view` at North reaches North Coast.
 4. As Leo: `GET /boards`: Crane schedule only. He holds no permission in the organization.
-5. As Rhea: `PUT /boards/<Quay plan's id>/name`: `403`, `boards.not-permitted`, "Doing this needs the permission
+5. As Rhea: `PUT /boards/<Quay plan's id>`: `403`, `boards.not-permitted`, "Doing this needs the permission
    boards.edit." Board keeper gives only `boards.create` and `boards.view`.
 6. As Ada: `POST /boards/<Crane schedule's id>/members` with her own seat and `editor`: `200`. Ada is not a member or
    the owner of the board. Her `boards.members.manage` at the root reaches it.
-7. As Ada: `GET /boards/<Crane schedule's id>`: three members. Rhea is first, as the owner. Leo and Ada follow, each
-   with `editor`.
+7. As Ada: `GET /boards/<Crane schedule's id>`: three members. Rhea is the owner and holds no role. Leo and Ada each
+   hold `editor`.
 
 > **Going further.** A command that moves a board, and a trigger that guards the unit column instead:
 > [Who writes the member rows](postgres.md#who-writes-the-member-rows). Reach from above without Tenancy:
@@ -2052,7 +2049,7 @@ public interface IBoardRepository
 {
     Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<Board>> ListAsync(CancellationToken cancellationToken);
 
     Task<ILookup<BoardId, string>> PermissionsOnVisibleAsync(IReadOnlyCollection<string> permissions, CancellationToken cancellationToken);
 
@@ -2062,9 +2059,8 @@ public interface IBoardRepository
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardRepository.cs`**
 
-```csharp {18-23}
+```csharp {1,23-28}
 using DDDToolkit.Supporting.Membership.EntityFramework;
-using Harbor.Boards.Application.Access;
 using Harbor.Boards.Application.Boards;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -2072,13 +2068,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Harbor.Boards.Infrastructure.Persistence;
 
+// A board comes whole: with the people on it and the roles each holds. Which boards a caller reads is the read policy's.
 internal sealed class BoardRepository(BoardsContext db) : IBoardRepository
 {
     public Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken)
-        => db.Boards.SingleOrDefaultAsync(board => board.Id == id, cancellationToken);
+        => db.Boards
+            .Include(board => board.People).ThenInclude(member => member.Roles)
+            .SingleOrDefaultAsync(board => board.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken)
-        => await db.Boards.WhereIHold(BoardPermissions.View).OrderBy(board => board.Name).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<Board>> ListAsync(CancellationToken cancellationToken)
+        => await db.Boards
+            .Include(board => board.People).ThenInclude(member => member.Roles)
+            .OrderBy(board => board.Name)
+            .ToListAsync(cancellationToken);
 
     // One pair for each board the caller sees and each of the permissions it holds there.
     public async Task<ILookup<BoardId, string>> PermissionsOnVisibleAsync(IReadOnlyCollection<string> permissions, CancellationToken cancellationToken)
@@ -2091,24 +2093,33 @@ internal sealed class BoardRepository(BoardsContext db) : IBoardRepository
 }
 ```
 
-**Seeing one board.** **Why:** the handler has the board already, so it asks the access manager about that board.
+**What a query answers now.** **Why:** the board stays whole, and the answer says beside it what the caller holds on it.
 
-**`Harbor.Boards.Application/Boards/SeeBoard/SeeBoard.cs`**
+**`Harbor.Boards.Application/Boards/BoardWithPermissions.cs`**
 
-```csharp {11,19-20,25,29}
+```csharp {3}
+namespace Harbor.Boards.Application.Boards;
+
+public sealed record BoardWithPermissions(Board Board, IReadOnlyList<string> May);
+```
+
+**Getting one board.** **Why:** the handler has the board already, so it asks the access manager about that board.
+
+**`Harbor.Boards.Application/Boards/GetBoard/GetBoard.cs`**
+
+```csharp {6,8-10,12,17-20}
 using DDDToolkit.Supporting.Membership;
 
-namespace Harbor.Boards.Application.Boards.SeeBoard;
+namespace Harbor.Boards.Application.Boards.GetBoard;
 
 [RequiresPermission(BoardPermissions.View)]
-public sealed record SeeBoard([OnResource] BoardId Board) : IQuery<BoardDetails>, IBoardsRequest;
+public sealed record GetBoardQuery([OnResource] BoardId Board) : IQuery<BoardWithPermissions>, IBoardsRequest;
 
-public sealed class SeeBoardHandler(
+public sealed class GetBoardHandler(
     IBoardRepository boards,
-    BoardMemberManager members,
-    MembershipAccessManager<Board> boardAccess) : IQueryHandler<SeeBoard, BoardDetails>
+    MembershipAccessManager<Board> boardAccess) : IQueryHandler<GetBoardQuery, BoardWithPermissions>
 {
-    public async ValueTask<BoardDetails> Handle(SeeBoard query, CancellationToken cancellationToken)
+    public async ValueTask<BoardWithPermissions> Handle(GetBoardQuery query, CancellationToken cancellationToken)
     {
         var board = await boards.FindAsync(query.Board, cancellationToken)
             ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
@@ -2116,45 +2127,96 @@ public sealed class SeeBoardHandler(
         // Which of the two permissions the caller holds on this board: one statement, for the screen's buttons.
         var held = await boardAccess.PermissionsOnAsync([board], [BoardPermissions.Edit, BoardPermissions.ManageMembers], cancellationToken);
         IReadOnlyList<string> may = held.TryGetValue(board, out var permissions) ? [.. permissions] : [];
-
-        // The owner first, then by when each membership starts, each with its roles.
-        var people = await members.ListAsync(board, cancellationToken);
-        return new BoardDetails(board.Id, board.Name, board.UnitId, board.Version, board.OwnerSeatId,
-            [.. people.Select(member => new BoardMemberDetails(member.MemberId, member.StartsAt, member.EndsAt, [.. member.Roles.Select(role => role.RoleId)]))], may);
+        return new BoardWithPermissions(board, may);
     }
 }
-
-public sealed record BoardDetails(BoardId Id, string Name, OrganizationUnitId Unit, long Version, SeatId Owner, IReadOnlyList<BoardMemberDetails> Members, IReadOnlyList<string> May);
-
-public sealed record BoardMemberDetails(SeatId Seat, DateTimeOffset StartsAt, DateTimeOffset? EndsAt, IReadOnlyList<BoardRoleId> Roles);
 ```
 
-**Listing the caller's boards.** **Why:** the list has many boards, so it reads the pairs in one statement instead
-of one question per board.
+**Listing the boards.** **Why:** the list has many boards, so it reads the pairs in one statement instead of one question
+per board.
 
-**`Harbor.Boards.Application/Boards/ListBoards/ListBoards.cs`**
+**`Harbor.Boards.Application/Boards/ListBoard/ListBoard.cs`**
 
-```csharp {14-16,20}
-namespace Harbor.Boards.Application.Boards.ListBoards;
+```csharp {4,6,8,12-14}
+namespace Harbor.Boards.Application.Boards.ListBoard;
 
-[SeenWith<BoardId>(BoardPermissions.View)]
-public sealed record ListBoards : IQuery<IReadOnlyList<BoardListing>>, IBoardsRequest;
+[InTenant]
+public sealed record ListBoardQuery : IQuery<IReadOnlyList<BoardWithPermissions>>, IBoardsRequest;
 
-public sealed class ListBoardsHandler(IBoardRepository boards)
-    : IQueryHandler<ListBoards, IReadOnlyList<BoardListing>>
+public sealed class ListBoardHandler(IBoardRepository boards) : IQueryHandler<ListBoardQuery, IReadOnlyList<BoardWithPermissions>>
 {
-    public async ValueTask<IReadOnlyList<BoardListing>> Handle(ListBoards query, CancellationToken cancellationToken)
+    public async ValueTask<IReadOnlyList<BoardWithPermissions>> Handle(ListBoardQuery query, CancellationToken cancellationToken)
     {
-        // The boards the caller holds boards.view on. The repository's query reads them in one statement.
-        var found = await boards.ListVisibleAsync(cancellationToken);
+        var found = await boards.ListAsync(cancellationToken);
 
         // Which of the two permissions the caller holds on each of those boards, in one more statement.
         var may = await boards.PermissionsOnVisibleAsync([BoardPermissions.Edit, BoardPermissions.ManageMembers], cancellationToken);
-        return [.. found.Select(board => new BoardListing(board.Id, board.Name, board.UnitId, board.OwnerSeatId, [.. may[board.Id]]))];
+        return [.. found.Select(board => new BoardWithPermissions(board, [.. may[board.Id]]))];
     }
 }
+```
 
-public sealed record BoardListing(BoardId Id, string Name, OrganizationUnitId Unit, SeatId Owner, IReadOnlyList<string> May);
+**The routes.** **Why:** the two queries answer the board with what the caller may do on it, and `Describe` adds that to
+what leaves the API. The commands answer the board alone.
+
+**`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**
+
+```csharp {22-27,39,47}
+using Harbor.Boards.Application.Boards.AddMember;
+using Harbor.Boards.Application.Boards.EditBoard;
+using Harbor.Boards.Application.Boards.GetBoard;
+using Harbor.Boards.Application.Boards.ListBoard;
+using Harbor.Boards.Application.Boards.OpenBoard;
+using Harbor.Boards.Contracts.ValueObjects;
+using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
+using Harbor.Boards.Domain.Aggregates.Boards;
+using Harbor.Tenancy.Contracts.ValueObjects;
+using Mediator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace Harbor.Boards.Api.Boards.Rest;
+
+internal static class BoardsEndpoints
+{
+    public static IEndpointRouteBuilder MapBoardsEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapGet("/boards", async (ISender sender, CancellationToken cancellationToken)
+            => Results.Ok((await sender.Send(new ListBoardQuery(), cancellationToken)).Select(found => Describe(found.Board, found.May))));
+        routes.MapGet("/boards/{board}", async (BoardId board, ISender sender, CancellationToken cancellationToken) =>
+        {
+            var found = await sender.Send(new GetBoardQuery(board), cancellationToken);
+            return Results.Ok(Describe(found.Board, found.May));
+        });
+        routes.MapPost("/boards", async (NewBoard body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new OpenBoardCommand(body.Unit, body.Name), cancellationToken))));
+        routes.MapPut("/boards/{board}", async (BoardId board, EditedBoard body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new EditBoardCommand(board, body.Name), cancellationToken))));
+        routes.MapPost("/boards/{board}/members", async (BoardId board, NewMember body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new AddMemberCommand(board, body.Seat, body.Role), cancellationToken))));
+
+        return routes;
+    }
+
+    // The handlers answer the board whole. What leaves the API is chosen here.
+    private static object Describe(Board board, IReadOnlyList<string>? may = null) => new
+    {
+        board = board.Id,
+        name = board.Name,
+        unit = board.UnitId,
+        owner = board.OwnerSeatId,
+        version = board.Version,
+        members = board.People.Select(member => new { seat = member.MemberId, roles = member.Roles.Select(role => role.RoleId) }),
+        may,
+    };
+
+    public sealed record NewBoard(OrganizationUnitId Unit, string Name);
+
+    public sealed record EditedBoard(string Name);
+
+    public sealed record NewMember(SeatId Seat, BoardRoleId Role);
+}
 ```
 
 ```powershell
@@ -2173,7 +2235,10 @@ dotnet build Harbor.slnx
 - `WhereIHold([...])`: a pair is one row per permission on a board, however many ways the caller holds it there. The
   query goes on from the pair to the board's columns, here `pair.Resource.Id`.
 - `may[board.Id]`: an `ILookup` returns no permissions for a board without pairs.
-- The routes of step 6 send the same requests, so they need no change. The responses get the field `may`.
+- `db.Boards.WhereIHold([...])` keeps its place here: the question is what the caller may do on the boards it sees, and
+  the read policy does not answer that.
+- `BoardWithPermissions` holds the whole board, so `Describe` works as before. The responses of the two queries get the
+  field `may`. A command's answer has `may` as `null`.
 
 ### Try it
 
@@ -2197,8 +2262,8 @@ dotnet build Harbor.slnx
 | 1-3 | A board with members, an owner and the tenant's roles, and its tables |
 | 4 | Database rules for who reads and changes a board, and the lock on its members |
 | 5 | The module registered and checked by Tenancy and Membership, and Ada's role updated with the board permissions |
-| 6 | Opening a board at a unit through the member manager, and seeing and listing boards by a permission held on them |
-| 7 | Starter roles made by the role manager, and members that the owner adds through the member manager, with a role that counts on that one board |
+| 6 | Opening a board at a unit through the member manager, getting it and listing the boards the read policy lets through, each answered by one `Describe` |
+| 7 | A tenant's starter roles made and kept up to date without a line of yours, and members that the owner adds through the member manager, with a role that counts on that one board |
 | 8 | A permission held at a unit counting on every board at that unit and below it |
 | 9 | Each board answered with what the caller may do on it, for one board and for a list |
 

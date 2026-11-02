@@ -353,6 +353,10 @@ public static class ShopAccessBehaviorRegistration
 }
 ```
 
+Both classes are declared in the namespace of `IShopRequest`. Code outside that namespace needs a using directive to
+call `AddShopAccessBehavior()`. Without it the call is CS1061, and [DDD00107](diagnostics.md#ddd00107) names the
+namespace.
+
 Mediator sends a message that is answered with a stream through a separate pipeline. So the same file holds a second
 class for such messages, and `AddShopAccessBehavior()` registers that class too:
 

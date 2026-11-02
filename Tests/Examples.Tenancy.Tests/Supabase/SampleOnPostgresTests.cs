@@ -1080,7 +1080,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await using var ada = await AsSeatAsync(sample, DemoPeople.Ada, Harbor);
 
         // Where the crew lead's role came from: the privileges the export wrote leave the column out.
-        (await RefusedAsync(ada, $"""UPDATE projects."{ProjectsContext.ProjectRolesTable}" SET "MadeFrom" = NULL WHERE "Id" = '{lead}'"""))
+        (await RefusedAsync(ada, $"""UPDATE projects."{ProjectsContext.ProjectRolesTable}" SET "FromStarterRole" = NULL WHERE "Id" = '{lead}'"""))
             .Should().Be(PostgresErrorCodes.InsufficientPrivilege);
 
         // What she may do she does: she renames the crew lead's role and archives the observer's, under the rule
@@ -1106,7 +1106,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // tenant's roles, and leaves the tenant to Tenancy's restrictive policy, which is what refuses this row.
         await using (var planted = new NpgsqlCommand(
                          $"""
-                         INSERT INTO projects."{ProjectsContext.ProjectRolesTable}" ("Id", "TenantId", "Version", "Name", "Description", "Permissions", "Status", "MadeFrom")
+                         INSERT INTO projects."{ProjectsContext.ProjectRolesTable}" ("Id", "TenantId", "Version", "Name", "Description", "Permissions", "Status", "FromStarterRole")
                          VALUES ('{Guid.NewGuid()}', '{Meadow.Id.Value}', 1, 'Planted', '', ARRAY['{ProjectPermissionNames.View}', '{ProjectPermissionNames.Close}']::text[], 'Active', NULL)
                          """,
                          ada))
@@ -1118,7 +1118,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
         await using var owner = new NpgsqlConnection(sample.Database.AsMigrationRole);
         await owner.OpenAsync(Cancellation);
-        (await RowAsync(owner, $"""SELECT "Name", "Status", "MadeFrom" FROM projects."{ProjectsContext.ProjectRolesTable}" WHERE "Id" = '{lead}'"""))
+        (await RowAsync(owner, $"""SELECT "Name", "Status", "FromStarterRole" FROM projects."{ProjectsContext.ProjectRolesTable}" WHERE "Id" = '{lead}'"""))
             .Should().Equal("Lead hand", "Active", SampleCatalogue.CrewLead);
         (await ScalarAsync<long>(owner, $"""SELECT count(*) FROM projects."{ProjectsContext.ProjectRolesTable}" WHERE "Name" = 'Planted'""")).Should().Be(0);
     }

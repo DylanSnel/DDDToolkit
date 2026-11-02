@@ -29,7 +29,7 @@ public sealed class RolesACustomerMakesTests
         });
 
         var kept = await garden.Services.ReadAsync(pruner.Id);
-        (kept.Name, kept.Description, kept.Status, kept.MadeFrom, kept.GardenId).Should().Be(("Pruner", string.Empty, CustomRoleStatus.Active, null, data.Meadow));
+        (kept.Name, kept.Description, kept.Status, kept.FromStarterRole, kept.GardenId).Should().Be(("Pruner", string.Empty, CustomRoleStatus.Active, null, data.Meadow));
         kept.Permissions.Should().Equal(PlotPermissions.Fence, PlotPermissions.Plant);
 
         // Di is on the beans with no role: she sees them, and that is all.
@@ -178,7 +178,7 @@ public sealed class RolesACustomerMakesTests
         // A garden that is new has no role. The host asks for its first ones, saying which garden it means.
         var made = await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation));
 
-        made.Select(role => (role.Name, role.MadeFrom, role.GardenId, role.Status)).Should().Equal(
+        made.Select(role => (role.Name, role.FromStarterRole, role.GardenId, role.Status)).Should().Equal(
             [(PlotMembership.Tender, PlotMembership.Tender, paddock, CustomRoleStatus.Active), (PlotMembership.Waterer, PlotMembership.Waterer, paddock, CustomRoleStatus.Active)],
             "the starter roles, and none for the owner, which holds no role");
         made[0].Permissions.Should().Equal(PlotPermissions.Plant, PlotPermissions.See, PlotPermissions.Water);
@@ -250,7 +250,7 @@ public sealed class RolesACustomerMakesTests
         {
             var model = provider.GetRequiredService<GardenContext>().Model;
             return Task.FromResult(new[] { typeof(PlotRole), typeof(ShedRole) }
-                .Select(roleClass => model.FindEntityType(roleClass)!.FindProperty(nameof(PlotRole.MadeFrom))!.GetAfterSaveBehavior())
+                .Select(roleClass => model.FindEntityType(roleClass)!.FindProperty(nameof(PlotRole.FromStarterRole))!.GetAfterSaveBehavior())
                 .ToList());
         });
         behaviors.Should().Equal(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Throw, Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Throw);
@@ -259,18 +259,18 @@ public sealed class RolesACustomerMakesTests
         var moved = await FluentActions.Awaiting(() => garden.Services.ChangeAsync(data.MeadowTender.Id, role =>
             {
                 role.CallIt("Grower", null);
-                Break.Set(role, nameof(PlotRole.MadeFrom), PlotMembership.Waterer);
+                Break.Set(role, nameof(PlotRole.FromStarterRole), PlotMembership.Waterer);
             }))
             .Should().ThrowAsync<InvalidOperationException>();
-        moved.Which.Message.Should().Contain(nameof(PlotRole.MadeFrom));
+        moved.Which.Message.Should().Contain(nameof(PlotRole.FromStarterRole));
 
         var kept = await garden.Services.ReadAsync(data.MeadowTender.Id);
-        (kept.MadeFrom, kept.Name).Should().Be((PlotMembership.Tender, data.MeadowTender.Name));
+        (kept.FromStarterRole, kept.Name).Should().Be((PlotMembership.Tender, data.MeadowTender.Name));
 
         // A role made from no starter role stays one: it is not made a starter role's afterwards.
-        await FluentActions.Awaiting(() => garden.Services.ChangeAsync(data.Fencer.Id, role => Break.Set(role, nameof(PlotRole.MadeFrom), PlotMembership.Tender)))
+        await FluentActions.Awaiting(() => garden.Services.ChangeAsync(data.Fencer.Id, role => Break.Set(role, nameof(PlotRole.FromStarterRole), PlotMembership.Tender)))
             .Should().ThrowAsync<InvalidOperationException>();
-        (await garden.Services.ReadAsync(data.Fencer.Id)).MadeFrom.Should().BeNull();
+        (await garden.Services.ReadAsync(data.Fencer.Id)).FromStarterRole.Should().BeNull();
     }
 
     [Fact]
@@ -706,7 +706,7 @@ public sealed class RolesACustomerMakesTests
         (await garden.Services.InAsync(data.Orchard, provider => provider.GetRequiredService<IMemberRoles<ShedId, ShedRoleId>>().ExistsAsync(data.ShedKeeper.Id, Cancellation).AsTask())).Should().BeTrue();
         (await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<ShedRoleManager>().CreateStarterRolesAsync(draft => new ShedRole(ShedRoleId.CreateSequential(), draft), Cancellation)))
             .Should().BeEmpty();
-        (data.ShedKeeper.Name, data.ShedKeeper.MadeFrom).Should().Be((ShedMembership.Keeper, ShedMembership.Keeper));
+        (data.ShedKeeper.Name, data.ShedKeeper.FromStarterRole).Should().Be((ShedMembership.Keeper, ShedMembership.Keeper));
         ShedMembership.Rules.PermissionsOf(new NamedRole(ShedMembership.Keeper)).Should().Equal([ShedPermissions.Open, ShedPermissions.Stock], "selling is no role's to give, and the starter role does not list it");
 
         // What a garden does to a role of its plots changes nothing for a shed, and what was done to the lender nothing for a plot.

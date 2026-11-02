@@ -83,10 +83,10 @@ builder.Services.AddRequestTracing();
 
 // The modules, each through the one entry its API project has. Tenancy brings the application's catalogue with
 // it, and the other modules ask Tenancy, so Tenancy comes first. Projects is given the starter project
-// roles the application declares for its tenants' crews, which its rules are made with. Inspections asks
-// Projects' gate, so it follows Projects.
+// roles the application declares for its tenants' crews, which its rules are made with, and the fixed ids the
+// demonstration seeds them under. Inspections asks Projects' gate, so it follows Projects.
 builder.Services.AddTenantsModule(host, SampleCatalogue.Application);
-builder.Services.AddProjectsModule(host, SampleCatalogue.ProjectRoles);
+builder.Services.AddProjectsModule(host, SampleCatalogue.ProjectRoles, DemoData.ProjectRoleIdOf);
 builder.Services.AddInspectionsModule(host);
 
 // Every module's permissions, in one call that names no module. Each module declares its permissions once, in a

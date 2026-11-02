@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Host.Seeding;
 /// <param name="Root">The root unit's id.</param>
 /// <param name="Administrator">The first administrator's seat, which provisioning places at the root and grants the role of the administrators' starter role seeded for the tenant's shape.</param>
 /// <param name="Roles">The ids of the roles of the organization copied from the starter roles seeded for the tenant's shape, by starter role key.</param>
-/// <param name="ProjectRoles">The ids of the project roles made from the starter roles when the tenant is set up, by the starter role's key.</param>
+/// <param name="ProjectRoles">The ids of the project roles made from the starter roles when the tenant is provisioned, by the starter role's key.</param>
 /// <param name="Units">The units below the root, parents before children.</param>
 /// <param name="Seats">Every other seat, each with its primary placement.</param>
 /// <param name="Grants">The roles granted at units, besides the administrators' role provisioning grants the first administrator.</param>
@@ -70,8 +70,8 @@ public sealed record DemoTenant(
     /// when all of it is there.
     /// </summary>
     /// <remarks>
-    /// A database an earlier version of the sample seeded has every seat, role and project, and no project role:
-    /// its tenants were never set up for projects, so none of them can open one. The project roles are what says so.
+    /// A database an earlier version of the sample seeded has every seat, role and project, and no project role, until
+    /// the host's sync of the starter roles has made them under new ids. The project roles are what says so.
     /// </remarks>
     /// <param name="seats">The tenant's seats the database has.</param>
     /// <param name="roles">The tenant's roles of the organization the database has.</param>

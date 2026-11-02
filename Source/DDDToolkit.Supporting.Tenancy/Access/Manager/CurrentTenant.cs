@@ -82,6 +82,38 @@ public sealed class CurrentTenant<TTenantId, TSeatId>
         };
     }
 
+    /// <summary>
+    /// The tenant the current work acts in, with the seat, for work that a seat does. It reads nothing. A user who is nobody
+    /// gets the refusal <see cref="Require"/> gives.
+    /// </summary>
+    /// <returns>
+    /// The tenant and the seat: the user's seat, or for system work in the tenant the seat it acts for, with
+    /// <see cref="SeatInScope{TTenantId, TSeatId}.BySystem"/> set.
+    /// </returns>
+    /// <exception cref="Exceptions.RefusalException">
+    /// The user is nobody, with the refusal <see cref="Require"/> gives: <c>tenancy.tenant-required</c>,
+    /// <c>tenancy.not-seated</c>, <c>tenancy.tenant-inactive</c> or <c>tenancy.seat-suspended</c>. Outside any request,
+    /// <c>tenancy.not-seated</c>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The work is system work that acts for no seat: begin it with the overload of <c>BeginSystemIn</c> that takes a seat.
+    /// Or it is system work outside any tenant; or the current user was made with other id types.
+    /// </exception>
+    /// <example>
+    /// <code>
+    /// var scope = access.CurrentTenant.RequireSeat();
+    /// var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, scope.Seat, clock.GetUtcNow());
+    /// </code>
+    /// </example>
+    public SeatInScope<TTenantId, TSeatId> RequireSeat()
+    {
+        var tenant = Require();
+        return tenant.Seat is { } seat
+            ? new SeatInScope<TTenantId, TSeatId>(tenant.Id, seat, tenant.BySystem)
+            : throw new InvalidOperationException(
+                "System work in tenant " + tenant.Id + " acts for no seat, and this work needs one. Begin it with the overload that takes a seat: access.BeginSystemIn(tenant, actingSeat).");
+    }
+
     /// <summary>The Tenancy user now, with the application's ids.</summary>
     private static TenancyUser<TTenantId, TSeatId> User => TenancyUsers.Current<TTenantId, TSeatId>();
 }

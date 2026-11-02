@@ -21,7 +21,7 @@ public sealed class RoleClassOfATenantTests
             .Should().BeEquivalentTo(
             [
                 (Properties: "TenantId, Name", IsUnique: true, Name: "IX_CourseRoles_TenantId_Name"),
-                (Properties: "TenantId, MadeFrom", IsUnique: true, Name: "IX_CourseRoles_TenantId_MadeFrom"),
+                (Properties: "TenantId, FromStarterRole", IsUnique: true, Name: "IX_CourseRoles_TenantId_FromStarterRole"),
             ]);
     }
 }

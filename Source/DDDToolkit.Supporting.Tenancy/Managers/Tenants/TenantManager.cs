@@ -37,6 +37,9 @@ namespace DDDToolkit.Supporting.Tenancy.Managers;
 /// administrators' starter role, which the package adds, gets the package's own texts in that language, English or
 /// Dutch.
 /// </param>
+/// <param name="otherModules">
+/// Runs another module's starter roles after a tenant is provisioned (<see cref="ITenantStarterRoles"/>). Without it, none run.
+/// </param>
 public class TenantManager<
     [TemplateType(typeof(TenantAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TTenant,
     [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
@@ -52,7 +55,8 @@ public class TenantManager<
     TimeProvider clock,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
     ICurrentUser user,
-    IStarterRoleTexts? starterRoleTexts = null)
+    IStarterRoleTexts? starterRoleTexts = null,
+    NewTenantStarterRoles? otherModules = null)
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
     where TUnit : OrganizationUnitEntity<TUnitId>
@@ -95,6 +99,12 @@ public class TenantManager<
     /// <para>
     /// The organization, the first seat and the roles belong to the tenant, and are read through the other managers by
     /// a request that names the new tenant. Imports and seeding that need fixed ids pass them in the command.
+    /// </para>
+    /// <para>
+    /// After the save, still as system work in the new tenant, every registered <see cref="ITenantStarterRoles"/> runs, each
+    /// in a scope of its own: another module's starter roles. This is not one transaction. A module has its own context, so
+    /// the tenant is saved first. A failure there does not fail provisioning: it is logged as an error, the tenant is
+    /// returned, and the next <c>services.SyncStarterRoles()</c> makes the role.
     /// </para>
     /// </summary>
     /// <param name="command">What to provision.</param>
@@ -142,7 +152,13 @@ public class TenantManager<
         var by = gate.By ?? TenancyActor<TSeatId>.OfSystem(TenancyWork.SystemScope);
         using (TenancyWork.BeginSystemInAs(tenantId, by))
         {
-            return await ProvisionInAsync(command, tenantId, slug, starterRoles, gate.Now, by, cancellationToken).ConfigureAwait(false);
+            var tenant = await ProvisionInAsync(command, tenantId, slug, starterRoles, gate.Now, by, cancellationToken).ConfigureAwait(false);
+            if (otherModules is not null)
+            {
+                await otherModules.RunAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            }
+
+            return tenant;
         }
     }
 

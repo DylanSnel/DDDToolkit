@@ -671,7 +671,7 @@ Projects/
     Ownership/
       Commands/                   ChangeProjectOwner.cs
     ProjectRoles/
-      Commands/                   MakeProjectRole.cs, RenameProjectRole.cs, SetProjectRolePermissions.cs, ArchiveProjectRole.cs, SetUpProjectRoles.cs
+      Commands/                   MakeProjectRole.cs, RenameProjectRole.cs, SetProjectRolePermissions.cs, ArchiveProjectRole.cs
       Queries/                    TenantProjectRoles.cs, ProjectRolesById.cs
       ProjectRoleListing.cs       the result type of both
     StoredProjects/               IProjectStore.cs, IProjectReads.cs, IProjectReading.cs: the ports several features share
@@ -917,8 +917,8 @@ flowchart LR
 
   <ItemGroup>
     <!-- the version of every other Temp.DDDToolkit.* package: the attribute, the property and the step are 3.2.0's -->
-    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.2.0-preview.8" />
-    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.2.0-preview.8" PrivateAssets="all" />
+    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.2.0-preview.9" />
+    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.2.0-preview.9" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

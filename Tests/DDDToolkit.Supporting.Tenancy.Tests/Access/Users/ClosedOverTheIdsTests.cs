@@ -172,6 +172,55 @@ public class ClosedOverTheIdsTests
     }
 
     [Fact]
+    public void RequireSeat_answers_a_seat_that_is_not_nullable()
+    {
+        using (TenancyUsers.Begin(HostUser.InSeat(Harbor, Ada)))
+        {
+            var scope = Access.CurrentTenant.RequireSeat();
+
+            scope.Should().Be(new SeatInScope<TenantId, SeatId>(Harbor, Ada, BySystem: false));
+            SeatId seat = scope.Seat;
+            seat.Should().Be(Ada);
+        }
+    }
+
+    [Fact]
+    public void RequireSeat_refuses_a_user_who_is_nobody_as_Require_does()
+    {
+        Refused.With(TenancyRefusals.NotSeated, () => Access.CurrentTenant.RequireSeat());
+
+        using (TenancyUsers.Begin(HostUser.Nobody(TenancyRefusals.TenantRequired)))
+        {
+            Refused.With(TenancyRefusals.TenantRequired, () => Access.CurrentTenant.RequireSeat());
+        }
+    }
+
+    [Fact]
+    public void RequireSeat_for_system_work_answers_the_seat_it_acts_for()
+    {
+        using (Access.BeginSystemIn(Harbor, Ada))
+        {
+            Access.CurrentTenant.RequireSeat().Should().Be(new SeatInScope<TenantId, SeatId>(Harbor, Ada, BySystem: true));
+        }
+    }
+
+    [Fact]
+    public void RequireSeat_for_system_work_that_acts_for_no_seat_is_a_programmers_mistake_that_names_the_overload()
+    {
+        using (Access.BeginSystemIn(Harbor))
+        {
+            FluentActions.Invoking(() => Access.CurrentTenant.RequireSeat())
+                .Should().Throw<InvalidOperationException>().WithMessage("*acts for no seat*access.BeginSystemIn(tenant, actingSeat)*");
+        }
+
+        using (Access.BeginSystem())
+        {
+            FluentActions.Invoking(() => Access.CurrentTenant.RequireSeat())
+                .Should().Throw<InvalidOperationException>().WithMessage("System work outside any tenant has no tenant.*");
+        }
+    }
+
+    [Fact]
     public void The_current_user_follows_what_is_begun()
     {
         var user = Guid.NewGuid();

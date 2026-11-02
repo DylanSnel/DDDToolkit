@@ -17,7 +17,7 @@ public sealed partial class PlotRole
     public PlotRole(PlotRoleId id, GardenId garden, CustomRoleDraft draft) : base(id, draft, PlotMembership.Rules)
     {
         GardenId = garden;
-        RaiseDomainEvent(new PlotRoleMade(id, garden, MadeFrom));
+        RaiseDomainEvent(new PlotRoleMade(id, garden, FromStarterRole));
     }
 
     /// <summary>The garden the role is of: the host's own column, which the package knows nothing of.</summary>
@@ -41,7 +41,7 @@ public sealed partial class PlotRole
 }
 
 /// <summary>A role of plots was made, by hand or from a starter role.</summary>
-public sealed record PlotRoleMade(PlotRoleId Role, GardenId Garden, string? MadeFrom) : DomainEvent;
+public sealed record PlotRoleMade(PlotRoleId Role, GardenId Garden, string? FromStarterRole) : DomainEvent;
 
 /// <summary>A role of plots is called something else.</summary>
 public sealed record PlotRoleRenamed(PlotRoleId Role, string Name) : DomainEvent;
@@ -94,7 +94,7 @@ public sealed class GardenRoles(GardenContext context)
         var existing = await context.PlotRoles.IgnoreQueryFilters().Where(role => role.GardenId == garden).ToListAsync(cancellationToken);
 
         var rules = PlotMembership.Rules;
-        var there = existing.Select(role => role.MadeFrom).ToHashSet(StringComparer.Ordinal);
+        var there = existing.Select(role => role.FromStarterRole).ToHashSet(StringComparer.Ordinal);
         List<PlotRole> made = [.. rules.Roles.Declared
             .Where(starter => !there.Contains(starter.Name))
             .Select(starter => new PlotRole(PlotRoleId.CreateSequential(), garden, new CustomRoleDraft(starter.Name, null, rules.PermissionsOf(new NamedRole(starter.Name)), starter.Name)))];

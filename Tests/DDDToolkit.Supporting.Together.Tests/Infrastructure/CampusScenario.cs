@@ -103,8 +103,8 @@ public sealed class CampusScenario
             .ToList();
         CourseRoles =
         [
-            .. starters.Select(draft => new CourseRole(AlderCourseRoles[draft.MadeFrom!], Alder, draft)),
-            .. starters.Select(draft => new CourseRole(BirchCourseRoles[draft.MadeFrom!], Birch, draft)),
+            .. starters.Select(draft => new CourseRole(AlderCourseRoles[draft.FromStarterRole!], Alder, draft)),
+            .. starters.Select(draft => new CourseRole(BirchCourseRoles[draft.FromStarterRole!], Birch, draft)),
         ];
         _courseRolePermissions = CourseRoles.ToDictionary(role => role.Id, role => role.Permissions);
 
@@ -288,12 +288,15 @@ public sealed class CampusScenario
 
         foreach (var college in new[] { Alder, Birch })
         {
-            await services.ChangeAsync(college, context =>
+            await services.ChangeAsync(college, async context =>
             {
+                // Provisioning made the roles of courses, under new ids. The scenario names them by ids it fixes, so its rows take their place.
+                context.CourseRoles.RemoveRange(await context.CourseRoles.ToListAsync(cancellation));
+                await context.SaveChangesAsync(cancellation);
+
                 context.CourseRoles.AddRange(CourseRoles.Where(role => role.TenantId == college));
                 context.Courses.AddRange(Courses.Where(course => course.TenantId == college));
                 context.Labs.AddRange(Labs.Where(lab => lab.TenantId == college));
-                return Task.CompletedTask;
             });
         }
     }

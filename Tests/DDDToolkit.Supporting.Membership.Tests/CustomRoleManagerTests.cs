@@ -1,4 +1,5 @@
 using DDDToolkit.Exceptions;
+using DDDToolkit.Supporting.Membership.Tests.Support;
 
 namespace DDDToolkit.Supporting.Membership.Tests;
 
@@ -59,7 +60,7 @@ public sealed class CustomRoleManagerTests
             await FluentActions.Awaiting(() => new ShedRoleManager(store, access, TestUser, asked).CreateStarterRolesAsync(Keeper, Cancellation)).Should().ThrowAsync<RefusalException>();
             asked.Held = true;
             var made = await new ShedRoleManager(store, access, TestUser, asked).CreateStarterRolesAsync(Keeper, Cancellation);
-            made.Select(role => role.MadeFrom).Should().Equal(ShedMembership.Keeper);
+            made.Select(role => role.FromStarterRole).Should().Equal(ShedMembership.Keeper);
             asked.Asked.Should().Equal(ShedMembership.ManageRoles, ShedMembership.ManageRoles);
         }
     }
@@ -75,7 +76,7 @@ public sealed class CustomRoleManagerTests
 
         // The starter roles the rules declare, each through the host's constructor, which says whose it is.
         var made = await roles.CreateStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), Meadow, draft), Cancellation, scope: role => role.GardenId == Meadow);
-        made.Select(role => (role.Name, role.MadeFrom, role.GardenId)).Should().Equal(
+        made.Select(role => (role.Name, role.FromStarterRole, role.GardenId)).Should().Equal(
             [(PlotMembership.Tender, PlotMembership.Tender, Meadow), (PlotMembership.Waterer, PlotMembership.Waterer, Meadow)],
             "the starter roles the rules declare, and none for the owner, which holds no role");
         made[0].Permissions.Should().Equal(PlotPermissions.Plant, PlotPermissions.See, PlotPermissions.Water);
@@ -90,7 +91,133 @@ public sealed class CustomRoleManagerTests
         var orchard = GardenId.CreateSequential();
         store.Add(new PlotRole(PlotRoleId.CreateSequential(), orchard, new CustomRoleDraft(PlotMembership.Tender, null, [PlotPermissions.See])));
         (await roles.CreateStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), orchard, draft), Cancellation, scope: role => role.GardenId == orchard))
-            .Select(role => role.MadeFrom).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer);
+            .Select(role => role.FromStarterRole).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer);
+    }
+
+    // ---------------------------------------------------------------- following the starter roles
+
+    private static MembershipRules WhereTheKeeperHolds(params string[] permissions)
+        => MembershipRules.For<Shed>(
+            Roles.Custom(starters: [new(ShedMembership.Keeper, permissions)], otherPermissions: OtherPermissions.All, managedWith: ShedMembership.ManageRoles));
+
+    [Fact]
+    public async Task Following_makes_what_is_missing_and_makes_the_rest_follow_in_one_save()
+    {
+        var store = new StubRoleStore<PlotRole, PlotRoleId>();
+        var kept = new PlotRole(
+            PlotRoleId.CreateSequential(),
+            Meadow,
+            new CustomRoleDraft(PlotMembership.Waterer, null, [PlotPermissions.See], PlotMembership.Waterer));
+        Break.Set(kept, nameof(kept.PermissionsFromStarterRole), new[] { PlotPermissions.See });
+        store.Add(kept);
+        using var system = TestAccess.BeginSystemBypassingRowAccess();
+
+        var followed = await Plots(store).FollowStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), Meadow, draft), Cancellation);
+
+        followed.Made.Select(role => role.FromStarterRole).Should().Equal(PlotMembership.Tender);
+        followed.Changed.Should().Equal(kept.Id);
+        followed.WithoutTheirStarterRole.Should().BeEmpty();
+        kept.Permissions.Should().Equal(PlotPermissions.See, PlotPermissions.Water);
+        store.Kept.Should().HaveCount(2);
+        store.Saves.Should().Be(1, "making and following are one save");
+    }
+
+    [Fact]
+    public async Task A_second_run_in_a_row_saves_nothing()
+    {
+        var store = new StubRoleStore<PlotRole, PlotRoleId>();
+        var roles = Plots(store);
+        using var system = TestAccess.BeginSystemBypassingRowAccess();
+        await roles.FollowStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), Meadow, draft), Cancellation);
+        store.Saves.Should().Be(1);
+
+        var again = await roles.FollowStarterRolesAsync(draft => new PlotRole(PlotRoleId.CreateSequential(), Meadow, draft), Cancellation);
+
+        (again.Made.Count, again.Changed.Count, again.WithoutTheirStarterRole.Count).Should().Be((0, 0, 0));
+        store.Saves.Should().Be(1, "nothing changed, so nothing is saved");
+    }
+
+    [Fact]
+    public async Task Following_is_system_works_alone()
+    {
+        var store = new StubRoleStore<ShedRole, ShedRoleId>();
+        var asked = new RoleAccess { Held = true };
+        var roles = new ShedRoleManager(store, new StubAccess<Shed, ShedId>(ShedMembership.Rules), TestUser, asked);
+
+        using (TestAccess.BeginAs(Guid.NewGuid()))
+        {
+            var refused = await FluentActions.Awaiting(() => roles.FollowStarterRolesAsync(Keeper, Cancellation)).Should().ThrowAsync<RefusalException>();
+            refused.Which.Code.Should().Be(ToolkitRefusals.SystemOnly, "whoever holds the permission that manages the roles changes a role, and what a starter role holds is the application's");
+        }
+
+        store.Kept.Should().BeEmpty();
+        store.Saves.Should().Be(0);
+        asked.Asked.Should().BeEmpty();
+
+        // System work in any scope follows: Tenancy's own runs it for every module.
+        using (TestAccess.BeginSystem("tenancy"))
+        {
+            (await roles.FollowStarterRolesAsync(Keeper, Cancellation)).Made.Should().ContainSingle();
+        }
+    }
+
+    [Fact]
+    public async Task An_archived_role_follows_nothing_and_is_not_made_again_and_a_renamed_role_follows()
+    {
+        var store = new StubRoleStore<ShedRole, ShedRoleId>();
+        using var system = TestAccess.BeginSystemBypassingRowAccess();
+        var keeper = Keeper(new CustomRoleDraft(ShedMembership.Keeper, null, [ShedPermissions.Open, ShedPermissions.Stock], ShedMembership.Keeper));
+        store.Add(keeper);
+        keeper.Archive(ShedMembership.Rules);
+
+        var followed = await new ShedRoleManager(store, new StubAccess<Shed, ShedId>(WhereTheKeeperHolds(ShedPermissions.Open)), TestUser)
+            .FollowStarterRolesAsync(Keeper, Cancellation);
+
+        (followed.Made.Count, followed.Changed.Count, followed.WithoutTheirStarterRole.Count).Should().Be((0, 0, 0));
+        keeper.Permissions.Should().Equal(ShedPermissions.Open, ShedPermissions.Stock);
+        store.Saves.Should().Be(0);
+
+        var renamedStore = new StubRoleStore<ShedRole, ShedRoleId>();
+        var renamed = Keeper(new CustomRoleDraft(ShedMembership.Keeper, null, [ShedPermissions.Open, ShedPermissions.Stock], ShedMembership.Keeper));
+        renamed.Rename("Shed boss", null, ShedMembership.Rules);
+        renamedStore.Add(renamed);
+
+        followed = await new ShedRoleManager(renamedStore, new StubAccess<Shed, ShedId>(WhereTheKeeperHolds(ShedPermissions.Open)), TestUser)
+            .FollowStarterRolesAsync(Keeper, Cancellation);
+
+        followed.Changed.Should().Equal(renamed.Id);
+        renamed.Permissions.Should().Equal(ShedPermissions.Open);
+        renamedStore.Kept.Should().ContainSingle("told by what it was made from, so it is not made again");
+    }
+
+    [Fact]
+    public async Task A_role_whose_starter_role_the_rules_no_longer_declare_is_counted_and_keeps_its_permissions()
+    {
+        var store = new StubRoleStore<ShedRole, ShedRoleId>();
+        using var system = TestAccess.BeginSystemBypassingRowAccess();
+        var keeper = Keeper(new CustomRoleDraft(ShedMembership.Keeper, null, [ShedPermissions.Open, ShedPermissions.Stock], ShedMembership.Keeper));
+        store.Add(keeper);
+        var withoutIt = MembershipRules.For<Shed>(Roles.Custom(otherPermissions: OtherPermissions.All, managedWith: ShedMembership.ManageRoles));
+
+        var followed = await new ShedRoleManager(store, new StubAccess<Shed, ShedId>(withoutIt), TestUser).FollowStarterRolesAsync(Keeper, Cancellation);
+
+        followed.WithoutTheirStarterRole.Should().Equal(keeper.Id);
+        followed.Made.Should().BeEmpty();
+        store.Saves.Should().Be(0, "nothing changed");
+        keeper.Permissions.Should().Equal(ShedPermissions.Open, ShedPermissions.Stock);
+    }
+
+    [Fact]
+    public async Task Rules_with_no_starter_roles_do_nothing()
+    {
+        var store = new StubRoleStore<ShedRole, ShedRoleId>();
+        using var system = TestAccess.BeginSystemBypassingRowAccess();
+        var none = MembershipRules.For<Shed>(Roles.Custom(otherPermissions: OtherPermissions.All, managedWith: ShedMembership.ManageRoles));
+
+        var followed = await new ShedRoleManager(store, new StubAccess<Shed, ShedId>(none), TestUser).FollowStarterRolesAsync(Keeper, Cancellation);
+
+        followed.Made.Should().BeEmpty();
+        store.Saves.Should().Be(0);
     }
 
     // ---------------------------------------------------------------- the changes

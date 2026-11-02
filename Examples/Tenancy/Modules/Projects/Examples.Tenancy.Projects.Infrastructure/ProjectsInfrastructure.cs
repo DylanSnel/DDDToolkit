@@ -32,8 +32,16 @@ public static class ProjectsInfrastructure
     /// <param name="services">The host's services.</param>
     /// <param name="host">The host's two decisions: the database, and the transport.</param>
     /// <param name="membership">The projects' rules, which the projects are registered with.</param>
+    /// <param name="starterRoleIds">
+    /// The id of the role made from a starter role in a tenant, for seeding and imports whose ids are known beforehand.
+    /// It answers <see langword="null"/> for a new id, and so does leaving it out.
+    /// </param>
     /// <exception cref="InvalidOperationException">The host was not built on Postgres.</exception>
-    public static IServiceCollection AddProjectsInfrastructure(this IServiceCollection services, ModuleHost host, Application.Access.ProjectMembership membership)
+    public static IServiceCollection AddProjectsInfrastructure(
+        this IServiceCollection services,
+        ModuleHost host,
+        Application.Access.ProjectMembership membership,
+        Func<TenantId, string, ProjectRoleId?>? starterRoleIds = null)
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(membership);
@@ -77,7 +85,21 @@ public static class ProjectsInfrastructure
         // caller's own place on a crew is saved. Then the package's check, for a permission held on a project, added
         // for this module's request interface: who may change a crew, or name an owner, is what each command requires,
         // in the crew manager, and in the database alike.
-        services.AddProjectMembershipWithTenancy<ProjectsContext>(membership.Rules);
+        //
+        // A new tenant gets the starter project roles right after it is provisioned, and SyncStarterRoles() makes them
+        // follow at every start. The generator writes that too, and calls makeRole for each role it makes: the
+        // application gives its starter roles a name and a description of their own.
+        services.AddProjectMembershipWithTenancy<ProjectsContext>(
+            membership.Rules,
+            makeRole: (_, tenant, draft) =>
+            {
+                var starter = membership.StarterRoles.Single(role => role.Key == draft.FromStarterRole);
+                return new ProjectRole(
+                    starterRoleIds?.Invoke(tenant, starter.Key) ?? ProjectRoleId.Create(),
+                    tenant,
+                    draft with { Name = starter.Name, Description = starter.Description },
+                    membership.Rules);
+            });
         services.AddProjectMemberAccess<IProjectsRequest>();
 
         // The Membership package's start-up check: the database answers the projects' membership as the rules

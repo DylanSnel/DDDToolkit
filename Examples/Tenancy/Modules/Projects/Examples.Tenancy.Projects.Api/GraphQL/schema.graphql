@@ -281,7 +281,7 @@ type ProjectRole {
   id: UUID!
   name: String!
   description: String!
-  madeFrom: String
+  fromStarterRole: String
   status: ProjectRoleStatus!
   permissions: [String!] @authorize(policy: "tenancy.roles.manage")
 }

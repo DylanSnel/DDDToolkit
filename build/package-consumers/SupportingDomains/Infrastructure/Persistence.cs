@@ -117,9 +117,7 @@ public sealed class ManuscriptDesk(ManuscriptEditorManager editors, ManuscriptRo
     public Task<Manuscript> TakeOnAsync(ManuscriptId manuscript, SeatId seat, ManuscriptRoleId role, CancellationToken cancellationToken)
         => editors.AddAsync(manuscript, seat, role, until: null, cancellationToken);
 
-    /// <summary>Makes the starter roles of manuscripts a house does not have yet.</summary>
-    /// <param name="house">The house the roles are of.</param>
-    /// <param name="cancellationToken">Cancels the work.</param>
-    public Task<IReadOnlyList<ManuscriptRole>> SetUpAsync(TenantId house, CancellationToken cancellationToken)
-        => roles.CreateStarterRolesAsync(draft => new ManuscriptRole(ManuscriptRoleId.Create(), house, draft), cancellationToken);
+    /// <summary>The roles of manuscripts of the caller's house. Provisioning a house makes its starter roles.</summary>
+    /// <param name="cancellationToken">Cancels the query.</param>
+    public Task<IReadOnlyList<ManuscriptRole>> RolesAsync(CancellationToken cancellationToken) => roles.ListAsync(cancellationToken);
 }

@@ -54,22 +54,22 @@
     {
       "name": "tenancy.units.manage",
       "description": "Create units below a unit, and rename, re-parent or archive them",
-      "request": { "name": "AddUnit", "route": "POST /units", "at": "unit", "phrase": "below", "where": "at the parent unit or above it" }
+      "request": { "name": "AddUnitCommand", "route": "POST /units", "at": "unit", "phrase": "below", "where": "at the parent unit or above it" }
     },
     {
       "name": "tenancy.seats.manage",
       "description": "Add people to the tenant, and place, withdraw, suspend, reactivate or deactivate their seats",
-      "request": { "name": "AddSeat", "route": "POST /seats", "at": "tenant", "phrase": "placed at", "where": "for the whole tenant" }
+      "request": { "name": "AddSeatCommand", "route": "POST /seats", "at": "tenant", "phrase": "placed at", "where": "for the whole tenant" }
     },
     {
       "name": "tenancy.grants.manage",
       "description": "Give seats organization roles at a unit, and take them away",
-      "request": { "name": "GrantRole", "route": "POST /grants", "at": "unit", "phrase": "at", "where": "at the unit or above it" }
+      "request": { "name": "GrantRoleCommand", "route": "POST /grants", "at": "unit", "phrase": "at", "where": "at the unit or above it" }
     },
     {
       "name": "tenancy.roles.manage",
       "description": "Make roles, and change their names, permissions and status",
-      "request": { "name": "CreateRole", "route": "POST /roles", "at": "tenant", "phrase": null, "where": "for the whole tenant" }
+      "request": { "name": "CreateRoleCommand", "route": "POST /roles", "at": "tenant", "phrase": null, "where": "for the whole tenant" }
     }
   ],
   "refusals": {

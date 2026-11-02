@@ -913,6 +913,14 @@ it), two member or role classes of one name (rename one), an `[Owner]` property 
 whose resource is declared in another project (declare it beside the resource). Handlers take the managers to
 change members and roles; never add member-changing methods to the resource instead.
 
+## DDD00107
+
+Error, at a call such as `services.AddBillingAccessBehavior()`, beside the compiler's CS1061. The message names the
+cause. The generator declares the registration in the namespace of the `[AccessRequests]` interface. If the file does
+not import that namespace, add the `using` the message names, or a `global using`. If the interface's project does not
+reference Mediator, add the package `Mediator.Abstractions` to the project the message names, or remove the call and
+ask `AccessChecks<TRequests>.RequireAsync` yourself.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

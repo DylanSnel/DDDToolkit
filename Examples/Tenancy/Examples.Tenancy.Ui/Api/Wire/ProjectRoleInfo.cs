@@ -11,10 +11,10 @@ namespace Examples.Tenancy.Ui.Api.Wire;
 /// <param name="Id">The role.</param>
 /// <param name="Name">Its name.</param>
 /// <param name="Description">What it is for; empty when nobody said.</param>
-/// <param name="MadeFrom">The starter role it was made from, such as <c>crew-lead</c>, or <see langword="null"/> for one the tenant made.</param>
+/// <param name="FromStarterRole">The starter role it was made from, such as <c>crew-lead</c>, or <see langword="null"/> for one the tenant made.</param>
 /// <param name="Status"><c>active</c>, or <c>archived</c> for one that can no longer be given.</param>
 /// <param name="Permissions">The permissions it gives on a crew, or <see langword="null"/> when the API did not answer them.</param>
-public sealed record ProjectRoleInfo(Guid Id, string Name, string? Description, string? MadeFrom, string Status, IReadOnlyList<string>? Permissions)
+public sealed record ProjectRoleInfo(Guid Id, string Name, string? Description, string? FromStarterRole, string Status, IReadOnlyList<string>? Permissions)
 {
     /// <summary>The permissions it gives; none when the API did not answer them.</summary>
     public IReadOnlyList<string> PermissionsShown => Permissions ?? [];

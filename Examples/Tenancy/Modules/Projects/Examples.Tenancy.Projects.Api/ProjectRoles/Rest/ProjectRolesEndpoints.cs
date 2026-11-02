@@ -73,7 +73,7 @@ internal static class ProjectRolesEndpoints
         role.Id,
         role.Name,
         role.Description,
-        role.MadeFrom,
+        role.FromStarterRole,
         role.Status,
         role.Permissions,
     };

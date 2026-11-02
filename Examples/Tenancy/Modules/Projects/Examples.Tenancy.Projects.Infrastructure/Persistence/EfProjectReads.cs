@@ -280,7 +280,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
             return await roles
                 .OrderBy(role => role.Name)
                 .ThenBy(role => role.Id)
-                .Select(role => new ProjectRoleListing(role.Id, role.Name, role.Description, role.MadeFrom, role.Status, role.Permissions))
+                .Select(role => new ProjectRoleListing(role.Id, role.Name, role.Description, role.FromStarterRole, role.Status, role.Permissions))
                 .ToListAsync(cancellationToken);
         }
 

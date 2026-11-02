@@ -16,12 +16,17 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// another run changed at the same moment is tried again, and then finds nothing left to change.
 /// </para>
 /// <para>
+/// After Tenancy's own roles, it runs every registered <see cref="ITenantStarterRoles"/> in the tenant, as system work there,
+/// each in a scope of its own: another module's starter roles, Membership's for a board say. A failure of one is that
+/// tenant's, and goes into the report. The others go on. A host on other storage runs them with <see cref="TenantStarterRolesRun.RunAsync"/>.
+/// </para>
+/// <para>
 /// Tenancy's storage package registers it with <c>AddTenancy</c>; a host on other storage registers its own.
 /// </para>
 /// </summary>
 public interface IStarterRoleSync
 {
-    /// <summary>Makes every role of every active or suspended tenant follow the starter role it was made from.</summary>
+    /// <summary>Makes every role of every active or suspended tenant follow the starter role it was made from, and runs every <see cref="ITenantStarterRoles"/> there.</summary>
     /// <param name="cancellationToken">Cancels the work, between two tenants or inside one.</param>
     /// <returns>What it did, counted over the tenants, with every tenant it could not sync.</returns>
     Task<StarterRoleSyncReport> SyncAsync(CancellationToken cancellationToken);

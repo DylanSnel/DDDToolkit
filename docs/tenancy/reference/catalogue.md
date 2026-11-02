@@ -549,11 +549,13 @@ var report = await services.GetRequiredService<IStarterRoleSync>().SyncAsync(can
 
 It visits the active and the suspended tenants, one after the other, and in each runs `RoleManager.FollowStarterRolesAsync` as Tenancy's system work in that tenant: it begins that work itself, so whoever calls it needs no caller of its own, and what it may do in a tenant is what system work there may. The events it raises name the system as who made the change. Each tenant is a unit of work of its own: a tenant whose sync fails is named in the report and left for the next run, and the others go on. A tenant another run changed at the same moment is tried again, and then finds nothing left to change.
 
+After Tenancy's own roles, it runs every registered [`ITenantStarterRoles`](#itenantstarterroles) in the tenant, as system work there, each in a scope of its own: another module's starter roles, Membership's for a board say. A failure of one is that tenant's, and goes into the report. The others go on. A host on other storage runs them with [`TenantStarterRolesRun.RunAsync`](#runasynciservicescopefactory-cancellationtoken).
+
 Tenancy's storage package registers it with `AddTenancy`; a host on other storage registers its own.
 
 | Member | Summary |
 |---|---|
-| [`SyncAsync(CancellationToken)`](#syncasynccancellationtoken) | Makes every role of every active or suspended tenant follow the starter role it was made from. |
+| [`SyncAsync(CancellationToken)`](#syncasynccancellationtoken) | Makes every role of every active or suspended tenant follow the starter role it was made from, and runs every [`ITenantStarterRoles`](#itenantstarterroles) there. |
 
 #### `SyncAsync(CancellationToken)`
 
@@ -561,7 +563,7 @@ Tenancy's storage package registers it with `AddTenancy`; a host on other storag
 Task<StarterRoleSyncReport> SyncAsync(CancellationToken cancellationToken)
 ```
 
-Makes every role of every active or suspended tenant follow the starter role it was made from.
+Makes every role of every active or suspended tenant follow the starter role it was made from, and runs every [`ITenantStarterRoles`](#itenantstarterroles) there.
 
 **Parameters**
 
@@ -569,29 +571,72 @@ Makes every role of every active or suspended tenant follow the starter role it 
 
 **Returns**: What it did, counted over the tenants, with every tenant it could not sync.
 
+### `ITenantStarterRoles`
+
+```csharp
+public interface ITenantStarterRoles
+```
+
+The starter roles of another module in the tenant the current work acts in. Tenancy knows nothing of that module. The module registers one of these, and `TenantManager.ProvisionAsync` and [`IStarterRoleSync`](#istarterrolesync) run every one that is registered. Membership's generator writes it for a member class whose roles are kept per resource, and `AddBoardMembershipWithTenancy` registers it, so an application writes none for its boards.
+
+```csharp
+public sealed class ReportTemplateStarterRoles(ReportRoles roles, TenancyAccessManager access) : ITenantStarterRoles
+{
+    public async Task<TenantStarterRolesFollowed> FollowAsync(CancellationToken cancellationToken)
+    {
+        var made = await roles.MakeMissingAsync(access.CurrentTenant.Require().Id, cancellationToken);
+        return new TenantStarterRolesFollowed(made, RolesChanged: 0, RolesWithoutTheirStarterRole: 0);
+    }
+}
+```
+
+Register it per scope, and take what it needs from the scope: `services.TryAddEnumerable(ServiceDescriptor.Scoped<ITenantStarterRoles, ReportTemplateStarterRoles>())`. Each one runs as system work in the tenant, in a scope of its own that begins after that system work, so a context it takes from the scope runs as that work. It must make what is missing and change what has to change, and save only when something changed, because it runs again at every start of the host.
+
+It runs in another save than the tenant's. A module has its own context, so the tenant is saved first. A failure in one of these does not fail `ProvisionAsync`. It is logged as an error, and the next `services.SyncStarterRoles()` runs it again.
+
+| Member | Summary |
+|---|---|
+| [`FollowAsync(CancellationToken)`](#followasynccancellationtoken) | Makes the starter roles the current tenant lacks, and makes the rest follow their starter roles. |
+
+#### `FollowAsync(CancellationToken)`
+
+```csharp
+Task<TenantStarterRolesFollowed> FollowAsync(CancellationToken cancellationToken)
+```
+
+Makes the starter roles the current tenant lacks, and makes the rest follow their starter roles.
+
+**Parameters**
+
+- `cancellationToken`: Cancels the work.
+
+**Returns**: How many roles it made, how many changed, and how many have no starter role any more.
+
 ### `StarterRoleSyncReport`
 
 ```csharp
 public sealed record StarterRoleSyncReport
 ```
 
-What a sync of the starter roles did ([`IStarterRoleSync`](#istarterrolesync)), counted over every tenant it visited. Which role gained or lost which permission is on the events it raised, one per role that changed.
+What a sync of the starter roles did ([`IStarterRoleSync`](#istarterrolesync)), counted over every tenant it visited, Tenancy's own roles and the roles of every [`ITenantStarterRoles`](#itenantstarterroles) together. Which of Tenancy's roles gained or lost which permission is on the events it raised, one per role that changed.
 
 | Member | Summary |
 |---|---|
-| [`StarterRoleSyncReport(int, int, int, int, IReadOnlyList<(string Tenant, Exception Error)>)`](#starterrolesyncreportint-int-int-int-ireadonlyliststring-tenant-exception-error) | The primary constructor: the type's summary says what it makes. |
+| [`StarterRoleSyncReport(int, int, int, int, int, IReadOnlyList<(string Tenant, Exception Error)>)`](#starterrolesyncreportint-int-int-int-int-ireadonlyliststring-tenant-exception-error) | The primary constructor: the type's summary says what it makes. |
 | `int Tenants { get; init; }` | How many tenants it visited. |
-| `int RolesChanged { get; init; }` | How many roles gained or lost a permission, each with its event. |
+| `int RolesMade { get; init; }` | How many roles another module made from a starter role the tenant lacked. Tenancy's sync makes no role of its own. |
+| `int RolesChanged { get; init; }` | How many roles gained or lost a permission. |
 | `int RolesKeptForAnAdministrator { get; init; }` | How many roles it left as they were, because following their starter role would leave a tenant without an administrator. |
-| `int RolesWithoutTheirStarterRole { get; init; }` | How many roles were made from a starter role the catalogue no longer has, and kept their permissions. |
-| `IReadOnlyList<(string Tenant, Exception Error)> Failed { get; init; }` | Each tenant it could not sync, by its id, with what went wrong; the next run tries it again. |
+| `int RolesWithoutTheirStarterRole { get; init; }` | How many roles were made from a starter role that is no longer declared, and kept their permissions. |
+| `IReadOnlyList<(string Tenant, Exception Error)> Failed { get; init; }` | Each tenant it could not sync, by its id, with what went wrong; the next run tries it again. A tenant is named once for each part that failed: Tenancy's own roles, and each [`ITenantStarterRoles`](#itenantstarterroles). |
 | `bool Succeeded { get; }` | Whether every tenant was synced. |
 
-#### `StarterRoleSyncReport(int, int, int, int, IReadOnlyList<(string Tenant, Exception Error)>)`
+#### `StarterRoleSyncReport(int, int, int, int, int, IReadOnlyList<(string Tenant, Exception Error)>)`
 
 ```csharp
 public StarterRoleSyncReport(
     int Tenants,
+    int RolesMade,
     int RolesChanged,
     int RolesKeptForAnAdministrator,
     int RolesWithoutTheirStarterRole,
@@ -603,7 +648,94 @@ The primary constructor: the type's summary says what it makes.
 **Parameters**
 
 - `Tenants`: How many tenants it visited.
-- `RolesChanged`: How many roles gained or lost a permission, each with its event.
+- `RolesMade`: How many roles another module made from a starter role the tenant lacked. Tenancy's sync makes no role of its own.
+- `RolesChanged`: How many roles gained or lost a permission.
 - `RolesKeptForAnAdministrator`: How many roles it left as they were, because following their starter role would leave a tenant without an administrator.
-- `RolesWithoutTheirStarterRole`: How many roles were made from a starter role the catalogue no longer has, and kept their permissions.
-- `Failed`: Each tenant it could not sync, by its id, with what went wrong; the next run tries it again.
+- `RolesWithoutTheirStarterRole`: How many roles were made from a starter role that is no longer declared, and kept their permissions.
+- `Failed`: Each tenant it could not sync, by its id, with what went wrong; the next run tries it again. A tenant is named once for each part that failed: Tenancy's own roles, and each [`ITenantStarterRoles`](#itenantstarterroles).
+
+### `TenantStarterRolesFollowed`
+
+```csharp
+public sealed record TenantStarterRolesFollowed
+```
+
+What one [`ITenantStarterRoles`](#itenantstarterroles) did in one tenant.
+
+| Member | Summary |
+|---|---|
+| [`TenantStarterRolesFollowed(int, int, int)`](#tenantstarterrolesfollowedint-int-int) | The primary constructor: the type's summary says what it makes. |
+| `int RolesMade { get; init; }` | How many roles it made from a starter role the tenant lacked. |
+| `int RolesChanged { get; init; }` | How many roles gained or lost a permission. |
+| `int RolesWithoutTheirStarterRole { get; init; }` | How many roles were made from a starter role that is no longer declared, and kept their permissions. |
+
+#### `TenantStarterRolesFollowed(int, int, int)`
+
+```csharp
+public TenantStarterRolesFollowed(int RolesMade, int RolesChanged, int RolesWithoutTheirStarterRole)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `RolesMade`: How many roles it made from a starter role the tenant lacked.
+- `RolesChanged`: How many roles gained or lost a permission.
+- `RolesWithoutTheirStarterRole`: How many roles were made from a starter role that is no longer declared, and kept their permissions.
+
+### `TenantStarterRolesRun`
+
+```csharp
+public sealed record TenantStarterRolesRun
+```
+
+What running every [`ITenantStarterRoles`](#itenantstarterroles) did in one tenant ([`RunAsync`](#runasynciservicescopefactory-cancellationtoken)), added up. Tenancy's [`IStarterRoleSync`](#istarterrolesync) and `TenantManager.ProvisionAsync` run them this way, and so does a host on other storage that registers its own [`IStarterRoleSync`](#istarterrolesync).
+
+| Member | Summary |
+|---|---|
+| [`TenantStarterRolesRun(int, int, int, IReadOnlyList<Exception>)`](#tenantstarterrolesrunint-int-int-ireadonlylistexception) | The primary constructor: the type's summary says what it makes. |
+| `int RolesMade { get; init; }` | How many roles were made from a starter role the tenant lacked. |
+| `int RolesChanged { get; init; }` | How many roles gained or lost a permission. |
+| `int RolesWithoutTheirStarterRole { get; init; }` | How many roles were made from a starter role that is no longer declared, and kept their permissions. |
+| `IReadOnlyList<Exception> Failed { get; init; }` | What went wrong in each one that failed. The others ran all the same. |
+| [`RunAsync(IServiceScopeFactory, CancellationToken)`](#runasynciservicescopefactory-cancellationtoken) | Runs every [`ITenantStarterRoles`](#itenantstarterroles) that is registered, for the tenant the current work acts in. |
+
+#### `TenantStarterRolesRun(int, int, int, IReadOnlyList<Exception>)`
+
+```csharp
+public TenantStarterRolesRun(
+    int RolesMade,
+    int RolesChanged,
+    int RolesWithoutTheirStarterRole,
+    IReadOnlyList<Exception> Failed)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `RolesMade`: How many roles were made from a starter role the tenant lacked.
+- `RolesChanged`: How many roles gained or lost a permission.
+- `RolesWithoutTheirStarterRole`: How many roles were made from a starter role that is no longer declared, and kept their permissions.
+- `Failed`: What went wrong in each one that failed. The others ran all the same.
+
+#### `RunAsync(IServiceScopeFactory, CancellationToken)`
+
+```csharp
+public static Task<TenantStarterRolesRun> RunAsync(
+    IServiceScopeFactory scopes,
+    CancellationToken cancellationToken)
+```
+
+Runs every [`ITenantStarterRoles`](#itenantstarterroles) that is registered, for the tenant the current work acts in. Begin that work first, `access.BeginSystemIn(tenant)`. Each one runs in a scope of its own, made here, so a context it takes from that scope runs as that work. A failure of one is kept in [`Failed`](#tenantstarterrolesrun), and the others go on. A row another run changed between the reading and the save is read again, up to three times. A registration that cannot be made is kept in [`Failed`](#tenantstarterrolesrun) too, and ends the run, because the others cannot be told from it.
+
+**Parameters**
+
+- `scopes`: Makes the scopes.
+- `cancellationToken`: Cancels the work, between two of them or inside one.
+
+**Returns**: What they did, added up.
+
+**Exceptions**
+
+- `OperationCanceledException`: `cancellationToken` was cancelled.

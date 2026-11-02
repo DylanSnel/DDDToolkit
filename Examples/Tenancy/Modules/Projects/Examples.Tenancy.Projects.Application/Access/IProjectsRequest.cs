@@ -9,8 +9,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// <remarks>
 /// The one line of access plumbing the module writes, and on it the module's default, <c>[InTenant]</c>: a caller who
 /// works in the tenant, which a request of the module that says nothing of its own requires. The queries any seat may
-/// send take it so, such as <c>TenantProjectRoles</c> and <c>PermissionsHeldAtRoot</c>, and so does <c>SetUpProjectRoles</c>,
-/// which the system work that sets a tenant up sends there. A request that says more says it with an attribute of its
+/// send take it so, such as <c>TenantProjectRoles</c> and <c>PermissionsHeldAtRoot</c>. A request that says more says it with an attribute of its
 /// own, and keeps only that: a case of the Membership package's for a permission held on a project,
 /// <c>[RequiresPermission(RequiredPermission)]</c> with <c>[OnResource]</c> on the project and <c>[ExpectedVersion]</c> on the version
 /// the caller read, or <c>[SeenWith&lt;ProjectId&gt;(permission)]</c> on a list; or one of Tenancy's, <c>[RequiresPermission(permission)]</c>

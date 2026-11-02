@@ -158,7 +158,6 @@ not reach. It refuses nobody for seeing nothing.
 | `TakeCrewRole`, `RemoveCrewMember` | `projects.crew.manage` on the project. | When a seat changes its own place on the crew, the crew manager saves the change as the module's work. |
 | `ChangeProjectOwner` | `projects.owner.change` on the project. | The new owner's seat is active. The old owner stays on the crew in the project role that `FormerOwnerRole` names, or leaves the crew. |
 | `MakeProjectRole`, `RenameProjectRole`, `SetProjectRolePermissions`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant. | The role manager asks the same permission, the one the projects' rules name in `managedWith`. |
-| `SetUpProjectRoles` | In a tenant. No route sends it. | The handler accepts only system work in the tenant it sets up. Anyone else gets `access.system-only`. |
 
 | Inspections request | Declares | The handler also checks |
 |---|---|---|
@@ -350,10 +349,12 @@ sample is that package's worked example.
 | Surveyor | `projects.view` and `inspections.record` |
 | Observer | `projects.view` |
 
-- A tenant gets the three starter project roles when it is set up. `SetUpProjectRoles` makes them, as system work in
-  that tenant. In the sample, only the seeding creates tenants, and it sends `SetUpProjectRoles` for each one.
-- `SetUpProjectRoles` does not make a role again that the tenant renamed or archived. The tenant can make more project
-  roles itself.
+- A tenant has the three starter project roles right after it is provisioned, as system work in that tenant. The host's
+  `SyncStarterRoles()` makes one a tenant lacks, and makes the rest follow what the application declares at every start.
+- `ProjectsInfrastructure` gives the roles their names and descriptions through `makeRole`, and the seeding gives them fixed
+  ids through `DemoData.ProjectRoleIdOf`.
+- A role the tenant renamed follows too. A role the tenant archived follows nothing and is not made again. What the tenant
+  changed itself stays. The tenant can make more project roles itself.
 - A seat with `tenancy.roles.manage` for the whole tenant makes, renames and archives project roles, and sets their
   permissions. It does so through the `/project-roles` routes, the `projectRoleCreate`, `projectRoleRename`,
   `projectRolePermissionsSet` and `projectRoleArchive` mutations, or the Crew roles page. Anyone in the tenant can read

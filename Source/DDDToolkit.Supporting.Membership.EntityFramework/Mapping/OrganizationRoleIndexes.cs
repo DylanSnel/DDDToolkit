@@ -38,8 +38,8 @@ internal static class OrganizationRoleIndexes
             return;
         }
 
-        // Named by Entity Framework, as indexes written by hand in a context are: IX_{table}_{tenant}_Name and IX_{table}_{tenant}_MadeFrom.
+        // Named by Entity Framework, as indexes written by hand in a context are: IX_{table}_{tenant}_Name and IX_{table}_{tenant}_FromStarterRole.
         role.HasIndex(marked[0].Name, nameof(CustomRoleAggregate<TRoleId>.Name)).IsUnique();
-        role.HasIndex(marked[0].Name, nameof(CustomRoleAggregate<TRoleId>.MadeFrom)).IsUnique();
+        role.HasIndex(marked[0].Name, nameof(CustomRoleAggregate<TRoleId>.FromStarterRole)).IsUnique();
     }
 }

@@ -90,7 +90,9 @@ public class MembershipWithTenancyGeneratorTests
         [CustomRole<CourseRoleId, Course>]
         public sealed partial class CourseRole
         {
-            public CourseRole(CourseRoleId id, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules) { }
+            public CourseRole(CourseRoleId id, TenantId tenant, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules) => TenantId = tenant;
+
+            public TenantId TenantId { get; private set; }
         }
 
         [AggregateRoot<CourseId>]
@@ -109,6 +111,16 @@ public class MembershipWithTenancyGeneratorTests
             public partial IReadOnlyList<CourseTutor> Tutors { get; }
         }
         """;
+
+    /// <summary>A course whose role class has no constructor the generator can call, here because it takes no tenant.</summary>
+    private static string CoursesWithRoleConstructor(string constructor)
+        => Courses.Replace(
+            "public CourseRole(CourseRoleId id, TenantId tenant, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules) => TenantId = tenant;",
+            constructor,
+            StringComparison.Ordinal);
+
+    /// <summary>What a project passes for <c>makeRole</c>: it makes a role with the constructor <see cref="CoursesWithRoleConstructor"/> gave the class.</summary>
+    private const string MakeRoleWithoutTheTenant = "makeRole: (_, _, draft) => new Campus.Courses.CourseRole(Campus.Courses.CourseRoleId.Create(), draft, rules)";
 
     /// <summary>A lab: its members are seats, and what they hold in it are roles of the tenant's own, by Tenancy's role id.</summary>
     private const string Labs =
@@ -257,7 +269,8 @@ public class MembershipWithTenancyGeneratorTests
             """
             public static global::Microsoft.Extensions.DependencyInjection.IServiceCollection AddCourseMembershipWithTenancy<TContext>(
                     this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services,
-                    global::DDDToolkit.Supporting.Membership.Access.MembershipRules rules)
+                    global::DDDToolkit.Supporting.Membership.Access.MembershipRules rules,
+                    global::System.Func<global::System.IServiceProvider, global::Campus.Tenants.TenantId, global::DDDToolkit.Supporting.Membership.CustomRoleDraft, global::Campus.Courses.CourseRole>? makeRole = null)
                     where TContext : global::Microsoft.EntityFrameworkCore.DbContext
             """,
             "the context is all the application writes: the classes, their ids and the organization's are closed");
@@ -526,7 +539,7 @@ public class MembershipWithTenancyGeneratorTests
             .WithSource(
                 Startup(
                     """
-                    services.AddCourseMembershipWithTenancy<CampusContext, TenantId, OrganizationUnitId, RoleId>(rules);
+                    services.AddCourseMembershipWithTenancy<CampusContext, TenantId, OrganizationUnitId, RoleId>(rules, (_, tenant, draft) => new Campus.Courses.CourseRole(Campus.Courses.CourseRoleId.Create(), tenant, draft, rules));
                             services.AddLabMembershipWithTenancy<CampusContext, TenantId, OrganizationUnitId>(rules);
                     """),
                 "Startup.cs")
@@ -611,7 +624,7 @@ public class MembershipWithTenancyGeneratorTests
             .WithSource(
                 Startup(
                     """
-                    services.AddCourseMembershipWithTenancy<CampusContext, TenantId, OrganizationUnitId, RoleId>(rules);
+                    services.AddCourseMembershipWithTenancy<CampusContext, TenantId, OrganizationUnitId, RoleId>(rules, (_, tenant, draft) => new Campus.Courses.CourseRole(Campus.Courses.CourseRoleId.Create(), tenant, draft, rules));
                             services.AddBulletinMembership<CampusContext>(rules);
                     """),
                 "Startup.cs")
@@ -637,8 +650,10 @@ public class MembershipWithTenancyGeneratorTests
         // What an application that declares its organization gets is asked against a database, by the suite of both
         // domains. A module's is held to it here: the same class and the same registration, line for line, once the
         // ids the module names are put where the application's own stand. Nothing else may differ between the two.
-        var application = Run(CampusWith(Startup(string.Empty), (Courses, "Courses.cs"), (Labs, "Labs.cs")));
-        var module = Run(GeneratorTestHost.Create(Courses, "Courses.cs")
+        // The role class takes no tenant, so neither gets a default for makeRole, and the two can be compared.
+        var courses = CoursesWithRoleConstructor("public CourseRole(CourseRoleId id, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules) { }");
+        var application = Run(CampusWith(Startup(string.Empty), (courses, "Courses.cs"), (Labs, "Labs.cs")));
+        var module = Run(GeneratorTestHost.Create(courses, "Courses.cs")
             .WithSource(Labs, "Labs.cs")
             .WithSource(Startup(string.Empty), "Startup.cs")
             .WithReferencedAssembly(TenancyIds, "Campus.Tenants.Contracts")
@@ -754,6 +769,150 @@ public class MembershipWithTenancyGeneratorTests
         result.HintNames.Should().NotContain(Written);
     }
 
+    // ------------------------------------------------------------------ the starter roles of a role class kept for the resource
+
+    private const string StarterRoles = "GeneratedMembershipWithTenancyExtensions.AddCourseMembershipWithTenancy";
+
+    [Theory]
+    [InlineData("public CourseRole(CourseRoleId id, TenantId tenant, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules) { }", "new global::Campus.Courses.CourseRole(global::Campus.Courses.CourseRoleId.Create(), tenant, draft, _rules)")]
+    [InlineData("public CourseRole(MembershipRules rules, CustomRoleDraft draft, TenantId tenant, CourseRoleId id) : base(id, draft, rules) { }", "new global::Campus.Courses.CourseRole(_rules, draft, tenant, global::Campus.Courses.CourseRoleId.Create())")]
+    [InlineData("public CourseRole(CustomRoleDraft draft, CourseRoleId id, TenantId tenant) : base(id, draft, null!) { }", "new global::Campus.Courses.CourseRole(draft, global::Campus.Courses.CourseRoleId.Create(), tenant)")]
+    public void The_constructor_is_found_by_its_parameter_types_in_any_order_with_or_without_the_rules(string constructor, string made)
+    {
+        var result = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), (CoursesWithRoleConstructor(constructor), "Courses.cs")));
+
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty();
+        result.ShouldContain(StarterRoles, made);
+        result.ShouldContain(StarterRoles, "global::System.Func<global::System.IServiceProvider, global::Campus.Tenants.TenantId, global::DDDToolkit.Supporting.Membership.CustomRoleDraft, global::Campus.Courses.CourseRole>? makeRole = null)");
+    }
+
+    [Fact]
+    public void Without_a_fitting_constructor_makeRole_is_required_and_the_failure_shows_at_the_call()
+    {
+        var courses = CoursesWithRoleConstructor("public CourseRole(CourseRoleId id, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules) { }");
+
+        var forgotten = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), (courses, "Courses.cs")));
+        forgotten.ReportedDiagnostics.Should().BeEmpty("no diagnostic fires on the role class: a role class like this is allowed");
+        forgotten.CompilationErrors.Should().ContainSingle().Which.ToString().Should().Contain("makeRole", "the call lacks the argument, and the compiler says so there");
+
+        var given = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules, " + MakeRoleWithoutTheTenant + ");"), (courses, "Courses.cs")));
+        given.ShouldCompile();
+        given.ReportedDiagnostics.Should().BeEmpty();
+        given.ShouldContain(StarterRoles, "global::Campus.Courses.CourseRole> makeRole)");
+        given.ShouldContain(StarterRoles, "global::System.ArgumentNullException.ThrowIfNull(makeRole);");
+        given.ShouldContain(StarterRoles, "draft => _makeRole(_services, tenant, draft),");
+    }
+
+    [Fact]
+    public void A_role_id_without_a_Create_makes_makeRole_required()
+    {
+        // The role id is over a text, which the generator gives no Create(): the application says how a new one is made.
+        var courses = System.Text.RegularExpressions.Regex.Replace(Courses, @"\[EntityId<Guid>\](\s+public readonly partial record struct CourseRoleId;)", "[EntityId<string>]$1");
+        courses.Should().Contain("[EntityId<string>]");
+
+        var result = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules, (_, tenant, draft) => new Campus.Courses.CourseRole(new Campus.Courses.CourseRoleId(\"own\"), tenant, draft, rules));"), (courses, "Courses.cs")));
+
+        result.ShouldContain(StarterRoles, "global::Campus.Courses.CourseRole> makeRole)");
+        result.ShouldNotContain(StarterRoles, "CourseRoleId.Create()");
+    }
+
+    [Fact]
+    public void A_module_on_tenancys_ids_alone_gets_its_starter_roles_as_well()
+    {
+        // The application the docs build: the module sees the ids, and one line says which they are.
+        var result = Run(GeneratorTestHost.Create(Courses, "Courses.cs")
+            .WithSource(
+                "[assembly: DDDToolkit.Supporting.Tenancy.TenancyIds<Campus.Tenants.TenantId, Campus.Tenants.SeatId, Campus.Tenants.OrganizationUnitId, Campus.Tenants.RoleId>]",
+                "TenancyIds.cs")
+            .WithSource(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), "Startup.cs")
+            .WithReferencedAssembly(TenancyIds, "Campus.Tenants.Contracts")
+            .WithMembership()
+            .WithTenancyOnEntityFramework());
+
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty();
+        result.ShouldContain(StarterRoles, "new global::Campus.Courses.CourseRole(global::Campus.Courses.CourseRoleId.Create(), tenant, draft, _rules)");
+        result.ShouldContain(StarterRoles, "GeneratedCourseStarterRoles<TContext>");
+    }
+
+    [Fact]
+    public void A_module_in_layers_finds_the_role_class_in_the_project_that_declares_it()
+    {
+        var infrastructure = Run(GeneratorTestHost.Create(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), "Startup.cs")
+            .WithSource(ModuleAttribute("Campus"), "Module.cs")
+            .WithTenancy()
+            .WithMembershipAlone()
+            .WithReferencedProject("Campus.Domain", DomainProject)
+            .WithMembership()
+            .WithTenancyOnEntityFramework());
+
+        infrastructure.ShouldCompile();
+        infrastructure.ReportedDiagnostics.Should().BeEmpty();
+        infrastructure.ShouldContain(StarterRoles, "new global::Campus.Courses.CourseRole(global::Campus.Courses.CourseRoleId.Create(), tenant, draft, _rules)");
+    }
+
+    [Fact]
+    public void A_member_that_holds_the_tenants_roles_or_named_roles_gets_no_starter_roles()
+    {
+        var labs = Run(CampusWith(Startup("services.AddLabMembershipWithTenancy<CampusContext>(rules);"), (Labs, "Labs.cs")));
+
+        labs.ShouldCompile();
+        labs.ShouldNotContain("GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy", "ITenantStarterRoles", "a lab's roles are the tenant's own, and Tenancy follows those itself");
+        labs.ShouldNotContain("GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy", "makeRole");
+
+        const string Clubs =
+            """
+            using System;
+            using System.Collections.Generic;
+            using DDDToolkit.Abstractions.Attributes;
+            using DDDToolkit.Supporting.Membership;
+            using Campus.Tenants;
+
+            namespace Campus.Clubs;
+
+            [EntityId<Guid>]
+            public readonly partial record struct ClubId;
+
+            [EntityId<Guid>]
+            public readonly partial record struct ClubMemberId;
+
+            [Member<ClubMemberId, SeatId, NamedRole, Club>]
+            public sealed partial class ClubMember;
+
+            [AggregateRoot<ClubId>]
+            public sealed partial class Club
+            {
+                public Club(ClubId id, SeatId owner) : base(id) => OwnerSeatId = owner;
+
+                public SeatId OwnerSeatId { get; private set; }
+
+                public partial IReadOnlyList<ClubMember> Members { get; }
+            }
+            """;
+
+        var clubs = Run(CampusWith(Startup("services.AddClubMembershipWithTenancy<CampusContext>(rules);"), (Clubs, "Clubs.cs")));
+
+        clubs.ShouldCompile();
+        clubs.ShouldNotContain("GeneratedMembershipWithTenancyExtensions.AddClubMembershipWithTenancy", "ITenantStarterRoles", "roles the rules declare are no rows, and have no starter roles to make");
+    }
+
+    [Fact]
+    public void The_registration_adds_the_starter_roles_once_for_tenancy_to_run()
+    {
+        var emitted = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), (Courses, "Courses.cs"))).Emit();
+        var services = new ServiceCollection();
+        var rules = CourseRules(emitted, members: null);
+
+        emitted.CallStatic("Campus.Startup", "Register", services, rules);
+        emitted.CallStatic("Campus.Startup", "Register", services, rules);
+
+        var written = emitted.Type(Package + "GeneratedCourseStarterRoles`1").MakeGenericType(emitted.Type("Campus.CampusContext"));
+        services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(DDDToolkit.Supporting.Tenancy.ITenantStarterRoles))
+            .Which.Should().Match<ServiceDescriptor>(descriptor => descriptor.Lifetime == ServiceLifetime.Scoped);
+        written.GetInterfaces().Should().Contain(typeof(DDDToolkit.Supporting.Tenancy.ITenantStarterRoles));
+    }
+
     // ------------------------------------------------------------------ what the registration does when it is called
 
     private static MembershipRules CourseRules(EmittedAssembly emitted, MemberSource? members)
@@ -794,7 +953,7 @@ public class MembershipWithTenancyGeneratorTests
         // The ids are declared here and the organization's classes are not: what a module sees whose organization is another's.
         var emitted = Run(GeneratorTestHost.Create(TenancyIds, "TenancyIds.cs")
             .WithSource(Courses, "Courses.cs")
-            .WithSource(Startup("services.AddCourseMembershipWithTenancy<CampusContext, TenantId, OrganizationUnitId, RoleId>(rules);"), "Startup.cs")
+            .WithSource(Startup("services.AddCourseMembershipWithTenancy<CampusContext, TenantId, OrganizationUnitId, RoleId>(rules, (_, tenant, draft) => new Campus.Courses.CourseRole(Campus.Courses.CourseRoleId.Create(), tenant, draft, rules));"), "Startup.cs")
             .WithMembership()
             .WithTenancyOnEntityFramework()).Emit();
         var services = new ServiceCollection();

@@ -85,7 +85,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         var roles = (await api.TenantRolesAsync(Cancellation)).Value!;
         roles.Should().Contain(role => role.Name == "Crew lead" && role.IsActive);
         var projectRoles = (await api.ProjectRolesAsync(Cancellation)).Value!;
-        projectRoles.Where(role => role.IsActive).Select(role => role.MadeFrom)
+        projectRoles.Where(role => role.IsActive).Select(role => role.FromStarterRole)
             .Should().BeEquivalentTo(new[] { SampleCatalogue.CrewLead, SampleCatalogue.Surveyor, SampleCatalogue.Observer }, "the crew's role pickers offer the tenant's project roles in use");
         projectRoles.Should().OnlyContain(role => role.Permissions == null, "she manages no roles, so what each gives is not hers to read");
 

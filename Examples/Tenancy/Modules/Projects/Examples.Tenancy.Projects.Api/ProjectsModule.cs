@@ -59,10 +59,18 @@ public static class ProjectsModule
     /// <param name="services">The host's services.</param>
     /// <param name="host">The host's two decisions: the database, and the transport.</param>
     /// <param name="starterRoles">The starter project roles a tenant's project roles are made from (<see cref="ProjectMembership"/>).</param>
-    public static IServiceCollection AddProjectsModule(this IServiceCollection services, ModuleHost host, IReadOnlyList<StarterProjectRole> starterRoles)
+    /// <param name="starterRoleIds">
+    /// The id of the role made from a starter role in a tenant, for a host that seeds fixed ids. It answers
+    /// <see langword="null"/> for a new id, and so does leaving it out.
+    /// </param>
+    public static IServiceCollection AddProjectsModule(
+        this IServiceCollection services,
+        ModuleHost host,
+        IReadOnlyList<StarterProjectRole> starterRoles,
+        Func<TenantId, string, ProjectRoleId?>? starterRoleIds = null)
     {
         var membership = new ProjectMembership(starterRoles);
-        services.AddProjectsInfrastructure(host, membership).AddProjectsApplication(membership);
+        services.AddProjectsInfrastructure(host, membership, starterRoleIds).AddProjectsApplication(membership);
 
         // The module's GraphQL source schema, when the host serves GraphQL. No context is registered with it: a
         // field only sends, and every query that reads takes a context of its own from the pool.

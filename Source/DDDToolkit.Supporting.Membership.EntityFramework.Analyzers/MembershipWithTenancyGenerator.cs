@@ -48,6 +48,18 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Analyzers;
 /// and nothing is answered about roles.
 /// </para>
 /// <para>
+/// <b>Starter roles.</b> A member that holds roles by the id of a role class kept for the resource,
+/// <c>[CustomRole&lt;TRoleId, TResource&gt;]</c>, gets a class that makes the tenant's starter roles and makes the rest
+/// follow, Tenancy's <c>ITenantStarterRoles</c>, and the registration adds it. So a new tenant has the roles right after
+/// <c>ProvisionAsync</c>, and <c>SyncStarterRoles()</c> keeps them up to date. It makes a role with the role class's public
+/// constructor that takes the role id, the tenant id and the draft, in any order, and the rules if it asks for them. The
+/// role id must have a <c>Create()</c>. The registration has a parameter <c>makeRole</c>, for names, descriptions or ids
+/// of the application's own. Where no constructor fits, <c>makeRole</c> is required, so the failure shows at the call. A
+/// project that does not know the tenant id, which it writes at the call, always passes <c>makeRole</c>. The roles are read
+/// through the role class's own filter, so a role class kept per tenant marks its tenant <c>[OfTenant]</c>. A member that
+/// holds the tenant's own roles, or named roles, gets none of this.
+/// </para>
+/// <para>
 /// Every type of the other package is named here by its metadata name, as text: this assembly references
 /// nothing of it, and neither does the package it ships with.
 /// </para>
@@ -63,6 +75,8 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
 
     private const string NamedRole = "global::DDDToolkit.Supporting.Membership.NamedRole";
     private const string CustomRoleTemplate = "DDDToolkit.Supporting.Membership.CustomRoleAttribute`2";
+    private const string CustomRoleDraftName = "DDDToolkit.Supporting.Membership.CustomRoleDraft";
+    private const string MembershipRulesName = "DDDToolkit.Supporting.Membership.Access.MembershipRules";
 
     private const string Tenancy = "DDDToolkit.Supporting.Tenancy";
     private const string TenantTemplate = Tenancy + ".TenantAggregateAttribute`1";
@@ -77,6 +91,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         Tenancy + ".Access.ITenancyQueries`4",
         Tenancy + ".Catalogue.TenancyCatalogue",
         Tenancy + ".EntityFramework.EfTenancyReadSource`4",
+        Tenancy + ".ITenantStarterRoles",
     ];
 
     /// <inheritdoc />
@@ -135,6 +150,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         // Only a project that cannot see Tenancy's role class has to tell the tenant's roles from kept ones another way:
         // by the role classes kept for a resource, wherever the project can see one.
         var kept = seen ? null : IdsOf(CustomRoleTemplate, declared, compilation, cancellationToken, everywhere: true);
+        var roleClasses = RoleClasses(declared, compilation, cancellationToken);
 
         var joins = ImmutableArray.CreateBuilder<Join>();
         foreach (var wrapper in wrappers)
@@ -152,6 +168,9 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
 
             var tenantsRoles = seen ? held == role.Id : held != NamedRole && !kept!.Contains(held);
             var resourceName = LastNameOf(arguments[Resource]);
+            var keptRole = tenantsRoles || held == NamedRole
+                ? null
+                : roleClasses.FirstOrDefault(candidate => candidate.Id == held && candidate.Resource == arguments[Resource]);
             joins.Add(new Join(
                 Registration: wrapper.Name + "WithTenancy",
                 Plain: wrapper.Name,
@@ -166,7 +185,11 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 Tenant: tenant.Id,
                 Unit: unit.Id,
                 TenancyRole: seen ? role.Id : tenantsRoles ? held : null,
-                TenantsRoles: tenantsRoles));
+                TenantsRoles: tenantsRoles,
+                KeptRole: keptRole?.Name,
+                KeptRoleMade: keptRole?.Symbol is { } roleClass && tenant.Id is { } tenantId
+                    ? NewRoleOf(roleClass, keptRole.Name, held, tenantId, compilation, cancellationToken)
+                    : null));
         }
 
         return joins.ToImmutable();
@@ -237,6 +260,129 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         return ids;
     }
 
+    /// <summary>
+    /// The classes declared with the role template, in this project and in the projects it references: each by its name, the
+    /// id it was declared with and the resource it is of. The symbol is null for a class whose declaration cannot be read.
+    /// </summary>
+    private static List<RoleClass> RoleClasses(ImmutableArray<EntityDefinition> declared, Compilation compilation, CancellationToken cancellationToken)
+    {
+        var found = new List<RoleClass>();
+        if (compilation.GetTypeByMetadataName(CustomRoleTemplate) is not { } template)
+        {
+            return found;
+        }
+
+        var key = template.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        foreach (var definition in declared)
+        {
+            if (definition.TemplateKey == key && definition.MetadataName is { } metadataName && compilation.GetTypeByMetadataName(metadataName) is { } symbol)
+            {
+                Add(definition.Type.FullyQualifiedName, definition.IdType, symbol);
+            }
+        }
+
+        foreach (var source in DefinitionFactory.ReferencedSources(compilation, CustomRoleTemplate, cancellationToken))
+        {
+            if (source.Symbol is { } symbol)
+            {
+                Add(source.FullyQualifiedName, source.IdType, symbol);
+            }
+        }
+
+        return found;
+
+        void Add(string name, string? id, INamedTypeSymbol symbol)
+        {
+            foreach (var attribute in symbol.GetAttributes())
+            {
+                if (SymbolEqualityComparer.Default.Equals(attribute.AttributeClass?.OriginalDefinition, template)
+                    && attribute.AttributeClass is { TypeArguments.Length: 2 } closed)
+                {
+                    found.Add(new RoleClass(name, id, closed.TypeArguments[1].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), symbol));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The expression that makes a role with the role class's public constructor, in the order of its parameters: the role
+    /// id, the tenant id and the draft, and the rules if it asks for them. Null when no constructor takes exactly those, and
+    /// when the role id has no <c>Create()</c>. A parameter of a type another generator writes cannot be bound here, so it
+    /// is compared by name.
+    /// </summary>
+    private static string? NewRoleOf(INamedTypeSymbol role, string roleName, string roleId, string tenant, Compilation compilation, CancellationToken cancellationToken)
+    {
+        if (RoleIdOf(role) is { } id && IdCreation.Lacks(id, compilation, cancellationToken))
+        {
+            return null;
+        }
+
+        foreach (var constructor in role.InstanceConstructors.Where(static each => each.DeclaredAccessibility == Accessibility.Public).OrderByDescending(static each => each.Parameters.Length))
+        {
+            var arguments = new List<string>();
+            foreach (var parameter in constructor.Parameters)
+            {
+                if (parameter.RefKind != RefKind.None)
+                {
+                    break;
+                }
+
+                if (IsType(parameter.Type, roleId))
+                {
+                    arguments.Add(roleId + ".Create()");
+                }
+                else if (IsType(parameter.Type, tenant))
+                {
+                    arguments.Add("tenant");
+                }
+                else if (IsType(parameter.Type, "global::" + CustomRoleDraftName))
+                {
+                    arguments.Add("draft");
+                }
+                else if (IsType(parameter.Type, "global::" + MembershipRulesName))
+                {
+                    arguments.Add("_rules");
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (arguments.Count == constructor.Parameters.Length
+                && arguments.Distinct(StringComparer.Ordinal).Count() == arguments.Count
+                && arguments.Contains(roleId + ".Create()")
+                && arguments.Contains("tenant")
+                && arguments.Contains("draft"))
+            {
+                return "new " + roleName + "(" + string.Join(", ", arguments) + ")";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The first type argument of the role template on <paramref name="role"/>: the role's id.</summary>
+    private static ITypeSymbol? RoleIdOf(INamedTypeSymbol role)
+    {
+        foreach (var attribute in role.GetAttributes())
+        {
+            if (attribute.AttributeClass is { TypeArguments.Length: 2 } closed
+                && closed.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).StartsWith("global::DDDToolkit.Supporting.Membership.CustomRoleAttribute<", StringComparison.Ordinal))
+            {
+                return closed.TypeArguments[0];
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether <paramref name="type"/> is the type named <paramref name="qualified"/>: by its name alone when the compiler cannot bind it yet.</summary>
+    private static bool IsType(ITypeSymbol type, string qualified)
+        => type.TypeKind == TypeKind.Error
+            ? type.Name == LastNameOf(qualified)
+            : type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == qualified;
+
     /// <summary>A type's own name, from its fully qualified one: <c>Course</c> of <c>global::Campus.Courses.Course</c>.</summary>
     private static string LastNameOf(string qualified)
     {
@@ -259,6 +405,8 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
     /// <param name="Unit">Tenancy's unit id, or null where the application writes it.</param>
     /// <param name="TenancyRole">Tenancy's role id, or null where the application writes it.</param>
     /// <param name="TenantsRoles">Whether the members hold the tenant's own roles, so the class answers about roles as well.</param>
+    /// <param name="KeptRole">The role class kept for the resource, whose starter roles a tenant gets; null for any other member.</param>
+    /// <param name="KeptRoleMade">The expression that makes a role with the role class's constructor; null when none fits, and <c>makeRole</c> is required.</param>
     private sealed record Join(
         string Registration,
         string Plain,
@@ -273,7 +421,16 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         string? Tenant,
         string? Unit,
         string? TenancyRole,
-        bool TenantsRoles);
+        bool TenantsRoles,
+        string? KeptRole,
+        string? KeptRoleMade);
+
+    /// <summary>A class declared with the role template.</summary>
+    /// <param name="Name">The class, in full.</param>
+    /// <param name="Id">Its id, in full.</param>
+    /// <param name="Resource">The resource it is of, in full.</param>
+    /// <param name="Symbol">The class.</param>
+    private sealed record RoleClass(string Name, string? Id, string Resource, INamedTypeSymbol Symbol);
 
     // ------------------------------------------------------------------ writing it
 
@@ -311,6 +468,11 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         var currentUser = TenancyAccessNamespace + ".TenancyUsers.Current<" + tenant + ", " + join.Seat + ">()";
         var catalogue = "global::" + Tenancy + ".Catalogue.TenancyCatalogue";
         var joined = join.ClassName + parameters;
+        var starterRoles = "Generated" + join.ResourceName + "StarterRoles";
+        var writtenStarterRoles = starterRoles + parameters;
+        var makeRole = join.KeptRole is { } kept
+            ? "global::System.Func<global::System.IServiceProvider, " + tenant + ", " + Membership + ".CustomRoleDraft, " + kept + ">"
+            : null;
 
         var writer = new CodeWriter().Header();
         writer.Line("namespace DDDToolkit.Supporting.Membership.EntityFramework;");
@@ -330,18 +492,40 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line("/// <typeparam name=\"" + parameter + "\">" + WhatItIs(parameter) + ", which this project sees no class of and so cannot be given.</typeparam>");
             }
 
+            if (makeRole is not null)
+            {
+                writer.Line("/// <param name=\"services\">The service collection.</param>");
+                writer.Line("/// <param name=\"rules\">The rules of " + join.ResourceName + ".</param>");
+                writer.Line("/// <param name=\"makeRole\">");
+                writer.Line("/// Makes a role of a starter role in a tenant, for names, descriptions or ids of the application's own. It gets the scope's services,");
+                writer.Line(join.KeptRoleMade is null
+                    ? "/// the tenant and the starter role's draft. Required here: no public constructor of the role class takes the role id, the tenant id and the draft."
+                    : "/// the tenant and the starter role's draft. Left out, the role class's constructor makes it, with the name the rules declare and a new id.");
+                writer.Line("/// </param>");
+            }
+
             writer.Line("/// <exception cref=\"global::System.ArgumentException\">The rules take a member from the caller's token, where a member is a seat.</exception>");
             using (Declared(
                        writer,
                        [
                            "public static " + Services + ".IServiceCollection " + join.Registration + parameters + "(",
                            "    this " + Services + ".IServiceCollection services,",
-                           "    " + Membership + ".Access.MembershipRules rules)",
+                           makeRole is null
+                               ? "    " + Membership + ".Access.MembershipRules rules)"
+                               : "    " + Membership + ".Access.MembershipRules rules,",
+                           .. makeRole is null
+                               ? Array.Empty<string>()
+                               : new[] { "    " + makeRole + (join.KeptRoleMade is null ? " makeRole)" : "? makeRole = null)") },
                            .. constraints.Select(static constraint => "    " + constraint),
                        ]))
             {
                 writer.Line("global::System.ArgumentNullException.ThrowIfNull(services);");
                 writer.Line("global::System.ArgumentNullException.ThrowIfNull(rules);");
+                if (makeRole is not null && join.KeptRoleMade is null)
+                {
+                    writer.Line("global::System.ArgumentNullException.ThrowIfNull(makeRole);");
+                }
+
                 writer.Line();
 
                 // The one thing the resource's own registration cannot tell: a seat's id is over the same value as a
@@ -363,6 +547,16 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line("    services,");
                 writer.Line("    provider => new " + joined + "(provider, rules));");
                 writer.Line();
+                if (makeRole is not null)
+                {
+                    writer.Line("// A new tenant gets the starter roles, and every start of the host makes them follow: Tenancy runs this one for both.");
+                    writer.Line(Services + ".Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(");
+                    writer.Line("    services,");
+                    writer.Line("    " + Services + ".ServiceDescriptor.Scoped<global::" + Tenancy + ".ITenantStarterRoles, " + writtenStarterRoles + ">(");
+                    writer.Line("        provider => new " + writtenStarterRoles + "(provider, rules, makeRole)));");
+                    writer.Line();
+                }
+
                 writer.Line("return " + Membership + ".EntityFramework.MembershipEntityFrameworkServiceCollectionExtensions.AddMembership<");
                 writer.Line("    " + join.Member + ", " + join.MemberOwnId + ", " + join.Seat + ", " + join.Role + ", TContext, " + join.Resource + ", " + join.IdOfResource + ",");
                 writer.Line("    " + joined + ">(services, rules);");
@@ -534,7 +728,67 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("    => _access.In(new " + TenancyEntityFramework + ".EfTenancyReadSource<" + ids + ">(context), " + TenancyEntityFramework + ".EfQueryExecutor.Instance);");
         }
 
+        if (join.KeptRole is { } role2 && makeRole is not null)
+        {
+            WriteStarterRoles(writer, join, role2, makeRole, starterRoles, parameters, constraints, tenancy);
+        }
+
         return writer.ToString();
+    }
+
+    /// <summary>
+    /// The class Tenancy runs in a tenant: it makes the starter roles the tenant lacks, and makes the rest follow, through the
+    /// role manager of the role class. It runs as system work in the tenant, in a scope of its own, so the store's context
+    /// runs as that work and reads the tenant's roles through the role class's filter.
+    /// </summary>
+    private static void WriteStarterRoles(CodeWriter writer, Join join, string role, string makeRole, string name, string parameters, List<string> constraints, string tenancy)
+    {
+        var id = join.Role;
+        writer.Line();
+        writer.Line("/// <summary>");
+        writer.Line("/// The starter roles of " + join.ResourceName + " in the tenant the current work acts in. Tenancy runs this after it provisions a tenant and at every");
+        writer.Line("/// sync of the starter roles: it makes the roles the tenant lacks and makes the rest follow the rules.");
+        writer.Line("/// </summary>");
+        using (Declared(
+                   writer,
+                   [
+                       "internal sealed class " + name + parameters + " :",
+                       "    global::" + Tenancy + ".ITenantStarterRoles",
+                       .. constraints.Select(static constraint => "    " + constraint),
+                   ]))
+        {
+            writer.Line("private readonly global::System.IServiceProvider _services;");
+            writer.Line("private readonly " + Membership + ".Access.MembershipRules _rules;");
+            writer.Line("private readonly " + makeRole + (join.KeptRoleMade is null ? " _makeRole;" : "? _makeRole;"));
+            writer.Line();
+            writer.Line("/// <param name=\"services\">The services of the scope the work runs in.</param>");
+            writer.Line("/// <param name=\"rules\">The rules the resource is registered with.</param>");
+            writer.Line("/// <param name=\"makeRole\">What makes a role, where the application says.</param>");
+            using (writer.Block("public " + name + "(global::System.IServiceProvider services, " + Membership + ".Access.MembershipRules rules, " + makeRole + (join.KeptRoleMade is null ? " makeRole)" : "? makeRole)")))
+            {
+                writer.Line("_services = services;");
+                writer.Line("_rules = rules;");
+                writer.Line("_makeRole = makeRole;");
+            }
+
+            writer.Line();
+            writer.Line("/// <inheritdoc />");
+            using (writer.Block("public async global::System.Threading.Tasks.Task<global::" + Tenancy + ".TenantStarterRolesFollowed> FollowAsync(" + CancellationTokenType + " cancellationToken)"))
+            {
+                writer.Line("var tenant = " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + tenancy + ">(_services).CurrentTenant.Require().Id;");
+                writer.Line("var roles = new " + Membership + ".Managers.CustomRoleManager<" + role + ", " + id + ", " + join.Resource + ">(");
+                writer.Line("    " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + Membership + ".Managers.ICustomRoleStore<" + role + ", " + id + ">>(_services),");
+                writer.Line("    " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + Membership + ".Access.MembershipAccessManager<" + join.Resource + ">>(_services),");
+                writer.Line("    " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<global::DDDToolkit.Abstractions.Access.ICurrentUser>(_services),");
+                writer.Line("    " + Services + ".ServiceProviderServiceExtensions.GetService<" + Membership + ".Managers.ICustomRoleAccess<" + join.Resource + ">>(_services));");
+                writer.Line("var followed = await roles.FollowStarterRolesAsync(");
+                writer.Line(join.KeptRoleMade is null
+                    ? "    draft => _makeRole(_services, tenant, draft),"
+                    : "    draft => _makeRole is { } makeRole ? makeRole(_services, tenant, draft) : " + join.KeptRoleMade + ",");
+                writer.Line("    cancellationToken).ConfigureAwait(false);");
+                writer.Line("return new global::" + Tenancy + ".TenantStarterRolesFollowed(followed.Made.Count, followed.Changed.Count, followed.WithoutTheirStarterRole.Count);");
+            }
+        }
     }
 
     /// <summary>What an id the application names where it registers stands for, as its registration says it.</summary>

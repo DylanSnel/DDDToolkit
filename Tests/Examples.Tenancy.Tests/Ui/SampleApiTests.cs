@@ -180,15 +180,15 @@ public sealed class SampleApiTests
     public async Task A_project_role_reads_its_permissions_only_where_they_were_answered()
     {
         using var stub = StubApi.Answering(HttpStatusCode.OK, """
-            [{"id":"90000000-0000-4000-8000-000000000103","name":"Crew lead","description":"Leads a project crew","madeFrom":"crew-lead","status":"active","permissions":["projects.view","projects.edit"]},
-             {"id":"90000000-0000-4000-8000-000000000106","name":"Diver","description":"","madeFrom":null,"status":"archived","permissions":null}]
+            [{"id":"90000000-0000-4000-8000-000000000103","name":"Crew lead","description":"Leads a project crew","fromStarterRole":"crew-lead","status":"active","permissions":["projects.view","projects.edit"]},
+             {"id":"90000000-0000-4000-8000-000000000106","name":"Diver","description":"","fromStarterRole":null,"status":"archived","permissions":null}]
             """);
         var api = new SampleApi(stub.Client(), SignedIn());
 
         var roles = (await api.ProjectRolesAsync(Cancellation)).Value!;
 
         stub.Requests.Should().ContainSingle().Which.Should().Match<StubRequest>(request => request.Method == "GET" && request.PathAndQuery == "/project-roles");
-        roles.Select(role => (role.Name, role.MadeFrom, role.IsActive, role.Permissions is null, role.PermissionsShown.Count)).Should().Equal(
+        roles.Select(role => (role.Name, role.FromStarterRole, role.IsActive, role.Permissions is null, role.PermissionsShown.Count)).Should().Equal(
             [("Crew lead", "crew-lead", true, false, 2), ("Diver", null, false, true, 0)],
             "permissions the answer left out read as none to show, and not as a role that gives none");
     }
