@@ -211,8 +211,7 @@ public class OwnerRequirementGenerationTests
         // on a resource, the owner in the place of the value.
         var result = OverTheDomain(
             """
-            [RequiresPermission("documents.manage")]
-            public sealed record UnpinCard([OnResource] DocumentId Document, [OrOwn] CardId Card) : IBillingRequest;
+            public sealed record UnpinCard([OnResource("documents.manage")] DocumentId Document, [OrOwn] CardId Card) : IBillingRequest;
             """).RunCore();
 
         result.ShouldCompile();

@@ -1,17 +1,18 @@
 namespace DDDToolkit.Access;
 
 /// <summary>
-/// Says, of the assembly of a package, what <see cref="RequiresPermissionAttribute"/> means on a request that marks no member:
-/// the call that makes the requirement from the permission alone. Tenancy says that a permission without a marker is held for the
-/// whole tenant:
+/// Says, of the assembly of a package, what <see cref="RequiresPermissionAttribute"/> means: the call that makes the
+/// requirement from a permission alone, held without a marker. Tenancy says that such a permission is held for the whole
+/// tenant:
 /// <code>
 /// [assembly: PermissionWithoutMarker(typeof(TenancyAccess), nameof(TenancyAccess.AtTenant))]
 /// </code>
-/// so <c>[RequiresPermission(BillingPermissions.CloseTheBooks)]</c> on its own is <c>TenancyAccess.AtTenant("billing.close-the-books")</c>.
+/// so <c>[RequiresPermission(BillingPermissions.CloseTheBooks)]</c> is <c>TenancyAccess.AtTenant("billing.close-the-books")</c>.
 /// </summary>
 /// <remarks>
 /// One package says it. A project that references none that does, or two that do, cannot tell where a permission without a
-/// marker is held, and there such a request is DDD00080, which asks for a marker.
+/// marker is held. There <c>[RequiresPermission]</c> is DDD00080, which asks for the permission on the marker of where it
+/// is held.
 /// </remarks>
 /// <param name="factory">The class whose static method makes the requirement: <c>typeof(TenancyAccess)</c>.</param>
 /// <param name="method">The method's name: <c>nameof(TenancyAccess.AtTenant)</c>.</param>

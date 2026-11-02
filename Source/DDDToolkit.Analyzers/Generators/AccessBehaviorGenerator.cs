@@ -64,10 +64,11 @@ namespace DDDToolkit.Analyzers;
 /// <para>
 /// <b>What a request requires, from its attributes.</b> A request says what it requires of its caller with an attribute
 /// where the requirement reads no value of the request but a permission and an id it carries: <c>[SignedIn]</c>,
-/// <c>[InTenant]</c>, <c>[RequiresPermission(permission)]</c> with a marker of where the permission is held, <c>[AtUnit]</c> on the unit.
-/// Where the interface is declared <c>partial</c>, the file implements <c>IRequireAccess.RequiredAccess</c> in it, with one
-/// line per request of the project that states its requirement so, the call the attributes stand for written out, and
-/// <c>AccessRequirement.All</c> of the calls, in the order they are written, where several are stacked:
+/// <c>[InTenant]</c>, <c>[RequiresPermission(permission)]</c> for a permission without a marker, and a marker that carries
+/// the permission on the member where it is held, <c>[AtUnit(permission)]</c> on the unit. Where the interface is declared
+/// <c>partial</c>, the file implements <c>IRequireAccess.RequiredAccess</c> in it, with one line per request of the project
+/// that states its requirement so, the call the attributes and markers stand for written out, and
+/// <c>AccessRequirement.All</c> of the calls, in the order they are written, where there are several:
 /// <code>
 /// partial interface IBillingRequest
 /// {

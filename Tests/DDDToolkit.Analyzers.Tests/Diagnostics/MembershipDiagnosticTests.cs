@@ -104,7 +104,7 @@ public class MembershipDiagnosticTests
         }
 
         return host.WithMembershipAlone()
-            .WithAnalyzers(new PermissionsAnalyzer(), new OwnAlternativeAnalyzer())
+            .WithAnalyzers(new PermissionsAnalyzer(), new OnResourceAnalyzer())
             .RunCoreAnd(GeneratorTestHost.MemberListGenerators());
     }
 
@@ -353,9 +353,50 @@ public class MembershipDiagnosticTests
         Message(result, "DDD00097", "UnitId").Should().Contain("'Column' is no aggregate root");
     }
 
-    // ------------------------------------------------------------------ DDD00096: [OrOwn] beside what the owner holds
+    // ------------------------------------------------------------------ a request's [OnResource]: DDD00093 and DDD00096
 
-    private static string Request(string permission)
+    /// <summary>A second resource with members beside the board, an asset, with the one permission declared on it.</summary>
+    private const string Asset =
+        """
+        using System;
+        using System.Collections.Generic;
+        using DDDToolkit.Abstractions.Attributes;
+        using DDDToolkit.Access;
+        using DDDToolkit.Supporting.Membership;
+        using DDDToolkit.Supporting.Membership.Access;
+
+        namespace Shop;
+
+        [EntityId<Guid>] public readonly partial record struct AssetId;
+        [EntityId<Guid>] public readonly partial record struct AssetMemberId;
+
+        [Member<AssetMemberId, UserId, NamedRole, Asset>]
+        public sealed partial class AssetMember;
+
+        [AggregateRoot<AssetId>]
+        public sealed partial class Asset
+        {
+            public Asset(AssetId id, UserId owner, DateTimeOffset now) : base(id)
+            {
+                OwnerId = owner;
+                Members.Open(now);
+            }
+
+            [Owner] public UserId OwnerId { get; private set; }
+
+            public partial IReadOnlyList<AssetMember> AssetMembers { get; }
+        }
+
+        [Permissions]
+        public static class AssetPermissions
+        {
+            /// <summary>Use an asset.</summary>
+            [On<Asset>]
+            public const string Use = "assets.use";
+        }
+        """;
+
+    private static string Request(string parameters)
         => $$"""
              using DDDToolkit.Abstractions.Attributes;
              using DDDToolkit.Access;
@@ -366,22 +407,48 @@ public class MembershipDiagnosticTests
              [AccessRequests]
              public partial interface IBoardsRequest : IRequireAccess;
 
-             [RequiresPermission({{permission}})]
-             public sealed record RenameBoard([OnResource, OrOwn] BoardId Board, string Name) : IBoardsRequest;
+             public sealed record RenameBoard({{parameters}}) : IBoardsRequest;
              """;
+
+    [Fact]
+    public void A_marker_with_a_permission_declared_on_another_resource_is_DDD00093_at_that_marker()
+    {
+        var result = Run(Board(), Permissions, Asset, Request("[OnResource(BoardPermissions.Edit)] BoardId Board, [OnResource(BoardPermissions.Edit)] AssetId Asset"));
+
+        result.Count("DDD00093").Should().Be(1, "the board's marker fits, and only the asset's is reported");
+        Message(result, "DDD00093", "OnResource(BoardPermissions.Edit)").Should()
+            .Be("'RenameBoard' marks 'Asset' [OnResource] with 'boards.edit', which is declared [On<Board>]: the rules of the Asset give only the permissions declared [On<Asset>], so this one lets nobody through. "
+                + "Name a permission declared on the Asset, or mark the id of the resource the permission is declared on");
+    }
+
+    [Fact]
+    public void Markers_with_the_permissions_declared_on_their_resources_are_no_DDD00093()
+    {
+        Run(Board(), Permissions, Asset, Request("[OnResource(BoardPermissions.Edit)] BoardId Board, [OnResource(AssetPermissions.Use)] AssetId Asset"))
+            .ShouldNotHaveDiagnostic("DDD00093");
+    }
 
     [Fact]
     public void OrOwn_on_a_resource_beside_a_permission_its_owner_holds_is_DDD00096()
     {
-        var result = Run(Board(), Permissions, Request("BoardPermissions.Edit"));
+        var result = Run(Board(), Permissions, Request("[OnResource(BoardPermissions.Edit), OrOwn] BoardId Board, string Name"));
 
         Message(result, "DDD00096", "OrOwn").Should()
             .Be("[OrOwn] on 'Board' says nothing more: the owner of the Board holds 'boards.edit' already, which is declared [On<Board>] with Owner = true and is asked on it. Remove [OrOwn].");
     }
 
     [Fact]
+    public void OrOwn_naming_the_resource_beside_its_marker_and_a_permission_its_owner_holds_is_DDD00096_for_that_pair()
+    {
+        var result = Run(Board(), Permissions, Asset, Request("[OnResource(BoardPermissions.Edit), OrOwn<Board>] BoardId Board, [OnResource(AssetPermissions.Use)] AssetId Asset"));
+
+        result.Count("DDD00096").Should().Be(1);
+        Message(result, "DDD00096", "OrOwn<Board>").Should().StartWith("[OrOwn] on 'Board' says nothing more: the owner of the Board holds 'boards.edit' already");
+    }
+
+    [Fact]
     public void OrOwn_on_a_resource_beside_a_permission_its_owner_does_not_hold_is_no_diagnostic()
     {
-        Run(Board(), Permissions, Request("BoardPermissions.HandOn")).ShouldNotHaveDiagnostic("DDD00096");
+        Run(Board(), Permissions, Request("[OnResource(BoardPermissions.HandOn), OrOwn] BoardId Board, string Name")).ShouldNotHaveDiagnostic("DDD00096");
     }
 }

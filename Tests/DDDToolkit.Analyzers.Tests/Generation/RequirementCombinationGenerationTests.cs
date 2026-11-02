@@ -82,13 +82,12 @@ public class RequirementCombinationGenerationTests
     }
 
     [Fact]
-    public void A_key_s_marker_keeps_saying_where_it_is_held_beside_another_attribute()
+    public void A_marker_stacks_after_the_attributes_on_the_request()
     {
         var result = RequirementAttributeGenerationTests.Module(
             """
             [SignedIn]
-            [RequiresPermission("billing.open-ledger")]
-            public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
+            public sealed record OpenLedger(string Name, [AtUnit("billing.open-ledger")] OrganizationUnitId Unit) : IBillingRequest;
             """).RunCore();
 
         result.ShouldCompile();
@@ -146,8 +145,7 @@ public class RequirementCombinationGenerationTests
     {
         var result = RequirementAttributeGenerationTests.Module(
             """
-            [RequiresPermission("documents.manage")]
-            public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] Guid User, [ExpectedVersion] long? ExpectedVersion = null) : IBillingRequest;
+            public sealed record LeaveDocument([OnResource("documents.manage")] DocumentId Document, [OrOwn] Guid User, [ExpectedVersion] long? ExpectedVersion = null) : IBillingRequest;
             """).RunCore();
 
         result.ShouldCompile();

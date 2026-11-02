@@ -146,6 +146,21 @@ public class RequirementAttributeDiagnosticTests
         result.ShouldNotContain("BillingAccessBehavior.", "CloseTheBooks", "no line is written that nothing would read");
     }
 
+    [Fact]
+    public void A_marker_and_the_property_on_one_request_is_DDD00078()
+    {
+        var result = Run(
+            """
+            public sealed record OpenLedger([AtUnit("billing.open-ledger")] OrganizationUnitId Unit) : IBillingRequest
+            {
+                AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtTenant("billing.open-ledger");
+            }
+            """);
+
+        result.ShouldHaveExactlyDiagnostics("DDD00078");
+        Message(result, "DDD00078", at: "OpenLedger").Should().Contain("'OpenLedger' carries 'Unit' [AtUnit] and answers RequiredAccess as well");
+    }
+
     // ------------------------------------------------------------------ DDD00079: [AllowAnonymous] beside nothing else
 
     [Theory]
@@ -162,6 +177,15 @@ public class RequirementAttributeDiagnosticTests
         result.ShouldNotContain("BillingAccessBehavior.", "CloseTheBooks", "no line is written for a request that says two contrary things");
     }
 
+    [Fact]
+    public void AllowAnonymous_beside_a_marker_is_DDD00079()
+    {
+        var result = Run("[AllowAnonymous] public sealed record ReadDocument([OnResource(\"documents.read\")] DocumentId Document) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00079");
+        Message(result, "DDD00079", at: "ReadDocument").Should().Contain("carries [AllowAnonymous] beside 'Document' [OnResource]");
+    }
+
     [Theory]
     [InlineData("[SignedIn, InTenant]")]
     [InlineData("[SignedIn, RequiresPermission(\"billing.close\")]")]
@@ -173,46 +197,46 @@ public class RequirementAttributeDiagnosticTests
         result.ShouldContain("BillingAccessBehavior.", "global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Access.AccessRequirement.All(", "stacked attributes are all of them");
     }
 
-    // ------------------------------------------------------------------ DDD00080: a marker in its place
+    // ------------------------------------------------------------------ DDD00080: a marker carries its permission
+
+    private static GeneratorRunOutcome OverTheDomain(string requests) => RequirementAttributeGenerationTests.OverTheDomain(requests).RunCore();
 
     [Fact]
-    public void A_marker_without_RequiresKey_is_DDD00080()
+    public void A_marker_without_its_permission_is_DDD00080()
     {
-        var result = Run("[InTenant] public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;");
+        var result = Run("[SignedIn] public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
-        Message(result, "DDD00080", at: "AtUnit").Should().Contain("marks 'Unit' [AtUnit], and requires no permission");
+        Message(result, "DDD00080", at: "AtUnit").Should()
+            .Contain("'OpenLedger' marks 'Unit' [AtUnit] and names no permission: the marker carries the permission held where it marks, so write [AtUnit(permission)]");
+        result.ShouldNotContain("BillingAccessBehavior.", "OpenLedger", "no line is written for a marker that names nothing to hold");
     }
 
     [Fact]
-    public void An_abstract_shape_that_marks_the_unit_is_not_DDD00080_and_a_request_that_inherits_it_without_a_permission_is()
+    public void A_marker_without_its_permission_is_DDD00080_on_an_abstract_shape_and_where_it_is_inherited()
     {
-        // The shape is shared, and each request that derives from it says its permission: the one that does not is reported,
-        // where it is declared, since the marker it inherits is the shape's.
+        // A marker is a requirement wherever it is declared, so the shape that declares it is reported, and so is the
+        // request that inherits it, which holds to it as well.
         var result = Run(
             """
             public abstract record UnitCommand([property: AtUnit] OrganizationUnitId Unit) : IBillingRequest;
 
-            [RequiresPermission("billing.open-ledger")]
             public sealed record OpenLedger(OrganizationUnitId Unit) : UnitCommand(Unit);
-
-            [SignedIn]
-            public sealed record PeekLedger(OrganizationUnitId Unit) : UnitCommand(Unit);
             """);
 
-        result.ShouldHaveExactlyDiagnostics("DDD00080");
-        Message(result, "DDD00080", at: "PeekLedger").Should().Contain("'PeekLedger' inherits 'Unit' [AtUnit] from 'UnitCommand', and requires no permission");
+        result.ShouldHaveExactlyDiagnostics("DDD00080", "DDD00080");
+        Message(result, "DDD00080", at: "AtUnit").Should().Contain("'UnitCommand' marks 'Unit' [AtUnit] and names no permission");
+        Message(result, "DDD00080", at: "OpenLedger").Should().Contain("'OpenLedger' inherits 'Unit' [AtUnit] from 'UnitCommand' and names no permission");
     }
 
     [Fact]
-    public void A_request_that_takes_its_base_s_line_is_not_DDD00080_for_the_marker_that_line_reads()
+    public void A_request_that_inherits_a_marker_with_its_permission_is_no_diagnostic()
     {
         var result = Run(
             """
-            [RequiresPermission("billing.open-ledger")]
             public abstract record LedgerCommand : IBillingRequest
             {
-                [AtUnit] public required OrganizationUnitId Unit { get; init; }
+                [AtUnit("billing.open-ledger")] public required OrganizationUnitId Unit { get; init; }
             }
 
             public sealed record OpenLedger : LedgerCommand;
@@ -223,22 +247,24 @@ public class RequirementAttributeDiagnosticTests
     }
 
     [Theory]
-    [InlineData("[AtUnit] OrganizationUnitId Unit, [OnResource] DocumentId Document", "'Unit' [AtUnit] and 'Document' [OnResource]")]
-    [InlineData("[AtUnit] OrganizationUnitId From, [AtUnit] OrganizationUnitId To", "'From' [AtUnit] and 'To' [AtUnit]")]
-    public void Two_markers_of_where_the_permission_is_held_is_DDD00080(string parameters, string named)
+    [InlineData("[AtUnit(\"billing.move\")] OrganizationUnitId From, [AtUnit(\"billing.move\")] OrganizationUnitId To")]
+    [InlineData("[AtUnit(\"billing.move\")] OrganizationUnitId Unit, [OnResource(\"documents.edit\")] DocumentId Document")]
+    [InlineData("[OnResource(\"documents.edit\")] DocumentId First, [OnResource(\"documents.edit\")] DocumentId Second")]
+    public void Two_markers_are_no_diagnostic_and_both_hold(string parameters)
     {
-        var result = Run("[RequiresPermission(\"billing.move\")] public sealed record MoveLedger(" + parameters + ") : IBillingRequest;");
+        var result = Run("public sealed record MoveLedger(" + parameters + ") : IBillingRequest;");
 
-        result.ShouldHaveExactlyDiagnostics("DDD00080");
-        result.ReportedDiagnostics.Single().GetMessage(CultureInfo.InvariantCulture).Should().Contain("marks where its permission is held more than once, " + named);
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain("BillingAccessBehavior.", "global::Shop.Billing.MoveLedger request => global::DDDToolkit.Access.AccessRequirement.All(");
     }
 
     [Theory]
-    [InlineData("[AtUnit] OrganizationUnitId Unit, [ExpectedVersion] long? ExpectedVersion = null", "beside [AtUnit]")]
+    [InlineData("[AtUnit(\"billing.close\")] OrganizationUnitId Unit, [ExpectedVersion] long? ExpectedVersion = null", "beside [AtUnit]")]
     [InlineData("int Number, [ExpectedVersion] long? ExpectedVersion = null", "without a marker")]
     public void The_version_without_a_resource_is_DDD00080(string parameters, string where)
     {
-        var result = Run("[RequiresPermission(\"billing.close\")] public sealed record CloseLedger(" + parameters + ") : IBillingRequest;");
+        var result = Run("[SignedIn] public sealed record CloseLedger(" + parameters + ") : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "ExpectedVersion").Should()
@@ -246,30 +272,66 @@ public class RequirementAttributeDiagnosticTests
     }
 
     [Fact]
-    public void The_version_marked_twice_is_DDD00080()
+    public void The_bare_version_beside_markers_on_two_kinds_of_resource_is_DDD00080_and_names_the_generic_form()
     {
-        var result = Run("[RequiresPermission(\"documents.share\")] public sealed record ShareDocument([OnResource] DocumentId Document, [ExpectedVersion] long? Read, [ExpectedVersion] long? Seen) : IBillingRequest;");
+        var result = OverTheDomain("public sealed record FileDocument([OnResource(\"documents.edit\")] DocumentId Document, [OnResource(\"folders.file\")] FolderId Folder, [ExpectedVersion] long? Version = null) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
-        result.ReportedDiagnostics.Single().GetMessage(CultureInfo.InvariantCulture).Should().Contain("marks 'Read' and 'Seen' [ExpectedVersion]: the call takes it once");
+        Message(result, "DDD00080", at: "ExpectedVersion").Should()
+            .Be("'FileDocument' marks 'Version' [ExpectedVersion] beside 'Document' [OnResource] and 'Folder' [OnResource]: name the resource whose marker it goes with, [ExpectedVersion<Document>] or [ExpectedVersion<Folder>]");
+        result.ShouldNotContain("BillingAccessBehavior.", "FileDocument");
+    }
+
+    [Theory]
+    [InlineData("ExpectedVersion")]
+    [InlineData("ExpectedVersion<Document>")]
+    public void The_version_beside_two_markers_on_one_kind_of_resource_is_DDD00080_and_asks_for_RequiredAccess(string version)
+    {
+        var result = OverTheDomain("public sealed record MergeDocuments([OnResource(\"documents.edit\")] DocumentId Into, [OnResource(\"documents.edit\")] DocumentId From, [" + version + "] long? Version = null) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00080");
+        Message(result, "DDD00080", at: version).Should()
+            .Contain("marks 'Version' [" + version + "] beside 'Into' [OnResource] and 'From' [OnResource], two markers of one kind: which call it goes to cannot be told, so write RequiredAccess");
+    }
+
+    [Fact]
+    public void The_version_naming_a_resource_no_marker_is_on_is_DDD00080()
+    {
+        var result = OverTheDomain("public sealed record EditDocument([OnResource(\"documents.edit\")] DocumentId Document, [ExpectedVersion<Folder>] long? Version = null) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00080");
+        Message(result, "DDD00080", at: "ExpectedVersion<Folder>").Should()
+            .Contain("marks 'Version' [ExpectedVersion<Folder>], which goes with [OnResource] on a 'Folder', and marks no member [OnResource] on the id of 'Folder'");
+    }
+
+    [Fact]
+    public void The_version_marked_twice_is_DDD00080_bare_or_named()
+    {
+        var bare = Run("public sealed record ShareDocument([OnResource(\"documents.share\")] DocumentId Document, [ExpectedVersion] long? Read, [ExpectedVersion] long? Seen) : IBillingRequest;");
+        bare.ShouldHaveExactlyDiagnostics("DDD00080");
+        bare.ReportedDiagnostics.Single().GetMessage(CultureInfo.InvariantCulture).Should().Contain("marks 'Read' and 'Seen' [ExpectedVersion]: the call takes it once");
+
+        var both = OverTheDomain("public sealed record ShareDocument([OnResource(\"documents.share\")] DocumentId Document, [ExpectedVersion] long? Read, [ExpectedVersion<Document>] long? Seen) : IBillingRequest;");
+        both.ShouldHaveExactlyDiagnostics("DDD00080");
+        both.ReportedDiagnostics.Single().GetMessage(CultureInfo.InvariantCulture).Should().Contain("marks 'Read' and 'Seen' [ExpectedVersion]: the call takes it once", "the bare and the named form are one argument");
     }
 
     [Fact]
     public void A_marker_on_a_parameter_of_a_class_s_constructor_is_DDD00080()
     {
-        var result = Run("[RequiresPermission(\"billing.open\")] public sealed class OpenLedger([AtUnit] OrganizationUnitId unit) : IBillingRequest { public OrganizationUnitId Unit { get; } = unit; }");
+        var result = Run("public sealed class OpenLedger([AtUnit(\"billing.open\")] OrganizationUnitId unit) : IBillingRequest { public OrganizationUnitId Unit { get; } = unit; }");
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
-        Message(result, "DDD00080", at: "AtUnit").Should().Contain("marks the parameter 'unit' of its constructor [AtUnit], which is no property the requirement can read");
+        Message(result, "DDD00080", at: "AtUnit(\"billing.open\")").Should().Contain("marks the parameter 'unit' of its constructor [AtUnit], which is no property the requirement can read");
     }
 
     [Fact]
     public void A_marker_on_a_property_the_interface_cannot_read_is_DDD00080()
     {
-        var result = Run("[RequiresPermission(\"billing.open\")] public sealed class OpenLedger : IBillingRequest { [AtUnit] private OrganizationUnitId Unit { get; } }");
+        var result = Run("public sealed class OpenLedger : IBillingRequest { [AtUnit(\"billing.open\")] private OrganizationUnitId Unit { get; } }");
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
-        Message(result, "DDD00080", at: "AtUnit").Should().Contain("which 'IBillingRequest', where the requirement is written, cannot read");
+        Message(result, "DDD00080", at: "AtUnit(\"billing.open\")").Should().Contain("which 'IBillingRequest', where the requirement is written, cannot read");
     }
 
     [Fact]
@@ -288,16 +350,16 @@ public class RequirementAttributeDiagnosticTests
 
                 [RequiresPermission("documents.read")] public sealed record ReadAll : IBillingRequest;
 
-                [RequiresPermission("documents.read")] public sealed record ReadOne([OnResource] DocumentId Document) : IBillingRequest;
+                public sealed record ReadOne([OnResource("documents.read")] DocumentId Document) : IBillingRequest;
                 """,
                 "Requests.cs")
             .WithDependencyInjection()
             .RunCore();
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
-        Message(result, "DDD00080", at: "ReadAll").Should()
-            .Contain("requires a permission and marks no member of where it is held, and no package this project references says where a permission without a marker is held")
-            .And.Contain("[OnResource]");
+        Message(result, "DDD00080", at: "RequiresPermission(\"documents.read\")").Should()
+            .Contain("'ReadAll' carries [RequiresPermission], a permission without a marker, and no package this project references says where a permission without a marker is held")
+            .And.Contain("[OnResource(permission)]");
     }
 
     // ------------------------------------------------------------------ DDD00081: the id it marks
@@ -305,31 +367,41 @@ public class RequirementAttributeDiagnosticTests
     [Fact]
     public void A_unit_marked_on_another_id_is_DDD00081_where_the_unit_class_is_seen()
     {
-        var result = RequirementAttributeGenerationTests.OverTheDomain("[RequiresPermission(\"billing.open\")] public sealed record OpenLedger([AtUnit] SeatId Unit) : IBillingRequest;").RunCore();
+        var result = OverTheDomain("public sealed record OpenLedger([AtUnit(\"billing.open\")] SeatId Unit) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00081");
-        Message(result, "DDD00081", at: "AtUnit").Should()
+        Message(result, "DDD00081", at: "AtUnit(\"billing.open\")").Should()
             .Be("'OpenLedger' marks 'Unit' [AtUnit], which is a 'SeatId': it marks 'OrganizationUnitId', the id of the [OrganizationUnit<TUnitId>] class this project sees");
     }
 
     [Fact]
     public void A_resource_marked_on_another_id_is_DDD00081_where_a_member_class_is_seen()
     {
-        var result = RequirementAttributeGenerationTests.OverTheDomain("[RequiresPermission(\"documents.share\")] public sealed record ShareDocument([OnResource] SeatId Document) : IBillingRequest;").RunCore();
+        var result = OverTheDomain("public sealed record ShareDocument([OnResource(\"documents.share\")] SeatId Document) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00081");
-        Message(result, "DDD00081", at: "OnResource").Should()
-            .Contain("which is a 'SeatId': it marks 'DocumentId', the id of the TResource of the [Member<TId, TMemberId, TRoleId, TResource>] class this project sees");
+        Message(result, "DDD00081", at: "OnResource(\"documents.share\")").Should()
+            .Contain("which is a 'SeatId': it marks 'DocumentId' and 'FolderId', the ids of the TResource of the [Member<TId, TMemberId, TRoleId, TResource>] classes this project sees");
+    }
+
+    [Fact]
+    public void Each_marker_is_held_to_the_id_it_marks()
+    {
+        var result = OverTheDomain("public sealed record MoveLedger([AtUnit(\"billing.move\")] OrganizationUnitId From, [AtUnit(\"billing.move\")] SeatId To) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00081");
+        result.ReportedDiagnostics.Single().GetMessage(CultureInfo.InvariantCulture).Should().StartWith("'MoveLedger' marks 'To' [AtUnit], which is a 'SeatId'");
     }
 
     [Fact]
     public void The_right_ids_over_the_domain_are_not_reported_and_compile()
     {
-        var result = RequirementAttributeGenerationTests.OverTheDomain(
+        var result = OverTheDomain(
             """
-            [RequiresPermission("billing.open")] public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;
-            [RequiresPermission("documents.share")] public sealed record ShareDocument([OnResource] DocumentId Document, [ExpectedVersion] long? ExpectedVersion = null) : IBillingRequest;
-            """).RunCore();
+            public sealed record OpenLedger([AtUnit("billing.open")] OrganizationUnitId Unit) : IBillingRequest;
+            public sealed record ShareDocument([OnResource("documents.share")] DocumentId Document, [ExpectedVersion] long? ExpectedVersion = null) : IBillingRequest;
+            public sealed record FileDocument([OnResource("documents.edit")] DocumentId Document, [OnResource("folders.file")] FolderId Folder, [ExpectedVersion<Folder>] long? ExpectedVersion = null) : IBillingRequest;
+            """);
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
@@ -338,7 +410,7 @@ public class RequirementAttributeDiagnosticTests
     [Fact]
     public void Where_no_unit_class_is_seen_nothing_can_be_told_and_the_check_says_it_when_sent()
     {
-        var result = Run("[RequiresPermission(\"billing.open\")] public sealed record OpenLedger([AtUnit] SeatId Unit) : IBillingRequest;");
+        var result = Run("public sealed record OpenLedger([AtUnit(\"billing.open\")] SeatId Unit) : IBillingRequest;");
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
@@ -347,16 +419,16 @@ public class RequirementAttributeDiagnosticTests
     [Fact]
     public void A_unit_that_may_be_null_is_DDD00081_and_asks_for_the_property()
     {
-        var result = Run("[RequiresPermission(\"billing.read\")] public sealed record ListLedgers([AtUnit] OrganizationUnitId? Unit) : IBillingRequest;");
+        var result = Run("public sealed record ListLedgers([AtUnit(\"billing.read\")] OrganizationUnitId? Unit) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00081");
-        Message(result, "DDD00081", at: "AtUnit").Should().Contain("which is 'OrganizationUnitId?' and may be null: a requirement computed from whether it is given is written as RequiredAccess");
+        Message(result, "DDD00081", at: "AtUnit(\"billing.read\")").Should().Contain("which is 'OrganizationUnitId?' and may be null: a requirement computed from whether it is given is written as RequiredAccess");
     }
 
     [Fact]
     public void A_version_of_another_type_is_DDD00081()
     {
-        var result = Run("[RequiresPermission(\"documents.share\")] public sealed record ShareDocument([OnResource] DocumentId Document, [ExpectedVersion] string ExpectedVersion) : IBillingRequest;");
+        var result = Run("public sealed record ShareDocument([OnResource(\"documents.share\")] DocumentId Document, [ExpectedVersion] string ExpectedVersion) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00081");
         Message(result, "DDD00081", at: "ExpectedVersion").Should().Contain("which is a 'string': the call takes a 'long?' there");

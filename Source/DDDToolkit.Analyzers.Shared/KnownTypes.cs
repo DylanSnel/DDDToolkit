@@ -147,10 +147,10 @@ internal static class KnownTypes
     /// </summary>
     public const string StatesRequirementAttribute = "DDDToolkit.Access.StatesRequirementAttribute";
 
-    /// <summary>On a request: the key its caller holds, where a marker on one of its members says, or for the whole tenant.</summary>
+    /// <summary>On a request: a permission its caller holds without a marker, where a package says, for the whole tenant on Tenancy's.</summary>
     public const string RequiresPermissionAttribute = "DDDToolkit.Access.RequiresPermissionAttribute";
 
-    /// <summary>On an attribute a package ships: it marks where the key of <c>[RequiresPermission]</c> is held, and names the call.</summary>
+    /// <summary>On an attribute a package ships: a marker of where the permission it carries is held, and the call it stands for.</summary>
     public const string PermissionMarkerAttribute = "DDDToolkit.Access.PermissionMarkerAttribute";
 
     /// <summary>On an attribute a package ships: it marks one more argument of a key marker's call, such as the version read.</summary>
@@ -171,8 +171,11 @@ internal static class KnownTypes
     /// <summary>On a member of an <c>[OwnOnly]</c> request: the value compared with the caller's own.</summary>
     public const string OwnAttribute = "DDDToolkit.Access.OwnAttribute";
 
-    /// <summary>On a member of a request that requires a key: the caller's own, which the key is the alternative of.</summary>
+    /// <summary>On a member of a request with one permission: the caller's own, which the permission is the alternative of.</summary>
     public const string OrOwnAttribute = "DDDToolkit.Access.OrOwnAttribute";
+
+    /// <summary>On a member of a request with several permissions: the caller's own, the alternative of the permission on the resource it names.</summary>
+    public const string OrOwnOfResourceAttribute = "DDDToolkit.Access.OrOwnAttribute`1";
 
     /// <summary>On a package's assembly: a type its handle says the caller's own of, or a template whose classes' ids it is.</summary>
     public const string OwnedByCurrentUserAttribute = "DDDToolkit.Access.OwnedByCurrentUserAttribute";
