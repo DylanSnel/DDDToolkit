@@ -4447,6 +4447,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   after that migration. The export has written these files since row access rules came to it in 3.0.0. See
   [Row access rules in the build](docs/supabase.md#row-access-rules-in-the-build).
 
+- **The Supabase export writes no access file from a model its migrations do not make yet.** The access file is
+  written from the context's model, and the migrations make the tables. A property added before its migration got a
+  grant in the next build. After an upgrade to 3.2.0-preview.9, which added `PermissionsFromStarterRole` to
+  `CustomRoleAggregate`, a module's access file granted `UPDATE` on that column of its role table. The migration that
+  adds the column came later, so its file sorted after the access file, and `supabase migration up` failed on the
+  grant. The export now asks Entity Framework whether the model has changes that the migrations' model snapshot
+  lacks. While a context has such changes, the export writes no access file for any module it exports. It reports
+  each file it would have written as `Deferred`, in `SupabaseMigrationStatus`, and names the contexts in
+  `SupabaseMigrationReport.ContextsWithPendingModelChanges`. The build warns with DDD00108, and `Check` does not
+  fail. The build after `dotnet ef migrations add` writes the access files, numbered after the new migration. A
+  context whose migrations have no model snapshot is exported as before. An access file that an earlier build wrote
+  before its migration stays in the directory. Delete it where it was never applied, since the export wrote another
+  one after the migration. See [DDD00108](docs/diagnostics.md#ddd00108).
+
 - **Tenancy's messages about system work name a call that compiles.** System work asked about outside any tenant,
   or a tenant provisioned from inside one, told you to begin `TenancyWork.BeginSystemIn(tenant)` or
   `TenancyWork.BeginSystem()`, which do not compile: C# infers no id that is not an argument. They now name

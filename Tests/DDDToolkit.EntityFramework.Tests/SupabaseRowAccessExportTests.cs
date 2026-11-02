@@ -5,6 +5,8 @@ using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using LabelledCrateContext = DDDToolkit.EntityFramework.Tests.Infrastructure.Labelled.SupabaseCrateContext;
 
 namespace DDDToolkit.EntityFramework.Tests;
 
@@ -207,6 +209,76 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         reports[1].Entries.Should().BeEmpty();
         AccessFiles().Should().Equal("20260925160000_access.shelves.ddd.sql");
         File.ReadAllText(Path.Combine(_directory, AccessFiles()[0])).Should().NotContain("\"drafts\"", "the file of one module says nothing of another's tables");
+    }
+
+    private static readonly RowAccessRule CratesByName = RowAccessRule.For<SupabaseCrate>(
+        "Crates by name", RowOperations.All, "({col:Name} IS NOT DISTINCT FROM {user:claim:crate})");
+
+    private SupabaseMigrationReport ExportCrates(bool labelled, DateTimeOffset? now = null)
+    {
+        using DbContext context = labelled ? LabelledCrateContext.Create() : SupabaseCrateContext.Create();
+        return SupabaseMigrations.Export(context, _directory, Options(now, [CratesByName]));
+    }
+
+    [Fact]
+    public void A_model_its_migrations_make_gets_its_access_file_with_a_grant_on_each_column_that_may_change()
+    {
+        // The snapshot is the model, so nothing waits. Without this, the tests below could pass on a snapshot that
+        // differs from the model in some other way.
+        var report = ExportCrates(labelled: false);
+
+        report.ContextsWithPendingModelChanges.Should().BeEmpty();
+        AccessFiles().Should().Equal("20260925160000_access.supabasecrate.ddd.sql");
+        File.ReadAllText(Path.Combine(_directory, AccessFiles()[0])).Should().Contain("GRANT UPDATE (\"Name\") ON TABLE \"public\".\"Crates\" TO authenticated;");
+    }
+
+    [Fact]
+    public void A_property_the_latest_migration_lacks_gets_no_grant()
+    {
+        // A package upgrade or a change in the code adds a property, and a build runs before dotnet ef migrations add,
+        // which builds the project too. The access file is written from the model, so one written now would grant
+        // UPDATE on a column no migration has made. The migration that adds it would sort after the file, and
+        // Supabase would run the grant first and fail.
+        var report = ExportCrates(labelled: true);
+
+        Directory.GetFiles(_directory).Select(File.ReadAllText).Should().NotContain(sql => sql.Contains("\"Label\""), "no migration has made the column");
+        AccessFiles().Should().BeEmpty();
+        Directory.GetFiles(_directory).Select(Path.GetFileName).Should().Equal($"{CreateCrates.Id}.supabasecrate.ddd.sql");
+        report.ContextsWithPendingModelChanges.Should().Equal("SupabaseCrateContext");
+        report.Entries.Should().ContainSingle(entry => entry.Status == SupabaseMigrationStatus.Deferred)
+            .Which.Path.Should().EndWith("_access.supabasecrate.ddd.sql");
+        report.IsInSync.Should().BeTrue("the directory says what the migrations make; the build warns instead (DDD00108)");
+    }
+
+    [Fact]
+    public void An_access_file_written_before_the_property_came_is_not_followed_by_one_that_grants_its_column()
+    {
+        // As after an upgrade that adds a property: the module has its access file, and the model now says another.
+        ExportCrates(labelled: false);
+
+        var report = ExportCrates(labelled: true, now: new DateTimeOffset(2026, 9, 26, 9, 0, 0, TimeSpan.Zero));
+
+        report.Entries[^1].Status.Should().Be(SupabaseMigrationStatus.Deferred);
+        AccessFiles().Should().Equal("20260925160000_access.supabasecrate.ddd.sql");
+        File.ReadAllText(Path.Combine(_directory, AccessFiles()[0])).Should().NotContain("Label");
+
+        using var context = LabelledCrateContext.Create();
+        SupabaseMigrations.Compare(context, _directory, Options(null, [CratesByName])).IsInSync.Should().BeTrue("a check in CI waits for the migration as well");
+    }
+
+    [Fact]
+    public void A_model_ahead_of_its_migrations_holds_back_the_access_files_of_every_module_exported_with_it()
+    {
+        // Another module's file may call a function the waiting file makes, and would come before it.
+        var reports = SupabaseMigrations.Export(
+            [SupabaseMigrationSource.For(() => SupabaseShelfContext.Create(), "shelves"), SupabaseMigrationSource.For(() => LabelledCrateContext.Create(), "crates")],
+            _directory,
+            Options(null, [ShelvesByName, CratesByName]));
+
+        reports.Should().OnlyContain(report => report.IsInSync);
+        reports.Should().OnlyContain(report => report.ContextsWithPendingModelChanges.SequenceEqual(new[] { "SupabaseCrateContext" }));
+        reports.Select(report => report.Entries[^1].Status).Should().Equal(SupabaseMigrationStatus.Deferred, SupabaseMigrationStatus.Deferred);
+        AccessFiles().Should().BeEmpty();
     }
 
     [Fact]

@@ -935,4 +935,13 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "For an interface marked [AccessRequests], the generator writes an access behavior and the method that registers it. The method is declared in the namespace of the interface, so code outside that namespace needs a using directive for it. The generator writes the method only in a project that references the Mediator library. In both cases the compiler reports CS1061, which names neither cause. This diagnostic is reported beside CS1061, at the same call, and names the cause. A project without the library may also remove the call and ask AccessChecks<TRequests>.RequireAsync itself. Such a project writes no call, so nothing is reported there.");
+
+    public static readonly DiagnosticDescriptor AccessFilesWaitForMigration = Create(
+        id: "DDD00108",
+        title: "The migrations make the model the access files are written from",
+        messageFormat: "The model of {0} has changes no migration makes yet, so the build writes no access file. A file written now would name columns and tables that no migration has made, and would come before the migration that makes them. Add the migration with dotnet ef migrations add, and the next build writes the access files after it.",
+        category: Supabase,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The Supabase export writes each module's access file from its context's model: the policies, and the privileges, with UPDATE granted per column. The migrations make the tables, and a migration is added after the model changes, with dotnet ef migrations add, which builds the project first. An access file written in a build between the two would grant a column or make a policy on a table no migration has made yet, and the migration added after it would sort after the file, so Supabase would apply the file first and fail. So while the model of a context has changes its migrations do not make, as Entity Framework finds by comparing the model with the migrations' model snapshot, the export writes no access file, for any module it exports: one module's file may call a function another's makes. It reports each file it would have written as Deferred, and says once, in that build, which contexts have the changes. The migrations' own files are written as always. The build after the migration writes the access files, after it. A context whose migrations have no snapshot, such as hand-written ones, is taken to have no such changes. Nothing is said where no access file waits, such as a change that leaves every access file as it is.");
 }

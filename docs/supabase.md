@@ -298,6 +298,7 @@ So the report, and `EnsureInSync`, lists each problem:
 | `Changed` | The file differs from what the migration generates now. If the file was never applied anywhere, delete it and export again. Otherwise make the change in a new migration. |
 | `VersionTaken` | Another file already has this timestamp. |
 | `Orphaned` | An exported file whose migration is gone, usually after `dotnet ef migrations remove`. |
+| `Deferred` | An access file that waits for a migration, because the model has changes no migration makes yet ([DDD00108](diagnostics.md#ddd00108)). It counts as in sync. |
 
 The comparison ignores line endings and the Entity Framework version in the history insert. So a checkout with
 `\r\n` line endings, or an Entity Framework update, does not mark every file as changed. Files you wrote yourself,
@@ -921,6 +922,15 @@ say. No migration has made the module's tables yet, so a policy on them would fa
 The module's first migration would also sort after such a file, because Entity Framework names a migration after
 the time you add it. So the build writes nothing for the module, and `Check` asks for nothing. The build after the
 first migration writes the module's access file, numbered after that migration.
+
+**A model ahead of its migrations gets no new access file.** The build writes the access file from the context's
+model, and the migrations make the tables. A property you add before its migration would get a grant on a column
+that no migration has made. A package upgrade can add such a property too. The migration is added later, so its
+file would sort after the access file, and Supabase would fail on the grant. So while a context's model has changes
+that its migrations do not make, the build writes no access file for any module. Entity Framework finds those
+changes by comparing the model with the migrations' model snapshot, as `dotnet ef migrations add` does. The build
+reports each access file it holds back as `Deferred` and warns with [DDD00108](diagnostics.md#ddd00108). The build
+after `dotnet ef migrations add` writes the access files, numbered after the new migration.
 
 The [access functions](row-level-security.md#access-functions) that a module's rules
 call go into the access file of the module that maps their aggregate, before its policies. That file comes before the

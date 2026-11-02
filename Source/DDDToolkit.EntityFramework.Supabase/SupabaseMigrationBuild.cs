@@ -414,6 +414,11 @@ public static partial class SupabaseMigrationBuild
                 output.WriteLine("warning " + namesChanged);
             }
 
+            if (AccessDeferred(reports) is { } deferred)
+            {
+                output.WriteLine("warning " + deferred);
+            }
+
             if (reports.All(report => report.IsInSync))
             {
                 return 0;
@@ -526,6 +531,23 @@ public static partial class SupabaseMigrationBuild
         return "DDD00090: Membership names changed since the last access file. Gone: " + Listed(renamed.Where(each => each.Gone), "was ")
                + ". New: " + Listed(renamed.Where(each => !each.Gone), string.Empty)
                + ". Codes clients read change with them, and the database gets new functions. A class you renamed keeps its old name with [Members(\"...\")].";
+    }
+
+    /// <summary>
+    /// DDD00108, once for the build, where an access file waits for a migration: the model of a context has changes its
+    /// migrations do not make yet, and the file would name columns and tables no migration has made. It names the
+    /// contexts. <see langword="null"/> where no access file waits.
+    /// </summary>
+    internal static string? AccessDeferred(IReadOnlyList<SupabaseMigrationReport> reports)
+    {
+        if (!reports.SelectMany(report => report.Entries).Any(entry => entry.Status == SupabaseMigrationStatus.Deferred))
+        {
+            return null;
+        }
+
+        var contexts = reports.SelectMany(report => report.ContextsWithPendingModelChanges).Distinct(StringComparer.Ordinal).ToList();
+        var named = contexts.Count == 1 ? "The model of " + contexts[0] + " has" : "The models of " + string.Join(", ", contexts) + " have";
+        return $"DDD00108: {named} changes no migration makes yet, so the build writes no access file. A file written now would name columns and tables that no migration has made, and would come before the migration that makes them. Add the migration with dotnet ef migrations add, and the next build writes the access files after it.";
     }
 
     /// <summary>

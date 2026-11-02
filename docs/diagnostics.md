@@ -107,6 +107,7 @@ problem, and the fix.
 | [DDD00105](#ddd00105) | Warning | [Operator] on a query names no tenant and no scope |
 | [DDD00106](#ddd00106) | Info | A member or role manager is not written |
 | [DDD00107](#ddd00107) | Error | The registration of an access behavior is written and in scope where it is called |
+| [DDD00108](#ddd00108) | Warning | The migrations make the model the access files are written from |
 
 The Meaning column is the title the IDE shows for each id.
 
@@ -127,6 +128,7 @@ rules, by topic:
   [DDD00073](#ddd00073): the [Supabase export](supabase.md). They catch a module's migrations or a package's
   policies that never reach Supabase, that are written from settings the host does not run with, or that are
   written twice. They also catch migration files that a class rename would write a second time.
+  [DDD00108](#ddd00108) reports access files that wait until the migrations make the model.
 - [DDD00032](#ddd00032): [Relay node ids](graphql.md#relay-node-ids). It catches a node id that stores nothing.
 - [DDD00062](#ddd00062): [a field for one schema only](graphql.md#a-field-for-one-schema-only). It catches an
   administration field that every schema offers.
@@ -3975,6 +3977,39 @@ that reason the diagnostic is on the call and not on the interface.
 DDD00107 comes from an analyzer. It is an error because the call does not compile in either case. In a project that
 references the library, an interface without a behavior is [DDD00056](#ddd00056) or [DDD00057](#ddd00057), and DDD00107
 is not reported beside them.
+
+## DDD00108
+
+**The migrations make the model the access files are written from.**
+
+```text
+warning DDD00108: The model of OrderingContext has changes no migration makes yet, so the build writes no access
+file. A file written now would name columns and tables that no migration has made, and would come before the
+migration that makes them. Add the migration with dotnet ef migrations add, and the next build writes the access
+files after it.
+```
+
+The Supabase export writes each module's [access file](supabase.md#row-access-rules-in-the-build) from the context's
+model. The file grants `UPDATE` on each column that may change, and its policies name the module's tables. The
+Entity Framework migrations make those tables and columns.
+
+A migration comes after the change to the model. You add a property, and then you run `dotnet ef migrations add`. A
+package upgrade can add a property as well. Every build between the two runs the export. An access file written in
+such a build grants a column that no migration has made. The migration that makes the column is added later, so its
+file sorts after the access file. Supabase applies the access file first, and the grant fails.
+
+So the export asks Entity Framework whether the model has changes that the migrations do not make. Entity Framework
+compares the model with the migrations' model snapshot, as `dotnet ef migrations add` does. While a context has
+such changes, the export writes no access file. It reports each file it would have written as `Deferred`, and the
+build gives this warning once. The files of the migrations themselves are still written. The access files of the
+other modules wait as well, because one module's file can call a function that another module's file makes.
+
+Add the migration with `dotnet ef migrations add`. The next build writes the file of the migration, and then the
+access files, numbered after it.
+
+The warning is given only where an access file waits. A change that leaves every access file as it was needs no
+new file. `Check` gives the same warning and does not fail. A context whose migrations have no model snapshot, such
+as migrations written by hand, is taken to have no such changes.
 
 ## Building the model fails: the owned type must carry the key part
 

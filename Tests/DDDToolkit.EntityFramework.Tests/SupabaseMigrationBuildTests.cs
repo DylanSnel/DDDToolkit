@@ -3,6 +3,7 @@ using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
+using LabelledCrateContext = DDDToolkit.EntityFramework.Tests.Infrastructure.Labelled.SupabaseCrateContext;
 
 namespace DDDToolkit.EntityFramework.Tests;
 
@@ -73,6 +74,25 @@ public sealed class SupabaseMigrationBuildTests : IDisposable
         output.Should().NotContain(".drafts.ddd.sql");
         Directory.GetFiles(Migrations).Select(Path.GetFileName).Should().HaveCount(3).And.NotContain(name => name!.Contains("drafts", StringComparison.Ordinal));
         Run("Check", Shelves, drafts).ExitCode.Should().Be(0, "nothing of the module is missing until it has a migration");
+    }
+
+    [Fact]
+    public void A_model_ahead_of_its_migrations_is_a_warning_that_names_the_context_and_fails_neither_write_nor_check()
+    {
+        // dotnet ef migrations add builds the project before it adds the migration, so that build must not fail.
+        Directory.CreateDirectory(Path.Combine(_project, "src", "Host"));
+        var crates = SupabaseMigrationSource.For(() => LabelledCrateContext.Create(), "crates");
+
+        var (exitCode, output) = Run("Write", Shelves, crates);
+
+        exitCode.Should().Be(0);
+        output.Should().Contain("Deferred     _access.supabaseshelf.ddd.sql", "the shelves' outbox has privileges to write, and waits with the crates");
+        output.Should().Contain("warning DDD00108: The model of SupabaseCrateContext has changes no migration makes yet, so the build writes no access file.");
+        Directory.GetFiles(Migrations).Select(Path.GetFileName).Should().NotContain(name => name!.Contains("_access.", StringComparison.Ordinal));
+        Run("Check", Shelves, crates).ExitCode.Should().Be(0);
+
+        var after = Run("Write", Shelves, SupabaseMigrationSource.For(() => SupabaseCrateContext.Create(), "crates"));
+        after.Output.Should().NotContain("DDD00108").And.Contain("Created      ");
     }
 
     [Fact]

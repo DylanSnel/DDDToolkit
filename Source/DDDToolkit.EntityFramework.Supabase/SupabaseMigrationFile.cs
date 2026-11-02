@@ -55,6 +55,15 @@ public enum SupabaseMigrationStatus
     /// anything, so remove it yourself if it was never applied anywhere.
     /// </summary>
     Orphaned,
+
+    /// <summary>
+    /// The module's file of row access rules waits for a migration: the model of a context of the export has changes
+    /// its migrations do not make yet, such as a property added since the last <c>dotnet ef migrations add</c>. A file
+    /// written now would grant columns and make policies on tables no migration has made, and the migration that makes
+    /// them, added later, would sort after it. The export writes nothing, and the export after that migration writes
+    /// the file. Not a problem by itself: the build says it as a warning (DDD00108).
+    /// </summary>
+    Deferred,
 }
 
 /// <summary>What happened to, or would happen to, one migration's file.</summary>
@@ -72,12 +81,23 @@ public sealed record RenamedResource(string Name, string? Class, bool Gone);
 /// <summary>Every migration's standing against one Supabase migrations directory.</summary>
 public sealed class SupabaseMigrationReport
 {
-    internal SupabaseMigrationReport(string directory, IReadOnlyList<SupabaseMigrationEntry> entries, IReadOnlyList<RenamedResource>? renamed = null)
+    internal SupabaseMigrationReport(string directory, IReadOnlyList<SupabaseMigrationEntry> entries, IReadOnlyList<RenamedResource>? renamed = null, IReadOnlyList<string>? contextsWithPendingModelChanges = null)
     {
         Directory = directory;
         Entries = entries;
         Renamed = renamed ?? [];
+        ContextsWithPendingModelChanges = contextsWithPendingModelChanges ?? [];
     }
+
+    /// <summary>
+    /// The contexts of the export whose models have changes their migrations do not make yet, by the name of their
+    /// type: what <c>dotnet ef migrations add</c> would put in a new migration. While one is listed, the export writes
+    /// no access file, and one it would have written is <see cref="SupabaseMigrationStatus.Deferred"/>: a module's
+    /// access file may call the functions another module's makes. Empty where every model is what its migrations
+    /// make. A context whose migrations have no model snapshot, such as hand-written ones, is never listed, since
+    /// nothing says what its migrations make.
+    /// </summary>
+    public IReadOnlyList<string> ContextsWithPendingModelChanges { get; }
 
     /// <summary>
     /// The resources with members whose names in the code are not those the newest access file of the module
@@ -96,13 +116,14 @@ public sealed class SupabaseMigrationReport
 
     /// <summary>
     /// Whether the directory needs no attention: every migration has its file, as generated, and there is
-    /// no file left behind by a migration that is gone. A file the export has just written counts.
+    /// no file left behind by a migration that is gone. A file the export has just written counts, and so does an
+    /// access file that waits for a migration: the directory says what the migrations make.
     /// </summary>
-    public bool IsInSync => Entries.All(e => e.Status is SupabaseMigrationStatus.Unchanged or SupabaseMigrationStatus.Created);
+    public bool IsInSync => Entries.All(e => e.Status is SupabaseMigrationStatus.Unchanged or SupabaseMigrationStatus.Created or SupabaseMigrationStatus.Deferred);
 
     /// <summary>The files the export wrote.</summary>
     public IEnumerable<SupabaseMigrationEntry> Created => Entries.Where(e => e.Status == SupabaseMigrationStatus.Created);
 
     /// <summary>The entries that need someone to look at them.</summary>
-    public IEnumerable<SupabaseMigrationEntry> Problems => Entries.Where(e => e.Status is not (SupabaseMigrationStatus.Unchanged or SupabaseMigrationStatus.Created));
+    public IEnumerable<SupabaseMigrationEntry> Problems => Entries.Where(e => e.Status is not (SupabaseMigrationStatus.Unchanged or SupabaseMigrationStatus.Created or SupabaseMigrationStatus.Deferred));
 }
