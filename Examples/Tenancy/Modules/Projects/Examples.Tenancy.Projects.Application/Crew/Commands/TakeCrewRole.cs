@@ -13,12 +13,7 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-[RequiresPermission(RequiredPermission)]
-public sealed record TakeCrewRole([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId Role, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    /// <summary>The permission the caller holds on the project.</summary>
-    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
-}
+public sealed record TakeCrewRole([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, SeatId Seat, ProjectRoleId Role, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 /// <summary>Handles <see cref="TakeCrewRole"/> with one call to the crew manager, which takes the role on the project it loads, and saves.</summary>
 /// <remarks>

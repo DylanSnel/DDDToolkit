@@ -1448,19 +1448,27 @@ docs must explain. A package can take over these lines:
 
   [PermissionMarker(typeof(BillingAccess), nameof(BillingAccess.OnLedger), IdOf = typeof(LedgerAttribute<>))]
   [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, Inherited = false)]
-  public sealed class OnLedgerAttribute : Attribute;                             // [RequiresPermission(permission)] with [OnLedger]: OnLedger(permission, request.Ledger)
+  public sealed class OnLedgerAttribute(string permission) : Attribute           // [OnLedger(permission)]: OnLedger(permission, request.Ledger)
+  {
+      public string Permission { get; } = permission;
+  }
   ```
 
   - `[StatesRequirement]` passes the attribute's constructor arguments to the call in their order, and the attribute's
     type arguments as the method's type arguments. For example, `[SeenWith<DocumentId>(permission)]` becomes
     `MemberAccess.SeenWith<DocumentId>(permission)`. `QueriesOnly = true` states that the requirement is for queries
     only ([DDD00082](diagnostics.md#ddd00082)).
-  - `[PermissionMarker]` marks where the permission of the core's `[RequiresPermission(permission)]` is held. The call
-    takes the permission and the marked member. `IdOf` names the template whose classes' ids the member holds, as a
-    `[TemplateType]` names one, `Argument` and `IdOfArgument` included. A marker on a member of another id is
-    [DDD00081](diagnostics.md#ddd00081), in the project where the application's classes are visible.
+  - `[PermissionMarker]` marks an attribute class as a permission marker. The marker's constructor takes the
+    permission, a string, and the generator reads that argument as the permission. The call takes the permission and
+    the marked member. The generator combines the calls of several markers on one request with
+    `AccessRequirement.All`. `IdOf` names the template whose classes' ids the member holds, as a `[TemplateType]` names
+    one, `Argument` and `IdOfArgument` included. A marker on a member of another id is
+    [DDD00081](diagnostics.md#ddd00081), in the project where the application's classes are visible. A marker without
+    its permission is [DDD00080](diagnostics.md#ddd00080).
   - `[PermissionMarkerArgument(typeof(OnLedgerAttribute))]` marks one more argument of that call, as Membership's
-    `[ExpectedVersion]` does for `[OnResource]`.
+    `[ExpectedVersion]` does for `[OnResource]`. Declare a generic form beside it, such as
+    `ExpectedVersionAttribute<TResource>`, with the same mark. Its type argument names the class whose id the marker's
+    member is. With it, a request with markers on two kinds of resource names the marker that the argument belongs to.
   - `[RequirementArgument(typeof(TAttribute))]` does the same for the call of a `[StatesRequirement]` attribute. The
     generator hands the marked member to the call after the attribute's constructor arguments. Tenancy's `[ForTenant]`
     marks the tenant of a request that carries `[Operator]`, so `[Operator]` with `[ForTenant] TenantId Tenant` is
@@ -1475,8 +1483,9 @@ docs must explain. A package can take over these lines:
     ([Asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)). Begin nothing
     for a query that would change anything. Tenancy's check of `[Operator]` begins operator work for a command this
     way.
-  - `[assembly: PermissionWithoutMarker(typeof(...), nameof(...))]` states what a permission without any marker means.
-    One package of an application states this: Tenancy, for the whole tenant.
+  - `[assembly: PermissionWithoutMarker(typeof(...), nameof(...))]` names the call that the core's
+    `[RequiresPermission(permission)]` becomes. That attribute names a permission without any marker. One package of
+    an application declares this call. Tenancy declares it, for the whole tenant.
 
   The compiler checks the call's types in the written line. So a declaration that does not fit is the package's to
   find, in its own tests of a request that carries the attribute.
@@ -1493,8 +1502,9 @@ docs must explain. A package can take over these lines:
     so `[OrOwn]` may stand next to it. It names a method of your factory, with the same parameters as the marker's
     method. The case it returns is what a caller who acts on its own value must still meet. Membership's
     `[OnResource]` names `MemberAccess.Sees`, so a caller acting on its own value still sees the resource. `[OrOwn]`
-    next to it is `Any(All(Own(member), Sees(permission, resource)), On(permission, resource))`. Without
-    `OwnAlternative`, `[OrOwn]` is [DDD00085](diagnostics.md#ddd00085).
+    next to it is `Any(All(Own(member), Sees(permission, resource)), On(permission, resource))`. Beside several
+    markers, `[OrOwn<TResource>]` names the marker it pairs with. Without `OwnAlternative`, `[OrOwn]` paired with the
+    marker is [DDD00085](diagnostics.md#ddd00085).
   - A type that your package declares the caller's own, with an `IOwnedByCurrentUser<TValue>` it registers, goes in
     `[assembly: OwnedByCurrentUser(typeof(...))]`. For an id that the application declares with your template, write
     `[assembly: OwnedByCurrentUser(IdOf = typeof(SeatAggregateAttribute<>))]`, as Tenancy does for its seat id. The generator

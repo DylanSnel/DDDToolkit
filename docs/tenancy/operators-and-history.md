@@ -41,9 +41,9 @@ seat**. So an operator is not an administrator of every tenant.
   tables on Postgres. A module's own command names its module: `[Operator(Scope = "projects")]`.
 - The whole handler holds every permission in that tenant. Keep an operator's handler to the operator's act.
 - The analyzer reports three mistakes. [DDD00103](../diagnostics.md#ddd00103) is `FromRequest` beside a `[ForTenant]`
-  member. [DDD00104](../diagnostics.md#ddd00104) is `[Operator]` beside `[InTenant]` or `[RequiresPermission]`, which
-  no operator meets. [DDD00105](../diagnostics.md#ddd00105), a warning, is `Tenant` or `Scope` on a query's
-  `[Operator]`.
+  member. [DDD00104](../diagnostics.md#ddd00104) is `[Operator]` beside `[InTenant]`, `[RequiresPermission]` or a
+  permission marker, which no operator meets. [DDD00105](../diagnostics.md#ddd00105), a warning, is `Tenant` or
+  `Scope` on a query's `[Operator]`.
 
 ```csharp
 // Support suspends a tenant for its owner. The command names the tenant.

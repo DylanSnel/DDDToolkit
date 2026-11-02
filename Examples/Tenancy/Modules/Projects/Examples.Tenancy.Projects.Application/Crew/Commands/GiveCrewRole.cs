@@ -9,7 +9,7 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// <remarks>
 /// Giving a project role is positional: whoever manages the crew gives any of the tenant's project roles in use,
 /// to anyone on the crew, themselves included, without holding that role's permissions. That is this application's rule,
-/// declared as <see cref="RequiredPermission"/> on the project. A seat holds a role once on a crew, so one it still holds
+/// declared as <see cref="ProjectPermissionNames.ManageCrew"/> on the project. A seat holds a role once on a crew, so one it still holds
 /// is refused; a role's period is its own, and may end before the membership does, or after it, where it then
 /// counts for nothing.
 /// </remarks>
@@ -21,12 +21,7 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-[RequiresPermission(RequiredPermission)]
-public sealed record GiveCrewRole([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    /// <summary>The permission the caller holds on the project.</summary>
-    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
-}
+public sealed record GiveCrewRole([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, SeatId Seat, ProjectRoleId Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 /// <summary>
 /// Handles <see cref="GiveCrewRole"/> with one call to the crew manager, which admits the role, gives it on the project

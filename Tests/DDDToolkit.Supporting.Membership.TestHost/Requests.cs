@@ -15,9 +15,10 @@ namespace DDDToolkit.Supporting.Membership.TestHost;
 /// </para>
 /// <para>
 /// Each request says what it requires with Membership's attributes, and the toolkit's generator writes the call each
-/// stands for into this interface, which is marked and partial for that: <c>[RequiresPermission(permission)]</c> with
-/// <c>[OnResource]</c> on the resource and <c>[ExpectedVersion]</c> on the version the caller read, and
-/// <c>[SeenWith&lt;TResourceId&gt;(permission)]</c> on a list.
+/// stands for into this interface, which is marked and partial for that: <c>[OnResource(permission)]</c> on the resource
+/// and <c>[ExpectedVersion]</c> on the version the caller read, and <c>[SeenWith&lt;TResourceId&gt;(permission)]</c> on a
+/// list. A request with a marker on each of two resources requires both, <c>AccessRequirement.All</c> of the two
+/// (<see cref="FileDocumentInFolder"/>, <see cref="ShareOnBoth"/>).
 /// </para>
 /// </summary>
 [AccessRequests]
@@ -27,16 +28,14 @@ public partial interface IFilingRequest : IRequireAccess;
 /// Shares a document with a user, in a role or in none, until a moment or with no end. Whoever holds the permission
 /// that shares, on that document, may: the attribute below is the whole of this host's rule about it.
 /// </summary>
-[RequiresPermission(DocumentPermissions.Share)]
-public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, NamedRole? Role = null, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
+public sealed record ShareDocument([OnResource(DocumentPermissions.Share)] DocumentId Document, UserId With, NamedRole? Role = null, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>
 /// Puts a member of staff on a folder, in a role, until a moment or with no end. The permission that decides a
 /// folder's staff is required on it, and the handler adds the host's own rule: for no longer than the caller
 /// holds that permission.
 /// </summary>
-[RequiresPermission(FolderPermissions.Staff)]
-public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
+public sealed record AdmitStaff([OnResource(FolderPermissions.Staff)] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>
 /// Takes a user off a document: a member takes itself off a document it sees, or whoever holds the permission that shares it
@@ -44,17 +43,31 @@ public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, N
 /// <see cref="CurrentUserId"/> says, and either way the document is read at the door, its version compared, and what the
 /// expert hold holds the save to kept.
 /// </summary>
-[RequiresPermission(DocumentPermissions.Share)]
-public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
+public sealed record LeaveDocument([OnResource(DocumentPermissions.Share)] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>Lists the documents the caller sees: nothing is refused, the statement filters.</summary>
 [SeenWith<DocumentId>(DocumentPermissions.View)]
 public sealed record ListDocuments : IFilingRequest;
 
 /// <summary>Puts something in a folder: requires the permission that files, on that folder.</summary>
-[RequiresPermission(FolderPermissions.File)]
-public sealed record FileInFolder([OnResource] FolderId Folder, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
+public sealed record FileInFolder([OnResource(FolderPermissions.File)] FolderId Folder, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>Lists the folders the caller sees.</summary>
 [SeenWith<FolderId>(FolderPermissions.Read)]
 public sealed record ListFolders : IFilingRequest;
+
+/// <summary>
+/// Files a document in a folder: the permission that edits, on the document, and the permission that files, on the folder.
+/// Two kinds of resource, each decided by its own check. The version the caller read is the document's, so the document's
+/// check compares it, and the folder is only read.
+/// </summary>
+public sealed record FileDocumentInFolder(
+    [OnResource(DocumentPermissions.Edit)] DocumentId Document,
+    [OnResource(FolderPermissions.File)] FolderId Folder,
+    [ExpectedVersion<Document>] long? ExpectedVersion = null) : IFilingRequest;
+
+/// <summary>Shares a user on each of two documents: the permission that shares, on both. Two resources of one kind.</summary>
+public sealed record ShareOnBoth(
+    [OnResource(DocumentPermissions.Share)] DocumentId First,
+    [OnResource(DocumentPermissions.Share)] DocumentId Second,
+    UserId With) : IFilingRequest;

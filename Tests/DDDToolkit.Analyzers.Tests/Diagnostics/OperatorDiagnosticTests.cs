@@ -57,6 +57,15 @@ public class OperatorDiagnosticTests
         result.ShouldHaveDiagnostic("DDD00104", at: "Operator").Severity.Should().Be(DiagnosticSeverity.Error);
     }
 
+    [Fact]
+    public void A_marker_that_carries_a_permission_beside_Operator_is_DDD00104()
+    {
+        var result = Run("[Operator] public sealed record CloseLedger([AtUnit(\"billing.close\")] OrganizationUnitId Unit) : Mediator.ICommand, IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00104");
+        Message(result, "DDD00104", at: "Operator").Should().StartWith("'CloseLedger' carries [Operator] beside 'Unit' [AtUnit], which no operator meets");
+    }
+
     [Theory]
     [InlineData("Tenant = OperatorTenant.FromRequest", "Mediator.IQuery<int>")]
     [InlineData("Scope = \"billing\"", "Mediator.IStreamQuery<int>")]

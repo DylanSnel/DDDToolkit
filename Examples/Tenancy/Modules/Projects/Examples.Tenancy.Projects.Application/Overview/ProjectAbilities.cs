@@ -19,21 +19,17 @@ namespace Examples.Tenancy.Projects.Application.Overview;
 public sealed record ProjectAbilities(bool Rename, bool Plan, bool Move, bool Close, bool Reopen, bool ManageCrew, bool ChangeOwner)
 {
     /// <summary>
-    /// The permissions the abilities are decided from: the <c>RequiredPermission</c> of each command an ability stands for, each
-    /// once. A command whose permission changes takes its ability with it.
+    /// The permissions that <see cref="For"/> reads, each once. Each one is the permission that the marker of a command
+    /// names: <see cref="ProjectPermissionNames.Edit"/> for renaming, planning and moving, <see cref="ProjectPermissionNames.Close"/>
+    /// for closing and reopening, <see cref="ProjectPermissionNames.ManageCrew"/> for the crew, and
+    /// <see cref="ProjectPermissionNames.ChangeOwner"/> for the owner.
     /// </summary>
     public static IReadOnlyList<string> Permissions { get; } =
     [
-        .. new[]
-        {
-            ChangeProjectName.RequiredPermission,
-            PlanProject.RequiredPermission,
-            MoveProjectToUnit.RequiredPermission,
-            CloseProject.RequiredPermission,
-            ReopenProject.RequiredPermission,
-            AddCrewMember.RequiredPermission,
-            ChangeProjectOwner.RequiredPermission,
-        }.Distinct(StringComparer.Ordinal),
+        ProjectPermissionNames.Edit,
+        ProjectPermissionNames.Close,
+        ProjectPermissionNames.ManageCrew,
+        ProjectPermissionNames.ChangeOwner,
     ];
 
     /// <summary>
@@ -41,24 +37,24 @@ public sealed record ProjectAbilities(bool Rename, bool Plan, bool Move, bool Cl
     /// the one place that decides it, for a single project and for every row of a list alike.
     /// </summary>
     /// <param name="state">Open or closed.</param>
-    /// <param name="held">Those of <see cref="Keys"/> the caller holds on the project.</param>
+    /// <param name="held">Those of <see cref="Permissions"/> the caller holds on the project.</param>
     /// <param name="mayOpenSomewhere">
-    /// Whether the caller holds the destination permission of <see cref="MoveProjectToUnit"/> at any unit at all: moving
-    /// needs somewhere to move to.
+    /// Whether the caller holds <see cref="ProjectPermissionNames.Open"/> at any unit. <see cref="MoveProjectToUnit"/>
+    /// requires that permission at the unit the project moves to, so moving needs such a unit.
     /// </param>
     public static ProjectAbilities For(ProjectState state, IReadOnlySet<string> held, bool mayOpenSomewhere)
     {
         ArgumentNullException.ThrowIfNull(held);
 
         return state == ProjectState.Closed
-            ? new ProjectAbilities(Rename: false, Plan: false, Move: false, Close: false, Reopen: held.Contains(ReopenProject.RequiredPermission), ManageCrew: false, ChangeOwner: false)
+            ? new ProjectAbilities(Rename: false, Plan: false, Move: false, Close: false, Reopen: held.Contains(ProjectPermissionNames.Close), ManageCrew: false, ChangeOwner: false)
             : new ProjectAbilities(
-                Rename: held.Contains(ChangeProjectName.RequiredPermission),
-                Plan: held.Contains(PlanProject.RequiredPermission),
-                Move: held.Contains(MoveProjectToUnit.RequiredPermission) && mayOpenSomewhere,
-                Close: held.Contains(CloseProject.RequiredPermission),
+                Rename: held.Contains(ProjectPermissionNames.Edit),
+                Plan: held.Contains(ProjectPermissionNames.Edit),
+                Move: held.Contains(ProjectPermissionNames.Edit) && mayOpenSomewhere,
+                Close: held.Contains(ProjectPermissionNames.Close),
                 Reopen: false,
-                ManageCrew: held.Contains(AddCrewMember.RequiredPermission),
-                ChangeOwner: held.Contains(ChangeProjectOwner.RequiredPermission));
+                ManageCrew: held.Contains(ProjectPermissionNames.ManageCrew),
+                ChangeOwner: held.Contains(ProjectPermissionNames.ChangeOwner));
     }
 }

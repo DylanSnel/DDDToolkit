@@ -68,8 +68,8 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
     [Fact]
     public async Task A_permission_stated_with_an_attribute_is_asked_under_the_policies_as_the_property_is()
     {
-        // The requests say the permission with [RequiresPermission], for the whole tenant and with [AtUnit] at a unit: the line the
-        // generator wrote is the same case, so the database answers it the same, for the same people.
+        // The requests say the permission with [RequiresPermission] for the whole tenant and with [AtUnit(permission)] at a unit: the
+        // line the generator wrote is the same case, so the database answers it the same, for the same people.
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var recorder = new CommandRecorder();
         await using var services = new TenancyServices(database, contexts: options => options.AddInterceptors(recorder));

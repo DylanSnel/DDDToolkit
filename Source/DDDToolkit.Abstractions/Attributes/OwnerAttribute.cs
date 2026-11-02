@@ -10,9 +10,9 @@ namespace DDDToolkit.Abstractions.Attributes;
 ///     [Owner] public UserId Owner { get; private set; }
 /// }
 /// </code>
-/// Who may do what with the owner's own is the request's to say, at the door, in the words a request says the
-/// caller's own with: <c>[OwnOnly]</c> with <c>[Own] BoardId Board</c> lets the board's owner alone through, and
-/// <c>[OrOwn] BoardId Board</c> beside <c>[RequiresPermission(permission)]</c> the owner, or whoever holds the permission.
+/// The request states who may act on the owner's own, with the attributes for the caller's own. The access check reads
+/// them. <c>[OwnOnly]</c> with <c>[Own] BoardId Board</c> lets only the board's owner through. <c>[OrOwn] BoardId Board</c>
+/// beside the request's only permission lets through the owner, or whoever holds the permission.
 /// </summary>
 /// <remarks>
 /// The property is of a type the caller has an own of: a <see cref="Guid"/>, the caller's verified identity;

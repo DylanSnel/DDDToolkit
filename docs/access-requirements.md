@@ -65,7 +65,7 @@ no [supporting domain](writing-a-supporting-domain.md):
 | Type | What it is |
 |---|---|
 | `IRequireAccess` | The interface a request implements. It has one member, `RequiredAccess`. |
-| `[AllowAnonymous]`, `[SignedIn]`, `[RequiresPermission(permission)]`, `[OrOwn]`, `[OwnOnly]` with `[Own]` | The core's attributes for stating a requirement on a request. Packages ship more attributes the same way. Stacked attributes must all hold. |
+| `[AllowAnonymous]`, `[SignedIn]`, `[RequiresPermission(permission)]`, `[OrOwn]`, `[OrOwn<TResource>]`, `[OwnOnly]` with `[Own]` | The core's attributes for stating a requirement on a request. Packages ship more attributes the same way. Packages also ship permission markers, such as `[OnResource(permission)]`: attributes on a member of the request that name a permission. A request must meet every attribute and marker on it. |
 | `AccessRequirement` | What `RequiredAccess` returns: a record that says what is required. The core defines the cases about who is calling, the caller's own, the owner of an aggregate, and the combinations `All` and `Any`. The package that decides a case defines the other cases. |
 | `IOwnedByCurrentUser<TValue>` | Returns the caller's own value of a type. The core has one for `Guid`, Tenancy has one for its seat id, and an application can add one for a type it defines. |
 | `[Owner]`, `IAggregateOwners<TId>` | `[Owner]` marks the property of an aggregate root that names its owner. This is a fact of the domain. `IAggregateOwners<TId>` reads that owner for a request about the owner's own. The Entity Framework package registers one for every id. |
@@ -206,9 +206,9 @@ flowchart LR
     class Stopped bad
 ```
 
-- **A request that states its own requirement does not get the default.** This holds for an attribute, for the
-  property, and for the attributes of a base request. The default does not replace a stated requirement and does not
-  add to it. `MyInvitations` lets a signed-in user without a seat through, as it states. `ArchiveBoard` requires only
+- **A request that states its own requirement does not get the default.** This holds for an attribute, a permission
+  marker, the property, and the attributes and markers of a base request. The default does not replace a stated
+  requirement and does not add to it. `MyInvitations` lets a signed-in user without a seat through, as it states. `ArchiveBoard` requires only
   the permission. Several attributes on the interface must all hold, as `AccessRequirement.All` in the order written,
   as on a request.
 - **The `switch` shows what each request gets.** A request that takes the default gets its own line with the
@@ -218,8 +218,8 @@ flowchart LR
 - **A default must suit every request.** These attributes can be a default:
   - `[SignedIn]`;
   - `[InTenant]`;
-  - `[RequiresPermission(permission)]`, with the permission held for the whole tenant, because a default reads no
-    member of a request and so cannot have a marker;
+  - `[RequiresPermission(permission)]`, with the permission held for the whole tenant. A default reads no member of a
+    request, so it cannot use a permission marker;
   - an attribute of your own whose `AttributeUsage` allows `AttributeTargets.Interface`.
 
   These cannot, and are reported as [DDD00089](diagnostics.md#ddd00089):
@@ -236,9 +236,8 @@ flowchart LR
   that another request derives from, the attribute is not reported, because the derived request must meet it next to
   its own.
 - **The cost: a forgotten permission is not reported.** With a default, [DDD00077](diagnostics.md#ddd00077) no longer
-  reports a request that states nothing, because the request gets the default. A command that forgets its
-  `[RequiresPermission]` then lets every seat in the tenant through, and the build reports nothing. For this reason
-  the default is opt-in, for a module whose requests nearly all need it, and the generated `switch` shows what each
+  reports a request that states nothing, because the request gets the default. A command that forgets its permission
+  then lets every seat in the tenant through, and the build reports nothing. For this reason the default is opt-in, for a module whose requests nearly all need it, and the generated `switch` shows what each
   request gets. A test that compares each request's requirement with the expected one
   ([Testing the requirements](#testing-the-requirements)) finds the forgotten permission.
 
@@ -276,15 +275,15 @@ computes its requirement:
 | a signed-in user, who does not need to hold anything yet | `[SignedIn]` | `AccessRequirement.SignedIn()` | a user who signed in, including an anonymous sign-in of the identity provider | `access.not-signed-in` |
 | a caller in the tenant | `[InTenant]`, from [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
 | a permission for the whole tenant | `[RequiresPermission(permission)]` | `TenancyAccess.AtTenant(permission)` | whoever holds the permission at the tenant's root now | `tenancy.not-permitted`, naming the permission |
-| a permission at a unit | `[RequiresPermission(permission)]`, with `[AtUnit]` on the unit | `TenancyAccess.AtUnit(permission, unit)` | whoever holds the permission now at that unit or at a unit above it | `tenancy.not-permitted`, with the permission and the unit |
-| a permission on a resource | `[RequiresPermission(permission)]`, with `[OnResource]` on the resource and `[ExpectedVersion]` on the version read, from [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(permission, resource, expectedVersion)` | whoever holds the permission on it, through its members or from above | the resource's `not-found` or `not-permitted` |
+| a permission at a unit | `[AtUnit(permission)]` on the unit | `TenancyAccess.AtUnit(permission, unit)` | whoever holds the permission now at that unit or at a unit above it | `tenancy.not-permitted`, with the permission and the unit |
+| a permission on a resource | `[OnResource(permission)]` on the resource, and `[ExpectedVersion]` on the version read, from [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(permission, resource, expectedVersion)` | whoever holds the permission on it, through its members or from above | the resource's `not-found` or `not-permitted` |
 | a query that shows the resources a permission is held on | `[SeenWith<TResourceId>(permission)]`, from [Membership](membership/checks-and-saves.md#access-in-your-own-queries) | `MemberAccess.SeenWith<TResourceId>(permission)` | every caller who signed in, and system work. The query's own statement leaves out the resources where the caller does not hold the permission. | the caller's own reason for a caller who is nobody; the resource's `not-permitted`, naming the permission, for a caller who did not sign in |
 | one of the application's operators | `[Operator]`, with `[ForTenant]` on the tenant the request names ([An operator's request](#an-operators-request)) | `TenancyAccess.Operator()`, `TenancyAccess.Operator(tenant)` | a signed-in user with an [operator's token role](tenancy/operators-and-history.md#operators). On a command, the handler runs as operator work. | `tenancy.operators-only`; `tenancy.tenant-mismatch` for a request that names another tenant than its `[ForTenant]` member |
-| the caller's own, or a permission | `[RequiresPermission(permission)]`, with `[OrOwn]` on the member that names the value | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the permission | one `access.refused`, with `access.not-own` and the permission's reason |
+| the caller's own, or a permission | `[OrOwn]` on the member that names the value, beside the request's only permission | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the permission | one `access.refused`, with `access.not-own` and the permission's reason |
 | only the caller's own | `[OwnOnly]`, with `[Own]` on the member that names the value | `AccessRequirement.Own(seat)` | the caller the member names | `access.not-own` |
-| the owner of an aggregate, or a permission | `[RequiresPermission(permission)]`, with `[OrOwn]` on the aggregate's id. The aggregate marks its owner with `[Owner]`. | `AccessRequirement.Any(AccessRequirement.OwnerOf(board), ...)` | the aggregate's owner, and whoever holds the permission | one `access.refused`, with `access.not-own` or `access.not-found` and the permission's reason |
+| the owner of an aggregate, or a permission | `[OrOwn]` on the aggregate's id, beside the request's only permission. The aggregate marks its owner with `[Owner]`. | `AccessRequirement.Any(AccessRequirement.OwnerOf(board), ...)` | the aggregate's owner, and whoever holds the permission | one `access.refused`, with `access.not-own` or `access.not-found` and the permission's reason |
 | only the owner of an aggregate | `[OwnOnly]`, with `[Own]` on the aggregate's id | `AccessRequirement.OwnerOf(board)` | the aggregate's owner | `access.not-own`; `access.not-found` for a row the caller cannot see |
-| several of these, all of them | the attributes, stacked | `AccessRequirement.All(...)` | whoever meets every one | the reason of the first one that fails |
+| several of these, all of them | the attributes, stacked, and a permission marker on each member where a permission is held | `AccessRequirement.All(...)` | whoever meets every one | the reason of the first one that fails |
 | one of several | | `AccessRequirement.Any(...)` | whoever meets one | one `access.refused`, with each one's reason |
 | something only your module knows | `[YourOwn]`, declared with `[StatesRequirement]` | a record of your own | what your check lets through | your module's refusal code |
 
@@ -313,7 +312,8 @@ Each call is a static method on the class of the package that decides it, so req
 - `AllowAnonymous()` and `SignedIn()` are named after who is let through, which is what a reviewer looks for.
 - Each package declares what its attributes stand for, with a core attribute on the attribute's class:
   `[StatesRequirement]` or `[PermissionMarker]`. The generator knows no attribute by name. A module declares an
-  attribute for its own case the same way ([Writing your own supporting domain](writing-a-supporting-domain.md)).
+  attribute or a marker for its own case the same way ([Writing your own supporting domain](writing-a-supporting-domain.md)).
+  The Projects module of the Tenancy sample declares `[AtProjectUnit(permission)]` for its own case at a unit.
 
 ### The id of the signed-in user
 
@@ -342,38 +342,66 @@ if (user.IsAuthenticated)
 
 ### Where the permission is held
 
-`[RequiresPermission(permission)]` is the same attribute wherever the permission is held. A marker on one of the
-request's members states where:
+A permission marker is an attribute on one of the request's members. Its argument is the permission, and the member
+is the place where the caller must hold it:
 
-- no marker: for the whole tenant;
-- `[AtUnit]`: at that unit, or at a unit above it;
-- `[OnResource]`: on that resource, through its members. Add `[ExpectedVersion]` on the member that holds the version
-  the caller read. The check compares the version only after it finds that the caller may act.
+- `[AtUnit(permission)]`, from Tenancy: at that unit, or at a unit above it;
+- `[OnResource(permission)]`, from Membership: on that resource, through its members. Add `[ExpectedVersion]` on the
+  member that holds the version the caller read. The check compares the version only after it finds that the caller
+  may act.
 
-A marker goes on a positional parameter of a record, or on a property. `[property: AtUnit]` is read as well. No
-attribute names a member with a string or with `nameof`.
+`[RequiresPermission(permission)]` on the request names a permission without a marker. A package declares where such a
+permission is held. Tenancy declares that it is held for the whole tenant. In a project where no package declares it,
+`[RequiresPermission]` is [DDD00080](diagnostics.md#ddd00080).
+
+A marker goes on a positional parameter of a record, or on a property. The generator also reads
+`[property: AtUnit(permission)]`. No attribute names a member with a string or with `nameof`.
 
 ```csharp
 [RequiresPermission(BillingPermissions.CloseTheBooks)]                                     // for the whole tenant
 public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
-[RequiresPermission(BillingPermissions.OpenLedger)]                                        // at the unit, or above it
-public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
+public sealed record OpenLedger(                                                           // at the unit, or above it
+    string Name, [AtUnit(BillingPermissions.OpenLedger)] OrganizationUnitId Unit) : IBillingRequest;
 
-[RequiresPermission(DocumentPermissions.Share)]                                            // on the document, through its members
-public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
+public sealed record ShareDocument(                                                        // on the document, through its members
+    [OnResource(DocumentPermissions.Share)] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 
-[RequiresPermission(BillingPermissions.ArchiveLedger)]                                     // an ordinary property takes a marker too
-public sealed class ArchiveLedger : IBillingRequest
+public sealed class ArchiveLedger : IBillingRequest                                       // an ordinary property takes a marker too
 {
-    [AtUnit] public required OrganizationUnitId Unit { get; init; }
+    [AtUnit(BillingPermissions.ArchiveLedger)] public required OrganizationUnitId Unit { get; init; }
 }
 ```
 
-The permission is a constant from the catalogue, because an attribute argument must be a constant. A request can
-declare its own constant, as `[RequiresPermission(RequiredPermission)]` with
-`public const string RequiredPermission = ProjectPermissionNames.Edit;`. Its handler, or a list of abilities, then
-reads the same permission.
+Each marker is one requirement. A request with two markers requires both. The generator combines their calls with
+`AccessRequirement.All`, in the order the markers are written. Attaching an asset to a board needs the permission that
+edits the board and the permission that uses the asset:
+
+```csharp
+public sealed record AttachAssetCommand(
+    [OnResource(BoardPermissions.Edit)] BoardId Board,
+    [OnResource(AssetPermissions.Use)] AssetId Asset,
+    [ExpectedVersion<Board>] long? Version = null) : ICommand<Board>, IBoardsRequest;
+```
+
+```csharp title="the line the generator writes into IBoardsRequest, shortened"
+AttachAssetCommand request => AccessRequirement.All(
+    MemberAccess.On("boards.edit", request.Board, request.Version),
+    MemberAccess.On("assets.use", request.Asset)),
+```
+
+- **Each call checks its own resource.** The board's check reads the board, and the asset's check reads the asset.
+  The access check runs the calls in order and stops at the first refusal. That refusal has the codes of its
+  resource. Each check keeps a hold on its own resource ([The request in hand](#the-request-in-hand)).
+- **`[ExpectedVersion<Board>]` names the resource.** Beside markers on two kinds of resource, the type argument says
+  whose version it is. The board's check compares the version, and the asset's check only reads the asset. Beside one
+  `[OnResource]`, the bare `[ExpectedVersion]` belongs to that marker, and `[ExpectedVersion<Board>]` is allowed too.
+- **Two markers of one kind are allowed.** Both are required, for example two boards, or the unit a seat leaves and
+  the unit it moves to. A version or `[OrOwn]` cannot say which of two markers of one kind it belongs to. Such a
+  request implements `RequiredAccess` ([DDD00080](diagnostics.md#ddd00080), [DDD00085](diagnostics.md#ddd00085)).
+
+The permission is a constant from the catalogue, because an attribute argument must be a constant. The marker names
+that constant, for example `[OnResource(ProjectPermissionNames.Edit)]`.
 
 ### An operator's request
 
@@ -428,12 +456,12 @@ of its own.
 
 ### Valid combinations of attributes
 
-Stacked requirement attributes must all hold. A marker states where the permission of the request's one
-`[RequiresPermission]` is held. The build reports attributes that do not go together as an error, where they are
-written. Such a request would look correct in a review while it requires something else. An attribute that adds
-nothing to its neighbour is a warning.
+A request must meet every requirement attribute and marker on it. Each marker names its own permission.
+`[RequiresPermission]` names a permission without a marker. The build reports attributes that do not go together as an
+error, where they are written. Such a request would look correct in a review while it requires something else. An
+attribute that adds nothing to its neighbour is a warning.
 
-| `[RequiresPermission(permission)]` with | no marker | `[AtUnit]` | `[OnResource]` | `[OnResource]` and `[ExpectedVersion]` |
+| The request's only permission | `[RequiresPermission(permission)]` | `[AtUnit(permission)]` | `[OnResource(permission)]` | `[OnResource(permission)]` and `[ExpectedVersion]` |
 |---|---|---|---|---|
 | is | `AtTenant(permission)` | `AtUnit(permission, unit)` | `On(permission, resource)` | `On(permission, resource, version)` |
 | and `[OrOwn]` on a member | `Any(Own(member), AtTenant(permission))` | not allowed: [DDD00085](diagnostics.md#ddd00085) | `Any(All(Own(member), Sees(permission, resource)), On(permission, resource))` | `Any(All(Own(member), Sees(permission, resource, version)), On(permission, resource, version))` |
@@ -444,22 +472,35 @@ resource, its version is compared, and the check keeps what the save is checked 
 with `[Owner]`, `[OrOwn]` produces the same with `OwnerOf(member)` instead of `Own(member)`
 ([The owner of an aggregate](#the-owner-of-an-aggregate)).
 
+A request with several permissions requires all of them. The generator combines them with `All`, in the order they are
+written: the attributes on the request first, then the markers on its members. A version and the caller's own each
+belong to one of the permissions:
+
+| Beside several permissions | Belongs to | Reported otherwise |
+|---|---|---|
+| `[ExpectedVersion]` | The request's only `[OnResource]`. | [DDD00080](diagnostics.md#ddd00080) |
+| `[ExpectedVersion<TResource>]` | The `[OnResource]` on the id of `TResource`, such as `Board`. Required beside markers on two kinds of resource, allowed beside one. | [DDD00080](diagnostics.md#ddd00080) |
+| `[OrOwn]` | The request's only permission, on a marker or in `[RequiresPermission]`. | [DDD00085](diagnostics.md#ddd00085) |
+| `[OrOwn<TResource>]` | The `[OnResource]` on the id of `TResource`. The `Any` takes the place of that marker's call in the `All`. Required beside two or more permissions, allowed beside one. | [DDD00085](diagnostics.md#ddd00085) |
+
+A version or `[OrOwn]` beside two markers of one kind, such as two boards, cannot say which marker it belongs to. Such
+a request implements `RequiredAccess` ([Any and All in RequiredAccess](#any-and-all-in-requiredaccess)).
+
 | On one request | Goes with | Reported otherwise |
 |---|---|---|
 | `[AllowAnonymous]` | No other requirement attribute, on the request or on a base request, and not the property. | [DDD00079](diagnostics.md#ddd00079), [DDD00078](diagnostics.md#ddd00078) |
 | any other requirement attribute | Other requirement attributes, on the request and on its base requests. All of them must hold. Not the property. | [DDD00078](diagnostics.md#ddd00078) |
 | `[InTenant]`, `[SignedIn]` | A neighbour that does not already require it. So not `[InTenant]` next to a permission of Tenancy's, not `[SignedIn]` next to `[Operator]`, neither next to `[OwnOnly]` with `[Own]` on a member whose own value already requires it, and not the same attribute on a base request. On a sealed request, also not alone when it repeats the module's default. | [DDD00084](diagnostics.md#ddd00084), a warning |
-| `[RequiresPermission]` | One per request, base requests included. | [DDD00080](diagnostics.md#ddd00080) |
-| `[AtUnit]` or `[OnResource]` | `[RequiresPermission]`. One of the two markers, on a member of the id type it marks, which is never null. | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
-| `[ExpectedVersion]` | `[OnResource]`, on a `long?`. | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
-| `[RequiresPermission]` without a marker | A package that declares where such a permission is held, such as Tenancy. | [DDD00080](diagnostics.md#ddd00080) |
-| `[OrOwn]` | `[RequiresPermission]` without `[AtUnit]`. Once per request, on a member that is never null. The member's type has an own value, or is the id of an aggregate whose owner's type has one. Not on the id of a resource with members next to a permission that its owner already holds. | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088), [DDD00096](diagnostics.md#ddd00096) (a warning) |
+| `[RequiresPermission]` | A package that declares where a permission without a marker is held, such as Tenancy. Beside markers, and on a base request, it adds one more permission. | [DDD00080](diagnostics.md#ddd00080) |
+| `[AtUnit(permission)]` or `[OnResource(permission)]` | A permission, on a member of the id type that the marker takes, which is never null. A request may have any number of markers, also two of one kind. For `[OnResource]`, a permission declared `[On<TResource>]` for that resource. | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081), [DDD00093](diagnostics.md#ddd00093) |
+| `[ExpectedVersion]`, `[ExpectedVersion<TResource>]` | The `[OnResource]` it belongs to, on a `long?`. Once for that marker. | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
+| `[OrOwn]`, `[OrOwn<TResource>]` | The permission it belongs to, except the permission of `[AtUnit]`. Once per request, on a member that is never null. The member's type has an own value, or is the id of an aggregate whose owner's type has one. Not on the id of a resource with members next to a permission that its owner already holds. | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088), [DDD00096](diagnostics.md#ddd00096) (a warning) |
 | `[Own]` | `[OwnOnly]`. Once, on a member that is never null. The member's type has an own value, or is the id of an aggregate whose owner's type has one. | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088) |
 | `[Owner]`, on a property of an aggregate | The aggregate root itself, once, on a property of a type with an own value. The property may be nullable. | [DDD00087](diagnostics.md#ddd00087), [DDD00088](diagnostics.md#ddd00088) |
 | `[At]`, from Membership's markers, on a property of an aggregate | The aggregate root itself, once, on an instance property that is never null. It names the unit the aggregate is placed at. The rules of a resource with members read it when the resource is reached from above. | [DDD00097](diagnostics.md#ddd00097), and [DDD00098](diagnostics.md#ddd00098) for rules that reach a class that marks none |
-| `[Permissions]`, on a class | A static class whose public constants each have a level: `[AtTenant]`, `[AtUnit]` or `[On<TResource>]`. | [DDD00092](diagnostics.md#ddd00092), [DDD00093](diagnostics.md#ddd00093) |
+| `[Permissions]`, on a class | A static class whose public constants each have a level, written without a permission: `[AtTenant]`, `[AtUnit]` or `[On<TResource>]`. | [DDD00092](diagnostics.md#ddd00092), [DDD00093](diagnostics.md#ddd00093) |
 | `[SeenWith<TResourceId>(permission)]` | A query. | [DDD00082](diagnostics.md#ddd00082) on a command, or on a plain request of Mediator |
-| `[Operator]` | Neither `[InTenant]` nor `[RequiresPermission]`, because an operator holds no seat and no permission. On a query, no `Tenant` and no `Scope`. | [DDD00104](diagnostics.md#ddd00104), [DDD00105](diagnostics.md#ddd00105) (a warning) |
+| `[Operator]` | Neither `[InTenant]`, `[RequiresPermission]` nor a permission marker, because an operator holds no seat and no permission. On a query, no `Tenant` and no `Scope`. | [DDD00104](diagnostics.md#ddd00104), [DDD00105](diagnostics.md#ddd00105) (a warning) |
 | `[ForTenant]` | `[Operator]` without `Tenant = OperatorTenant.FromRequest`. Once per request, on a member of the application's tenant id. | [DDD00102](diagnostics.md#ddd00102), [DDD00103](diagnostics.md#ddd00103), [DDD00081](diagnostics.md#ddd00081) |
 | any of them | One module interface of the same project, with `[AccessRequests]` and `partial`. | [DDD00083](diagnostics.md#ddd00083) |
 
@@ -470,21 +511,23 @@ with `[Owner]`, `[OrOwn]` produces the same with `OwnerOf(member)` instead of `O
 
 Why these combinations are reported:
 
-- `[AllowAnonymous]` next to `[RequiresPermission]` would let anyone in where the permission should keep them out.
-  The build cannot know which one was meant.
-- `[InTenant]` next to `[RequiresPermission]` adds nothing, because only a seat in the tenant, or system work there,
-  holds a permission of Tenancy's.
-- `[Operator]` next to `[InTenant]` or `[RequiresPermission]` refuses every caller. An operator holds no seat and no
+- `[AllowAnonymous]` next to a permission would let anyone in where the permission should keep them out. The build
+  cannot know which one was meant.
+- `[InTenant]` next to `[RequiresPermission]` or `[AtUnit(permission)]` adds nothing, because only a seat in the
+  tenant, or system work there, holds a permission of Tenancy's.
+- `[Operator]` next to `[InTenant]` or a permission refuses every caller. An operator holds no seat and no
   permission, and a seat is no operator. A request that either may send implements the property with
   `AccessRequirement.Any` ([Any and All in RequiredAccess](#any-and-all-in-requiredaccess)).
-- `[SignedIn]` next to `[RequiresPermission]` does add something, and is not reported. System work holds every
-  permission, but it is not a signed-in user.
+- `[SignedIn]` next to a permission does add something, and is not reported. System work holds every permission, but
+  it is not a signed-in user.
+- A version or the caller's own beside two markers of one kind cannot say which marker it belongs to. Beside markers
+  of two kinds, the generic form names the resource.
 - The caller's own also requires something. Only a signed-in user has a verified identity, so `[SignedIn]` next to
   `[OwnOnly]` with `[Own]` on a `Guid` is a warning. Only a seat in the tenant has its own seat there, so `[InTenant]`
   next to `[OwnOnly]` with `[Own]` on the seat id is a warning too.
-- Next to a permission with `[OrOwn]`, only what both alternatives require counts. `[InTenant]` next to a Tenancy
-  permission with `[OrOwn]` on the seat id adds nothing. `[SignedIn]` there adds something, because system work holds
-  the permission.
+- For the permission that `[OrOwn]` pairs with, only what both alternatives require counts. `[InTenant]` next to a
+  Tenancy permission with `[OrOwn]` on the seat id adds nothing. `[SignedIn]` there adds something, because system work
+  holds the permission. Every other permission of the request counts in full.
 
 ### A requirement computed from the request
 
@@ -502,7 +545,7 @@ public sealed record ListLedgers(OrganizationUnitId? Unit) : IBillingRequest
 }
 ```
 
-For this reason, `[AtUnit]` on a unit that may be null is [DDD00081](diagnostics.md#ddd00081). The requirement
+For this reason, `[AtUnit(permission)]` on a unit that may be null is [DDD00081](diagnostics.md#ddd00081). The requirement
 depends on whether the unit is given, so the request must compute it.
 
 ## Requirements that combine
@@ -518,10 +561,10 @@ Each of these is one requirement record. The access check holds the caller to it
 
 | Written as | Holds when | Refused with |
 |---|---|---|
-| `AccessRequirement.All(a, b)`, and stacked requirement attributes | Every case holds. The cases are asked in the order they are written. | The refusal of the first failing case. The cases after it are not asked. |
+| `AccessRequirement.All(a, b)`, stacked requirement attributes, and several permission markers | Every case holds. The cases are asked in the order they are written. | The refusal of the first failing case. The cases after it are not asked. |
 | `AccessRequirement.Any(a, b)` | The first case that holds. The cases after it are not asked. | One `access.refused`. Its argument `Reasons` lists each case's refusal, with its refusal code and arguments, in order. |
 | `AccessRequirement.Own(value)`, `[OwnOnly]` with `[Own]` on the member | The value is the caller's own. | `access.not-own` |
-| `[RequiresPermission(permission)]` with `[OrOwn]` on the member | The value is the caller's own, or the caller holds the permission: `Any(Own(value), the permission's case)`. | One `access.refused`, with both reasons |
+| `[OrOwn]` on the member, beside a permission | The value is the caller's own, or the caller holds the permission: `Any(Own(value), the permission's case)`. | One `access.refused`, with both reasons |
 | `AccessRequirement.OwnerOf(id)`, `[OwnOnly]` with `[Own]` on the id of an aggregate | The aggregate's owner, read from its row as the caller, is the caller's own value. | `access.not-own`, or `access.not-found` for a row the caller cannot see |
 
 The set gives each case of a combination to the check that decides that case. So cases of different packages
@@ -605,9 +648,9 @@ catch (RefusalException refused) when (refused.Code == ToolkitRefusals.Refused
 
 Requirement attributes stacked on one request must all hold, like several `[Authorize]` attributes in ASP.NET Core.
 The generator writes `AccessRequirement.All` of their calls, in the order they are written above the request. The
-first attribute is checked first, and when it fails, its refusal is the one the caller gets. A marker still states
-where the permission of `[RequiresPermission]` is held, whatever other attributes are present. A module's own
-attribute, declared with `[StatesRequirement]` as a package declares one
+first attribute is checked first, and when it fails, its refusal is the one the caller gets. The calls of the markers
+on the request's members come after the attributes, in the order the markers are written. Each marker call has the
+marker's own permission. A module's own attribute, declared with `[StatesRequirement]` as a package declares one
 ([Writing your own supporting domain](writing-a-supporting-domain.md)), stacks the same way:
 
 ```csharp
@@ -628,16 +671,17 @@ attribute, `PlanCheck` and its registration.
   next to `[Operator]`, add nothing to what the other attribute already requires. The build reports
   [DDD00084](diagnostics.md#ddd00084). A package states what its requirement already requires with `Implies` on its
   `[StatesRequirement]` or `[PermissionMarker]`, so a module's own attribute follows the same rule.
-- **One permission per request.** A request has at most one `[RequiresPermission]`, because a marker could not say
-  which permission it belongs to. Write two permissions, or one case or another, as the property.
+- **Two permissions at two places need a marker on each place.** Each marker names its own permission, and the request
+  requires both. Two markers of one kind are allowed, such as the unit a seat leaves and the unit it moves to.
 - **A derived request adds to its base.** A request that derives from a request with requirement attributes, and has
   attributes of its own, must meet both, the base's first. This works like `[Authorize]` on a controller and on its
   base controller. For example, `[SignedIn] MyReport : Report`, where `Report` has `[InTenant]`, requires
-  `All(InTenant(), SignedIn())`, and never `SignedIn()` alone. The base's markers are read too, including a marker
-  without a target on the base record's parameter. A derived request without attributes of its own gets the line of
-  its base unchanged. A derived request cannot remove what its base requires:
+  `All(InTenant(), SignedIn())`, and never `SignedIn()` alone. The base's markers are requirements of the derived
+  request too, including a marker without a target on the base record's parameter. A derived request without
+  attributes or markers of its own gets the line of its base unchanged. A derived request that inherits a marker gets a
+  line of its own with the same calls. A derived request cannot remove what its base requires:
   - `[AllowAnonymous]` on it, below a base that requires something, is DDD00079;
-  - a second `[RequiresPermission]` is DDD00080;
+  - a `[RequiresPermission]` of its own adds one more permission to its base's;
   - an attribute that its base already has is DDD00084.
 - **A module's default does not stack.** The default is not an attribute of the request. A request that states
   nothing gets the default. A request that states its own requirement, or derives from one that does, gets only that
@@ -683,44 +727,27 @@ partial interface IBoardsRequest
 
 </details>
 
-### Any and All in RequiredAccess
+A request that needs two permissions at two places has a marker on each place:
 
-Stacked attributes cannot express one caller or another, or two permissions at two places. For these, the request
-implements the property with `Any` or `All`:
-
-- **One caller or another.** The application's operators read a tenant's audit log across tenants. A seat that manages
-  the tenant's seats reads it too: `Any(TenancyAccess.Operator(),
-  TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))`. The first case lets an operator through without reading
-  anything. The second case lets a seat manager through, with one statement.
-- **Two permissions at two units.** Moving a seat from one unit to another requires the permission that manages seats at
-  both units: `All(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, From),
-  TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, To))`. The access check tested the units the request names, so
-  the handler acts on those units. It removes the seat from `From`, and refuses a seat that is not placed there. If the
-  handler moved the seat from wherever it is, a caller with the permission at two units could move a seat away from a
-  third unit.
-- **A permission from each package.** Moving a project to another unit requires the edit permission on the project, and
-  the permission that opens a project at the target unit: `All(MemberAccess.On(ProjectPermissionNames.Edit, Project,
-  ExpectedVersion), TenancyAccess.AtUnit(ProjectPermissionNames.Open, To))`. The first case is Membership's, the second
-  Tenancy's. The Tenancy sample's `MoveProjectToUnit` does the same, but uses its module's own case at the unit, which
-  refuses with `projects.not-permitted`.
+- **Two units.** Moving a seat from one unit to another requires the permission that manages seats at both units. The
+  access check tested the units the request names, so the handler acts on those units. It removes the seat from
+  `From`, and refuses a seat that is not placed there. If the handler moved the seat from wherever it is, a caller with
+  the permission at two units could move a seat away from a third unit.
+- **A permission from each package.** Moving a project to another unit requires two permissions. The edit permission
+  on the project is Membership's. The permission that opens a project at the target unit is Tenancy's. The version
+  belongs to the project, the only resource. The Tenancy sample's `MoveProjectToUnit` does the same with its module's
+  own marker at the unit, `[AtProjectUnit(permission)]`, which refuses with `projects.not-permitted`.
+- **Two resources.** Attaching an asset to a board requires a permission on each. `[ExpectedVersion<Board>]` names
+  the resource whose version the caller read ([Where the permission is held](#where-the-permission-is-held)).
 
 <details>
-<summary>Show the code: the audit log, moving a seat, moving a project</summary>
+<summary>Show the code: moving a seat, moving a project</summary>
 
 ```csharp
-public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AuditEntry>>, IAuditRequest
-{
-    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
-        TenancyAccess.Operator(),
-        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
-}
-
-public sealed record MoveSeat(SeatId Seat, OrganizationUnitId From, OrganizationUnitId To) : ICommand, ISeatsRequest
-{
-    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-        TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, From),
-        TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, To));
-}
+public sealed record MoveSeat(
+    SeatId Seat,
+    [AtUnit(TenancyPermissions.SeatsManage)] OrganizationUnitId From,
+    [AtUnit(TenancyPermissions.SeatsManage)] OrganizationUnitId To) : ICommand, ISeatsRequest;
 
 public sealed class MoveSeatHandler(SeatManager seats) : ICommandHandler<MoveSeat>
 {
@@ -733,11 +760,54 @@ public sealed class MoveSeatHandler(SeatManager seats) : ICommandHandler<MoveSea
     }
 }
 
-public sealed record MoveProject(ProjectId Project, OrganizationUnitId To, long? ExpectedVersion = null) : ICommand, IProjectsRequest
+public sealed record MoveProject(
+    [OnResource(ProjectPermissionNames.Edit)] ProjectId Project,
+    [AtUnit(ProjectPermissionNames.Open)] OrganizationUnitId To,
+    [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
+```
+
+```csharp title="the lines the generator writes for moving a seat and a project, shortened"
+MoveSeat request => AccessRequirement.All(
+    TenancyAccess.AtUnit("tenancy.seats.manage", request.From),
+    TenancyAccess.AtUnit("tenancy.seats.manage", request.To)),
+MoveProject request => AccessRequirement.All(
+    MemberAccess.On("projects.edit", request.Project, request.ExpectedVersion),
+    TenancyAccess.AtUnit("projects.open", request.To)),
+```
+
+</details>
+
+### Any and All in RequiredAccess
+
+Stacked attributes and markers cannot express one caller or another, or a requirement that depends on the request's
+values. A version or the caller's own beside two markers of one kind cannot say which marker it belongs to. For these
+cases, the request implements the property with `Any` or `All`:
+
+- **One caller or another.** The application's operators read a tenant's audit log across tenants. A seat that manages
+  the tenant's seats reads it too: `Any(TenancyAccess.Operator(),
+  TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))`. The first case lets an operator through without reading
+  anything. The second case lets a seat manager through, with one statement.
+- **A version on one of two resources of one kind.** Merging one board into another checks the version of the board
+  that receives the merge: `All(MemberAccess.On(BoardPermissions.Edit, Into, Version),
+  MemberAccess.On(BoardPermissions.Edit, From))`. `[ExpectedVersion<Board>]` beside two boards cannot say which board
+  the version belongs to.
+
+<details>
+<summary>Show the code: the audit log, merging two boards</summary>
+
+```csharp
+public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AuditEntry>>, IAuditRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
+        TenancyAccess.Operator(),
+        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
+}
+
+public sealed record MergeBoards(BoardId Into, BoardId From, long? Version = null) : ICommand<Board>, IBoardsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-        MemberAccess.On(ProjectPermissionNames.Edit, Project, ExpectedVersion),
-        TenancyAccess.AtUnit(ProjectPermissionNames.Open, To));
+        MemberAccess.On(BoardPermissions.Edit, Into, Version),
+        MemberAccess.On(BoardPermissions.Edit, From));
 }
 ```
 
@@ -747,8 +817,8 @@ public sealed record MoveProject(ProjectId Project, OrganizationUnitId To, long?
 
 A request about the caller's own names the value, such as a seat or a user. The check compares that value with the
 caller's own value of the same type. The request never states whose value it is. The check takes the caller from the
-token, so nobody can act for somebody else by naming them. `[OrOwn]` on that member, next to `[RequiresPermission]`,
-makes the caller's own an alternative to the permission. A person renames their own seat, and whoever holds the
+token, so nobody can act for somebody else by naming them. `[OrOwn]` on that member, next to the request's only
+permission, makes the caller's own an alternative to that permission. A person renames their own seat, and whoever holds the
 permission renames any seat. The check tests the caller's own first, because that reads nothing. It tests the
 permission only when the value is not the caller's.
 
@@ -785,17 +855,30 @@ request, with `[Own]` on the member, requires the caller's own value with no per
 leaving a tenant, or for `CloseAccount` below.
 
 - **Next to `[OnResource]`, never next to `[AtUnit]`.** `[OrOwn]` can go next to `[OnResource]`.
-  `LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Seat)` lets callers take themselves off the crew of a
-  project they can see, and lets anybody with the permission on the project take anyone off. The handler still checks
-  that the seat is on that crew ([The caller's own on a resource](#the-callers-own-on-a-resource)). Next to
-  `[AtUnit]` it is [DDD00085](diagnostics.md#ddd00085). The unit names where the permission is checked, but the
-  request does not act on the unit. A caller could send a unit where they hold the permission together with another
-  person's seat, so a permission held at one unit would act on a seat anywhere. A package states which of its markers
-  allow `[OrOwn]`, and what the caller's own alternative must still meet there, with `OwnAlternative` on
-  `[PermissionMarker]`.
-- **One mark, on a suitable member.** These are [DDD00085](diagnostics.md#ddd00085): `[OrOwn]` without
-  `[RequiresPermission]`, `[Own]` without `[OwnOnly]` and the other way round, one member with both marks, and two
-  members with the same mark. A mark on a member that may be null, or on a member of a type that has no own value, is
+  `LeaveCrew([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, [OrOwn] SeatId Seat)` lets callers take
+  themselves off the crew of a project they can see, and lets anybody with the permission on the project take anyone
+  off. The handler still checks that the seat is on that crew
+  ([The caller's own on a resource](#the-callers-own-on-a-resource)). Next to `[AtUnit]` it is
+  [DDD00085](diagnostics.md#ddd00085). The unit names where the permission is checked, but the request does not act on
+  the unit. A caller could send a unit where they hold the permission together with another person's seat, so a
+  permission held at one unit would act on a seat anywhere. A package states which of its markers allow `[OrOwn]`,
+  and what the caller's own alternative must still meet there, with `OwnAlternative` on `[PermissionMarker]`.
+- **One permission, or a named resource.** The bare `[OrOwn]` pairs with the request's only permission, on a marker
+  or in `[RequiresPermission]`. Beside two or more permissions, `[OrOwn<TResource>]` names the resource of the
+  `[OnResource]` it pairs with. The caller's own is then an alternative to that permission only. The `Any` takes the
+  place of that marker's call among the request's requirements, and the request still requires every other
+  permission. `DetachAssetCommand` below lets the seat that attached the asset through on the board. Every caller
+  still needs the permission that uses the asset.
+- **One mark, on a suitable member.** These are [DDD00085](diagnostics.md#ddd00085):
+  - `[OrOwn]` beside no permission;
+  - a bare `[OrOwn]` beside two permissions;
+  - `[OrOwn<TResource>]` that names a class no marker is on;
+  - `[OrOwn]` beside two permissions of one kind;
+  - `[Own]` without `[OwnOnly]`, and `[OwnOnly]` without `[Own]`;
+  - one member with both marks;
+  - two members with the same mark.
+
+  A mark on a member that may be null, or on a member of a type that has no own value, is
   [DDD00086](diagnostics.md#ddd00086), because the request would be stopped every time. The id of an aggregate that
   marks its owner counts as a type with an own value, through its owner.
 - **Written as the property.** The case is `AccessRequirement.Own(value)`. `TenancyAccess.Own(seat)` is the same case,
@@ -808,8 +891,13 @@ leaving a tenant, or for `CloseAccount` below.
 [RequiresPermission(TenancyPermissions.SeatsManage)]                                       // rename yourself, or any seat with the permission
 public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ITenantsRequest;
 
-[RequiresPermission(ProjectPermissionNames.ManageCrew)]                                        // take yourself off, or manage the crew
-public sealed record LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Seat) : IProjectsRequest;
+public sealed record LeaveCrew(                                                           // take yourself off, or manage the crew
+    [OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, [OrOwn] SeatId Seat) : IProjectsRequest;
+
+public sealed record DetachAssetCommand(                                                  // the one who attached it, on the board, or the board's editors
+    [OnResource(BoardPermissions.Edit)] BoardId Board,
+    [OnResource(AssetPermissions.Use)] AssetId Asset,
+    [OrOwn<Board>] SeatId AttachedBy) : ICommand<Board>, IBoardsRequest;
 
 [OwnOnly]                                                                    // only your own, no permission stands in
 public sealed record CloseAccount([Own] UserId User) : IAccountsRequest;
@@ -831,6 +919,11 @@ RenameSeat request => AccessRequirement.Any(
 LeaveCrew request => AccessRequirement.Any(
     AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees("projects.crew.manage", request.Project)),
     MemberAccess.On("projects.crew.manage", request.Project)),
+DetachAssetCommand request => AccessRequirement.All(
+    AccessRequirement.Any(
+        AccessRequirement.All(AccessRequirement.Own(request.AttachedBy), MemberAccess.Sees("boards.edit", request.Board)),
+        MemberAccess.On("boards.edit", request.Board)),
+    MemberAccess.On("assets.use", request.Asset)),
 CloseAccount request => AccessRequirement.Own(request.User),
 ```
 
@@ -1003,8 +1096,8 @@ this handling. It saves anybody else's place as the caller, and the database che
 <summary>Show the code: taking yourself off, saved as the document's own work</summary>
 
 ```csharp
-[RequiresPermission(DocumentPermissions.Share)]                                            // take yourself off, or anybody with the permission
-public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
+public sealed record LeaveDocument(                                                      // take yourself off, or anybody with the permission
+    [OnResource(DocumentPermissions.Share)] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 
 public sealed class LeaveDocumentHandler(DocumentShareManager shares, ICurrentUser user)
 {
@@ -1240,9 +1333,9 @@ the `IAccessCheck` that decides it:
 | who is calling: anyone, a signed-in user | `[AllowAnonymous]` and `[SignedIn]`, `AccessRequirement.AllowAnonymous()` and `SignedIn()`, from the core | Nothing. Every module's set asks the core's `CurrentUserAccessCheck` first, and `AllowAnonymous()` needs no check at all. |
 | the caller's own | `[OrOwn]`, `[OwnOnly]` with `[Own]`, `AccessRequirement.Own(value)`, from the core | Nothing for a `Guid` or for Tenancy's seat id. `services.AddOwnedByCurrentUser<TValue, THandle>()` for a type you define. |
 | the owner of an aggregate | `[OrOwn]`, or `[OwnOnly]` with `[Own]`, on the id of an aggregate that marks its owner `[Owner]`; `AccessRequirement.OwnerOf(id)`; from the core | Nothing more on Entity Framework, whose `AddDDDToolkitEntityFramework` registers what reads the owner. The caller's own value of the owner's type, as in the row above. |
-| several cases at once, or one of several | stacked attributes, `AccessRequirement.All(...)` and `Any(...)`, from the core | Nothing. The set gives each case to the check that decides it. |
-| a tenant: a seat in it, a permission for the whole tenant or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or without a marker, `[Operator]` with `[ForTenant]`; `TenancyAccess.InTenant()` and the other cases of `TenancyRequirement`; from [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<TRequests, TContext>()`, once per module. It adds Tenancy's check and the check of the operator cases. |
-| a resource with members: a permission held on it | `[RequiresPermission(permission)]` with `[OnResource]`, `[SeenWith<TResourceId>(permission)]`; `MemberAccess.On(permission, resource)` and `SeenWith`; from [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
+| several cases at once, or one of several | stacked attributes and markers, `AccessRequirement.All(...)` and `Any(...)`, from the core | Nothing. The set gives each case to the check that decides it. |
+| a tenant: a seat in it, a permission for the whole tenant or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` for the whole tenant, `[AtUnit(permission)]` on a unit, `[Operator]` with `[ForTenant]`; `TenancyAccess.InTenant()` and the other cases of `TenancyRequirement`; from [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<TRequests, TContext>()`, once per module. It adds Tenancy's check and the check of the operator cases. |
+| a resource with members: a permission held on it | `[OnResource(permission)]` on the resource, `[SeenWith<TResourceId>(permission)]`; `MemberAccess.On(permission, resource)` and `SeenWith`; from [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
 | something only your module knows | a record of your own | `services.AddAccessCheck<IBillingRequest, BillingAccessCheck>()` |
 
 A check of your own has two methods:
@@ -1722,10 +1815,12 @@ Some mistakes no check can detect. Write a test of your own for them, over the r
   the sample requires a token.
 - **The property is only for what attributes cannot express.** Assert that every request that implements
   `RequiredAccess` itself uses one of these: a case of your module's own, a requirement computed from the request's
-  values, or a combination that stacked attributes cannot express (one case or another, or two permissions). The
-  Tenancy sample's `AccessDeclarationTests` does this, so a requirement that could be an attribute is written as one.
-  `All` of a sign-in and a permission is a stack, `[SignedIn] [RequiresPermission(permission)]`. `Any` of the caller's
-  own and a permission is `[OrOwn]`. The sample's test checks for these two as well.
+  values, or a combination that stacked attributes and markers cannot express (one case or another). The Tenancy
+  sample's `AccessDeclarationTests` does this, so a requirement that could be an attribute is written as one. The
+  sample's test also checks for three combinations that attributes express:
+  - `All` of a sign-in and a permission is the stack `[SignedIn] [RequiresPermission(permission)]`.
+  - `All` of two permissions at two places is a marker on each place.
+  - `Any` of the caller's own and a permission is `[OrOwn]`.
 
 A requirement is a record, so the same test can compare each request's requirement with the expected one: a table of
 request types, and the requirement each should return. In a module with a [default](#a-modules-default), this table

@@ -250,7 +250,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
             .Should().BeEquivalentTo(new Dictionary<string, List<Type>> { ["Projects"] = [typeof(InTenantAttribute)], ["Tenants"] = [], ["Inspections"] = [] });
 
         var takingIt = Requests
-            .Where(request => !request.Type.GetCustomAttributes(inherit: true).Any(attribute => IsARequirement(attribute.GetType())))
+            .Where(request => !request.Type.GetCustomAttributes(inherit: true).Any(attribute => IsARequirement(attribute.GetType())) && !MarksAPermission(request.Type))
             .Where(request => request.Type.GetInterfaceMap(typeof(IRequireAccess)).TargetMethods.Single().DeclaringType!.IsInterface)
             .Select(request => request.Type)
             .ToList();
@@ -271,16 +271,21 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
 
         static bool IsARequirement(Type attribute)
             => attribute.IsDefined(typeof(StatesRequirementAttribute), inherit: false) || attribute == typeof(RequiresPermissionAttribute) || attribute == typeof(OwnOnlyAttribute);
+
+        // A marker that carries a permission is a requirement of the request too, on the member where it is held.
+        static bool MarksAPermission(Type request)
+            => request.GetProperties().SelectMany(property => property.GetCustomAttributes(inherit: true))
+                .Concat(request.GetConstructors().SelectMany(constructor => constructor.GetParameters()).SelectMany(parameter => parameter.GetCustomAttributes(inherit: true)))
+                .Any(attribute => attribute.GetType().IsDefined(typeof(PermissionMarkerAttribute), inherit: false));
     }
 
     [Fact]
     public void A_request_says_what_it_requires_with_an_attribute_unless_it_computes_it_or_it_is_its_module_s_own()
     {
-        // A requirement that reads no value of the request but a permission and an id it carries is an attribute on it, and
-        // the line the generator writes, stacked attributes and [OrOwn] beside a permission included; the property is for
-        // what an attribute cannot say: a case of the module's own, which no package's attribute stands for, a
-        // requirement computed from the request's values, and a combination no stack of attributes says, two permissions in
-        // two places.
+        // A requirement that reads no value of the request but a permission and an id it carries is an attribute or a marker on
+        // it, and the line the generator writes: stacked attributes, a marker on each place a permission is held, two places
+        // among them, and [OrOwn] beside a permission included. The property is for what neither can say: a case of the
+        // module's own, alone or in a combination, one caller or another, and a requirement computed from the request's values.
         var answeringItself = Requests
             .Where(request => request.Type.GetInterfaceMap(typeof(IRequireAccess)).TargetMethods.Single().DeclaringType == request.Type)
             .ToDictionary(request => request.Type, request => DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request)!);
@@ -288,12 +293,13 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         answeringItself.Should().NotBeEmpty("or this proves nothing");
         foreach (var (type, declares) in answeringItself)
         {
-            (OfTheModuleOrTwoPermissions(declares) || type == typeof(SeatGrants)).Should().BeTrue(
-                "{0} answers RequiredAccess itself, so it declares a case of its module's own, two permissions, or computes it, and {1} is none of them", type.Name, declares.GetType().Name);
+            (SaidByNoAttribute(declares) || type == typeof(SeatGrants)).Should().BeTrue(
+                "{0} answers RequiredAccess itself, so it declares a case of its module's own, one caller or another, or computes it, and {1} is none of them", type.Name, declares.GetType().Name);
         }
 
         answeringItself.Should().ContainKey(typeof(SeatGrants), "the sample keeps a requirement computed from the request's values");
-        answeringItself.Should().ContainKey(typeof(MoveProjectToUnit), "and one of two permissions in two places");
+        answeringItself.Should().ContainKey(typeof(OpenProject), "and one computed from whether the command names an owner");
+        answeringItself.Should().NotContainKey(typeof(MoveProjectToUnit), "two permissions in two places are a marker on each");
         answeringItself.Should().NotContainKey(typeof(RenameSeat), "the caller's own or the permission is said with attributes");
         Requests.Where(request => !answeringItself.ContainsKey(request.Type)).Should().NotBeEmpty("and the others say it with an attribute");
     }
@@ -302,34 +308,28 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     public void The_guard_of_the_property_takes_what_no_attribute_says_and_nothing_a_stack_of_them_does()
     {
         // The guard of the test above, held to the cases it tells apart, so an application that copies it copies a guard
-        // that holds: a stack of attributes says All of a sign-in and a permission, and [OrOwn] beside a permission says Any of the two.
-        OfTheModuleOrTwoPermissions(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeFalse("[SignedIn] [RequiresPermission(permission)] says it");
-        OfTheModuleOrTwoPermissions(AccessRequirement.Any(AccessRequirement.Own(TheSeat), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeFalse("[RequiresPermission(permission)] with [OrOwn] says it");
-        OfTheModuleOrTwoPermissions(TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)).Should().BeFalse("[RequiresPermission(permission)] says it");
+        // that holds: a stack of attributes says All of a sign-in and a permission, a marker on each place says All of two
+        // permissions, and [OrOwn] beside a permission says Any of the two.
+        SaidByNoAttribute(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeFalse("[SignedIn] [RequiresPermission(permission)] says it");
+        SaidByNoAttribute(AccessRequirement.Any(AccessRequirement.Own(TheSeat), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeFalse("[RequiresPermission(permission)] with [OrOwn] says it");
+        SaidByNoAttribute(TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)).Should().BeFalse("[RequiresPermission(permission)] says it");
+        SaidByNoAttribute(AccessRequirement.All(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, TheUnit), TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, TheOtherUnit))).Should().BeFalse("a marker on each unit says it");
 
-        OfTheModuleOrTwoPermissions(AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeTrue("one caller or another is no stack");
-        OfTheModuleOrTwoPermissions(AccessRequirement.All(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, TheUnit), TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, TheOtherUnit))).Should().BeTrue("two permissions at once");
-        OfTheModuleOrTwoPermissions(AccessRequirement.All(TenancyAccess.InTenant(), new ProjectsRequirement.AtUnit(ProjectPermissionNames.Open, TheUnit))).Should().BeTrue("the module's own case, in a combination too");
+        SaidByNoAttribute(AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeTrue("one caller or another is no stack");
+        SaidByNoAttribute(AccessRequirement.All(TenancyAccess.InTenant(), new ProjectsRequirement.AtUnit(ProjectPermissionNames.Open, TheUnit))).Should().BeTrue("the module's own case, in a combination too");
     }
 
     /// <summary>
-    /// What may answer the property rather than an attribute: a case of the module's own, alone or in a combination; one
-    /// caller or another where neither way is the caller's own, which no stack of attributes says; or two permissions at once,
-    /// where one <c>[RequiresPermission]</c> says one.
+    /// What may answer the property rather than attributes and markers: a case of the module's own, alone or in a
+    /// combination; and one caller or another where neither way is the caller's own, which no stack of attributes says.
     /// </summary>
-    private static bool OfTheModuleOrTwoPermissions(AccessRequirement declares) => declares switch
+    private static bool SaidByNoAttribute(AccessRequirement declares) => declares switch
     {
         ProjectsRequirement or InspectionsRequirement => true,
-        AccessRequirement.Combined combined when combined.Cases.Any(OfTheModuleOrTwoPermissions) => true,
+        AccessRequirement.Combined combined when combined.Cases.Any(SaidByNoAttribute) => true,
         AccessRequirement.AnyOf any => any.Cases.All(each => each is not AccessRequirement.Owned<SeatId>),
-        AccessRequirement.AllOf all => all.Cases.Count(IsAPermission) > 1,
         _ => false,
     };
-
-    /// <summary>A permission, of Tenancy's for the whole tenant or at a unit, or of Membership's on a resource.</summary>
-    private static bool IsAPermission(AccessRequirement each)
-        => each is TenancyRequirement.AtTenant or TenancyRequirement.AtUnit<OrganizationUnitId>
-           || (each.GetType().IsGenericType && each.GetType().GetGenericTypeDefinition() == typeof(MemberAccess<>.On));
 
     [Fact]
     public void A_requirement_computed_from_the_request_s_values_is_the_property_s_answer()

@@ -149,9 +149,9 @@ public abstract partial record AccessRequirement
     ///     AccessRequirement.Own(Seat),                                  // the caller's own seat,
     ///     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));    // or the permission for every seat
     /// </code>
-    /// A request says it with attributes as well: <see cref="OrOwnAttribute"/> beside <see cref="RequiresPermissionAttribute"/>
-    /// for the caller's own or the permission, <see cref="OwnAttribute"/> with <see cref="OwnOnlyAttribute"/> for the
-    /// caller's own alone.
+    /// A request can state it with attributes as well. <see cref="OrOwnAttribute"/> beside the request's only permission,
+    /// of <see cref="RequiresPermissionAttribute"/> or of a marker, lets through the caller's own or the permission.
+    /// <see cref="OwnAttribute"/> with <see cref="OwnOnlyAttribute"/> lets through the caller's own alone.
     /// </summary>
     /// <remarks>
     /// What the caller's own value is, whoever knows says, with an <see cref="IOwnedByCurrentUser{TValue}"/>: the core for a

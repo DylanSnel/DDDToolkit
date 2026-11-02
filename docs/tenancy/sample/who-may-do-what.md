@@ -86,11 +86,7 @@ The command declares its requirement with attributes. The module's request inter
 [`IProjectsRequest.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs)):
 
 ```csharp
-[RequiresPermission(RequiredPermission)]
-public sealed record CloseProject([OnResource] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    public const string RequiredPermission = ProjectPermissionNames.Close;
-}
+public sealed record CloseProject([OnResource(ProjectPermissionNames.Close)] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 [AccessRequests, InTenant]   // the generator writes ProjectsAccessBehavior from this, with [InTenant] as the module's default
 public partial interface IProjectsRequest : IRequireAccess;
@@ -152,7 +148,7 @@ not reach. It refuses nobody for seeing nothing.
 | `RenameTenantProject` | An operator only, in the tenant its `[ForTenant]` member names. | The project exists and is open. The handler runs as operator work in that tenant. |
 | `OpenProject` | `projects.open` at the unit. A request that names an owner also needs one of these: the owner is the caller's own seat, or the caller holds `projects.owner.change` at the unit (`AccessRequirement.All`, `Any`, `Own`). | The unit is active. The number is free in the tenant (`projects.number-taken`). The crew manager admits the owner's seat. |
 | `ChangeProjectName`, `PlanProject` | `projects.edit` on the project. | |
-| `MoveProjectToUnit` | `projects.edit` on the project and `projects.open` at the new unit (`AccessRequirement.All`). | The new unit is active. |
+| `MoveProjectToUnit` | `projects.edit` on the project and `projects.open` at the new unit, with a marker on each (`AccessRequirement.All`). | The new unit is active. |
 | `CloseProject`, `ReopenProject` | `projects.close` on the project. | |
 | `AddCrewMember`, `GiveCrewRole` | `projects.crew.manage` on the project. | The crew manager checks that a new member's seat is active, and that a role is one of the tenant's project roles in use. An end that has passed is `projects.invalid-period`. |
 | `TakeCrewRole`, `RemoveCrewMember` | `projects.crew.manage` on the project. | When a seat changes its own place on the crew, the crew manager saves the change as the module's work. |

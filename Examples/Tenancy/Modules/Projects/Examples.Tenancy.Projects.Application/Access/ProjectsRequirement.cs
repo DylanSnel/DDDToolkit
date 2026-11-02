@@ -18,12 +18,13 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// for every refusal about a project.
 /// </para>
 /// <para>
-/// A closed set: the constructor is private, so the cases below are all there are, and each is a record, so two
-/// requirements that say the same are equal. A case combines with the packages' cases at the door: moving a project
-/// needs the permission on it and this one at the destination, <c>AccessRequirement.All</c>, and naming somebody else as the
-/// owner of a new project needs the caller's own seat or this one with the owner's permission, <c>AccessRequirement.Any</c>.
-/// What no requirement can say, because it is about the tenant's state rather than the caller's rights, stays in the
-/// handler, in plain sight: that the unit takes anything new.
+/// The set of cases is closed. The constructor is private, so the cases below are the only ones. Each case is a record,
+/// so two requirements with the same values are equal. A case combines with the packages' cases in the access check.
+/// Moving a project needs the permission on the project and this case at the destination, combined with
+/// <c>AccessRequirement.All</c>. The request states the second with the module's marker,
+/// <see cref="AtProjectUnitAttribute"/>. Naming somebody else as the owner of a new project needs the caller's own seat,
+/// or this case with the owner's permission, combined with <c>AccessRequirement.Any</c>. The handler checks that the
+/// unit takes anything new, because that is the tenant's state and no permission of the caller.
 /// </para>
 /// </remarks>
 public abstract record ProjectsRequirement : AccessRequirement
@@ -31,6 +32,11 @@ public abstract record ProjectsRequirement : AccessRequirement
     private ProjectsRequirement()
     {
     }
+
+    /// <summary>The case that the generator writes for <see cref="AtProjectUnitAttribute"/> on a request's unit: <see cref="AtUnit"/>.</summary>
+    /// <param name="permission">The permission the request needs at the unit.</param>
+    /// <param name="unit">The unit, from the request.</param>
+    public static AtUnit HeldAt(string permission, OrganizationUnitId unit) => new(permission, unit);
 
     /// <summary>
     /// <paramref name="Permission"/> is held by the caller at <paramref name="Unit"/>, there or above it: for what is asked

@@ -400,6 +400,36 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     }
 
     [Fact]
+    public async Task A_marker_on_a_document_and_one_on_a_folder_are_each_decided_as_the_caller_and_the_document_is_saved_under_the_version_it_named()
+    {
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
+        var data = filing.Scenario;
+        var read = (await filing.Services.ReadAsync(data.Minutes)).Version;
+
+        // Ada owns the minutes, and her token names her the clerk of the cabinet: each check reads its own resource as her,
+        // keeps what it read, and the document is saved as her, under the policies.
+        var command = new FileDocumentInFolder(data.Minutes, data.Cabinet, ExpectedVersion: read);
+        await filing.Services.AsAsync(TestUsers.Staff(data.Clerk, data.Ada), async provider =>
+        {
+            await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
+            Checked<MemberHold<DocumentId>>.FindAllInHand().Select(hold => (hold.Resource, hold.Version)).Should().Equal([(data.Minutes, read)]);
+            Checked<MemberHold<FolderId>>.FindAllInHand().Select(hold => hold.Resource).Should().Equal([data.Cabinet]);
+
+            var context = provider.GetRequiredService<FilingContext>();
+            var minutes = await context.Documents.AsTracking().SingleAsync(document => document.Id == command.Document, Cancellation);
+            minutes.ShareWith(data.Hal, MemberPeriod.Open(data.Now), data.Now, by: data.Ada);
+            await context.SaveChangesAsync(Cancellation);
+        });
+        (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Hal);
+
+        // Ben contributes to the minutes and only visits the cabinet: the folder's part refuses him, under the folder's codes.
+        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.Services.AsAsync(
+                TestUsers.Staff(data.Visitor, data.Ben),
+                provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(new FileDocumentInFolder(data.Minutes, data.Cabinet), Cancellation).AsTask())))
+            .Arguments.Should().Contain("Permission", FolderPermissions.File);
+    }
+
+    [Fact]
     public async Task A_member_who_takes_itself_off_without_the_permission_saves_its_own_place_as_the_applications_own_work_once_its_request_passed_the_door()
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);

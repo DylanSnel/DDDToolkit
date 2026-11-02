@@ -17,8 +17,8 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// Where the requirement reads no value of the request but the permission, the resource and the version it carries, the
 /// request says it with attributes instead, and the toolkit's generator writes the same call:
 /// <code>
-/// [RequiresPermission(DocumentPermissions.Share)]
-/// public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, NamedRole Role, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
+/// public sealed record ShareDocument(
+///     [OnResource(DocumentPermissions.Share)] DocumentId Document, UserId With, NamedRole Role, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 ///
 /// [SeenWith&lt;DocumentId&gt;(DocumentPermissions.View)]
 /// public sealed record ListDocuments : IDocumentsRequest;
@@ -62,8 +62,8 @@ public static class MemberAccess
     /// about the caller's own on the resource requires of it, beside the caller's own, where the permission is the other way
     /// through. <c>[OrOwn]</c> beside <c>[OnResource]</c> says it:
     /// <code>
-    /// [RequiresPermission(DocumentPermissions.Share)]                                    // take yourself off, or anybody with the permission
-    /// public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member) : IDocumentsRequest;
+    /// public sealed record LeaveDocument(                                                // take yourself off, or anybody with the permission
+    ///     [OnResource(DocumentPermissions.Share)] DocumentId Document, [OrOwn] UserId Member) : IDocumentsRequest;
     /// </code>
     /// is <c>AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Member), MemberAccess.Sees(DocumentPermissions.Share,
     /// request.Document)), MemberAccess.On(DocumentPermissions.Share, request.Document))</c>.

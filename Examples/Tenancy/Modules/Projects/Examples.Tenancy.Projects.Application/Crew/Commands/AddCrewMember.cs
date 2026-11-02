@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// <remarks>
 /// Whoever manages the crew may put anyone on it, themselves included, in any project role of the tenant in use,
 /// without holding that role's permissions: on a crew a role gives only what acts on the project. That is this
-/// application's rule, and the whole of it: the command requires <see cref="RequiredPermission"/> on the project, the
+/// application's rule, and the whole of it: the command requires <see cref="ProjectPermissionNames.ManageCrew"/> on the project, the
 /// permission the projects' rules mark as the one that manages the crew, and nothing is checked for a caller who adds
 /// their own seat.
 /// </remarks>
@@ -22,12 +22,7 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-[RequiresPermission(RequiredPermission)]
-public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    /// <summary>The permission the caller holds on the project.</summary>
-    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
-}
+public sealed record AddCrewMember([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 /// <summary>
 /// Handles <see cref="AddCrewMember"/> with one call to the crew manager, which takes the answer of the command's check,

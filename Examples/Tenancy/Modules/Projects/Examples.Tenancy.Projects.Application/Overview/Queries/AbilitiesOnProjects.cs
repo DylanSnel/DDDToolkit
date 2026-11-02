@@ -1,4 +1,3 @@
-using Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.Overview.Queries;
@@ -48,7 +47,7 @@ public sealed class AbilitiesOnProjectsHandler(IProjectReads reads, ProjectAcces
         var standing = await reading.StandingOnAsync(
             projects,
             access.KnownPermissions(ProjectAbilities.Permissions),
-            access.TenancyIn(reading).UnitsWhereIHold(MoveProjectToUnit.DestinationPermission),
+            access.TenancyIn(reading).UnitsWhereIHold(ProjectPermissionNames.Open),
             cancellationToken);
 
         return standing.ToDictionary(

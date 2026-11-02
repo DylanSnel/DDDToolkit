@@ -82,7 +82,7 @@ public class ModuleDefaultGenerationTests
 
             [RequiresPermission("billing.close")] public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
-            [RequiresPermission("billing.open-ledger")] public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
+            public sealed record OpenLedger(string Name, [AtUnit("billing.open-ledger")] OrganizationUnitId Unit) : IBillingRequest;
 
             public sealed record ListLedgers(OrganizationUnitId? Unit) : IBillingRequest
             {

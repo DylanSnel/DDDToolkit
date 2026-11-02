@@ -7,22 +7,16 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 /// <summary>
 /// Requirements that combine Membership's cases, sent through the door, the handler and its save under the expert hold
 /// (<c>UseMemberHolds</c>): the caller's own beside a permission on a resource, <c>[OrOwn]</c> beside <c>[OnResource]</c>, whose
-/// own way through still reads the resource, compares its version and keeps what the save is held to; and a permission on each
-/// of two resources of one kind, each saved under its own hold.
+/// own way through still reads the resource, compares its version and keeps what the save is held to; a permission on each
+/// of two resources of one kind, each saved under its own hold; and a permission on each of two kinds of resource, a document
+/// and a folder, where the document is saved under the version the request named and the folder is only read. Each request
+/// says its permissions with a marker on each resource.
 /// </summary>
 public sealed class CombinedRequirementsUnderTheHoldTests
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     private static Task<SqliteFiling> FilingAsync() => SqliteFiling.SeededAsync(wiring: (options, provider) => options.UseDDDToolkit(provider).UseMemberHolds(provider));
-
-    /// <summary>Shares a document with a user on each of two documents: the permission that shares, on both.</summary>
-    private sealed record ShareOnBoth(DocumentId First, DocumentId Second, UserId With) : IFilingRequest
-    {
-        AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-            MemberAccess.On(DocumentPermissions.Share, First),
-            MemberAccess.On(DocumentPermissions.Share, Second));
-    }
 
     [Fact]
     public async Task A_member_takes_itself_off_a_document_it_sees_without_the_permission_and_the_save_is_held_to_what_the_door_read()
@@ -131,5 +125,55 @@ public sealed class CombinedRequirementsUnderTheHoldTests
             FluentActions.Invoking(() => provider.GetRequiredService<Checked<MemberHold<DocumentId>>>().TakeAllFor(command))
                 .Should().Throw<InvalidOperationException>("nothing is kept for a request its checks refused, whichever of its cases passed");
         });
+    }
+
+    [Fact]
+    public async Task A_permission_on_a_document_and_one_on_a_folder_keep_a_hold_on_each_and_the_document_is_saved_under_the_version_it_named()
+    {
+        using var filing = await FilingAsync();
+        var data = filing.Scenario;
+        var read = (await filing.Services.ReadAsync(data.Minutes)).Version;
+
+        // Ada owns the minutes, and her token names her the clerk of the cabinet, which files: a member of both.
+        var command = new FileDocumentInFolder(data.Minutes, data.Cabinet, ExpectedVersion: read);
+        await filing.Services.AsAsync(TestUsers.Staff(data.Clerk, data.Ada), async provider =>
+        {
+            await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
+            Checked<MemberHold<DocumentId>>.FindAllInHand().Select(hold => (hold.Resource, hold.Version)).Should().Equal([(data.Minutes, read)], "the document's check compared the version it read");
+            Checked<MemberHold<FolderId>>.FindAllInHand().Select(hold => hold.Resource).Should().Equal([data.Cabinet], "the folder's check read the folder and kept what it read");
+
+            // The document is saved under its hold, and the folder is only read.
+            var context = provider.GetRequiredService<FilingContext>();
+            var minutes = await context.Documents.AsTracking().SingleAsync(each => each.Id == command.Document, Cancellation);
+            minutes.ShareWith(data.Hal, MemberPeriod.Open(data.Now), data.Now, by: data.Ada);
+            await context.SaveChangesAsync(Cancellation);
+        });
+
+        (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Hal);
+    }
+
+    [Fact]
+    public async Task Of_a_document_and_a_folder_the_part_that_refuses_refuses_under_its_own_codes_and_a_stale_version_loses_on_the_document()
+    {
+        using var filing = await FilingAsync();
+        var data = filing.Scenario;
+
+        Task RequireAsync(CurrentUserSnapshot caller, FileDocumentInFolder command)
+            => filing.Services.AsAsync(caller, provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation).AsTask());
+
+        // Cy only looks on at the minutes, and is the clerk: the document's part refuses, under the document's codes.
+        (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(TestUsers.Staff(data.Clerk, data.Cy), new FileDocumentInFolder(data.Minutes, data.Cabinet))))
+            .Arguments.Should().Contain("Permission", DocumentPermissions.Edit);
+
+        // Ben contributes to the minutes, and only visits the cabinet: the folder's part refuses, under the folder's codes.
+        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(TestUsers.Staff(data.Visitor, data.Ben), new FileDocumentInFolder(data.Minutes, data.Cabinet))))
+            .Arguments.Should().Contain("Permission", FolderPermissions.File);
+
+        // The version is the document's: one the document has left behind loses the race there.
+        var read = (await filing.Services.ReadAsync(data.Minutes)).Version;
+        await filing.Services.ChangeAsync(data.Minutes, minutes => minutes.Unshare(data.Eve));
+        var lost = await FluentActions.Awaiting(() => RequireAsync(TestUsers.Staff(data.Clerk, data.Ada), new FileDocumentInFolder(data.Minutes, data.Cabinet, ExpectedVersion: read)))
+            .Should().ThrowAsync<ConcurrencyConflictException>();
+        lost.Which.AggregateId.Should().Be(data.Minutes);
     }
 }

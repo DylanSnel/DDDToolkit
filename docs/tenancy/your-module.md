@@ -312,8 +312,7 @@ the class by that name:
 | `TenantToProvision` | The record `ProvisionAsync` takes. Your code makes it with `new`. | (a record) |
 
 ```csharp
-[RequiresPermission(TenancyPermissions.GrantsManage)]
-public sealed record GrantRole(SeatId Seat, RoleId Role, [AtUnit] OrganizationUnitId Unit) : ICommand<Seat>, ITenancyRequest;
+public sealed record GrantRole(SeatId Seat, RoleId Role, [AtUnit(TenancyPermissions.GrantsManage)] OrganizationUnitId Unit) : ICommand<Seat>, ITenancyRequest;
 
 public sealed class GrantRoleHandler(SeatManager seats) : ICommandHandler<GrantRole, Seat>
 {

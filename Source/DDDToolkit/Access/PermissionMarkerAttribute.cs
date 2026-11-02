@@ -1,26 +1,39 @@
 namespace DDDToolkit.Access;
 
 /// <summary>
-/// Makes an attribute a package ships a marker that says where the permission of <see cref="RequiresPermissionAttribute"/> is held,
-/// and says the call that makes the requirement from the permission and the member it marks. Tenancy declares its marker of a
-/// unit this way, and Membership its marker of a resource:
+/// Marks an attribute class as a permission marker. A package declares its markers with it. A permission marker goes on
+/// the member of a request that names a place, such as a unit or a resource. The marker's constructor takes the
+/// permission that the caller holds at that place. The generator turns the marker into a call that makes the requirement
+/// from the permission and the member. Membership declares its resource marker this way, and Tenancy its unit marker:
 /// <code>
-/// [PermissionMarker(typeof(TenancyAccess), nameof(TenancyAccess.AtUnit), IdOf = typeof(OrganizationUnitAttribute&lt;&gt;))]
+/// [PermissionMarker(typeof(MemberAccess), nameof(MemberAccess.On), IdOf = typeof(MemberAttribute&lt;,,,&gt;), Argument = 3, IdOfArgument = true)]
 /// [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, Inherited = false)]
-/// public sealed class AtUnitAttribute : Attribute;
+/// public sealed class OnResourceAttribute(string permission) : Attribute
+/// {
+///     public string Permission { get; } = permission;
+/// }
 /// </code>
-/// A request that carries <c>[RequiresPermission(permission)]</c> and marks a member <c>[AtUnit]</c> then answers
-/// <see cref="IRequireAccess.RequiredAccess"/> with <c>TenancyAccess.AtUnit(permission, request.Unit)</c>.
+/// A request with the member <c>[OnResource(BoardPermissions.Edit)] BoardId Board</c> then answers
+/// <see cref="IRequireAccess.RequiredAccess"/> with <c>MemberAccess.On(BoardPermissions.Edit, request.Board)</c>.
 /// </summary>
 /// <remarks>
-/// The generator writes the method of <see cref="Factory"/> named <see cref="Method"/>, with the permission and the marked
-/// member, and then whatever a <see cref="PermissionMarkerArgumentAttribute"/> beside it marks. A marker goes on a positional
-/// parameter of a record or on a property, so declare it for both, <c>AttributeTargets.Parameter |
-/// AttributeTargets.Property</c>: a bare marker on a positional parameter is the parameter's, and the generator reads
-/// <c>[property: AtUnit]</c> as well. One marker says where for one requirement, so two on one request are DDD00080.
+/// The generator reads the permission from the marker's constructor argument, a string. It writes a call of the method
+/// <see cref="Method"/> on <see cref="Factory"/>, with the permission and the marked member. Each member that a
+/// <see cref="PermissionMarkerArgumentAttribute"/> marks goes into the same call, after the marked member. A marker on a
+/// request's member without a permission is DDD00080. A marker goes on a positional parameter of a record or on a
+/// property, so declare it for both, <c>AttributeTargets.Parameter | AttributeTargets.Property</c>. On a positional
+/// parameter the marker applies to the parameter, and the generator reads it there. The generator also reads
+/// <c>[property: OnResource(permission)]</c>.
+/// <para>
+/// Each marker is one requirement. When a request has several markers, the generator combines their calls with
+/// <c>AccessRequirement.All</c>, in the order the markers are written. These calls come after the calls of the
+/// requirement attributes on the request. A request may have two markers of one kind, such as two boards or two units.
+/// <c>AttachAsset([OnResource(BoardPermissions.Edit)] BoardId Board, [OnResource(AssetPermissions.Use)] AssetId Asset)</c>
+/// becomes <c>AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board), MemberAccess.On(AssetPermissions.Use, request.Asset))</c>.
+/// </para>
 /// </remarks>
-/// <param name="factory">The class whose static method makes the requirement: <c>typeof(TenancyAccess)</c>.</param>
-/// <param name="method">The method's name: <c>nameof(TenancyAccess.AtUnit)</c>.</param>
+/// <param name="factory">The class whose static method makes the requirement: <c>typeof(MemberAccess)</c>.</param>
+/// <param name="method">The method's name: <c>nameof(MemberAccess.On)</c>.</param>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class PermissionMarkerAttribute(Type factory, string method) : Attribute
 {
@@ -31,49 +44,50 @@ public sealed class PermissionMarkerAttribute(Type factory, string method) : Att
     public string Method { get; } = method;
 
     /// <summary>
-    /// The template whose classes' ids the marked member may be, as <c>[TemplateType]</c> names one: the open generic
-    /// attribute an application declares the class with, <c>typeof(OrganizationUnitAttribute&lt;&gt;)</c>. A member of
-    /// another type is DDD00081: a unit marked on a seat's id compiles, and lets nobody through. Where the project sees
-    /// no class declared with the template, nothing is said, and the package's check stops an id it does not know
-    /// when the request is sent. Null to take any type the method takes.
+    /// The template whose classes' ids the marked member may be, named as <c>[TemplateType]</c> names one. It is the open
+    /// generic attribute that an application declares the class with, <c>typeof(OrganizationUnitAttribute&lt;&gt;)</c>. A
+    /// member of another type is DDD00081. Without this diagnostic, a unit marker on a seat's id compiles and lets nobody
+    /// through. Where the project sees no class declared with the template, the analyzer reports nothing, and the
+    /// package's check refuses an id it does not know when the request is sent. Null to take any type the method takes.
     /// </summary>
     public Type? IdOf { get; set; }
 
     /// <summary>
-    /// Which type argument of <see cref="IdOf"/>, as the class is declared with it, names what the member is the id of:
-    /// zero-based, and 0 by default, the class's own id. Membership's marker of a resource takes the fourth, the
-    /// resource a member class is declared for, with <see cref="IdOfArgument"/>.
+    /// The type argument of <see cref="IdOf"/>, in the class's declaration, that names what the member is the id of. It
+    /// is zero-based. The default, 0, is the class's own id. Membership's resource marker takes the fourth type argument,
+    /// the resource that a member class is declared for, with <see cref="IdOfArgument"/>.
     /// </summary>
     public int Argument { get; set; }
 
     /// <summary>
-    /// With a later <see cref="Argument"/> that names an entity or an aggregate root: the member is the id that class
-    /// is declared with, rather than the class itself. <c>[Member&lt;DocumentShareId, UserId, NamedRole, Document&gt;]</c>
+    /// When <see cref="Argument"/> names an entity or an aggregate root, the member is the id that the class is declared
+    /// with. <c>[Member&lt;DocumentShareId, UserId, NamedRole, Document&gt;]</c>
     /// with <c>Argument = 3, IdOfArgument = true</c> makes the member a <c>DocumentId</c>.
     /// </summary>
     public bool IdOfArgument { get; set; }
 
     /// <summary>
-    /// The requirement attributes a permission held where this marker says already requires, so that one of them stacked
-    /// beside <see cref="RequiresPermissionAttribute"/> says nothing more: a permission at a unit of Tenancy's is held by a seat in the
-    /// tenant or by system work there, so <c>[AtUnit]</c> names <c>[InTenant]</c>, and <c>[InTenant]</c> beside it is
-    /// DDD00084, a warning. Empty by default.
+    /// The requirement attributes that the marker's permission already requires. One of these attributes beside the
+    /// marker adds nothing. Only a seat in the tenant, or system work there, holds a permission at a unit of Tenancy's. So
+    /// <c>[AtUnit]</c> names <c>[InTenant]</c>, and <c>[InTenant]</c> beside it is DDD00084, a warning. Empty by default.
     /// </summary>
     public Type[] Implies { get; set; } = [];
 
     /// <summary>
-    /// Says that <see cref="OrOwnAttribute"/> may go beside this marker, by naming the method of <see cref="Factory"/>
-    /// whose case the caller's own way through still meets where the marker says: the member it marks is what the request
-    /// acts on, so a caller who holds the permission there acts on it, and one who acts on its own acts on its own there, and is
-    /// held to it there too. The method takes what <see cref="Method"/> takes, the permission, the marked member and the
-    /// arguments beside it. Membership's <c>[OnResource]</c> names <c>MemberAccess.Sees</c>:
-    /// <c>LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Seat)</c> takes the caller off a crew of a project it
-    /// sees, or anyone with the permission on the project, and is
-    /// <c>Any(All(Own(request.Seat), MemberAccess.Sees(permission, request.Project)), MemberAccess.On(permission, request.Project))</c>,
-    /// so the project's check reads it, compares the version the request names and keeps what a save is held to, either
-    /// way. <see langword="null"/> by default, for a marker of where a permission is checked whatever the request acts on, as
-    /// Tenancy's <c>[AtUnit]</c> is: beside it the caller would send a unit where it holds the permission for another subject, so
-    /// <c>[OrOwn]</c> there is DDD00085.
+    /// The method of <see cref="Factory"/> that the caller's own way through must still pass at the marked member. A
+    /// marker with this property allows <see cref="OrOwnAttribute"/> to pair with it. Set it on a marker whose member is
+    /// what the request acts on. The method takes what <see cref="Method"/> takes: the permission, the marked member and
+    /// the arguments beside it. Membership's <c>[OnResource]</c> names <c>MemberAccess.Sees</c>. So
+    /// <c>LeaveCrew([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, [OrOwn] SeatId Seat)</c> becomes
+    /// <c>Any(All(Own(request.Seat), MemberAccess.Sees(permission, request.Project)), MemberAccess.On(permission, request.Project))</c>.
+    /// On both ways through, the project's check reads the project, compares the version the request names, and keeps the
+    /// hold that the save is checked against.
+    /// <para>
+    /// The default is <see langword="null"/>. Leave it null on a marker of the place where a permission is checked, when
+    /// the request acts on something else, as with Tenancy's <c>[AtUnit]</c>. With such a marker, a caller could send a
+    /// unit where it holds the permission together with another person's seat. So <c>[OrOwn]</c> paired with such a
+    /// marker is DDD00085.
+    /// </para>
     /// </summary>
     public string? OwnAlternative { get; set; }
 }

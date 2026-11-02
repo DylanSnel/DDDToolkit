@@ -37,9 +37,9 @@ using DDDToolkit.Supporting.Tenancy.Managers;
 // user.CurrentSeatId<SeatId>(). A wrapper is internal, and a rule may sit in any project.
 [assembly: TemplateRegistrations(typeof(TenancyRowAccess))]
 
-// A request that requires a permission and marks no member of where it is held, [RequiresPermission(permission)] on its own, requires it
-// for the whole tenant: Tenancy's case, so Tenancy says it. A permission at a unit is marked [AtUnit], and one on a resource
-// with members [OnResource], which Membership ships. A permission held for the whole tenant is held by a seat in it or by system
+// A permission without a marker, [RequiresPermission(permission)], is required for the whole tenant: Tenancy's case, so Tenancy
+// says it. A permission at a unit is on its marker, [AtUnit(permission)], and one on a resource with members on
+// [OnResource(permission)], which Membership ships. A permission held for the whole tenant is held by a seat in it or by system
 // work there, so [InTenant] beside it says nothing more.
 [assembly: PermissionWithoutMarker(typeof(TenancyAccess), nameof(TenancyAccess.AtTenant), Implies = [typeof(InTenantAttribute)])]
 

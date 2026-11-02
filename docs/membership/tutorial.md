@@ -142,15 +142,15 @@ package and Tenancy's markers package. Boards' context uses the Entity Framework
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.10" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.10" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.10" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.10" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.10" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.10" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.10" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.10" />
-    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.10" />
+    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.11" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
@@ -892,12 +892,13 @@ and policies.
   Changes that the tenant made to its roles stay.
 
 **What this looks like on a request.** Step 7 writes this request and its handler. You do not write it now. It shows
-what the checks of this step do. `[RequiresPermission(BoardPermissions.Edit)]` asks for `boards.edit`, and
-`[OnResource]` says on which board. Membership's check decides it, and `Handle` runs only when the check passes:
+what the checks of this step do. `[OnResource(BoardPermissions.Edit)]` asks for `boards.edit`, on the board it
+marks. Membership's check decides it, and `Handle` runs only when the check passes:
 
 ```csharp
-[RequiresPermission(BoardPermissions.Edit)]                       // what the caller needs: boards.edit
-public sealed record EditBoardCommand([OnResource] BoardId Board, string Name)  // [OnResource]: on this board
+public sealed record EditBoardCommand(
+    [OnResource(BoardPermissions.Edit)] BoardId Board,            // what the caller needs: boards.edit, on this board
+    string Name)
     : ICommand<Board>, IBoardsRequest;                             // IBoardsRequest: the behavior checks it
 
 public sealed class EditBoardHandler(IBoardRepository boards) : ICommandHandler<EditBoardCommand, Board>
@@ -1186,8 +1187,8 @@ not see it yet.
 
   | Request | Requires | Checked by |
   |---|---|---|
-  | `OpenBoardCommand` | `[RequiresPermission(boards.create)]`, with `[AtUnit]` on its unit | Tenancy, at that unit or above. The board does not exist yet, so nobody is a member of it. |
-  | `GetBoardQuery` | `[RequiresPermission(boards.view)]`, with `[OnResource]` on its board | Membership, on that board |
+  | `OpenBoardCommand` | `[AtUnit(BoardPermissions.Create)]` on its unit: `boards.create` | Tenancy, at that unit or above. The board does not exist yet, so nobody is a member of it. |
+  | `GetBoardQuery` | `[OnResource(BoardPermissions.View)]` on its board: `boards.view` | Membership, on that board |
   | `ListBoardQuery` | `[InTenant]` | Tenancy: the caller works in the tenant. The read policy of step 4 decides which boards the list holds. |
 
 - **Request names.** A request is `<Feature>Query` or `<Feature>Command`, and its handler is `<Feature>Handler`. The
@@ -1311,11 +1312,10 @@ caller becomes the owner.
 
 **`Harbor.Boards.Application/Boards/OpenBoard/OpenBoard.cs`**
 
-```csharp {3-4,7,14,17-18}
+```csharp {3,6,13,16-17}
 namespace Harbor.Boards.Application.Boards.OpenBoard;
 
-[RequiresPermission(BoardPermissions.Create)]
-public sealed record OpenBoardCommand([AtUnit] OrganizationUnitId Unit, string Name) : ICommand<Board>, IBoardsRequest;
+public sealed record OpenBoardCommand([AtUnit(BoardPermissions.Create)] OrganizationUnitId Unit, string Name) : ICommand<Board>, IBoardsRequest;
 
 public sealed class OpenBoardHandler(
     BoardMemberManager members,
@@ -1338,13 +1338,12 @@ public sealed class OpenBoardHandler(
 
 **`Harbor.Boards.Application/Boards/GetBoard/GetBoard.cs`**
 
-```csharp {5-6,8,10-12}
+```csharp {5,7,9-11}
 using DDDToolkit.Supporting.Membership;
 
 namespace Harbor.Boards.Application.Boards.GetBoard;
 
-[RequiresPermission(BoardPermissions.View)]
-public sealed record GetBoardQuery([OnResource] BoardId Board) : IQuery<Board>, IBoardsRequest;
+public sealed record GetBoardQuery([OnResource(BoardPermissions.View)] BoardId Board) : IQuery<Board>, IBoardsRequest;
 
 public sealed class GetBoardHandler(IBoardRepository boards) : IQueryHandler<GetBoardQuery, Board>
 {
@@ -1444,7 +1443,8 @@ public static class BoardsModule
 
 ### What it does
 
-- `[AtUnit] Unit`: Rhea needs `boards.create` at that unit or above it, from a Tenancy role.
+- `[AtUnit(BoardPermissions.Create)] Unit`: Rhea needs `boards.create` at that unit or above it, from a Tenancy role.
+  The marker names the permission, so the request needs no other attribute.
 - `TenancyAccessManager`: the class the generator wrote into this project from the `TenancyIds` line. It is the same
   access manager the Tenancy module's handlers take.
 - `access.CurrentTenant.RequireSeat()` returns the caller's tenant, as `Id`, and the caller's seat, as `Seat`, which is
@@ -1456,8 +1456,8 @@ public static class BoardsModule
 - `BoardId.Create()` makes the new board's id in code, before the save.
 - `members.OpenAsync(board)` refuses an owner whose seat is not active in the tenant with `boards.member-not-active`.
   Otherwise it adds the board, saves it and returns it.
-- `[OnResource] Board`: before the handler runs, the check reads that board. It refuses a caller who does not see the
-  board, and a caller who sees it without the permission.
+- `[OnResource(BoardPermissions.View)] Board`: before the handler runs, the check reads that board. It refuses a
+  caller who does not see the board, and a caller who sees it without the permission.
 - `Board.Codes.Refuse(MembershipRefusals.NotFound)`: for a board deleted between the check and the load. The refusal
   uses the board's code, `boards.not-found`.
 - `[InTenant]`: Tenancy's check lets through a seat of the tenant. `db.Boards` then returns the rows the policies leave.
@@ -1621,11 +1621,10 @@ then loads the board, adds the member and saves.
 
 **`Harbor.Boards.Application/Boards/AddMember/AddMember.cs`**
 
-```csharp {3-4,6,9-10}
+```csharp {3,5,8-9}
 namespace Harbor.Boards.Application.Boards.AddMember;
 
-[RequiresPermission(BoardPermissions.ManageMembers)]
-public sealed record AddMemberCommand([OnResource] BoardId Board, SeatId Seat, BoardRoleId Role) : ICommand<Board>, IBoardsRequest;
+public sealed record AddMemberCommand([OnResource(BoardPermissions.ManageMembers)] BoardId Board, SeatId Seat, BoardRoleId Role) : ICommand<Board>, IBoardsRequest;
 
 public sealed class AddMemberHandler(BoardMemberManager members) : ICommandHandler<AddMemberCommand, Board>
 {
@@ -1640,13 +1639,12 @@ it.
 
 **`Harbor.Boards.Application/Boards/EditBoard/EditBoard.cs`**
 
-```csharp {5-6,8,10,15}
+```csharp {5,7,9,14}
 using DDDToolkit.Supporting.Membership;
 
 namespace Harbor.Boards.Application.Boards.EditBoard;
 
-[RequiresPermission(BoardPermissions.Edit)]
-public sealed record EditBoardCommand([OnResource] BoardId Board, string Name) : ICommand<Board>, IBoardsRequest;
+public sealed record EditBoardCommand([OnResource(BoardPermissions.Edit)] BoardId Board, string Name) : ICommand<Board>, IBoardsRequest;
 
 public sealed class EditBoardHandler(IBoardRepository boards) : ICommandHandler<EditBoardCommand, Board>
 {
@@ -1779,8 +1777,8 @@ public static class BoardsModule
   on the tenant and the name. The sync reports it at each start, until the tenant renames that role.
 - `roles.ListAsync(...)`: every board role of the caller's tenant, archived ones included, ordered by name. The
   tenant filter keeps other tenants' roles out.
-- `[OnResource] Board` with `boards.members.manage`: the owner passes the check. A member fails it, whatever role the
-  member holds.
+- `[OnResource(BoardPermissions.ManageMembers)] Board`, `boards.members.manage`: the owner passes the check. A member
+  fails it, whatever role the member holds.
 - `members.AddAsync(...)` refuses with the board's codes: `boards.member-not-active` for a seat that is not active in
   the tenant, and `boards.role-not-for-members` for a role that is not one of the tenant's board roles in use.
 - The member list then adds Leo, with the role for the same period, and refuses him a second time. The manager saves
@@ -2107,13 +2105,12 @@ public sealed record BoardWithPermissions(Board Board, IReadOnlyList<string> May
 
 **`Harbor.Boards.Application/Boards/GetBoard/GetBoard.cs`**
 
-```csharp {6,8-10,12,17-20}
+```csharp {5,7-9,11,16-19}
 using DDDToolkit.Supporting.Membership;
 
 namespace Harbor.Boards.Application.Boards.GetBoard;
 
-[RequiresPermission(BoardPermissions.View)]
-public sealed record GetBoardQuery([OnResource] BoardId Board) : IQuery<BoardWithPermissions>, IBoardsRequest;
+public sealed record GetBoardQuery([OnResource(BoardPermissions.View)] BoardId Board) : IQuery<BoardWithPermissions>, IBoardsRequest;
 
 public sealed class GetBoardHandler(
     IBoardRepository boards,

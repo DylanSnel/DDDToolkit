@@ -14,6 +14,32 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
+- **Several permission markers on one request.** The generator combines the calls of all permission markers on a
+  request with `AccessRequirement.All`, in the order they are written. The calls of the request's own requirement
+  attributes come first. Two markers of the same kind are allowed, such as two boards or two units.
+  - Attaching an asset to a board:
+    `AttachAssetCommand([OnResource(BoardPermissions.Edit)] BoardId Board, [OnResource(AssetPermissions.Use)] AssetId Asset)`.
+  - Moving a seat between two units: `[AtUnit(permission)]` on both units.
+  - Moving a project to another unit: `[OnResource(permission)]` on the project and `[AtUnit(permission)]` on the unit.
+
+  Each `MemberAccess.On` call checks its own resource. A refusal contains the refusal codes of the resource that
+  failed. The check keeps a hold on each resource. See
+  [Where the permission is held](docs/access-requirements.md#where-the-permission-is-held).
+- **`[ExpectedVersion<TResource>]` and `[OrOwn<TResource>]`.** The type argument is the aggregate root of the id on an
+  `[OnResource]` member, for example `Board` for a `BoardId`. `[ExpectedVersion<Board>]` passes the version to the call
+  of the marker on the `BoardId`. `[OrOwn<Board>]` makes the caller's own an alternative to that marker's permission
+  only. A request with markers on two kinds of resource needs the generic form. A package declares a generic marker
+  argument with `[PermissionMarkerArgument]`, the same way as the bare one.
+- **New cases in the diagnostics of permission markers.**
+  - DDD00080: a marker without a permission, and an `[ExpectedVersion]` or `[ExpectedVersion<TResource>]` that
+    matches no marker or more than one.
+  - DDD00085: a bare `[OrOwn]` beside two permissions, an `[OrOwn<TResource>]` for a class that no marker is on, and
+    an `[OrOwn]` beside two permissions of the same kind.
+  - DDD00092: `[AtUnit(permission)]` on a permission constant.
+  - DDD00093: an `[OnResource(permission)]` whose permission is declared on another resource only.
+  - DDD00104: a permission marker beside `[Operator]`.
+  - DDD00081, DDD00084 and DDD00096 check each marker and each pair separately.
+
 - **An id makes a new one of itself: `TId.Create()`.** Ids are made in code before the save, never by the database,
   so a change and every event of it know the id from the start. Every id the generator writes over a `Guid`, declared
   with `[EntityId<Guid>]`, asked for by `[AggregateRoot<Guid>]` or written by a package's switch, gets `Create()`,
@@ -3192,6 +3218,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **The permission moves from `[RequiresPermission]` to the permission marker.** Before, `[RequiresPermission(permission)]`
+  named the permission and a bare `[OnResource]` or `[AtUnit]` named where it is held. A request could require one
+  permission in one place. A request with a permission on two resources needed a hand-written `RequiredAccess`. Now the
+  marker's constructor takes the permission, for example
+  `EditBoardCommand([OnResource(BoardPermissions.Edit)] BoardId Board, string Name)`.
+  - `[OnResource]` without a permission no longer compiles.
+  - `[AtUnit]` without a permission is still the level attribute on a permission constant. On a request member it is
+    DDD00080.
+  - `[RequiresPermission(permission)]` stays for a permission without a marker and as a module's default. Tenancy holds
+    such a permission in the whole tenant. Beside markers it adds one more requirement.
+  - A request with its own `[RequiresPermission]` and a base request with another `[RequiresPermission]` requires both.
+  - Membership's `OwnAlternativeAnalyzer` is renamed to `OnResourceAnalyzer`.
+  - The Tenancy sample's Projects requests name `ProjectPermissionNames` constants on their markers. Their own
+    `RequiredPermission` constants are removed. `MoveProjectToUnit` uses `[OnResource]` on the project and the module's
+    own `[AtProjectUnit]` marker on the unit.
+  - No package has users yet, so there is no shim for the old form.
 - **`MadeFrom` is `FromStarterRole`**, on `CustomRoleAggregate` and on `CustomRoleDraft`, through the mapping, its indexes
   (`IX_{table}_TenantId_FromStarterRole`), the samples, the test hosts and the docs: the word Tenancy uses. Committed
   migrations stay as they are. A new migration renames the column. No package has users yet, so there is no alias.

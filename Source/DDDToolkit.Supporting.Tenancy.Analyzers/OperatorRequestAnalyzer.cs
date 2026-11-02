@@ -13,15 +13,16 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// <list type="bullet">
 /// <item>DDD00103: <c>[Operator(Tenant = OperatorTenant.FromRequest)]</c> beside a member marked <c>[ForTenant]</c> names two
 /// tenants for the work of one command.</item>
-/// <item>DDD00104: <c>[InTenant]</c> or <c>[RequiresPermission]</c> beside <c>[Operator]</c> refuses every operator, so the
-/// request refuses every caller.</item>
+/// <item>DDD00104: <c>[InTenant]</c>, <c>[RequiresPermission]</c> or a permission marker, such as <c>[AtUnit(permission)]</c>
+/// on a member, beside <c>[Operator]</c> refuses every operator. So the request refuses every caller.</item>
 /// <item>DDD00105: <c>Tenant</c> or <c>Scope</c> on the <c>[Operator]</c> of a query of the Mediator library says nothing,
 /// since nothing begins for a query.</item>
 /// </list>
 /// </summary>
 /// <remarks>
-/// It reads the attributes the request declares itself. It knows the package's attributes by their names, as text, as the
-/// rest of this project does.
+/// It reads the attributes the request declares itself, on it and on its members. It knows the package's attributes by
+/// their names, as text, as the rest of this project does. It recognizes a permission marker of any package by the
+/// core's <c>[PermissionMarker]</c> on the marker's class.
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class OperatorRequestAnalyzer : DiagnosticAnalyzer
@@ -30,6 +31,7 @@ public sealed class OperatorRequestAnalyzer : DiagnosticAnalyzer
     private const string ForTenantAttribute = "DDDToolkit.Supporting.Tenancy.Access.ForTenantAttribute";
     private const string InTenantAttribute = "DDDToolkit.Supporting.Tenancy.Access.InTenantAttribute";
     private const string RequiresPermissionAttribute = "DDDToolkit.Access.RequiresPermissionAttribute";
+    private const string PermissionMarkerAttribute = "DDDToolkit.Access.PermissionMarkerAttribute";
     private const string MediatorBaseQuery = "Mediator.IBaseQuery";
     private const string MediatorBaseStreamQuery = "Mediator.IBaseStreamQuery";
 
@@ -57,6 +59,7 @@ public sealed class OperatorRequestAnalyzer : DiagnosticAnalyzer
                 start.Compilation.GetTypeByMetadataName(ForTenantAttribute),
                 start.Compilation.GetTypeByMetadataName(InTenantAttribute),
                 start.Compilation.GetTypeByMetadataName(RequiresPermissionAttribute),
+                start.Compilation.GetTypeByMetadataName(PermissionMarkerAttribute),
                 start.Compilation.GetTypeByMetadataName(MediatorBaseQuery),
                 start.Compilation.GetTypeByMetadataName(MediatorBaseStreamQuery));
             start.RegisterSymbolAction(symbol => Analyze(symbol, known), SymbolKind.NamedType);
@@ -81,6 +84,7 @@ public sealed class OperatorRequestAnalyzer : DiagnosticAnalyzer
                 && (SymbolEqualityComparer.Default.Equals(attributeClass, known.InTenant) || SymbolEqualityComparer.Default.Equals(attributeClass, known.RequiresPermission)))
             .Select(static attribute => "[" + Short(attribute.AttributeClass!.Name) + "]")
             .Distinct()
+            .Concat(PermissionMarkers(request, known.PermissionMarker))
             .ToList();
         if (against.Count > 0)
         {
@@ -139,6 +143,32 @@ public sealed class OperatorRequestAnalyzer : DiagnosticAnalyzer
                 : null;
     }
 
+    /// <summary>
+    /// The members on which the request declares a permission marker, as a message names them: <c>'Unit' [AtUnit]</c>.
+    /// On a property of its own, or on a parameter of its primary constructor.
+    /// </summary>
+    private static IEnumerable<string> PermissionMarkers(INamedTypeSymbol request, INamedTypeSymbol? permissionMarker)
+    {
+        if (permissionMarker is null)
+        {
+            yield break;
+        }
+
+        var members = request.GetMembers().OfType<IPropertySymbol>().Select(static property => (property.Name, Attributes: property.GetAttributes()))
+            .Concat(request.InstanceConstructors.SelectMany(static constructor => constructor.Parameters).Select(static parameter => (parameter.Name, Attributes: parameter.GetAttributes())));
+        foreach (var (name, attributes) in members)
+        {
+            foreach (var attribute in attributes)
+            {
+                if (attribute.AttributeClass is { } attributeClass
+                    && attributeClass.OriginalDefinition.GetAttributes().Any(meta => SymbolEqualityComparer.Default.Equals(meta.AttributeClass, permissionMarker)))
+                {
+                    yield return "'" + name + "' [" + Short(attributeClass.Name) + "]";
+                }
+            }
+        }
+    }
+
     /// <summary>Whether the request is a query of the Mediator library, answered once or with a stream.</summary>
     private static bool IsQuery(INamedTypeSymbol request, Known known)
         => request.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, known.Query) || SymbolEqualityComparer.Default.Equals(implemented, known.StreamQuery));
@@ -159,6 +189,7 @@ public sealed class OperatorRequestAnalyzer : DiagnosticAnalyzer
         INamedTypeSymbol? ForTenant,
         INamedTypeSymbol? InTenant,
         INamedTypeSymbol? RequiresPermission,
+        INamedTypeSymbol? PermissionMarker,
         INamedTypeSymbol? Query,
         INamedTypeSymbol? StreamQuery);
 }

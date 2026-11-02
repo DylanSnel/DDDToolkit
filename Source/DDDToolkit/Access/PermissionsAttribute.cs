@@ -20,8 +20,8 @@ namespace DDDToolkit.Access;
 /// Each permission carries a level, an attribute derived from <see cref="PermissionLevelAttribute"/>, which says where
 /// it is asked: Tenancy's <c>[AtTenant]</c> for the whole tenant and <c>[AtUnit]</c> at a unit of the organization, and
 /// Membership's <c>[On&lt;TResource&gt;]</c> on one resource, through its members. A permission without one, or a level
-/// on anything that is no such constant, is DDD00092. The constants stay constants, so a request names one where it
-/// requires it: <c>[RequiresPermission(BoardPermissions.Create)]</c>.
+/// on anything that is no such constant, is DDD00092. The constants stay constants, so a request names one on the marker
+/// of the place where it is held: <c>[AtUnit(BoardPermissions.Create)] OrganizationUnitId Unit</c>.
 /// </para>
 /// <para>
 /// The packages' generators collect what is declared here, so the module says it nowhere else: Membership's into the

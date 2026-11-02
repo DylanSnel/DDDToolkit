@@ -3,33 +3,49 @@ using DDDToolkit.Access;
 namespace DDDToolkit.Supporting.Membership.Access;
 
 /// <summary>
-/// Marks the resource on which the permission of a request's <see cref="RequiresPermissionAttribute"/> is held, through its members
-/// or however else the resource's rules let a permission be held: what <see cref="MemberAccess.On{TResourceId}"/> says,
-/// written on the member of the request it reads.
+/// Marks the resource on which the caller of a request holds a permission. The caller holds it through the resource's
+/// members, or in another way that the resource's rules allow. The generator turns the marker into a call of
+/// <see cref="MemberAccess.On{TResourceId}"/> on the marked member.
 /// <code>
-/// [RequiresPermission(DocumentPermissions.Share)]
-/// public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
+/// public sealed record ShareDocument(
+///     [OnResource(DocumentPermissions.Share)] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 /// </code>
 /// is <c>MemberAccess.On(DocumentPermissions.Share, request.Document, request.ExpectedVersion)</c>.
 /// </summary>
 /// <remarks>
-/// It goes on a positional parameter of a record as it is, or on a property, and <c>[property: OnResource]</c> is read
-/// as well. The member is the id of a resource with members: an aggregate root a class declared with
-/// <c>[Member&lt;TId, TMemberId, TRoleId, TResource&gt;]</c> names as its resource. On another id it is DDD00081, where
-/// the project sees such a class. <see cref="ExpectedVersionAttribute"/> beside it marks the version the caller read,
-/// for a command that names one.
+/// It goes on a positional parameter of a record, or on a property. The generator also reads
+/// <c>[property: OnResource(permission)]</c>. The member is the id of a resource with members: an aggregate root that a
+/// class declared with <c>[Member&lt;TId, TMemberId, TRoleId, TResource&gt;]</c> names as its resource. On another id it is
+/// DDD00081, in a project that sees such a class. The permission is declared on that resource with
+/// <c>[On&lt;TResource&gt;]</c>. A permission declared only on another resource is DDD00093.
+/// <see cref="ExpectedVersionAttribute"/> beside it marks the version the caller read, for a command that names one.
 /// <para>
-/// The resource is what the request acts on, so <see cref="OrOwnAttribute"/> goes beside it: the request is about the
-/// caller's own there, or the caller holds the permission on the resource.
+/// A request can have several of these markers, each on its own resource. All of them are required. Attaching an asset to
+/// a board needs a permission on each:
 /// <code>
-/// [RequiresPermission(ProjectPermissionNames.ManageCrew)]                                    // take yourself off, or manage the crew
-/// public sealed record LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Seat) : IProjectsRequest;
+/// public sealed record AttachAsset(
+///     [OnResource(BoardPermissions.Edit)] BoardId Board,
+///     [OnResource(AssetPermissions.Use)] AssetId Asset,
+///     [ExpectedVersion&lt;Board&gt;] long? Version = null) : ICommand&lt;Board&gt;, IBoardsRequest;
 /// </code>
-/// is <c>AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees(ProjectPermissionNames.ManageCrew,
-/// request.Project)), MemberAccess.On(ProjectPermissionNames.ManageCrew, request.Project))</c>. Either way the project's check
-/// reads the project, a caller on its own needs only to see it, compares the version <see cref="ExpectedVersionAttribute"/>
-/// marks, and keeps what the expert hold holds the save to. The handler still finds the seat on that resource, and
-/// refuses one that is not: the caller's own lets it act on itself, not on a resource it has nothing to do with.
+/// becomes <c>AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use,
+/// request.Asset))</c>. Each <c>MemberAccess.On</c> call checks its own resource, keeps a hold on that resource, and
+/// refuses with that resource's refusal codes.
+/// </para>
+/// <para>
+/// The resource is what the request acts on, so <see cref="OrOwnAttribute"/> can pair with the marker. The caller is let
+/// through when the request is about the caller's own on that resource, or when the caller holds the permission on the
+/// resource.
+/// <code>
+/// public sealed record LeaveCrew(                                                          // take yourself off, or manage the crew
+///     [OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, [OrOwn] SeatId Seat) : IProjectsRequest;
+/// </code>
+/// becomes <c>AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees(ProjectPermissionNames.ManageCrew,
+/// request.Project)), MemberAccess.On(ProjectPermissionNames.ManageCrew, request.Project))</c>. On both ways through, the
+/// project's check reads the project. A caller on the own way through only needs to see the project. The check compares
+/// the version that <see cref="ExpectedVersionAttribute"/> marks, and keeps the hold that the expert hold checks the save
+/// against. The handler still looks up the seat on that resource, and refuses a seat that is not there. So the caller's
+/// own way through covers the caller's own place on that resource only.
 /// </para>
 /// <para>
 /// Where a permission on the resource manages the members (<see cref="MembershipRules.ManagesMembersPermission"/>), a
@@ -38,6 +54,11 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// begun for that caller once its request is the one in hand (<see cref="RequestInHand"/>): the check decided it.
 /// </para>
 /// </remarks>
+/// <param name="permission">The permission the caller holds on the resource: a constant declared <c>[On&lt;TResource&gt;]</c>.</param>
 [PermissionMarker(typeof(MemberAccess), nameof(MemberAccess.On), IdOf = typeof(MemberAttribute<,,,>), Argument = 3, IdOfArgument = true, OwnAlternative = nameof(MemberAccess.Sees))]
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, Inherited = false)]
-public sealed class OnResourceAttribute : Attribute;
+public sealed class OnResourceAttribute(string permission) : Attribute
+{
+    /// <summary>The permission the caller holds on the resource.</summary>
+    public string Permission { get; } = permission;
+}

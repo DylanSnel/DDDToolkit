@@ -132,18 +132,26 @@ public class ModuleDefaultDiagnosticTests
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "IBillingRequest").Should()
             .Contain("'IBillingRequest' requires a permission as the default of its module, and no package this project references says where a permission without a marker is held")
-            .And.Contain("a default reads no member of a request");
+            .And.Contain("A default reads no member of a request, so its permission has no marker. Put the permission on each request");
     }
 
     [Fact]
-    public void A_marker_without_a_permission_of_its_own_is_DDD00080_beside_a_default_with_a_permission_too()
+    public void A_marker_without_a_permission_is_DDD00080_beside_a_default_with_a_permission_too()
     {
         var result = Run("RequiresPermission(\"billing.read\")", "public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "AtUnit").Should()
-            .Contain("marks 'Unit' [AtUnit], and requires no permission")
-            .And.Contain("the permission of its module's default, on 'IBillingRequest', reads no member of a request");
+            .Contain("marks 'Unit' [AtUnit] and names no permission. A permission marker takes the permission as its argument. Write [AtUnit(permission)]");
+    }
+
+    [Fact]
+    public void A_marker_with_its_permission_beside_a_default_with_a_permission_is_its_own_requirement_and_takes_no_default()
+    {
+        var result = Run("RequiresPermission(\"billing.read\")", "public sealed record OpenLedger([AtUnit(\"billing.open-ledger\")] OrganizationUnitId Unit) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain("BillingAccessBehavior.", "global::Shop.Billing.OpenLedger request => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtUnit(\"billing.open-ledger\", request.Unit),");
     }
 
     // ------------------------------------------------------------------ DDD00083: where a default is read
