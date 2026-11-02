@@ -11,7 +11,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// works in the tenant, which a request of the module that says nothing of its own requires. The queries any seat may
 /// send take it so, such as <c>TenantProjectRoles</c> and <c>PermissionsHeldAtRoot</c>. A request that says more says it with an attribute of its
 /// own, or a marker on one of its members, and keeps only that: a case of the Membership package's for a permission held on a project,
-/// <c>[OnResource(ChangeProjectName.RequiredPermission)]</c> on the project and <c>[ExpectedVersion]</c> on the version the
+/// <c>[OnResource(ProjectPermissionNames.Edit)]</c> on the project and <c>[ExpectedVersion]</c> on the version the
 /// caller read, or <c>[SeenWith&lt;ProjectId&gt;(permission)]</c> on a list; one of Tenancy's, <c>[RequiresPermission(permission)]</c>
 /// for the whole tenant and <c>[Operator]</c>; or the module's own case of a permission held at a unit where a project is
 /// to be, <c>[AtProjectUnit(permission)]</c> (<see cref="ProjectsRequirement"/>). Several markers all hold, so a request that

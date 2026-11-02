@@ -8,11 +8,7 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// at once, where a project out of reach is simply left out, it is <see cref="ProjectsById"/>.
 /// </remarks>
 /// <param name="Id">The project.</param>
-public sealed record ProjectDetail([OnResource(ProjectDetail.RequiredPermission)] ProjectId Id) : IQuery<ProjectOverview>, IProjectsRequest
-{
-    /// <summary>The permission the caller holds on the project.</summary>
-    public const string RequiredPermission = ProjectPermissionNames.View;
-}
+public sealed record ProjectDetail([OnResource(ProjectPermissionNames.View)] ProjectId Id) : IQuery<ProjectOverview>, IProjectsRequest;
 
 /// <summary>Answers <see cref="ProjectDetail"/> in one statement, on a reading of this query's own.</summary>
 /// <param name="reads">Where projects are read: a context per query.</param>
@@ -25,7 +21,7 @@ public sealed class ProjectDetailHandler(IProjectReads reads, ProjectAccess acce
     {
         await using var reading = reads.Open();
 
-        var found = await reading.ByIdsAsync([query.Id], access.ReachFor(ProjectDetail.RequiredPermission), cancellationToken);
+        var found = await reading.ByIdsAsync([query.Id], access.ReachFor(ProjectPermissionNames.View), cancellationToken);
         return found.Count == 1 ? found[0] : throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
     }
 }

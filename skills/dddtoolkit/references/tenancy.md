@@ -348,8 +348,7 @@ See `tenancy/postgres.md` ("Row level security on Postgres"): "Default read poli
   on the version read (several markers all hold, `[ExpectedVersion<TResource>]` beside markers on two kinds of resource), and
   Membership's `[SeenWith<TResourceId>(permission)]` for a query that shows the resources the permission is held on, and the
   core's `[OrOwn]` on a seat beside the request's one permission for the caller's own seat or the permission (`RenameSeat`; not
-  with `[AtUnit]`; `[OrOwn<TResource>]` beside several), and `[OwnOnly]` with `[Own]` for the seat alone. On a positional
-  parameter a request's own constant is named with the request's name, `[OnResource(CloseProject.RequiredPermission)]`. Where nearly every request of a module requires a caller in the
+  with `[AtUnit]`; `[OrOwn<TResource>]` beside several), and `[OwnOnly]` with `[Own]` for the seat alone. Where nearly every request of a module requires a caller in the
   tenant, the interface says it once, `[AccessRequests, InTenant]` (the sample's Projects module): a request that
   states nothing takes it, on a generated line of its own, and one that states its own keeps only its own; a
   command that forgets its permission then requires a seat, so give every command its permission. A request answers `RequiredAccess` itself only for a case of the

@@ -86,10 +86,7 @@ The command declares its requirement with attributes. The module's request inter
 [`IProjectsRequest.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs)):
 
 ```csharp
-public sealed record CloseProject([OnResource(CloseProject.RequiredPermission)] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    public const string RequiredPermission = ProjectPermissionNames.Close;
-}
+public sealed record CloseProject([OnResource(ProjectPermissionNames.Close)] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 [AccessRequests, InTenant]   // the generator writes ProjectsAccessBehavior from this, with [InTenant] as the module's default
 public partial interface IProjectsRequest : IRequireAccess;

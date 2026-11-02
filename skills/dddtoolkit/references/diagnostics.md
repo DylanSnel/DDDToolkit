@@ -697,9 +697,7 @@ public or internal getter); `[RequiresPermission]`, a permission without a marke
 such a permission is held, as in a project with Membership and no Tenancy (put the permission on the marker,
 `[OnResource(permission)]`). A marker a base request declares is a requirement of every request that derives from it, so a
 bare one is reported at the base and at each derived request. A derived record's positional parameter may carry
-`[AtUnit(permission)]` even where its base declares the property. A request's own constant on a positional parameter is
-named with the request's name, `[OnResource(ChangeProjectName.RequiredPermission)]`: C# binds that attribute outside the
-record (CS0103 otherwise). A module default of `[RequiresPermission(permission)]` on the interface is held for the whole
+`[AtUnit(permission)]` even where its base declares the property. A module default of `[RequiresPermission(permission)]` on the interface is held for the whole
 tenant, so it needs Tenancy.
 
 ## DDD00081

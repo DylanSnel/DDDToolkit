@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Projects.Application.Ownership.Commands;
 /// nobody on the crew.
 /// </summary>
 /// <remarks>
-/// Only the organization names an owner: <see cref="RequiredPermission"/> is held at the project's unit or above it,
+/// Only the organization names an owner: <see cref="ProjectPermissionNames.ChangeOwner"/> is held at the project's unit or above it,
 /// never through the crew, whatever role is on it, and not by owning the project either
 /// (<see cref="Access.ProjectPermissions.ChangeOwner"/>). So the owner cannot hand the project on. The projects'
 /// rules mark the permission as the one that names the owner, so the crew manager requires it, and the database holds a
@@ -26,11 +26,7 @@ namespace Examples.Tenancy.Projects.Application.Ownership.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-public sealed record ChangeProjectOwner([OnResource(ChangeProjectOwner.RequiredPermission)] ProjectId Id, SeatId Seat, ProjectRoleId? FormerOwnerRole, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    /// <summary>The permission the caller holds on the project, through the organization.</summary>
-    public const string RequiredPermission = ProjectPermissionNames.ChangeOwner;
-}
+public sealed record ChangeProjectOwner([OnResource(ProjectPermissionNames.ChangeOwner)] ProjectId Id, SeatId Seat, ProjectRoleId? FormerOwnerRole, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 /// <summary>
 /// Handles <see cref="ChangeProjectOwner"/> with one call to the crew manager, which takes the answer of the command's

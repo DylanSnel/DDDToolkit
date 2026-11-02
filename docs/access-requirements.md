@@ -401,11 +401,8 @@ AttachAssetCommand request => AccessRequirement.All(
   boards, are both required. A version, or `[OrOwn]`, cannot tell two markers of one kind apart. Such a request writes
   `RequiredAccess` ([DDD00080](diagnostics.md#ddd00080), [DDD00085](diagnostics.md#ddd00085)).
 
-The permission is a constant from the catalogue, because an attribute argument must be a constant. A request can
-declare its own constant, `public const string RequiredPermission = ProjectPermissionNames.Edit;`. Its handler, or a
-list of abilities, then reads the same permission. C# binds an attribute on a record's positional parameter outside the
-record, so the marker names the constant with the request's name, `[OnResource(ChangeProjectName.RequiredPermission)]`.
-On the request itself, `[RequiresPermission(RequiredPermission)]` names it without.
+The permission is a constant from the catalogue, because an attribute argument must be a constant. The marker names
+that constant, for example `[OnResource(ProjectPermissionNames.Edit)]`.
 
 ### An operator's request
 

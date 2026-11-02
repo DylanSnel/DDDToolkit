@@ -1417,10 +1417,7 @@
     "write.add-crew-member": {
       "language": "csharp",
       "lines": [
-        "public sealed record AddCrewMember([OnResource(AddCrewMember.RequiredPermission)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest",
-        "{",
-        "    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;",
-        "}"
+        "public sealed record AddCrewMember([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;"
       ]
     },
     "write.audit-log": {

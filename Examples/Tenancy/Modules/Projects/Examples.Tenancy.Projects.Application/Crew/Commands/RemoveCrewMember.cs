@@ -9,11 +9,7 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-public sealed record RemoveCrewMember([OnResource(RemoveCrewMember.RequiredPermission)] ProjectId Project, SeatId Seat, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    /// <summary>The permission the caller holds on the project.</summary>
-    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
-}
+public sealed record RemoveCrewMember([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, SeatId Seat, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 /// <summary>Handles <see cref="RemoveCrewMember"/> with one call to the crew manager, which takes the seat off the crew of the project it loads, and saves.</summary>
 /// <remarks>

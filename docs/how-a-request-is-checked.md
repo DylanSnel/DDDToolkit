@@ -51,7 +51,7 @@ reaches a table.
 
 ```csharp shortened
 // 1. What you write: the sample's AddCrewMember, a permission on the project it names
-public sealed record AddCrewMember([OnResource(AddCrewMember.RequiredPermission)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
+public sealed record AddCrewMember([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 // 2. What the generator writes into IProjectsRequest, when the module compiles
 AddCrewMember request => MemberAccess.On("projects.crew.manage", request.Project, request.ExpectedVersion),
@@ -87,7 +87,7 @@ seat there before anything else ([TenantHeader](../Examples/Tenancy/Examples.Ten
 |---|---|---|---|
 | `OrganizationUnits` | Lists the units the caller can read. | `[InTenant]`: a seat in the tenant | The sample's Tenants module |
 | `AddOrganizationUnit` | Adds a unit below another unit. | `[AtUnit(TenancyPermissions.UnitsManage)]` on the parent | The sample's Tenants module |
-| `AddCrewMember` | Puts a seat on a project's crew. | `[OnResource(AddCrewMember.RequiredPermission)]` on the project, and `[ExpectedVersion]` on the version the caller read | The sample's Projects module |
+| `AddCrewMember` | Puts a seat on a project's crew. | `[OnResource(ProjectPermissionNames.ManageCrew)]` on the project, and `[ExpectedVersion]` on the version the caller read | The sample's Projects module |
 | `RenameSeat` | Gives a seat another name. | `[RequiresPermission(RequiredPermission)]`, with `[OrOwn]` on the seat: the caller's own seat, or any seat with the permission | The sample's Tenants module |
 | `TenantAuditLog` | Reads a tenant's audit log. | The property: an operator, or the permission that manages seats for the whole tenant | The audit log example in [Access requirements](access-requirements.md#access-checks-and-row-policies) |
 | `RegisterOrganization` | Creates a new tenant, with the caller as its administrator. | `[SignedIn]`. The handler starts system work. | The registration example in [Tenancy](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) |
@@ -123,9 +123,8 @@ The sample's requests use attributes. A marker on a member states where a permis
 
 `[RequiresPermission(permission)]` on the request is a permission without a marker, held for the whole tenant. `[OrOwn]`
 on a seat lets the caller through when the seat is the caller's own, as an alternative to the permission. The
-permission is a constant of the catalogue. A request can declare its own constant for it, as `RenameSeat` and
-`AddCrewMember` do. The handler then reads the same constant. A marker on a positional parameter names it with the
-request's name, because C# binds that attribute outside the record.
+permission is a constant of the catalogue. A request can declare its own constant for it, as `RenameSeat` does. The
+handler then reads the same constant. `AddCrewMember` names the catalogue's constant on its marker.
 
 ```csharp
 [InTenant]
@@ -141,10 +140,7 @@ public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICom
 ```
 
 ```csharp
-public sealed record AddCrewMember([OnResource(AddCrewMember.RequiredPermission)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
-}
+public sealed record AddCrewMember([OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 ```
 
 The other two requests come from examples in [Access

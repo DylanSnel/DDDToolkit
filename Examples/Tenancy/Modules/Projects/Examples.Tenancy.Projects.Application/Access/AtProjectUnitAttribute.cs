@@ -6,8 +6,8 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// <c>projects.not-permitted</c>.
 /// <code>
 /// public sealed record MoveProjectToUnit(
-///     [OnResource(MoveProjectToUnit.RequiredPermission)] ProjectId Id,
-///     [AtProjectUnit(MoveProjectToUnit.DestinationPermission)] OrganizationUnitId UnitId,
+///     [OnResource(ProjectPermissionNames.Edit)] ProjectId Id,
+///     [AtProjectUnit(ProjectPermissionNames.Open)] OrganizationUnitId UnitId,
 ///     [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 /// </code>
 /// is <c>AccessRequirement.All(MemberAccess.On(..., request.Id, request.ExpectedVersion), ProjectsRequirement.HeldAt(..., request.UnitId))</c>.

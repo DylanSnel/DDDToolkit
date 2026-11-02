@@ -14,11 +14,7 @@ namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-public sealed record PlanProject([OnResource(PlanProject.RequiredPermission)] ProjectId Id, DateRange? Planned, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
-{
-    /// <summary>The permission the caller holds on the project.</summary>
-    public const string RequiredPermission = ProjectPermissionNames.Edit;
-}
+public sealed record PlanProject([OnResource(ProjectPermissionNames.Edit)] ProjectId Id, DateRange? Planned, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 /// <summary>Handles <see cref="PlanProject"/>: loads the project its command names, plans it and saves.</summary>
 /// <param name="store">Where projects are loaded and saved.</param>
