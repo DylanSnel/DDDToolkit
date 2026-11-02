@@ -86,8 +86,7 @@ rule about who gives what to whom.
   handler refuses to put staff on a folder for longer than the caller holds `folders.staff`:
 
 ```csharp
-[RequiresPermission("folders.staff")]
-public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
+public sealed record AdmitStaff([OnResource("folders.staff")] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 // In the handler. folderAccess is the MembershipAccessManager<Folder>, and staff the FolderMemberManager, the handler takes.
 var hold = await folderAccess.RequireAsync(command.Folder, "folders.staff", cancellationToken);

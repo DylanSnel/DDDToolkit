@@ -16,7 +16,7 @@ public abstract partial record MemberAccess<TResourceId>
     /// resource to the version read as the permission's way does, under the expert hold too, and compares the version the
     /// request names. The permission is asked about so that what is kept says whether the caller holds it as well:
     /// <see cref="MemberHold{TResourceId}.Via"/> is <see langword="null"/> where it does not.
-    /// <c>[RequiresPermission(permission)]</c> with <c>[OnResource]</c> on the resource and <c>[OrOwn]</c> on the member is
+    /// <c>[OnResource(permission)]</c> on the resource and <c>[OrOwn]</c> on the member is
     /// <c>Any(All(Own(member), Sees(permission, resource)), On(permission, resource))</c>.
     /// </remarks>
     public sealed record Sees : MemberAccess<TResourceId>

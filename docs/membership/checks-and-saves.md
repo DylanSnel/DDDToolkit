@@ -15,17 +15,26 @@ Membership adds two requirements to [the vocabulary](../access-requirements.md#r
 
 | On the request | The call | For |
 |---|---|---|
-| `[RequiresPermission(p)]`, with `[OnResource]` on the resource and `[ExpectedVersion]` on the version read | `MemberAccess.On(p, resource, expectedVersion)` | a request on one resource |
+| `[OnResource(p)]` on the resource, and `[ExpectedVersion]` on the version read | `MemberAccess.On(p, resource, expectedVersion)` | a request on a resource |
 | `[SeenWith<TResourceId>(p)]` | `MemberAccess.SeenWith<TResourceId>(p)` | a list ([Access in your own queries](#access-in-your-own-queries)) |
 
 Both [combine](../access-requirements.md#requirements-that-combine) with the other requirements. Each package
 registers its check for the same request interface, and each check decides its own cases.
 
+**A permission on each of two resources.** A request with an `[OnResource(p)]` on each of two resources requires
+both. Filing a document in a folder needs the permission that edits the document and the permission that files in the
+folder. The document's check and the folder's check each read their own resource, keep a hold on it, and refuse
+under their own codes. The version the caller read names its resource, `[ExpectedVersion<Document>]`, so the
+document's check compares it and the folder is only read
+([Where the permission is held](../access-requirements.md#where-the-permission-is-held)).
+
 **The caller's own, or the permission.** Put `[OrOwn]` beside `[OnResource]`. A member can then leave a document,
-and anybody with the permission can take any member off. With `[RequiresPermission(DocumentPermissions.Share)]`, the
-request `LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member)` gets this requirement:
+and anybody with the permission can take any member off. The request
+`LeaveDocument([OnResource(DocumentPermissions.Share)] DocumentId Document, [OrOwn] UserId Member)` gets this
+requirement:
 `Any(All(Own(request.Member), MemberAccess.Sees(DocumentPermissions.Share, request.Document)), MemberAccess.On(DocumentPermissions.Share, request.Document))`
-([Yours, or the permission](../access-requirements.md#the-callers-own-or-a-permission)).
+([Yours, or the permission](../access-requirements.md#the-callers-own-or-a-permission)). Beside markers on two
+resources, `[OrOwn<Document>]` names the resource whose permission the caller's own is the alternative of.
 
 The diagram shows the two ways through when Leo sends `LeaveDocument`. Purple: the request. Green: let through. Red:
 refused.
@@ -128,8 +137,7 @@ service. Each question takes the document, or the document's id:
 This handler shows a document and whether the caller may edit it:
 
 ```csharp
-[RequiresPermission(DocumentPermissions.View)]
-public sealed record ShowDocument([OnResource] DocumentId Document) : IFilingRequest;
+public sealed record ShowDocument([OnResource(DocumentPermissions.View)] DocumentId Document) : IFilingRequest;
 
 public sealed class ShowDocumentHandler(FilingContext db, MembershipAccessManager<Document> documentAccess)
 {

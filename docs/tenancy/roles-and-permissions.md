@@ -56,7 +56,7 @@ public static class OrderingPermissions
 | Level | Where it is checked | Who holds it |
 |---|---|---|
 | `[AtTenant]` | For the whole tenant, by `TenancyAccess.AtTenant` or by `[RequiresPermission]` without a marker | A seat with a role granted at the root |
-| `[AtUnit]` | At a unit, by `TenancyAccess.AtUnit` or by a request's `[AtUnit]` member | A seat with a role granted at that unit or above it |
+| `[AtUnit]` | At a unit, by `TenancyAccess.AtUnit` or by a request's `[AtUnit(permission)]` member | A seat with a role granted at that unit or above it |
 | `[On<TResource>]`, [Membership's](../membership/permissions-and-roles.md#the-settings-of-a-permission) | On one resource with members | The resource's owner, its members through their roles, and a role granted at the resource's unit or above it, when the permission allows that (`FromAbove`) |
 
 - A permission that is checked at more than one level carries each level. Put each setting on one of the levels. At

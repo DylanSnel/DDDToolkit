@@ -388,20 +388,20 @@ without the behavior in its pipeline ([When nothing asks the checks](access-requ
 
 ### The requirement of each request
 
-A request can declare with an attribute who may send it. For such a request, the generator writes one line in the same
-file, inside the interface, which is declared `partial` for this purpose. The line is the call that the attribute
-stands for, written out. The generator writes the line with or without Mediator, because any code that runs the access
+A request can declare with an attribute who may send it, or with a marker on the member where a permission is held,
+which carries that permission. For such a request, the generator writes one line in the same file, inside the
+interface, which is declared `partial` for this purpose. The line is the call that the attributes and markers stand
+for, written out. The generator writes the line with or without Mediator, because any code that runs the access
 check reads it ([What a request declares](access-requirements.md#what-a-request-declares)):
 
 ```csharp
 [AccessRequests]
 public partial interface IShopRequest : IRequireAccess;
 
-[RequiresPermission("shop.orders.cancel")]
-public sealed record CancelOrder([OnResource] OrderId Order, [ExpectedVersion] long? ExpectedVersion = null) : IShopRequest;
+public sealed record CancelOrder([OnResource("shop.orders.cancel")] OrderId Order, [ExpectedVersion] long? ExpectedVersion = null) : IShopRequest;
 
-[RequiresPermission("shop.orders.watchers")]                          // stop watching an order yourself, or take a watcher off with the permission
-public sealed record StopWatching([OnResource] OrderId Order, [OrOwn] Guid Watcher) : IShopRequest;
+public sealed record StopWatching(                              // stop watching an order yourself, or take a watcher off with the permission
+    [OnResource("shop.orders.watchers")] OrderId Order, [OrOwn] Guid Watcher) : IShopRequest;
 
 [SignedIn]                                                     // stacked: both must hold, checked in this order
 [RequiresPermission("shop.reports.export")]
@@ -433,7 +433,8 @@ partial interface IShopRequest
   `DDDToolkit`, such as `Contoso.DDDToolkit.Shop`, does not hide the type.
 - A request that implements `RequiredAccess` itself gets no line. C# uses the request's member instead of the
   interface's member.
-- Several attributes on one request become `AccessRequirement.All` of their calls.
+- Several attributes and markers on one request become `AccessRequirement.All` of their calls, the attributes on the
+  request first, then the markers in the order they are written.
 - `[OrOwn]` next to a permission becomes `AccessRequirement.Any` of the caller's own and the permission, with the
   caller's own first.
 - Next to `[OnResource]`, the path through the caller's own still requires that the caller sees the resource, with

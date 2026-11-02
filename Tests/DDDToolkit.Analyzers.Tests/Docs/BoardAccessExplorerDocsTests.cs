@@ -77,7 +77,7 @@ public partial class BoardAccessExplorerDocsTests
 
             var request = permission.Request;
             tutorial.Should().MatchRegex(
-                @"\[RequiresPermission\(BoardPermissions\." + permission.Constant + @"\)\]\npublic sealed record " + request.Name + @"\(\[OnResource\] BoardId Board",
+                @"public sealed record " + request.Name + @"\(\[OnResource\(BoardPermissions\." + permission.Constant + @"\)\] BoardId Board",
                 "the tutorial's {0} requires {1} on the board", request.Name, because);
             tutorial.Should().Contain(ExplorerDocs.Mapped(request.Route), "the tutorial's endpoints send {0} on {1}", request.Name, request.Route);
         }

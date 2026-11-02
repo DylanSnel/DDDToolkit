@@ -655,12 +655,13 @@ module in either.
 
 Error, on a request whose module's interface is `partial` (so the compiler no longer asks for the property) and
 that says nothing of what it requires. Put the requirement attribute on it that says who may send it: `[SignedIn]`,
-`[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or `[OnResource]` on the member where the permission is held,
+`[InTenant]`, `[RequiresPermission(permission)]` for the whole tenant, a marker that carries the permission on the member where it
+is held (`[AtUnit(permission)]`, `[OnResource(permission)]`),
 `[SeenWith<TResourceId>(permission)]` on a list, `[Operator]` on a request of the application's operators (with
 `[ForTenant]` on the tenant a command acts in), `[AllowAnonymous]` only
 where anyone may send it, `[OrOwn]` on the member beside the permission for the caller's own or the permission, several stacked
-where all hold. Answer `RequiredAccess` instead only for a case of the module's own, a requirement computed from the
-request's values, or one caller or another and two permissions (`AccessRequirement.Any`, `All`). A request of another project than its interface answers `RequiredAccess`. Never
+where all hold (two permissions in two places are a marker on each). Answer `RequiredAccess` instead only for a case of the
+module's own, a requirement computed from the request's values, or one caller or another (`AccessRequirement.Any`). A request of another project than its interface answers `RequiredAccess`. Never
 answer it with `[AllowAnonymous]` to make it build, and never with system work: there is no such requirement. Do not
 add a module default (`[AccessRequests, InTenant]` on the interface) only to silence this: a default is the module's
 choice, made where nearly every request requires the same, and then a command that forgets its permission requires the
@@ -668,8 +669,8 @@ default without a word. Where the module has one, a request that states nothing 
 
 ## DDD00078
 
-Error: a requirement attribute and `RequiredAccess` on one request; the property wins and the attribute does
-nothing. Keep the attribute where the requirement reads no value of the request (delete the property), keep the
+Error: a requirement attribute or a marker that carries a permission, and `RequiredAccess`, on one request; the
+property wins and the attribute does nothing. Keep the attribute where the requirement reads no value of the request (delete the property), keep the
 property where it computes one (delete the attribute). "Through 'ISomeRequest'" in the message: an interface between
 the request and its module's gives the property a default, which C# takes; implement the module's interface instead,
 or drop the attribute.
@@ -684,25 +685,28 @@ on one that derives from a request carrying a requirement is reported as well: d
 
 ## DDD00080
 
-Error, at a marker or the request. A marker says where the permission of `[RequiresPermission(permission)]` is held. Read the message:
-a marker without `[RequiresPermission]` (add the permission, or take the marker off); two markers of where, or `[AtUnit]` with
-`[OnResource]` (keep one; compute it as `RequiredAccess` where it depends on the request); `[ExpectedVersion]` without
-`[OnResource]` (mark the resource, or take it off); a marker twice; a marker on a class's primary-constructor
-parameter (mark the property; a positional record parameter is fine); a marker on a private or protected property
-(give it a public or internal getter); `[RequiresPermission]` without a marker where no referenced package says where such a
-permission is held, as in a project with Membership and no Tenancy (mark `[OnResource]` on the resource). An abstract
-record that carries the unit is not reported; a request that derives from it and "inherits" a marker without
-`[RequiresPermission]` is (add the permission). A derived record's positional parameter may carry `[AtUnit]` even where its base
-declares the property. A request with a `[RequiresPermission]` of its own that derives from one with a `[RequiresPermission]`
-requires two permissions: write `AccessRequirement.All` of the two as `RequiredAccess`. A module default of
-`[RequiresPermission(permission)]` on the interface reads no marker: it is held for the whole tenant, so it needs Tenancy, and a
-request's marker goes with the request's own `[RequiresPermission]`.
+Error, at a marker, the attribute or the request. A marker carries the permission held where it marks, and several all hold
+(`AccessRequirement.All`, after the attributes on the request, in the order written; two of one kind are fine). Read the
+message: a bare `[AtUnit]` on a request's member (write `[AtUnit(permission)]`; bare it is a constant's level, and a bare
+`[OnResource]` does not compile, CS7036); `[ExpectedVersion]` without `[OnResource]` (mark the resource, or take it off); a
+bare `[ExpectedVersion]` beside `[OnResource]` on two kinds of resource (name it, `[ExpectedVersion<Document>]`);
+`[ExpectedVersion<TResource>]` with no `[OnResource]` on that resource's id (name the marked resource); a version beside two
+`[OnResource]` of one kind (write `RequiredAccess`); a version twice for one marker; a marker on a class's primary-constructor
+parameter (mark the property; a positional record parameter is fine); a marker on a private or protected property (give it a
+public or internal getter); `[RequiresPermission]`, a permission without a marker, where no referenced package says where
+such a permission is held, as in a project with Membership and no Tenancy (put the permission on the marker,
+`[OnResource(permission)]`). A marker a base request declares is a requirement of every request that derives from it, so a
+bare one is reported at the base and at each derived request. A derived record's positional parameter may carry
+`[AtUnit(permission)]` even where its base declares the property. A request's own constant on a positional parameter is
+named with the request's name, `[OnResource(ChangeProjectName.RequiredPermission)]`: C# binds that attribute outside the
+record (CS0103 otherwise). A module default of `[RequiresPermission(permission)]` on the interface is held for the whole
+tenant, so it needs Tenancy.
 
 ## DDD00081
 
-Error, at the marker: it is on a member of the wrong type. `[AtUnit]` goes on the application's unit id (the id of
-the class declared `[OrganizationUnit<TUnitId>]`), `[OnResource]` on the id of a resource with members (the aggregate
-root a `[Member<..., TResource>]` class names), `[ExpectedVersion]` on a `long?`. Move the marker to the member the
+Error, at the marker, each marker on its own: it is on a member of the wrong type. `[AtUnit(permission)]` goes on the
+application's unit id (the id of the class declared `[OrganizationUnit<TUnitId>]`), `[OnResource(permission)]` on the id of a
+resource with members (the aggregate root a `[Member<..., TResource>]` class names), `[ExpectedVersion]` on a `long?`. Move the marker to the member the
 message names, or fix the member's type. A unit or resource that may be null is computed:
 `RequiredAccess => Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`.
 
@@ -712,7 +716,7 @@ Error, on a message of the Mediator library that is no query (a command, `IComma
 `IRequest` or `IStreamRequest`) and carries a requirement its package declares for queries only:
 `[SeenWith<TResourceId>(permission)]` (refuses nobody, the query's statement filters). Make it a query (`IQuery`,
 `IStreamQuery`) if it only reads. If it changes something, require the permission where it acts,
-`[RequiresPermission(permission)]` with `[OnResource]` on the resource. The same requirement written as
+`[OnResource(permission)]` on the resource. The same requirement written as
 `RequiredAccess` on a command is not reported; do not write it so. Tenancy's `[Operator]` is not queries-only: on a
 command the pipeline runs the handler as operator work.
 
@@ -729,8 +733,8 @@ answer `RequiredAccess` in that interface.
 
 ## DDD00084
 
-Warning, at a stacked requirement attribute its neighbour already requires: `[InTenant]` beside `[RequiresPermission]` (a permission
-of Tenancy's, with or without `[AtUnit]`, is held only by a seat in the tenant or system work there), `[SignedIn]`
+Warning, at a stacked requirement attribute its neighbour already requires: `[InTenant]` beside `[RequiresPermission]` or
+`[AtUnit(permission)]` (a permission of Tenancy's is held only by a seat in the tenant or system work there), `[SignedIn]`
 beside `[Operator]`, `[SignedIn]` beside `[OwnOnly]` with `[Own]` on a `Guid` (only a signed-in user has an
 identity), `[InTenant]` or `[SignedIn]` beside `[OwnOnly]` with `[Own]` on the seat id, `[InTenant]` beside a permission of
 Tenancy's with `[OrOwn]` on the seat id (either way the caller is in the tenant), and an attribute a request the
@@ -744,10 +748,13 @@ default. Not on a request another derives from, which holds to them beside its o
 ## DDD00085
 
 Error, at the marker or the request: the caller's own out of place. `[OrOwn]` goes on the member that names the
-caller's own, beside `[RequiresPermission]` (add the permission, or use `[OwnOnly]` with `[Own]` for the caller's own alone); `[Own]`
-goes with `[OwnOnly]` on the request, and `[OwnOnly]` needs a member marked `[Own]`; one member is marked one way,
-once; `[OrOwn]` never beside `[AtUnit]` (the caller would send a unit where it holds the permission for another subject):
-compute such a requirement as `RequiredAccess`. Beside `[OnResource]` it is fine: its `[PermissionMarker]` names
+caller's own, beside the request's one permission, of a marker or of `[RequiresPermission]` (add the permission, or use
+`[OwnOnly]` with `[Own]` for the caller's own alone); beside two or more permissions `[OrOwn<TResource>]` names the resource of
+the `[OnResource]` it pairs with (a bare `[OrOwn]` there, `[OrOwn<TResource>]` naming a class no marker is on, and `[OrOwn]`
+beside two permissions of one kind are reported; compute those as `RequiredAccess`); `[Own]` goes with `[OwnOnly]` on the
+request, and `[OwnOnly]` needs a member marked `[Own]`; one member is marked one way, once; `[OrOwn]` never paired with
+`[AtUnit(permission)]` (the caller would send a unit where it holds the permission for another subject): compute such a
+requirement as `RequiredAccess`. Beside `[OnResource]` it is fine: its `[PermissionMarker]` names
 `OwnAlternative = nameof(MemberAccess.Sees)`, so the caller's own way through still sees the resource, and the line is
 `Any(All(Own(member), MemberAccess.Sees(permission, resource)), MemberAccess.On(permission, resource))`. A marker on a class's
 primary constructor parameter or a private property: mark a property with a public or internal getter.
@@ -811,7 +818,8 @@ between words, starting with a letter, ending with neither separator. It is not 
 
 Error, on a `[Permissions]` class or its constants (`DDDToolkit.Access`): the class is not `static`; a public
 `const string` has no level; a level (`[AtTenant]`, `[AtUnit]`, `[On<TResource>]`) is on a field that is no public
-`const string`, or on a constant of a class not marked `[Permissions]`; or one permission is declared twice. Make the class
+`const string`, or on a constant of a class not marked `[Permissions]`; one permission is declared twice; or a level carries a
+permission of its own, `[AtUnit(permission)]` on a constant (that is a request's marker; write `[AtUnit]`). Make the class
 `public static`, give each permission exactly the level where it is asked, and name a permission by its one
 constant.
 
@@ -820,7 +828,9 @@ constant.
 Error, on a constant marked `[On<TResource>]`: `TResource` is no resource with members (no
 `[Member<TId, TMemberId, TRoleId, TResource>]` class names it), or a second permission of that resource says
 `EveryMember`, `ManagesMembers` or `NamesOwner`, or a permission is declared twice on it. Name the aggregate root whose members
-hold it, and keep one permission per setting.
+hold it, and keep one permission per setting. Also at a request's `[OnResource(permission)]`, reported by Membership's analyzer:
+the permission is declared on another resource only, or with no level on a resource, so the marked resource's rules never give
+it. Name a permission declared on the marked resource, or mark the id of the resource it is declared on.
 
 ## DDD00094
 
@@ -838,7 +848,8 @@ or `[On<TResource>]`) and `Description = "..."` on the level for its description
 
 ## DDD00096
 
-Warning, at `[OrOwn]` on the id of a resource with members beside `[OnResource]`: the permission the request requires is
+Warning, at `[OrOwn]` or `[OrOwn<TResource>]` on the id of a resource with members beside `[OnResource(permission)]` on the
+same member, for each such pair: the permission the marker carries is
 one the resource's owner holds by owning it (declared `[On<TResource>]` with `Owner = true`, the default), so the
 owner passes the permission already. Remove `[OrOwn]`. Keep it only for a permission declared `Owner = false`.
 
@@ -892,7 +903,8 @@ OperatorTenant.FromRequest)` as `RequiredAccess` throws `ArgumentException` for 
 
 ## DDD00104
 
-Error, at `[Operator]` beside `[InTenant]` or `[RequiresPermission]`: an operator holds no seat and no permission, so
+Error, at `[Operator]` beside `[InTenant]`, `[RequiresPermission]` or a marker that carries a permission: an operator holds
+no seat and no permission, so
 the request refuses every caller. Keep one. For a request an operator or a seat may send, answer `RequiredAccess` with
 `AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(permission))`.
 

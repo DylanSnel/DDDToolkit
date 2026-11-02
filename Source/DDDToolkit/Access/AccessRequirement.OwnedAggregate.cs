@@ -19,8 +19,8 @@ public abstract partial record AccessRequirement
     ///     TenancyAccess.AtTenant(BoardPermissions.Manage));           // or the permission for every board
     /// </code>
     /// A request says it with the attributes it says the caller's own with as well: <see cref="OwnAttribute"/> on the
-    /// aggregate's id with <see cref="OwnOnlyAttribute"/> for the owner alone, <see cref="OrOwnAttribute"/> beside
-    /// <see cref="RequiresPermissionAttribute"/> for the owner or the permission.
+    /// aggregate's id with <see cref="OwnOnlyAttribute"/> for the owner alone, <see cref="OrOwnAttribute"/> beside the
+    /// request's one permission for the owner or the permission.
     /// </summary>
     /// <remarks>
     /// The fact is the domain's, and the policy the request's: the aggregate marks the property that names its owner,

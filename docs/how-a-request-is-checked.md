@@ -51,8 +51,7 @@ reaches a table.
 
 ```csharp shortened
 // 1. What you write: the sample's AddCrewMember, a permission on the project it names
-[RequiresPermission(RequiredPermission)]
-public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
+public sealed record AddCrewMember([OnResource(AddCrewMember.RequiredPermission)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
 
 // 2. What the generator writes into IProjectsRequest, when the module compiles
 AddCrewMember request => MemberAccess.On("projects.crew.manage", request.Project, request.ExpectedVersion),
@@ -87,8 +86,8 @@ seat there before anything else ([TenantHeader](../Examples/Tenancy/Examples.Ten
 | Request | What it does | What it requires | Where it comes from |
 |---|---|---|---|
 | `OrganizationUnits` | Lists the units the caller can read. | `[InTenant]`: a seat in the tenant | The sample's Tenants module |
-| `AddOrganizationUnit` | Adds a unit below another unit. | `[RequiresPermission(TenancyPermissions.UnitsManage)]`, with `[AtUnit]` on the parent | The sample's Tenants module |
-| `AddCrewMember` | Puts a seat on a project's crew. | `[RequiresPermission(RequiredPermission)]`, with `[OnResource]` on the project and `[ExpectedVersion]` on the version the caller read | The sample's Projects module |
+| `AddOrganizationUnit` | Adds a unit below another unit. | `[AtUnit(TenancyPermissions.UnitsManage)]` on the parent | The sample's Tenants module |
+| `AddCrewMember` | Puts a seat on a project's crew. | `[OnResource(AddCrewMember.RequiredPermission)]` on the project, and `[ExpectedVersion]` on the version the caller read | The sample's Projects module |
 | `RenameSeat` | Gives a seat another name. | `[RequiresPermission(RequiredPermission)]`, with `[OrOwn]` on the seat: the caller's own seat, or any seat with the permission | The sample's Tenants module |
 | `TenantAuditLog` | Reads a tenant's audit log. | The property: an operator, or the permission that manages seats for the whole tenant | The audit log example in [Access requirements](access-requirements.md#access-checks-and-row-policies) |
 | `RegisterOrganization` | Creates a new tenant, with the caller as its administrator. | `[SignedIn]`. The handler starts system work. | The registration example in [Tenancy](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) |
@@ -115,24 +114,24 @@ all reach the same access check.
 A request states who may send it. Most requests state it with attributes, because the requirement only names a
 permission and the ids the request carries. A request implements the property `RequiredAccess` instead in two cases:
 when the requirement is computed from the request's values, and when it combines cases that stacked attributes cannot
-express, such as one caller or another, or two permissions at two places.
+express, such as one caller or another.
 
-The sample's requests use attributes. A marker on a member states where the permission is held:
+The sample's requests use attributes. A marker on a member states where a permission is held, and carries it:
 
-- `[AtUnit]`: at that unit, or at a unit above it.
-- `[OnResource]`: on that resource, through its members.
-- No marker: for the whole tenant.
+- `[AtUnit(permission)]`: at that unit, or at a unit above it.
+- `[OnResource(permission)]`: on that resource, through its members.
 
-`[OrOwn]` on a seat lets the caller through when the seat is the caller's own, as an alternative to the permission.
-The permission is a constant of the catalogue. A request can declare its own constant for it, as `RenameSeat` and
-`AddCrewMember` do. The handler then reads the same constant.
+`[RequiresPermission(permission)]` on the request is a permission without a marker, held for the whole tenant. `[OrOwn]`
+on a seat lets the caller through when the seat is the caller's own, as an alternative to the permission. The
+permission is a constant of the catalogue. A request can declare its own constant for it, as `RenameSeat` and
+`AddCrewMember` do. The handler then reads the same constant. A marker on a positional parameter names it with the
+request's name, because C# binds that attribute outside the record.
 
 ```csharp
 [InTenant]
 public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest;
 
-[RequiresPermission(TenancyPermissions.UnitsManage)]
-public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;
+public sealed record AddOrganizationUnit([AtUnit(TenancyPermissions.UnitsManage)] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;
 
 [RequiresPermission(RequiredPermission)]
 public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest
@@ -142,8 +141,7 @@ public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICom
 ```
 
 ```csharp
-[RequiresPermission(RequiredPermission)]
-public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
+public sealed record AddCrewMember([OnResource(AddCrewMember.RequiredPermission)] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
     public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
 }
@@ -256,8 +254,8 @@ partial interface IProjectsRequest
 }
 ```
 
-No reflection runs, and nothing is looked up when a request is sent. Stacked attributes become `AccessRequirement.All`
-of their calls, in the order they are written. `[OrOwn]` becomes `Any` of the caller's own and the permission
+No reflection runs, and nothing is looked up when a request is sent. Stacked attributes and markers become
+`AccessRequirement.All` of their calls, in the order they are written. `[OrOwn]` becomes `Any` of the caller's own and the permission
 ([The caller's own, or a permission](access-requirements.md#the-callers-own-or-a-permission)). When the project uses
 Mediator, the same file also contains the pipeline behavior. The behavior asks the module's checks before every
 handler of the interface. It reads the property, so it works the same for attributes and for the property. Then it

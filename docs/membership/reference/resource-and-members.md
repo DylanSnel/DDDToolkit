@@ -947,7 +947,7 @@ public sealed partial class Board
 }
 ```
 
-Who may do what with the owner's own is the request's to say, at the door, in the words a request says the caller's own with: `[OwnOnly]` with `[Own] BoardId Board` lets the board's owner alone through, and `[OrOwn] BoardId Board` beside `[RequiresPermission(permission)]` the owner, or whoever holds the permission.
+Who may do what with the owner's own is the request's to say, at the door, in the words a request says the caller's own with: `[OwnOnly]` with `[Own] BoardId Board` lets the board's owner alone through, and `[OrOwn] BoardId Board` beside the request's one permission the owner, or whoever holds the permission.
 
 **Remarks**
 
