@@ -147,10 +147,10 @@ internal static class KnownTypes
     /// </summary>
     public const string StatesRequirementAttribute = "DDDToolkit.Access.StatesRequirementAttribute";
 
-    /// <summary>On a request: a permission its caller holds without a marker, where a package says, for the whole tenant on Tenancy's.</summary>
+    /// <summary>On a request: a permission without a marker. A package declares where it is held. Tenancy declares the whole tenant.</summary>
     public const string RequiresPermissionAttribute = "DDDToolkit.Access.RequiresPermissionAttribute";
 
-    /// <summary>On an attribute a package ships: a marker of where the permission it carries is held, and the call it stands for.</summary>
+    /// <summary>On an attribute a package ships: marks the class as a permission marker, and names the call that the marker becomes.</summary>
     public const string PermissionMarkerAttribute = "DDDToolkit.Access.PermissionMarkerAttribute";
 
     /// <summary>On an attribute a package ships: it marks one more argument of a key marker's call, such as the version read.</summary>
@@ -171,10 +171,10 @@ internal static class KnownTypes
     /// <summary>On a member of an <c>[OwnOnly]</c> request: the value compared with the caller's own.</summary>
     public const string OwnAttribute = "DDDToolkit.Access.OwnAttribute";
 
-    /// <summary>On a member of a request with one permission: the caller's own, which the permission is the alternative of.</summary>
+    /// <summary>On a member of a request with one permission: the member names the caller's own, as an alternative to the permission.</summary>
     public const string OrOwnAttribute = "DDDToolkit.Access.OrOwnAttribute";
 
-    /// <summary>On a member of a request with several permissions: the caller's own, the alternative of the permission on the resource it names.</summary>
+    /// <summary>On a member of a request with several permissions: the member names the caller's own, as an alternative to the permission on the resource that the type argument names.</summary>
     public const string OrOwnOfResourceAttribute = "DDDToolkit.Access.OrOwnAttribute`1";
 
     /// <summary>On a package's assembly: a type its handle says the caller's own of, or a template whose classes' ids it is.</summary>

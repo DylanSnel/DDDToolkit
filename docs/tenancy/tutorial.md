@@ -1196,7 +1196,7 @@ that lists the units a seat can read.
 ### The idea: a permission, and where it must be held
 
 - `[RequiresPermission(...)]` on the request: the caller must hold that permission for the whole tenant.
-- `[AtUnit(...)]` on a parameter: the caller must hold that permission at that unit or above it. The marker carries
+- `[AtUnit(...)]` on a parameter: the caller must hold that permission at that unit or above it. The marker names
   the permission, so the request needs no other attribute.
 - Tenancy's manager checks the permission again where it acts, and adds its own rules. So the check before the
   handler is the first check, and the manager runs a second one.

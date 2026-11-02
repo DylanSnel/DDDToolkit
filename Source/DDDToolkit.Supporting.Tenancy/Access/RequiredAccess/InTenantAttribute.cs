@@ -14,8 +14,9 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// The toolkit's generator turns it into <c>TenancyAccess.InTenant()</c> at compile time, in the module's request
 /// interface (<c>[AccessRequests]</c>, declared <c>partial</c>), and the check that
 /// <c>services.AddTenancyAccess&lt;TRequests, TContext&gt;()</c> adds holds the caller to it. A request handed to a manager that asks more than this, a permission the manager reads where it acts, says this
-/// much and the manager asks the rest. Beside a permission of Tenancy's, <c>[RequiresPermission]</c> or <c>[AtUnit(permission)]</c>, it says nothing
-/// more, since only a caller in the tenant holds one, and the generator warns of it (DDD00084).
+/// much and the manager asks the rest. Beside a permission of Tenancy's, from <c>[RequiresPermission]</c> or <c>[AtUnit(permission)]</c>,
+/// it adds nothing, because only a caller in the tenant holds such a permission. The generator reports it as a warning
+/// (DDD00084).
 /// <para>
 /// On the module's interface it is the module's default, said once where nearly every request reads the tenant's
 /// data: a request of the module that states nothing of its own requires a caller in the tenant, and one that states

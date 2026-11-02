@@ -16,20 +16,25 @@ namespace DDDToolkit.Analyzers;
 /// generator writes for it into its module's interface, or what stands in the way of one.
 /// </summary>
 /// <remarks>
-/// A request says what it requires with an attribute whose class a package marked
-/// <c>[StatesRequirement(typeof(Factory), "Method")]</c>, such as <c>[SignedIn]</c> or <c>[InTenant]</c>, and with a marker
-/// of where a permission is held on one of its members, whose class a package marked
-/// <c>[PermissionMarker(typeof(Factory), "Method")]</c>, such as <c>[AtUnit(permission)]</c>, which carries the permission. A
-/// permission without a marker, <c>[RequiresPermission(permission)]</c>, is held where a package says with
-/// <c>[assembly: PermissionWithoutMarker]</c>. <c>[OrOwn]</c> on a member beside one permission makes the caller's own its
-/// alternative, <c>[OrOwn&lt;TResource&gt;]</c> beside several names the marker it pairs with, and <c>[OwnOnly]</c> with
-/// <c>[Own]</c> on a member says the caller's own alone. A member marked with an attribute a package marked
+/// A request states what it requires in these ways:
+/// <list type="bullet">
+/// <item>with an attribute whose class a package marked <c>[StatesRequirement(typeof(Factory), "Method")]</c>, such as
+/// <c>[SignedIn]</c> or <c>[InTenant]</c>;</item>
+/// <item>with a permission marker on one of its members, whose class a package marked
+/// <c>[PermissionMarker(typeof(Factory), "Method")]</c>, such as <c>[AtUnit(permission)]</c>. The marker's argument is the
+/// permission;</item>
+/// <item>with <c>[RequiresPermission(permission)]</c>, a permission without a marker. A package declares where it is held
+/// with <c>[assembly: PermissionWithoutMarker]</c>;</item>
+/// <item>with <c>[OrOwn]</c> on a member beside one permission, which makes the caller's own an alternative to it.
+/// Beside several permissions, <c>[OrOwn&lt;TResource&gt;]</c> names the marker it pairs with;</item>
+/// <item>with <c>[OwnOnly]</c> and <c>[Own]</c> on a member, for the caller's own alone.</item>
+/// </list> A member marked with an attribute a package marked
 /// <c>[RequirementArgument(typeof(TAttribute))]</c>, such as <c>[ForTenant]</c>, is handed to the call of that attribute, after
 /// its constructor's arguments; a property set where the request carries an attribute goes to its call as a named argument,
 /// <c>scope: "projects"</c>. Nothing here knows a package's attribute by its name: the marks say which call to write, so a
-/// package of the application's own declares attributes the same way. Attributes stacked on one request and markers on
-/// its members all hold, so the line is the call of each, the attributes in the order they are written and then the markers
-/// in theirs, inside <c>AccessRequirement.All(...)</c> where there are several:
+/// package of the application's own declares attributes the same way. A request requires every attribute on it and every
+/// marker on its members. So the line is the call of each: the attributes in the order they are written, then the
+/// markers in the order they are written, inside <c>AccessRequirement.All(...)</c> where there are several:
 /// <c>global::Shop.AddUnit request =&gt; global::...TenancyAccess.AtUnit("units.manage", request.Parent)</c>.
 /// <para>
 /// It is read from the compilation the request is part of, the classes the package's markers name included, so what it
@@ -137,9 +142,9 @@ internal sealed record RequestRequirement(
 
         // A request with requirements of its own holds to those of the requests it derives from as well, theirs first, as
         // several [Authorize] do on a controller and the one it derives from: what it carries adds to what its base
-        // requires, and never takes its place. A marker of where a permission is held is a requirement wherever it is
-        // declared, so a request that inherits one gets a line of its own too, unless it answers the property itself. One
-        // with neither is matched by its base's line.
+        // requires, and never takes its place. A permission marker is a requirement wherever it is declared. So a request
+        // that inherits one gets a line of its own too, unless it answers the property itself. A request with neither is
+        // matched by its base's line.
         var implementation = type.FindImplementationForInterfaceMember(requiredAccess);
         var answersItself = implementation is not null && !modules.Contains(implementation.ContainingType, SymbolEqualityComparer.Default);
         var line = stated.Count > 0
@@ -440,8 +445,9 @@ internal sealed record RequestRequirement(
     }
 
     /// <summary>
-    /// A marker of where a permission is held, of one more argument of such a marker's call, of one more argument of a requirement
-    /// attribute's call, or of the caller's own; null for any other attribute.
+    /// The marker that <paramref name="attribute"/> is: a permission marker, an argument marker of a permission marker's
+    /// call, an argument marker of a requirement attribute's call, or a marker of the caller's own. Null for any other
+    /// attribute.
     /// </summary>
     private static Marker? MarkerOf(AttributeData attribute)
     {
@@ -845,10 +851,10 @@ internal sealed record RequestRequirement(
     /// <summary>What a marker on a member of a request marks.</summary>
     private enum MarkerKind
     {
-        /// <summary>Where the permission it carries is held: <c>[AtUnit(permission)]</c>, <c>[OnResource(permission)]</c>.</summary>
+        /// <summary>A permission marker, whose argument is the permission: <c>[AtUnit(permission)]</c>, <c>[OnResource(permission)]</c>.</summary>
         Place,
 
-        /// <summary>One more argument of the call of a marker of where: <c>[ExpectedVersion]</c>, <c>[ExpectedVersion&lt;Board&gt;]</c>.</summary>
+        /// <summary>One more argument of a permission marker's call: <c>[ExpectedVersion]</c>, <c>[ExpectedVersion&lt;Board&gt;]</c>.</summary>
         Argument,
 
         /// <summary>The caller's own, which the permission is the alternative of: <c>[OrOwn]</c>.</summary>
@@ -876,8 +882,8 @@ internal sealed record RequestRequirement(
     }
 
     /// <summary>
-    /// A marker on a member of a request: of where the permission it carries is held (<see cref="MarkerKind.Place"/>), of one
-    /// more argument of that call, of one more argument of a requirement attribute's call, or of the caller's own.
+    /// A marker on a member of a request: a permission marker (<see cref="MarkerKind.Place"/>), an argument marker of that
+    /// marker's call, an argument marker of a requirement attribute's call, or a marker of the caller's own.
     /// </summary>
     private sealed record Marker(
         INamedTypeSymbol Class,
@@ -905,7 +911,7 @@ internal sealed record RequestRequirement(
 
         public LocationInfo? Location { get; init; }
 
-        /// <summary>The permission a marker of where carries, as C# writes it; null where it names none.</summary>
+        /// <summary>The permission argument of a permission marker, as C# writes it. Null where the marker has none.</summary>
         public string? Permission { get; init; }
 
         /// <summary>Whether the compiler could not bind the marker's arguments: its error to report, and no line is written.</summary>
@@ -924,8 +930,8 @@ internal sealed record RequestRequirement(
         public string Named => "'" + Name + "' " + Bracketed(Class);
 
         /// <summary>
-        /// What one marker of where shares with another of its kind: its class and the type of its member. Two units are of
-        /// one kind, a board and an asset of two.
+        /// The kind of a permission marker: its class and the type of its member. Two unit markers are of one kind. A board
+        /// marker and an asset marker are of two kinds.
         /// </summary>
         public string PlaceKind => Class.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "|" + Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
@@ -943,12 +949,12 @@ internal sealed record RequestRequirement(
     private sealed record OwnTemplate(INamedTypeSymbol Template, ImmutableArray<INamedTypeSymbol> Implies);
 
     /// <summary>
-    /// One requirement of a request's line: an attribute on the request or on a class it derives from, or a marker of where
-    /// a permission is held on one of its members.
+    /// One requirement of a request's line: an attribute on the request or on a class it derives from, or a permission
+    /// marker on one of its members.
     /// </summary>
     private sealed record Part(Stated? Stated, Marker? Place)
     {
-        /// <summary>Whether it is a permission: <c>[RequiresPermission]</c>, or a marker of where.</summary>
+        /// <summary>Whether it is a permission: <c>[RequiresPermission]</c>, or a permission marker.</summary>
         public bool IsPermission => Place is not null || Stated?.IsPermission == true;
 
         /// <summary>What it shares with another permission of its kind: a marker's class and the type of its member, or <c>[RequiresPermission]</c>.</summary>
@@ -960,8 +966,8 @@ internal sealed record RequestRequirement(
 
     /// <summary>One request, read: what it says, what is wrong with it, and its line.</summary>
     /// <param name="line">
-    /// Whether the request gets a line of its own: it carries a requirement attribute or a marker of where a permission is
-    /// held, or inherits such a marker. One without is matched by its base's line, or takes the module's default.
+    /// Whether the request gets a line of its own: it has a requirement attribute or a permission marker, or inherits such a
+    /// marker. A request without one is matched by its base's line, or takes the module's default.
     /// </param>
     private sealed class Reading(
         INamedTypeSymbol type,
@@ -984,7 +990,7 @@ internal sealed record RequestRequirement(
         private readonly LocationInfo? _location = LocationInfo.From(identifier);
         private readonly string _name = Written(type);
 
-        /// <summary>The markers of where a permission is held that the line reads, in the order they are written.</summary>
+        /// <summary>The permission markers that the line reads, in the order they are written.</summary>
         private readonly List<Marker> _places = line ? markers.Where(static each => each.Place).ToList() : [];
 
         /// <summary>For each of <see cref="_places"/>, at its index, the members that mark one more argument of its call.</summary>
@@ -1239,13 +1245,13 @@ internal sealed record RequestRequirement(
         }
 
         /// <summary>
-        /// DDD00080 and DDD00081: markers of where that name their permission, each argument beside the one marker it goes
-        /// with, on members the line can read, of the ids they mark; and a permission without a marker held where one package
-        /// says.
+        /// DDD00080 and DDD00081. Each permission marker names its permission. Each argument marker belongs to one permission
+        /// marker. Each marker is on a member that the line can read, of the id type it takes. A permission without a marker
+        /// is held where exactly one package declares.
         /// </summary>
         private void MarkedRightly()
         {
-            // A marker of where carries its permission: one without names nothing to hold there.
+            // A permission marker without its permission argument names nothing to hold.
             if (_places.FirstOrDefault(static each => each.Permission is null && !each.Unbound) is { } bare)
             {
                 Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, DeclaredHere(bare) ? bare.Location ?? _location : _location, _name,
@@ -1503,8 +1509,8 @@ internal sealed record RequestRequirement(
 
         /// <summary>
         /// The permission <paramref name="orOwn"/> pairs with: the one of the request, for the bare form, or the one of the
-        /// marker on the resource the generic form names. Null where it cannot be told, or where that marker says where a
-        /// permission is checked and not what the request acts on, each reported (DDD00085).
+        /// marker on the resource the generic form names. Null where it cannot be told, or where that marker marks the place a
+        /// permission is checked and not what the request acts on. Each of these is reported (DDD00085).
         /// </summary>
         private Part? PairOf(Marker orOwn, List<Part> permissions)
         {
@@ -1777,7 +1783,7 @@ internal sealed record RequestRequirement(
 
         /// <summary>
         /// DDD00084: a requirement attribute the request carries that another requirement beside it already requires, as the
-        /// other's package says with <c>Implies</c>, or that the request it derives from carries already. A marker of where
+        /// other's package says with <c>Implies</c>, or that the request it derives from carries already. A permission marker
         /// requires what its package says on <c>[PermissionMarker]</c>, a permission without a marker what it says on
         /// <c>[PermissionWithoutMarker]</c>. The caller's own of <c>[OwnOnly]</c> requires what its package says the own of the
         /// member's type requires, <c>[assembly: OwnedByCurrentUser(..., Implies = ...)]</c>: a sign-in for a <see cref="Guid"/>,
@@ -1948,7 +1954,7 @@ internal sealed record RequestRequirement(
             return pattern + (reads ? " " + Designation : string.Empty) + " => " + requirement;
         }
 
-        /// <summary>The call one requirement stands for; <paramref name="reads"/> is set where it reads the request.</summary>
+        /// <summary>The call that one requirement becomes. <paramref name="reads"/> is set where the call reads the request.</summary>
         private string CallOf(Part part, ref bool reads)
         {
             string held;

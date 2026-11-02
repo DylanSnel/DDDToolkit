@@ -2000,7 +2000,7 @@ The caller sees [`Resource`](#memberaccesssees), whether or not it holds [`Membe
 
 **Remarks**
 
-It reads what [`MemberAccess.On`](#memberaccesson) reads, in one statement, and keeps it the same way, a [`MemberHold<TResource>`](#memberholdtresource) with the request in hand, so the caller's own way through holds a save of the resource to the version read as the permission's way does, under the expert hold too, and compares the version the request names. The permission is asked about so that what is kept says whether the caller holds it as well: [`MemberHold.Via`](#memberholdtresource) is `null` where it does not. `[OnResource(permission)]` on the resource and `[OrOwn]` on the member is `Any(All(Own(member), Sees(permission, resource)), On(permission, resource))`.
+It reads what [`MemberAccess.On`](#memberaccesson) reads, in one statement, and keeps it the same way, a [`MemberHold<TResource>`](#memberholdtresource) with the request in hand, so the caller's own way through holds a save of the resource to the version read as the permission's way does, under the expert hold too, and compares the version the request names. The permission is asked about so that what is kept says whether the caller holds it as well: [`MemberHold.Via`](#memberholdtresource) is `null` where it does not. `[OnResource(permission)]` on the resource and `[OrOwn]` on the member become `Any(All(Own(member), Sees(permission, resource)), On(permission, resource))`.
 
 | Member | Summary |
 |---|---|
@@ -2014,7 +2014,7 @@ It reads what [`MemberAccess.On`](#memberaccesson) reads, in one statement, and 
 public sealed class OnResourceAttribute : Attribute
 ```
 
-Marks the resource on which the caller of a request holds a permission, through its members or however else the resource's rules let a permission be held. It is what [`MemberAccess.On<TResourceId>`](#onstring-tresourceid-long) says, written on the member of the request it reads.
+Marks the resource on which the caller of a request holds a permission. The caller holds it through the resource's members, or in another way that the resource's rules allow. The generator turns the marker into a call of [`MemberAccess.On<TResourceId>`](#onstring-tresourceid-long) on the marked member.
 
 ```csharp
 public sealed record ShareDocument(
@@ -2025,9 +2025,9 @@ is `MemberAccess.On(DocumentPermissions.Share, request.Document, request.Expecte
 
 **Remarks**
 
-It goes on a positional parameter of a record as it is, or on a property, and `[property: OnResource(permission)]` is read as well. The member is the id of a resource with members: an aggregate root a class declared with `[Member<TId, TMemberId, TRoleId, TResource>]` names as its resource. On another id it is DDD00081, where the project sees such a class. The permission is one declared on that resource, `[On<TResource>]`, and a permission declared on another resource only is DDD00093. [`ExpectedVersionAttribute`](#expectedversionattribute) beside it marks the version the caller read, for a command that names one.
+It goes on a positional parameter of a record, or on a property. The generator also reads `[property: OnResource(permission)]`. The member is the id of a resource with members: an aggregate root that a class declared with `[Member<TId, TMemberId, TRoleId, TResource>]` names as its resource. On another id it is DDD00081, in a project that sees such a class. The permission is declared on that resource with `[On<TResource>]`. A permission declared only on another resource is DDD00093. [`ExpectedVersionAttribute`](#expectedversionattribute) beside it marks the version the caller read, for a command that names one.
 
-Several on one request are all required, each on its own resource. Attaching an asset to a board needs a permission on each:
+A request can have several of these markers, each on its own resource. All of them are required. Attaching an asset to a board needs a permission on each:
 
 ```csharp
 public sealed record AttachAsset(
@@ -2036,16 +2036,16 @@ public sealed record AttachAsset(
     [ExpectedVersion<Board>] long? Version = null) : ICommand<Board>, IBoardsRequest;
 ```
 
-is `AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use, request.Asset))`. Each check decides its own resource, keeps a hold on it, and refuses under that resource's codes.
+becomes `AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use, request.Asset))`. Each `MemberAccess.On` call checks its own resource, keeps a hold on that resource, and refuses with that resource's refusal codes.
 
-The resource is what the request acts on, so `OrOwnAttribute` pairs with it: the request is about the caller's own there, or the caller holds the permission on the resource.
+The resource is what the request acts on, so `OrOwnAttribute` can pair with the marker. The caller is let through when the request is about the caller's own on that resource, or when the caller holds the permission on the resource.
 
 ```csharp
 public sealed record LeaveCrew(                                                          // take yourself off, or manage the crew
     [OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, [OrOwn] SeatId Seat) : IProjectsRequest;
 ```
 
-is `AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees(ProjectPermissionNames.ManageCrew, request.Project)), MemberAccess.On(ProjectPermissionNames.ManageCrew, request.Project))`. Either way the project's check reads the project, a caller on its own needs only to see it, compares the version [`ExpectedVersionAttribute`](#expectedversionattribute) marks, and keeps what the expert hold holds the save to. The handler still finds the seat on that resource, and refuses one that is not there: the caller's own lets it act on itself, not on a resource it has nothing to do with.
+becomes `AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees(ProjectPermissionNames.ManageCrew, request.Project)), MemberAccess.On(ProjectPermissionNames.ManageCrew, request.Project))`. On both ways through, the project's check reads the project. A caller on the own way through only needs to see the project. The check compares the version that [`ExpectedVersionAttribute`](#expectedversionattribute) marks, and keeps the hold that the expert hold checks the save against. The handler still looks up the seat on that resource, and refuses a seat that is not there. So the caller's own way through covers the caller's own place on that resource only.
 
 Where a permission on the resource manages the members ([`MembershipRules.ManagesMembersPermission`](rules.md#managesmemberspermission)), a database that checks every row lets a member row change only for a caller that holds that permission, so a caller who takes itself off without it is refused there. The handler then saves the caller's own place as the application's own work, begun for that caller once its request is the one in hand (`RequestInHand`): the check decided it.
 
@@ -2068,9 +2068,9 @@ The primary constructor: the type's summary says what it makes.
 
 **Remarks**
 
-It goes on a positional parameter of a record as it is, or on a property, and `[property: OnResource(permission)]` is read as well. The member is the id of a resource with members: an aggregate root a class declared with `[Member<TId, TMemberId, TRoleId, TResource>]` names as its resource. On another id it is DDD00081, where the project sees such a class. The permission is one declared on that resource, `[On<TResource>]`, and a permission declared on another resource only is DDD00093. [`ExpectedVersionAttribute`](#expectedversionattribute) beside it marks the version the caller read, for a command that names one.
+It goes on a positional parameter of a record, or on a property. The generator also reads `[property: OnResource(permission)]`. The member is the id of a resource with members: an aggregate root that a class declared with `[Member<TId, TMemberId, TRoleId, TResource>]` names as its resource. On another id it is DDD00081, in a project that sees such a class. The permission is declared on that resource with `[On<TResource>]`. A permission declared only on another resource is DDD00093. [`ExpectedVersionAttribute`](#expectedversionattribute) beside it marks the version the caller read, for a command that names one.
 
-Several on one request are all required, each on its own resource. Attaching an asset to a board needs a permission on each:
+A request can have several of these markers, each on its own resource. All of them are required. Attaching an asset to a board needs a permission on each:
 
 ```csharp
 public sealed record AttachAsset(
@@ -2079,16 +2079,16 @@ public sealed record AttachAsset(
     [ExpectedVersion<Board>] long? Version = null) : ICommand<Board>, IBoardsRequest;
 ```
 
-is `AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use, request.Asset))`. Each check decides its own resource, keeps a hold on it, and refuses under that resource's codes.
+becomes `AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use, request.Asset))`. Each `MemberAccess.On` call checks its own resource, keeps a hold on that resource, and refuses with that resource's refusal codes.
 
-The resource is what the request acts on, so `OrOwnAttribute` pairs with it: the request is about the caller's own there, or the caller holds the permission on the resource.
+The resource is what the request acts on, so `OrOwnAttribute` can pair with the marker. The caller is let through when the request is about the caller's own on that resource, or when the caller holds the permission on the resource.
 
 ```csharp
 public sealed record LeaveCrew(                                                          // take yourself off, or manage the crew
     [OnResource(ProjectPermissionNames.ManageCrew)] ProjectId Project, [OrOwn] SeatId Seat) : IProjectsRequest;
 ```
 
-is `AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees(ProjectPermissionNames.ManageCrew, request.Project)), MemberAccess.On(ProjectPermissionNames.ManageCrew, request.Project))`. Either way the project's check reads the project, a caller on its own needs only to see it, compares the version [`ExpectedVersionAttribute`](#expectedversionattribute) marks, and keeps what the expert hold holds the save to. The handler still finds the seat on that resource, and refuses one that is not there: the caller's own lets it act on itself, not on a resource it has nothing to do with.
+becomes `AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees(ProjectPermissionNames.ManageCrew, request.Project)), MemberAccess.On(ProjectPermissionNames.ManageCrew, request.Project))`. On both ways through, the project's check reads the project. A caller on the own way through only needs to see the project. The check compares the version that [`ExpectedVersionAttribute`](#expectedversionattribute) marks, and keeps the hold that the expert hold checks the save against. The handler still looks up the seat on that resource, and refuses a seat that is not there. So the caller's own way through covers the caller's own place on that resource only.
 
 Where a permission on the resource manages the members ([`MembershipRules.ManagesMembersPermission`](rules.md#managesmemberspermission)), a database that checks every row lets a member row change only for a caller that holds that permission, so a caller who takes itself off without it is refused there. The handler then saves the caller's own place as the application's own work, begun for that caller once its request is the one in hand (`RequestInHand`): the check decided it.
 
@@ -2099,7 +2099,7 @@ Where a permission on the resource manages the members ([`MembershipRules.Manage
 public sealed class ExpectedVersionAttribute : Attribute
 ```
 
-Marks the version of the resource the caller last read, beside the one [`OnResourceAttribute`](#onresourceattribute) of the request: the third argument of [`MemberAccess.On<TResourceId>`](#onstring-tresourceid-long).
+Marks the version of the resource that the caller last read, beside the request's only [`OnResourceAttribute`](#onresourceattribute). The member is the third argument of [`MemberAccess.On<TResourceId>`](#onstring-tresourceid-long).
 
 ```csharp
 public sealed record ShareDocument(
@@ -2110,7 +2110,7 @@ is `MemberAccess.On(DocumentPermissions.Share, request.Document, request.Expecte
 
 **Remarks**
 
-It goes with exactly one [`OnResourceAttribute`](#onresourceattribute). On a request that marks no resource it is DDD00080. Beside markers on two or more kinds of resource, [`ExpectedVersionAttribute<TResource>`](#expectedversionattributetresource) names the resource whose version it is, and beside two markers on one kind of resource the request writes `RequiredAccess`: each is DDD00080 otherwise. The member is a `long?`, or a `long`, as the call's parameter takes; another type is DDD00081.
+It goes with one [`OnResourceAttribute`](#onresourceattribute). On a request without a resource marker it is DDD00080. A request with markers on two or more kinds of resource uses [`ExpectedVersionAttribute<TResource>`](#expectedversionattributetresource), which names the resource. A request with two markers on one kind of resource implements `RequiredAccess`. Otherwise each of these is DDD00080. The member is a `long?`, or a `long`, because the call's parameter takes either. Another type is DDD00081.
 
 ### `ExpectedVersionAttribute<TResource>`
 
@@ -2120,7 +2120,7 @@ public sealed class ExpectedVersionAttribute<TResource> : Attribute
     where TResource : class
 ```
 
-[`ExpectedVersionAttribute`](#expectedversionattribute) for a request with markers on several resources: it names the resource whose version the caller last read.
+The form of [`ExpectedVersionAttribute`](#expectedversionattribute) for a request with markers on several resources. Its type argument names the resource whose version the caller last read.
 
 ```csharp
 public sealed record AttachAsset(
@@ -2129,15 +2129,15 @@ public sealed record AttachAsset(
     [ExpectedVersion<Board>] long? Version = null) : ICommand<Board>, IBoardsRequest;
 ```
 
-is `AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use, request.Asset))`. The board's check compares the version, and the asset's is only read.
+becomes `AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use, request.Asset))`. The board's check compares the version. The asset's check only reads the asset.
 
 **Type parameters**
 
-- `TResource`: The resource whose version the member is.
+- `TResource`: The resource whose version the member holds.
 
 **Remarks**
 
-`TResource` is the resource class, the aggregate root a member class names, such as `Board`. The version goes with the [`OnResourceAttribute`](#onresourceattribute) on that resource's id. It is required beside markers on two or more kinds of resource, and allowed beside one. A resource no [`OnResourceAttribute`](#onresourceattribute) of the request is on, and two markers on that one resource, are each DDD00080.
+`TResource` is the resource class, the aggregate root that a member class names, such as `Board`. The version belongs to the [`OnResourceAttribute`](#onresourceattribute) on that resource's id. The generic form is required beside markers on two or more kinds of resource, and allowed beside one. These are DDD00080: a resource that no [`OnResourceAttribute`](#onresourceattribute) of the request is on, and two markers on that resource.
 
 ### `SeenWithAttribute<TResourceId>`
 

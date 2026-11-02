@@ -9,12 +9,12 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace DDDToolkit.Supporting.Membership.Analyzers;
 
 /// <summary>
-/// What is said of a request's <c>[OnResource(permission)]</c> marker, for each marker on its own.
+/// The diagnostics of a request's <c>[OnResource(permission)]</c> marker, reported for each marker separately.
 /// <list type="bullet">
 /// <item>
-/// DDD00093: the permission the marker carries is declared on the resource whose id the marked member is,
-/// <c>[On&lt;TResource&gt;]</c>. A permission declared on another resource only, or with no level on a resource at all, is
-/// one the rules of the marked resource never give, so the request would refuse everyone.
+/// DDD00093: the marker's permission must be declared with <c>[On&lt;TResource&gt;]</c> on the resource whose id the
+/// marked member is. The rules of the marked resource never give a permission declared only on another resource, or with
+/// no level on a resource. The request would then refuse everyone.
 /// </item>
 /// <item>
 /// DDD00096: <c>[OrOwn]</c> on the member of an <c>[OnResource]</c>, beside a permission the owner of the resource holds
@@ -22,9 +22,10 @@ namespace DDDToolkit.Supporting.Membership.Analyzers;
 /// <code>
 /// public sealed record RenameBoard([OnResource(BoardPermissions.Edit), OrOwn] BoardId Board, string Name) : IBoardsRequest;
 /// </code>
-/// The permission is asked on the board, and the board's owner holds every permission declared on it with
-/// <c>Owner = true</c> by owning it, so the owner is let through by the permission already: <c>[OrOwn]</c> says nothing
-/// more. It stays meant for an aggregate with an <c>[Owner]</c> and no members, and for a permission the owner does not hold.
+/// The permission is asked on the board. The board's owner holds every permission declared on it with
+/// <c>Owner = true</c>, by owning the board. So the permission already lets the owner through, and <c>[OrOwn]</c> adds
+/// nothing. <c>[OrOwn]</c> is meant for an aggregate with an <c>[Owner]</c> and no members, and for a permission that the
+/// owner does not hold.
 /// </item>
 /// </list>
 /// What is declared where is read by the permission's value, from the <c>[Permissions]</c> classes of the project and of

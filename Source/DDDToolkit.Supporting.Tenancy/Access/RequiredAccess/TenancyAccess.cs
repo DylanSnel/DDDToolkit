@@ -17,7 +17,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <c>services.AddTenancyAccess&lt;TRequests, TContext&gt;()</c> adds holds the caller to. Where the requirement reads
 /// no value of the request but the permission and a unit it carries, the request says it with an attribute instead, and the
 /// toolkit's generator writes the same call: <see cref="InTenantAttribute"/>, <c>[RequiresPermission(permission)]</c> for the
-/// whole tenant, <see cref="AtUnitAttribute"/> with the permission on the unit for a permission there, and
+/// whole tenant, <c>[AtUnit(permission)]</c> (<see cref="AtUnitAttribute"/>) on the unit for a permission at that unit, and
 /// <see cref="OperatorAttribute"/>, with <see cref="ForTenantAttribute"/> on the tenant. These methods stay for a requirement computed from the request's
 /// values: <c>Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)</c>.
 /// </summary>

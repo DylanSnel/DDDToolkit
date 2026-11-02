@@ -2995,8 +2995,8 @@ Every command and query says who may send it. The module's checks hold the calle
 runs. A request says it in one of two ways
 ([What a request declares](access-requirements.md#what-a-request-declares)):
 
-- with an attribute, `[SignedIn]` say, or with a marker that carries a permission on the member where it is held,
-  `[OnResource(permission)]` say;
+- with an attribute, such as `[SignedIn]`, or with a permission marker on the member where the permission is held,
+  such as `[OnResource(permission)]`;
 - by answering `RequiredAccess` itself, where the requirement is computed.
 
 If the module's interface is `partial`, the generator implements `RequiredAccess` in it. The compiler then no
@@ -3040,12 +3040,12 @@ does nothing, while a review reads it as the requirement. That is why DDD00078 i
 - the attribute, where the requirement reads no value of the request;
 - the property, where it computes the requirement from the request's values.
 
-A marker that carries a permission is a requirement too, so a marker beside the property is reported the same way.
+A permission marker is a requirement too, so a marker beside the property is reported the same way.
 
 The same holds for an interface between the request and its module's interface that gives `RequiredAccess` a
 default of its own, such as `interface IPublicBillingRequest : IBillingRequest`. C# takes that default over the
 module's. The message then says that the request answers `RequiredAccess` through that interface. A request that
-derives from one that answers `RequiredAccess` answers it too, so it carries no requirement attribute or marker of its
+derives from one that answers `RequiredAccess` answers it too, so it has no requirement attribute or marker of its
 own.
 
 ## DDD00079
@@ -3061,8 +3061,8 @@ Requirement attributes stacked on one request all hold, as several `[Authorize]`
 ([Stacked attributes are all](access-requirements.md#stacked-attributes)). `[AllowAnonymous]` says that
 anyone may send the request, including a caller who did not sign in. A requirement beside it limits who may send
 the request. The two contradict each other, and a review cannot tell which one was meant. So DDD00079 is an error
-beside any other requirement, `[RequiresPermission]`, `[OwnOnly]` and a marker that carries a permission included,
-and the generator writes no line for the request. Keep the attribute that the request needs. A request that anyone may send carries
+beside any other requirement, including `[RequiresPermission]`, `[OwnOnly]` and a permission marker. The generator
+writes no line for the request. Keep the attribute that the request needs. A request that anyone may send has
 `[AllowAnonymous]` alone.
 
 A request also holds to the attributes of the requests it derives from, theirs first. So `[AllowAnonymous]` on a
@@ -3086,36 +3086,37 @@ public sealed record FileDocument(
     [ExpectedVersion] long? Version = null) : IFilingRequest;                                        // DDD00080: whose version?
 ```
 
-A marker on one of the request's members says where the caller holds a permission, and carries that permission
-([Where the permission is held](access-requirements.md#where-the-permission-is-held)):
+A permission marker on one of the request's members names a permission. The member is the place where the caller
+must hold it ([Where the permission is held](access-requirements.md#where-the-permission-is-held)):
 
 - `[AtUnit(permission)]`: at that unit or above it;
 - `[OnResource(permission)]`: on that resource, through its members. `[ExpectedVersion]` beside it gives the version
   the caller read.
 
-Several markers on one request all hold, two of one kind included. `[RequiresPermission(permission)]` on the request is
-a permission without a marker, held where a package says. Tenancy says it is held for the whole tenant.
+A request requires every marker on it, also two markers of one kind. `[RequiresPermission(permission)]` on the request
+names a permission without a marker. A package declares where such a permission is held. Tenancy declares that it is
+held for the whole tenant.
 
 DDD00080 is reported at the marker, the attribute or the request:
 
 | It | Because | Fix |
 |---|---|---|
-| marks a member `[AtUnit]` without a permission | the marker carries the permission held where it marks. Bare, `[AtUnit]` is the level of a permission constant | `[AtUnit(permission)]` |
-| marks `[ExpectedVersion]` and no member `[OnResource]` | the version belongs to the resource it goes with | mark the resource, or take the version off |
-| marks a bare `[ExpectedVersion]` beside `[OnResource]` on two kinds of resource | the version cannot tell which resource it is of | name the resource, `[ExpectedVersion<Document>]` |
-| marks `[ExpectedVersion<TResource>]` and no `[OnResource]` on the id of `TResource` | the version names a resource the request does not mark | name the resource of the marker it goes with |
-| marks `[ExpectedVersion]` or `[ExpectedVersion<TResource>]` beside two `[OnResource]` of one kind | no name tells which of the two calls it goes to | write `RequiredAccess`, with the version on the call it goes with |
-| marks one argument twice for one marker, such as two `[ExpectedVersion]` | the call takes each argument once. The bare and the named form are one argument | keep one |
+| marks a member `[AtUnit]` without a permission | the marker's argument is the permission that the caller holds at the unit. Without an argument, `[AtUnit]` is the level of a permission constant | `[AtUnit(permission)]` |
+| marks `[ExpectedVersion]` and no member `[OnResource]` | the version belongs to a resource marker | mark the resource, or take the version off |
+| marks a bare `[ExpectedVersion]` beside `[OnResource]` on two kinds of resource | the bare form cannot say which resource the version belongs to | name the resource, `[ExpectedVersion<Document>]` |
+| marks `[ExpectedVersion<TResource>]` and no `[OnResource]` on the id of `TResource` | the version names a resource that the request does not mark | name the resource of a marker on the request |
+| marks `[ExpectedVersion]` or `[ExpectedVersion<TResource>]` beside two `[OnResource]` of one kind | the type argument cannot say which of the two calls the version belongs to | write `RequiredAccess`, with the version in the right call |
+| marks one argument twice for one marker, such as two `[ExpectedVersion]` | the call takes each argument once. The bare and the generic form are the same argument | keep one |
 | marks a parameter of a class's primary constructor | the requirement cannot read such a parameter. A positional record's parameter is its property, and is fine | mark the property |
 | marks a private or protected property | the requirement is read in the module's interface, which needs a public or internal getter | give it a public or internal getter |
-| carries `[RequiresPermission]`, where no package says where a permission without a marker is held | Tenancy says it with `[assembly: PermissionWithoutMarker]`: for the whole tenant. A project with Membership alone, or with two such packages, cannot tell | put the permission on the marker of where it is held, `[OnResource(permission)]` |
-| is a module's interface whose default is `[RequiresPermission(permission)]`, where no package says where a permission without a marker is held | a default reads no member of a request, so its permission has no marker | put the permission on each request, on its marker |
+| has `[RequiresPermission]`, where no package declares where a permission without a marker is held | Tenancy declares it with `[assembly: PermissionWithoutMarker]`, for the whole tenant. A project with Membership alone, or with two such packages, cannot tell | put the permission on the marker of the place where it is held, `[OnResource(permission)]` |
+| is a module's interface whose default is `[RequiresPermission(permission)]`, where no package declares where a permission without a marker is held | a default reads no member of a request, so it cannot use a marker | put the permission on each request, on its marker |
 
 A marker on a base request is a requirement of every request that derives from it. A bare marker there is reported at
 the base, and at each derived request that inherits it.
 
-`[OnResource]` without a permission does not compile, since its constructor takes the permission. The compiler reports
-CS7036, and DDD00080 says nothing more.
+`[OnResource]` without a permission does not compile, because its constructor takes the permission. The compiler
+reports CS7036, and DDD00080 is not reported.
 
 A record's positional parameter is the property that its base record declares, if the base record has it. So
 `[AtUnit(permission)]` goes on the derived record's parameter as well:
@@ -3145,9 +3146,10 @@ type:
 - `[OnResource(permission)]` marks the id of a resource with members: the aggregate root that a class declared with
   `[Member<TId, TMemberId, TRoleId, TResource>]` names.
 
-The package says which id a marker takes, with `[PermissionMarker(..., IdOf = ...)]`. DDD00081 is reported for each
-marker on its own, where the project sees such classes, as a module's application project sees its domain's classes.
-Where the project sees none, nothing can be told, and the access check reports the problem when the request is sent.
+The package declares which id a marker takes, with `[PermissionMarker(..., IdOf = ...)]`. DDD00081 is reported for
+each marker separately, in a project that sees such classes, as a module's application project sees its domain's
+classes. In a project that sees none, the analyzer cannot tell, and the access check reports the problem when the
+request is sent.
 
 A member that may be null is a requirement computed from whether the value is given. Write it as
 `RequiredAccess`: `Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`.
@@ -3238,11 +3240,11 @@ public sealed record CloseAccount([Own] Guid User) : IAccountsRequest;
 public sealed record OpenLedger([AtUnit(BillingPermissions.OpenLedger)] OrganizationUnitId Unit) : IBillingRequest;
 ```
 
-Stacked requirement attributes and markers all hold. So an attribute that its neighbour already requires adds
-nothing:
+A request requires every requirement attribute and marker on it. So an attribute that its neighbour already requires
+adds nothing:
 
-- Only a seat in the tenant, or system work there, holds a permission of Tenancy's, of `[RequiresPermission]` or of
-  `[AtUnit(permission)]`. So `[InTenant]` beside such a permission adds nothing.
+- Only a seat in the tenant, or system work there, holds a permission of Tenancy's, from `[RequiresPermission]` or
+  from `[AtUnit(permission)]`. So `[InTenant]` beside such a permission adds nothing.
 - `[Operator]` lets through only a signed-in caller with an operator's token role. So `[SignedIn]` beside it adds
   nothing.
 
@@ -3256,9 +3258,9 @@ package of a type says what the caller's own of that type requires, with `Implie
 - A `Guid` is a signed-in caller's identity, so it implies `[SignedIn]`.
 - Tenancy's seat id is a seat in the tenant, so it implies `[InTenant]` and `[SignedIn]`.
 
-Beside `[OwnOnly]` with `[Own]` on such a member, these attributes are reported. Beside the permission `[OrOwn]`
+Beside `[OwnOnly]` with `[Own]` on such a member, these attributes are reported. For the permission that `[OrOwn]`
 pairs with, only what both the permission and the caller's own require counts. Every other permission of the request,
-on a marker or of `[RequiresPermission]`, counts in full.
+on a marker or in `[RequiresPermission]`, counts in full.
 
 These are reported too:
 
@@ -3306,7 +3308,7 @@ A request about the caller's own declares it in one of two ways
 ([Yours, or the permission](access-requirements.md#the-callers-own-or-a-permission)):
 
 - `[OrOwn]` on the member, beside a permission: the caller's own, or the permission. The bare form pairs with the
-  request's one permission, of a marker or of `[RequiresPermission(permission)]`. Beside two or more permissions,
+  request's only permission, on a marker or in `[RequiresPermission(permission)]`. Beside two or more permissions,
   `[OrOwn<TResource>]` names the resource of the `[OnResource]` it pairs with.
 - `[Own]` on the member, with `[OwnOnly]` on the request: the caller's own alone.
 
@@ -3316,23 +3318,23 @@ DDD00085 is reported at the marker or the request:
 |---|---|---|
 | marks `[OrOwn]`, and requires no permission | `[OrOwn]` makes the caller's own an alternative to a permission | put the permission on the request; for the caller's own alone, use `[OwnOnly]` with `[Own]` |
 | marks a bare `[OrOwn]` beside permissions of two kinds | `[OrOwn]` pairs with one permission | name the resource, `[OrOwn<Board>]` |
-| marks `[OrOwn<TResource>]` and no marker on the id of `TResource` | `[OrOwn<TResource>]` pairs with the marker on that resource | mark the resource's id, or name the resource of the marker it pairs with |
-| marks `[OrOwn]` or `[OrOwn<TResource>]` beside two permissions of one kind, such as two boards | no name tells which of the two the caller's own is the alternative of | compute the requirement as `RequiredAccess` |
-| marks `[OrOwn]` beside `[RequiresPermission]` and `[AtUnit(permission)]` | neither can pair with a named resource | compute the requirement as `RequiredAccess` |
+| marks `[OrOwn<TResource>]` and no marker on the id of `TResource` | `[OrOwn<TResource>]` pairs with the marker on that resource | mark the resource's id, or name the resource of a marker on the request |
+| marks `[OrOwn]` or `[OrOwn<TResource>]` beside two permissions of one kind, such as two boards | the type argument cannot say which of the two permissions the caller's own is an alternative to | compute the requirement as `RequiredAccess` |
+| marks `[OrOwn]` beside `[RequiresPermission]` and `[AtUnit(permission)]` | neither permission has a resource that `[OrOwn<TResource>]` could name | compute the requirement as `RequiredAccess` |
 | marks `[Own]`, and is not `[OwnOnly]` | `[Own]` names the value for a request about the caller's own alone, which `[OwnOnly]` declares | put `[OwnOnly]` on the request, or mark the member `[OrOwn]` |
-| carries `[OwnOnly]`, and marks no member `[Own]` | the request names no value to compare with the caller's own | mark the member `[Own]` |
+| has `[OwnOnly]`, and marks no member `[Own]` | the request names no value to compare with the caller's own | mark the member `[Own]` |
 | marks one member `[Own]` and `[OrOwn]` | `[Own]` means the caller's own alone, and `[OrOwn]` means the caller's own or the permission | keep the one it means |
 | marks two members `[OrOwn]`, or two `[Own]` | the caller's own is one value | compute the requirement as `RequiredAccess` |
-| pairs `[OrOwn]` with `[AtUnit(permission)]` | the unit says where the permission is checked, and the request acts on something else. A caller could send a unit where it holds the permission, together with another person's seat. A permission held at one unit would then act on a seat anywhere | compute the requirement as `RequiredAccess` |
+| pairs `[OrOwn]` with `[AtUnit(permission)]` | the unit names where the permission is checked, and the request acts on something else. A caller could send a unit where it holds the permission, together with another person's seat. A permission held at one unit would then act on a seat anywhere | compute the requirement as `RequiredAccess` |
 | marks a parameter of a class's primary constructor, or a private property | the line is written in the module's interface, which reads a property with a public or internal getter | mark the property, and give it a public or internal getter |
 
-`[OrOwn]` beside `[OnResource]` is fine, because the resource is what the request acts on. Membership says so with
-`OwnAlternative` on its `[PermissionMarker]`. `OwnAlternative` names the case that the caller's own way through
-still meets on the resource: `MemberAccess.Sees`. The caller sees the resource, and the access check reads the resource,
-compares its version and keeps its hold
-([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)). A package's marker of
-where a permission is checked, whatever the request acts on, names no `OwnAlternative`. `[OrOwn]` paired with such a
-marker is reported in the same way as with `[AtUnit]`.
+`[OrOwn]` beside `[OnResource]` is allowed, because the resource is what the request acts on. Membership declares this
+with `OwnAlternative` on its `[PermissionMarker]`. `OwnAlternative` names the case that the caller's own way through
+must still pass on the resource: `MemberAccess.Sees`. The caller must see the resource, and the access check reads the
+resource, compares its version and keeps its hold
+([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)). A package marker of the
+place where a permission is checked, when the request acts on something else, names no `OwnAlternative`. `[OrOwn]`
+paired with such a marker is reported in the same way as with `[AtUnit]`.
 
 ## DDD00086
 
@@ -3559,8 +3561,7 @@ public static class LedgerPermissions
 
 A module declares its permissions in a static class marked `[Permissions]`. Every public `const string` of the
 class is a permission. A request names it on a marker or in `[RequiresPermission]`, and a role gives it. Each
-permission carries
-its **level**: the attribute that says where the permission is asked. The levels are Tenancy's `[AtTenant]` and
+permission has its **level**: the attribute that says where the permission is asked. The levels are Tenancy's `[AtTenant]` and
 `[AtUnit]`, and Membership's `[On<TResource>]`
 ([The settings of a permission](membership/permissions-and-roles.md#the-settings-of-a-permission),
 [A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)). The
@@ -3578,7 +3579,7 @@ So each case below would be read as something else, or not at all, and is refuse
 | a level on a field that is no public `const string` | a request names a permission by its constant, also from another module, so the constant must be public |
 | a level on a constant of a class not marked `[Permissions]` | nothing reads that class |
 | one permission declared twice in one class | a permission is declared once. The second constant is the mistake |
-| a level written with a permission, `[AtUnit(permission)]`, on a constant | the constant is the permission, and the level says where it is asked. `[AtUnit(permission)]` is the marker of a request's unit. On the constant, write `[AtUnit]` |
+| a level written with a permission, `[AtUnit(permission)]`, on a constant | the constant is the permission, and the level says where it is asked. `[AtUnit(permission)]` is the marker of a request's unit. On the constant, write `[AtUnit]` without an argument |
 
 ## DDD00093
 
@@ -3613,14 +3614,14 @@ Of the permissions on one resource:
 A permission declared on one resource by two constants is reported as well. Each case is reported where the
 permission is declared, among the permissions that the project sees.
 
-On a request, the permission an `[OnResource(permission)]` marker carries is one declared on the resource whose id
-the marker marks. The rules of that resource give only the permissions declared `[On<TResource>]` for it. A permission
-declared on another resource only, or with no level on a resource, would let nobody through. Each marker is reported
-on its own, at the marker, where the project sees the permission declared. Name a permission declared on the marked
-resource, or mark the id of the resource the permission is declared on.
+On a request, the permission of an `[OnResource(permission)]` marker must be declared on the resource whose id the
+marker marks. The rules of that resource give only the permissions declared `[On<TResource>]` for it. A permission
+declared only on another resource, or with no level on a resource, would let nobody through. DDD00093 is reported at
+each such marker separately, in a project that sees the permission's declaration. Name a permission declared on the
+marked resource, or mark the id of the resource the permission is declared on.
 
-`[AtUnit(permission)]` takes a permission of any level. Tenancy's catalogue holds every declared permission, and a
-permission on a resource is held at a unit by a role granted there, which reaches the resource from above.
+`[AtUnit(permission)]` takes a permission of any level. Tenancy's catalogue holds every declared permission. A role
+granted at a unit can hold a permission on a resource. The role reaches the resource from above.
 
 ## DDD00094
 
@@ -3687,9 +3688,9 @@ with `Owner = true`, because the owner owns the resource. So the permission alre
   ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate));
 - a permission that the owner does not hold, declared with `Owner = false`.
 
-DDD00096 is a warning, because the request does the same with or without the attribute. It is reported for each such
-pair, `[OrOwn]` or `[OrOwn<TResource>]` and the `[OnResource]` on the same member, also on a request with markers on
-other resources.
+DDD00096 is a warning, because the request does the same with or without the attribute. It is reported for each
+`[OrOwn]` or `[OrOwn<TResource>]` with an `[OnResource]` on the same member, also on a request with markers on other
+resources.
 
 ## DDD00097
 
@@ -3911,9 +3912,9 @@ public sealed record TenantSeats : IQuery<IReadOnlyList<SeatRow>>, ITenancyReque
 public sealed record ArchiveUnit([AtUnit(TenancyPermissions.UnitsManage)] OrganizationUnitId Unit) : ICommand, ITenancyRequest;
 ```
 
-Requirement attributes and markers on one request all hold. `[Operator]` lets through only a signed-in user with an
-operator's token role. An operator holds no seat in any tenant and no permission, so `[InTenant]`,
-`[RequiresPermission(permission)]` and a marker that carries a permission refuse every operator. A seat is no
+A request requires every requirement attribute and marker on it. `[Operator]` lets through only a signed-in user with
+an operator's token role. An operator holds no seat in any tenant and no permission, so `[InTenant]`,
+`[RequiresPermission(permission)]` and a permission marker refuse every operator. A seat is no
 operator, so `[Operator]` refuses every seat. Together they refuse every caller, and the request can never be sent.
 
 Keep `[Operator]` for a request of the application's staff, or the other attribute for a request of a tenant's

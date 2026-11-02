@@ -341,19 +341,25 @@ See `tenancy/postgres.md` ("Row level security on Postgres"): "Default read poli
   written into it from the attributes. A module writes a check (`IAccessCheck`) only for cases of its own;
   `AddTenancyAccess<TRequests, TContext>()` adds the package's checks for Tenancy's cases (the operator cases among
   them), and `AddProjectMemberAccess<IProjectsRequest>()`, generated for the Membership package's member class, the
-  check for a permission held on a project. The attributes: the toolkit's `[AllowAnonymous]` and `[SignedIn]`,
-  Tenancy's `[InTenant]` and `[Operator]` (with `[ForTenant]` on the tenant a command acts in),
-  `[RequiresPermission(permission)]` for the whole tenant, markers that carry their permission on the member where it is held,
-  Tenancy's `[AtUnit(permission)]` on a unit and Membership's `[OnResource(permission)]` on a resource with `[ExpectedVersion]`
-  on the version read (several markers all hold, `[ExpectedVersion<TResource>]` beside markers on two kinds of resource), and
-  Membership's `[SeenWith<TResourceId>(permission)]` for a query that shows the resources the permission is held on, and the
-  core's `[OrOwn]` on a seat beside the request's one permission for the caller's own seat or the permission (`RenameSeat`; not
-  with `[AtUnit]`; `[OrOwn<TResource>]` beside several), and `[OwnOnly]` with `[Own]` for the seat alone. Where nearly every request of a module requires a caller in the
+  check for a permission held on a project. The attributes:
+  - the toolkit's `[AllowAnonymous]` and `[SignedIn]`;
+  - Tenancy's `[InTenant]` and `[Operator]`, with `[ForTenant]` on the tenant a command acts in;
+  - `[RequiresPermission(permission)]` for the whole tenant;
+  - permission markers on the member where the permission is held: Tenancy's `[AtUnit(permission)]` on a unit, and
+    Membership's `[OnResource(permission)]` on a resource, with `[ExpectedVersion]` on the version read. A request
+    requires every marker on it. Beside markers on two kinds of resource, use `[ExpectedVersion<TResource>]`;
+  - Membership's `[SeenWith<TResourceId>(permission)]` for a query that shows the resources the permission is held on;
+  - the core's `[OrOwn]` on a seat beside the request's only permission, for the caller's own seat or the permission
+    (`RenameSeat`). It does not pair with `[AtUnit]`. Beside several permissions, use `[OrOwn<TResource>]`;
+  - `[OwnOnly]` with `[Own]` for the seat alone.
+
+  Where nearly every request of a module requires a caller in the
   tenant, the interface says it once, `[AccessRequests, InTenant]` (the sample's Projects module): a request that
   states nothing takes it, on a generated line of its own, and one that states its own keeps only its own; a
-  command that forgets its permission then requires a seat, so give every command its permission. A request answers `RequiredAccess` itself only for a case of the
-  module's own that no marker stands for, a requirement computed from its values (`SeatGrants`, `OpenProject`), or one
-  that combines what no stack of attributes says: one caller or another, `AccessRequirement.Any(TenancyAccess.Operator(),
+  command that forgets its permission then requires a seat, so give every command its permission. A request answers
+  `RequiredAccess` itself only in three cases. The first is a case of the module's own that has no marker. The second
+  is a requirement computed from its values (`SeatGrants`, `OpenProject`). The third is a combination that stacked
+  attributes cannot express, one caller or another: `AccessRequirement.Any(TenancyAccess.Operator(),
   TenancyAccess.AtTenant(permission))`, with a row rule for each way onto the module's own table. None leaves the decision to a package: a request handed to Tenancy's manager says what that
   manager asks first, and the manager keeps the rest. System work is no requirement: trusted code begins it around
   the work (`access.BeginSystemIn(tenant)`), a request it sends in a tenant is `[InTenant]`, and the

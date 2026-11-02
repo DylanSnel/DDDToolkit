@@ -8,10 +8,14 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace DDDToolkit.Analyzers.Analyzers;
 
 /// <summary>
-/// DDD00092: the shape of a module's permissions, which the packages' generators read and nothing else. A class marked
-/// <c>[Permissions]</c> is static; every <c>public const string</c> of it is a permission and carries a level, an
-/// attribute derived from <c>PermissionLevelAttribute</c>, written without constructor arguments; a level is on such a
-/// constant and nowhere else; and a permission is declared once in a class.
+/// DDD00092: the shape of a module's permissions. The packages' generators read this shape and nothing else.
+/// <list type="bullet">
+/// <item>A class marked <c>[Permissions]</c> is static.</item>
+/// <item>Every <c>public const string</c> of it is a permission and has a level: an attribute derived from
+/// <c>PermissionLevelAttribute</c>, written without constructor arguments.</item>
+/// <item>A level is on such a constant and nowhere else.</item>
+/// <item>A permission is declared once in a class.</item>
+/// </list>
 /// <para>
 /// DDD00099: a permission says what it lets somebody do, for the screens that put permissions into roles, with
 /// <c>Description</c> on its level or in the constant's <c>&lt;summary&gt;</c>; a retired one is shown nowhere and needs
@@ -20,8 +24,9 @@ namespace DDDToolkit.Analyzers.Analyzers;
 /// <para>
 /// The levels are the packages' own, Tenancy's <c>[AtTenant]</c> and <c>[AtUnit]</c> and Membership's
 /// <c>[On&lt;TResource&gt;]</c>, and the core knows them only by what they derive from. Whether a level fits what it is
-/// asked on is the package's to say. <c>[AtUnit(permission)]</c> on a member of a request is the request's marker, and is
-/// not judged here; on a constant it names a second permission where the constant is the permission, and is refused.
+/// asked on is the package's to say. <c>[AtUnit(permission)]</c> on a member of a request is a permission marker, and this
+/// analyzer does not check it. On a constant, <c>[AtUnit(permission)]</c> names a second permission, because the constant
+/// is the permission. So the analyzer refuses it there.
 /// </para>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]

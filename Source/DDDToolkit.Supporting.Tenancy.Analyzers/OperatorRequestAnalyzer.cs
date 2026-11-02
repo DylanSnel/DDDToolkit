@@ -13,16 +13,16 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// <list type="bullet">
 /// <item>DDD00103: <c>[Operator(Tenant = OperatorTenant.FromRequest)]</c> beside a member marked <c>[ForTenant]</c> names two
 /// tenants for the work of one command.</item>
-/// <item>DDD00104: <c>[InTenant]</c>, <c>[RequiresPermission]</c> or a marker of where a permission is held, such as
-/// <c>[AtUnit(permission)]</c> on a member, beside <c>[Operator]</c> refuses every operator, so the request refuses every caller.</item>
+/// <item>DDD00104: <c>[InTenant]</c>, <c>[RequiresPermission]</c> or a permission marker, such as <c>[AtUnit(permission)]</c>
+/// on a member, beside <c>[Operator]</c> refuses every operator. So the request refuses every caller.</item>
 /// <item>DDD00105: <c>Tenant</c> or <c>Scope</c> on the <c>[Operator]</c> of a query of the Mediator library says nothing,
 /// since nothing begins for a query.</item>
 /// </list>
 /// </summary>
 /// <remarks>
 /// It reads the attributes the request declares itself, on it and on its members. It knows the package's attributes by
-/// their names, as text, as the rest of this project does, and a marker of any package's by the core's
-/// <c>[PermissionMarker]</c> on its class.
+/// their names, as text, as the rest of this project does. It recognizes a permission marker of any package by the
+/// core's <c>[PermissionMarker]</c> on the marker's class.
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class OperatorRequestAnalyzer : DiagnosticAnalyzer
@@ -144,7 +144,7 @@ public sealed class OperatorRequestAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// The members the request declares a marker of where a permission is held on, as a message names them: <c>'Unit' [AtUnit]</c>.
+    /// The members on which the request declares a permission marker, as a message names them: <c>'Unit' [AtUnit]</c>.
     /// On a property of its own, or on a parameter of its primary constructor.
     /// </summary>
     private static IEnumerable<string> PermissionMarkers(INamedTypeSymbol request, INamedTypeSymbol? permissionMarker)

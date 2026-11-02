@@ -20,7 +20,7 @@ public abstract partial record AccessRequirement
     /// </code>
     /// A request says it with the attributes it says the caller's own with as well: <see cref="OwnAttribute"/> on the
     /// aggregate's id with <see cref="OwnOnlyAttribute"/> for the owner alone, <see cref="OrOwnAttribute"/> beside the
-    /// request's one permission for the owner or the permission.
+    /// request's only permission for the owner or the permission.
     /// </summary>
     /// <remarks>
     /// The fact is the domain's, and the policy the request's: the aggregate marks the property that names its owner,

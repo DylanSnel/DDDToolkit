@@ -22,11 +22,11 @@ Both [combine](../access-requirements.md#requirements-that-combine) with the oth
 registers its check for the same request interface, and each check decides its own cases.
 
 **A permission on each of two resources.** A request with an `[OnResource(p)]` on each of two resources requires
-both. Filing a document in a folder needs the permission that edits the document and the permission that files in the
-folder. The document's check and the folder's check each read their own resource, keep a hold on it, and refuse
-under their own codes. The version the caller read names its resource, `[ExpectedVersion<Document>]`, so the
-document's check compares it and the folder is only read
-([Where the permission is held](../access-requirements.md#where-the-permission-is-held)).
+both permissions. Filing a document in a folder needs the permission that edits the document and the permission that
+files in the folder. The document's check reads the document, and the folder's check reads the folder. Each check
+keeps a hold on its resource, and refuses with that resource's codes. `[ExpectedVersion<Document>]` names the resource
+whose version the caller read. So the document's check compares the version, and the folder's check only reads the
+folder ([Where the permission is held](../access-requirements.md#where-the-permission-is-held)).
 
 **The caller's own, or the permission.** Put `[OrOwn]` beside `[OnResource]`. A member can then leave a document,
 and anybody with the permission can take any member off. The request
@@ -34,7 +34,7 @@ and anybody with the permission can take any member off. The request
 requirement:
 `Any(All(Own(request.Member), MemberAccess.Sees(DocumentPermissions.Share, request.Document)), MemberAccess.On(DocumentPermissions.Share, request.Document))`
 ([Yours, or the permission](../access-requirements.md#the-callers-own-or-a-permission)). Beside markers on two
-resources, `[OrOwn<Document>]` names the resource whose permission the caller's own is the alternative of.
+resources, `[OrOwn<Document>]` names the resource whose permission the caller's own is an alternative to.
 
 The diagram shows the two ways through when Leo sends `LeaveDocument`. Purple: the request. Green: let through. Red:
 refused.

@@ -116,13 +116,14 @@ permission and the ids the request carries. A request implements the property `R
 when the requirement is computed from the request's values, and when it combines cases that stacked attributes cannot
 express, such as one caller or another.
 
-The sample's requests use attributes. A marker on a member states where a permission is held, and carries it:
+The sample's requests use attributes. A permission marker on a member names a permission, and the member is the place
+where the caller must hold it:
 
 - `[AtUnit(permission)]`: at that unit, or at a unit above it.
 - `[OnResource(permission)]`: on that resource, through its members.
 
-`[RequiresPermission(permission)]` on the request is a permission without a marker, held for the whole tenant. `[OrOwn]`
-on a seat lets the caller through when the seat is the caller's own, as an alternative to the permission. The
+`[RequiresPermission(permission)]` on the request names a permission without a marker, held for the whole tenant.
+`[OrOwn]` on a seat lets the caller through when the seat is the caller's own, as an alternative to the permission. The
 permission is a constant of the catalogue. A request can declare its own constant for it, as `RenameSeat` does. The
 handler then reads the same constant. `AddCrewMember` names the catalogue's constant on its marker.
 
@@ -250,8 +251,9 @@ partial interface IProjectsRequest
 }
 ```
 
-No reflection runs, and nothing is looked up when a request is sent. Stacked attributes and markers become
-`AccessRequirement.All` of their calls, in the order they are written. `[OrOwn]` becomes `Any` of the caller's own and the permission
+No reflection runs, and nothing is looked up when a request is sent. The generator combines the calls of stacked
+attributes and markers with `AccessRequirement.All`, in the order they are written. `[OrOwn]` becomes `Any` of the
+caller's own and the permission
 ([The caller's own, or a permission](access-requirements.md#the-callers-own-or-a-permission)). When the project uses
 Mediator, the same file also contains the pipeline behavior. The behavior asks the module's checks before every
 handler of the interface. It reads the property, so it works the same for attributes and for the property. Then it

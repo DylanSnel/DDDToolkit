@@ -388,10 +388,10 @@ without the behavior in its pipeline ([When nothing asks the checks](access-requ
 
 ### The requirement of each request
 
-A request can declare with an attribute who may send it, or with a marker on the member where a permission is held,
-which carries that permission. For such a request, the generator writes one line in the same file, inside the
-interface, which is declared `partial` for this purpose. The line is the call that the attributes and markers stand
-for, written out. The generator writes the line with or without Mediator, because any code that runs the access
+A request can declare who may send it with an attribute, or with a permission marker on the member where a permission
+is held. The marker's argument is the permission. For such a request, the generator writes one line in the same file,
+inside the interface, which is declared `partial` for this purpose. The line is the call of each attribute and marker,
+written out. The generator writes the line with or without Mediator, because any code that runs the access
 check reads it ([What a request declares](access-requirements.md#what-a-request-declares)):
 
 ```csharp
@@ -433,8 +433,8 @@ partial interface IShopRequest
   `DDDToolkit`, such as `Contoso.DDDToolkit.Shop`, does not hide the type.
 - A request that implements `RequiredAccess` itself gets no line. C# uses the request's member instead of the
   interface's member.
-- Several attributes and markers on one request become `AccessRequirement.All` of their calls, the attributes on the
-  request first, then the markers in the order they are written.
+- The generator combines the calls of several attributes and markers on one request with `AccessRequirement.All`. The
+  attributes on the request come first, then the markers in the order they are written.
 - `[OrOwn]` next to a permission becomes `AccessRequirement.Any` of the caller's own and the permission, with the
   caller's own first.
 - Next to `[OnResource]`, the path through the caller's own still requires that the caller sees the resource, with

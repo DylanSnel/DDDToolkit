@@ -158,9 +158,9 @@ public static class FilingModule
 - Without `RequireExplicitCurrentUser()`, work that begins no user runs as system work, which holds every
   permission. With it, that work [fails](../row-level-security.md#requiring-an-explicit-current-user).
 
-**A request and its handler.** `[OnResource(DocumentPermissions.Share)]` marks the document, and carries the
-permission held on it. `[ExpectedVersion]` marks the version the caller read. The generator writes `MemberAccess.On("documents.share", request.Document,
-request.ExpectedVersion)` into the partial interface.
+**A request and its handler.** `[OnResource(DocumentPermissions.Share)]` marks the document, and its argument is the
+permission that the caller holds on the document. `[ExpectedVersion]` marks the version the caller read. The generator
+writes `MemberAccess.On("documents.share", request.Document, request.ExpectedVersion)` into the partial interface.
 
 ```csharp
 [AccessRequests]
@@ -186,10 +186,10 @@ public sealed class DocumentHandlers(DocumentShareManager shares, ICurrentUser u
   With the behavior, `AddDocumentMemberAccess` also adds a start-up check. A host without the behavior in its
   pipeline does not start ([When nothing asks the checks](../access-requirements.md#handlers-reached-without-the-access-check)).
 - **`[OnResource(permission)]` goes on the id of a resource with members.** On any other id it is
-  [DDD00081](../diagnostics.md#ddd00081). Its permission is one declared `[On<TResource>]` for that resource, or it
+  [DDD00081](../diagnostics.md#ddd00081). Its permission must be declared `[On<TResource>]` for that resource, or it
   is [DDD00093](../diagnostics.md#ddd00093). A request with a marker on each of two resources requires both
-  ([Requirements that combine](checks-and-saves.md#requirements-that-combine)). For a requirement computed from the
-  request's values, implement `RequiredAccess` instead.
+  permissions ([Requirements that combine](checks-and-saves.md#requirements-that-combine)). For a requirement computed
+  from the request's values, implement `RequiredAccess` instead.
 - **The manager uses the request's check.** `ShareDocument` was checked for `documents.share` on this document, so
   `AddAsync` asks nothing again. Without such a request in hand, the manager asks the access manager itself
   ([The managers](#the-managers)).

@@ -1459,7 +1459,7 @@ public sealed record TenantRoles : IQuery<IReadOnlyList<RoleListing>>, ITenantsR
 
 **Remarks**
 
-The toolkit's generator turns it into `TenancyAccess.InTenant()` at compile time, in the module's request interface (`[AccessRequests]`, declared `partial`), and the check that `services.AddTenancyAccess<TRequests, TContext>()` adds holds the caller to it. A request handed to a manager that asks more than this, a permission the manager reads where it acts, says this much and the manager asks the rest. Beside a permission of Tenancy's, `[RequiresPermission]` or `[AtUnit(permission)]`, it says nothing more, since only a caller in the tenant holds one, and the generator warns of it (DDD00084).
+The toolkit's generator turns it into `TenancyAccess.InTenant()` at compile time, in the module's request interface (`[AccessRequests]`, declared `partial`), and the check that `services.AddTenancyAccess<TRequests, TContext>()` adds holds the caller to it. A request handed to a manager that asks more than this, a permission the manager reads where it acts, says this much and the manager asks the rest. Beside a permission of Tenancy's, from `[RequiresPermission]` or `[AtUnit(permission)]`, it adds nothing, because only a caller in the tenant holds such a permission. The generator reports it as a warning (DDD00084).
 
 On the module's interface it is the module's default, said once where nearly every request reads the tenant's data: a request of the module that states nothing of its own requires a caller in the tenant, and one that states its own, a permission say, keeps only its own.
 
@@ -1498,7 +1498,7 @@ Tenancy's generator puts it into the catalogue, under the module the project dec
 public sealed class AtUnitAttribute : PermissionLevelAttribute
 ```
 
-At a unit. On a member of a request, with a permission, it marks the unit at which the caller holds that permission, there or at a unit above it. On a constant of a `PermissionsAttribute` class, bare, it says that the permission is asked at a unit. The one meaning, said where the permission is required and where it is declared.
+At a unit. On a member of a request, with a permission, it marks the unit at which the caller holds that permission, there or at a unit above it. On a constant of a `PermissionsAttribute` class, without a permission, it declares that the permission is asked at a unit. Both uses mean the same: the permission is held at a unit.
 
 ```csharp
 [Permissions]
@@ -1512,21 +1512,21 @@ public static class BoardPermissions
 public sealed record OpenBoardCommand([AtUnit(BoardPermissions.Create)] OrganizationUnitId Unit, string Name) : ICommand<Board>, IBoardsRequest;
 ```
 
-On the request it is what [`TenancyAccess.AtUnit<TUnitId>`](#atunitstring-tunitid) says, written on the member of the request it reads: `TenancyAccess.AtUnit(BoardPermissions.Create, request.Unit)`.
+On the request, the generator turns it into a call of [`TenancyAccess.AtUnit<TUnitId>`](#atunitstring-tunitid) on the marked member: `TenancyAccess.AtUnit(BoardPermissions.Create, request.Unit)`.
 
 **Remarks**
 
-On a request it goes on a positional parameter of a record as it is, or on a property, and `[property: AtUnit(permission)]` is read as well. The member is the application's unit id, the id its class declared with `[OrganizationUnit<TUnitId>]` is declared over. On another id, a seat's say, it is DDD00081, where the project sees that class. A unit that may be left out, `OrganizationUnitId?`, is a requirement computed from whether it is given, so the request answers `RequiredAccess` itself: `Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`. Without the permission it names none, and on a request's member that is DDD00080. Two units on one request are both required, `AccessRequirement.All` of the two, as a request that moves a seat from one unit to another needs.
+On a request it goes on a positional parameter of a record, or on a property. The generator also reads `[property: AtUnit(permission)]`. The member is the application's unit id: the id that the class declared with `[OrganizationUnit<TUnitId>]` is declared over. On another id, such as a seat's id, it is DDD00081, in a project that sees that class. A unit that may be left out, `OrganizationUnitId?`, makes a requirement that depends on whether the unit is given. Such a request implements `RequiredAccess` itself: `Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`. On a request's member, `[AtUnit]` without a permission is DDD00080. Two unit markers on one request are both required, and the generator combines them with `AccessRequirement.All`. A request that moves a seat from one unit to another needs this.
 
-On a permission it is its level, read by Tenancy's generator into the catalogue under the module, with what `PermissionLevelAttribute` says of it. The settings of a level say nothing on a request's member. `[AtUnit(permission)]` on a constant is DDD00092, since the constant is the permission. A permission asked at a unit is held there by a role of the organization granted at that unit or above it, and reaches every unit below.
+On a permission constant it is the permission's level. Tenancy's generator reads it into the catalogue under the module, with the settings of `PermissionLevelAttribute`. These settings have no effect on a request's member. `[AtUnit(permission)]` on a constant is DDD00092, because the constant is the permission. A permission asked at a unit is held there by a role of the organization granted at that unit or above it. The grant reaches every unit below.
 
-`[OrOwn]` does not pair with it. The caller would send the unit the permission is checked at together with another subject, so a permission held at one unit would act on a seat anywhere (DDD00085). A permission at a unit is held by a seat in the tenant or by system work there, so `[InTenant]` beside it says nothing more, and is a warning (DDD00084).
+`[OrOwn]` does not pair with it. A caller could send the unit where the permission is checked together with another person's seat. A permission held at one unit would then act on a seat anywhere (DDD00085). Only a seat in the tenant, or system work there, holds a permission at a unit. So `[InTenant]` beside the marker adds nothing, and is a warning (DDD00084).
 
 | Member | Summary |
 |---|---|
-| [`AtUnitAttribute()`](#atunitattribute-1) | The level of a permission constant: the permission is asked at a unit. |
-| [`AtUnitAttribute(string)`](#atunitattributestring) | The marker of a request's unit, at which the caller holds `permission`. |
-| `string? Permission { get; }` | The permission the caller holds at the unit, on a request's member; `null` on a permission constant. |
+| [`AtUnitAttribute()`](#atunitattribute-1) | Declares the level of a permission constant: the permission is asked at a unit. |
+| [`AtUnitAttribute(string)`](#atunitattributestring) | Marks the unit of a request at which the caller holds `permission`. |
+| `string? Permission { get; }` | The permission that the caller holds at the unit, on a request's member. Null on a permission constant. |
 
 #### `AtUnitAttribute()`
 
@@ -1534,7 +1534,7 @@ On a permission it is its level, read by Tenancy's generator into the catalogue 
 public AtUnitAttribute()
 ```
 
-The level of a permission constant: the permission is asked at a unit.
+Declares the level of a permission constant: the permission is asked at a unit.
 
 #### `AtUnitAttribute(string)`
 
@@ -1542,7 +1542,7 @@ The level of a permission constant: the permission is asked at a unit.
 public AtUnitAttribute(string permission)
 ```
 
-The marker of a request's unit, at which the caller holds `permission`.
+Marks the unit of a request at which the caller holds `permission`.
 
 **Parameters**
 
@@ -1575,7 +1575,7 @@ The whole handler holds every permission in that tenant. Keep an operator's hand
 
 On a query nothing begins. An operator reads across tenants through the database role of its token. A message answered with a stream begins nothing either.
 
-The toolkit's generator turns it into `TenancyAccess.Operator(...)` at compile time, in the module's request interface (`[AccessRequests]`, declared `partial`). Beside it, `[InTenant]`, `[RequiresPermission]` and a marker that carries a permission refuse every operator (DDD00104). `FromRequest` beside a `[ForTenant]` member names two tenants (DDD00103). `Tenant` or `Scope` on a query says nothing (DDD00105).
+The toolkit's generator turns it into `TenancyAccess.Operator(...)` at compile time, in the module's request interface (`[AccessRequests]`, declared `partial`). Beside it, `[InTenant]`, `[RequiresPermission]` and a permission marker refuse every operator (DDD00104). `FromRequest` beside a `[ForTenant]` member names two tenants (DDD00103). `Tenant` or `Scope` on a query says nothing (DDD00105).
 
 | Member | Summary |
 |---|---|
@@ -1664,7 +1664,7 @@ AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyP
 AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.Operator();
 ```
 
-Each answers one of [`TenancyRequirement`](#tenancyrequirement)'s cases, which the check that `services.AddTenancyAccess<TRequests, TContext>()` adds holds the caller to. Where the requirement reads no value of the request but the permission and a unit it carries, the request says it with an attribute instead, and the toolkit's generator writes the same call: [`InTenantAttribute`](#intenantattribute), `[RequiresPermission(permission)]` for the whole tenant, [`AtUnitAttribute`](#atunitattribute) with the permission on the unit for a permission there, and [`OperatorAttribute`](#operatorattribute), with [`ForTenantAttribute`](#fortenantattribute) on the tenant. These methods stay for a requirement computed from the request's values: `Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`.
+Each answers one of [`TenancyRequirement`](#tenancyrequirement)'s cases, which the check that `services.AddTenancyAccess<TRequests, TContext>()` adds holds the caller to. Where the requirement reads no value of the request but the permission and a unit it carries, the request says it with an attribute instead, and the toolkit's generator writes the same call: [`InTenantAttribute`](#intenantattribute), `[RequiresPermission(permission)]` for the whole tenant, `[AtUnit(permission)]` ([`AtUnitAttribute`](#atunitattribute)) on the unit for a permission at that unit, and [`OperatorAttribute`](#operatorattribute), with [`ForTenantAttribute`](#fortenantattribute) on the tenant. These methods stay for a requirement computed from the request's values: `Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`.
 
 **Remarks**
 

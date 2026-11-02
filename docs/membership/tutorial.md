@@ -1444,7 +1444,7 @@ public static class BoardsModule
 ### What it does
 
 - `[AtUnit(BoardPermissions.Create)] Unit`: Rhea needs `boards.create` at that unit or above it, from a Tenancy role.
-  The marker carries the permission, so the request needs no other attribute.
+  The marker names the permission, so the request needs no other attribute.
 - `TenancyAccessManager`: the class the generator wrote into this project from the `TenancyIds` line. It is the same
   access manager the Tenancy module's handlers take.
 - `access.CurrentTenant.RequireSeat()` returns the caller's tenant, as `Id`, and the caller's seat, as `Seat`, which is

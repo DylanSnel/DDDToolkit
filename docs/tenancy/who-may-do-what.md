@@ -167,11 +167,11 @@ public sealed record OpenLedger(                                // TenancyAccess
   [Requirements](reference/access.md#requirements) lists every case in full.
 - **Level.** A permission's level is declared once, on its constant, with `[AtTenant]` or `[AtUnit]`
   ([Declaring a module's permissions](roles-and-permissions.md#declaring-a-modules-permissions)).
-- **`[AtUnit(p)]`** marks the unit of a command that acts at a unit it names, and carries the permission held there.
-  Two kinds of command need it. The first kind calls a manager method that checks the unit, such as placing a seat or
-  giving a role there. The second kind creates something at a unit before anything exists there to hold a permission
-  on, such as opening a project. Bare, `[AtUnit]` is the level of a permission constant, and on a request's member it
-  is [DDD00080](../diagnostics.md#ddd00080).
+- **`[AtUnit(p)]`** marks the unit of a command that acts at a unit it names. Its argument is the permission that the
+  caller holds at that unit. Two kinds of command need it. The first kind calls a manager method that checks the unit,
+  such as placing a seat or giving a role there. The second kind creates something at a unit before anything exists
+  there to hold a permission on, such as opening a project. Without an argument, `[AtUnit]` is the level of a
+  permission constant. On a request's member, `[AtUnit]` without an argument is [DDD00080](../diagnostics.md#ddd00080).
 - `[AtUnit(p)]` goes on a member of your unit id type, the id of your `[OrganizationUnit<TUnitId>]` class. On a member
   of another type it is [DDD00081](../diagnostics.md#ddd00081). A module that sees only your ids cannot get that
   error. There, the check throws an `InvalidOperationException` when the request is sent. The sample's
@@ -190,9 +190,9 @@ public sealed record OpenLedger(                                // TenancyAccess
   [What goes together](../access-requirements.md#valid-combinations-of-attributes) lists the other pairs that clash or add nothing.
 - `[AllowAnonymous]` and `[SignedIn]` (a user who has no seat yet) belong to the toolkit core
   ([the vocabulary](../access-requirements.md#requirements-and-their-attributes)).
-- **Two units.** A marker on each unit requires the permission at both. Moving a seat requires the permission at the
-  unit it leaves and at the unit it moves to:
-  `MoveSeat(SeatId Seat, [AtUnit(p)] OrganizationUnitId From, [AtUnit(p)] OrganizationUnitId To)` is
+- **Two units.** A marker on each unit requires the permission at both units. Moving a seat requires the permission at
+  the unit it leaves and at the unit it moves to.
+  `MoveSeat(SeatId Seat, [AtUnit(p)] OrganizationUnitId From, [AtUnit(p)] OrganizationUnitId To)` becomes
   `All(TenancyAccess.AtUnit(p, From), TenancyAccess.AtUnit(p, To))`. The handler then moves the seat from `From` and
   from no other unit.
 - Combine other cases with `AccessRequirement.All` and `Any`
