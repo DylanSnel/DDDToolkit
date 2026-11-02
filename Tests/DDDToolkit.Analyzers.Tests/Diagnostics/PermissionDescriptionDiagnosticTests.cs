@@ -170,7 +170,7 @@ public class PermissionDescriptionDiagnosticTests
             """);
 
         result.ShouldHaveDiagnostic("DDD00092", at: "AtUnit(\"boards.create\")").GetMessage(CultureInfo.InvariantCulture).Should()
-            .Be("'BoardPermissions.Create' carries [AtUnit(...)], a level with a permission of its own: the constant is the permission, and a level says where it is asked. "
-                + "[AtUnit(permission)] is the marker of a request's member; on the constant write [AtUnit].");
+            .Be("'BoardPermissions.Create' has [AtUnit(...)], a level with a permission argument. The constant is the permission, and the level only says where it is asked. "
+                + "[AtUnit(permission)] is the marker of a request's member. On the constant, write [AtUnit].");
     }
 }

@@ -417,7 +417,7 @@ public class MembershipDiagnosticTests
 
         result.Count("DDD00093").Should().Be(1, "the board's marker fits, and only the asset's is reported");
         Message(result, "DDD00093", "OnResource(BoardPermissions.Edit)").Should()
-            .Be("'RenameBoard' marks 'Asset' [OnResource] with 'boards.edit', which is declared [On<Board>]: the rules of the Asset give only the permissions declared [On<Asset>], so this one lets nobody through. "
+            .Be("'RenameBoard' marks 'Asset' [OnResource] with 'boards.edit', which is declared [On<Board>]. The rules of the Asset give only the permissions declared [On<Asset>], so this one lets nobody through. "
                 + "Name a permission declared on the Asset, or mark the id of the resource the permission is declared on");
     }
 

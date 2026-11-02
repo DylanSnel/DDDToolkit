@@ -120,12 +120,12 @@ public sealed class OnResourceAnalyzer : DiagnosticAnalyzer
             return on.Any(each => SymbolEqualityComparer.Default.Equals(each.Id, id))
                 ? null
                 : "which is declared " + DefinitionFactory.Listed(on.Select(static each => "[On<" + each.Resource + ">]").Distinct(StringComparer.Ordinal))
-                  + ": the rules of the " + resource + " give only the permissions declared [On<" + resource + ">], so this one lets nobody through. "
+                  + ". The rules of the " + resource + " give only the permissions declared [On<" + resource + ">], so this one lets nobody through. "
                   + "Name a permission declared on the " + resource + ", or mark the id of the resource the permission is declared on";
         }
 
         return declared.Elsewhere.Contains(permission)
-            ? "which is declared with no level on a resource: the rules of the " + resource + " give only the permissions declared [On<" + resource + ">], so this one lets nobody through. "
+            ? "which is declared with no level on a resource. The rules of the " + resource + " give only the permissions declared [On<" + resource + ">], so this one lets nobody through. "
               + "Name a permission declared on the " + resource + ", or require this one where it is asked"
             : null;
     }

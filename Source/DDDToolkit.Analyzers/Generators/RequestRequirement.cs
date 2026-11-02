@@ -1159,7 +1159,7 @@ internal sealed record RequestRequirement(
                         "requires a permission as the default of its module, and " + (defaults.Count == 0
                             ? "no package this project references says where a permission without a marker is held"
                             : Listed(defaults.Select(static each => "'" + each.Assembly + "'")) + " each say where a permission without a marker is held")
-                        + ": a default reads no member of a request, so its permission is one without a marker; put the permission on each request, on the marker of where it is held");
+                        + ". A default reads no member of a request, so its permission has no marker. Put the permission on each request, on the marker of the place where it is held");
                 }
 
                 if (_errors == 0)
@@ -1256,7 +1256,7 @@ internal sealed record RequestRequirement(
             {
                 Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, DeclaredHere(bare) ? bare.Location ?? _location : _location, _name,
                     (DeclaredHere(bare) ? "marks " + bare.Named : "inherits " + bare.Named + " from '" + bare.Declaring?.Name + "'")
-                    + " and names no permission: the marker carries the permission held where it marks, so write " + WithPermission(bare.Class));
+                    + " and names no permission. A permission marker takes the permission as its argument. Write " + WithPermission(bare.Class));
                 return;
             }
 
@@ -1264,10 +1264,10 @@ internal sealed record RequestRequirement(
             if (defaults.Count != 1 && stated.FirstOrDefault(static each => each.IsPermission && each.InheritedFrom is null) is { } unplaced)
             {
                 Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, WhereWritten(unplaced.Attribute, cancellationToken) ?? _location, _name,
-                    "carries [RequiresPermission], a permission without a marker, and " + (defaults.Count == 0
-                        ? "no package this project references says where a permission without a marker is held"
-                        : Listed(defaults.Select(static each => "'" + each.Assembly + "'")) + " each say where a permission without a marker is held")
-                    + ": put the permission on the marker of where it is held, [OnResource(permission)] on a resource of Membership's or [AtUnit(permission)] on a unit of Tenancy's");
+                    "has [RequiresPermission], a permission without a marker, and " + (defaults.Count == 0
+                        ? "no package this project references declares where such a permission is held"
+                        : Listed(defaults.Select(static each => "'" + each.Assembly + "'")) + " each declare where such a permission is held")
+                    + ". Put the permission on a permission marker of the place where it is held instead, such as [OnResource(permission)] on a resource of Membership or [AtUnit(permission)] on a unit of Tenancy");
                 return;
             }
 
@@ -1294,21 +1294,24 @@ internal sealed record RequestRequirement(
                 }
 
                 var with = argument.GoesWith is { } goesWith ? Bracketed(goesWith) : "another marker";
+                var withPermission = argument.GoesWith is { } belongsTo ? WithPermission(belongsTo) : "a permission marker";
                 var marked = DeclaredHere(argument) ? "marks " + argument.Named : "inherits " + argument.Named + " from '" + argument.Declaring?.Name + "'";
                 var at = DeclaredHere(argument) ? argument.Location ?? _location : _location;
                 if (candidates.Count == 0)
                 {
                     Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, at, _name, argument.Resource is { } named
-                        ? marked + ", which goes with " + with + " on a '" + named.Name + "', and marks no member " + with + " on the id of '" + named.Name + "': the argument goes with the marker of the resource it is of"
-                        : marked + ", which goes with " + with + ", and marks no member " + with + ": the argument goes with the member it is of");
+                        ? marked + ", which belongs to " + with + " on a '" + named.Name + "', and the request has no " + with + " on the id of a '" + named.Name + "'. Put "
+                          + withPermission + " on the id of the '" + named.Name + "', or name the resource of a marker on the request"
+                        : marked + ", which belongs to " + with + ", and the request has no " + with + ". Put " + withPermission
+                          + " on the member it belongs to, or remove " + Bracketed(argument.Class));
                     return;
                 }
 
                 var oneKind = candidates.Select(static each => each.PlaceKind).Distinct(StringComparer.Ordinal).Count() == 1;
                 Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, at, _name,
                     marked + " beside " + Listed(candidates.Select(static each => each.Named)) + (oneKind
-                        ? ", two markers of one kind: which call it goes to cannot be told, so write RequiredAccess, with the argument on the call it goes with"
-                        : ": name the resource whose marker it goes with, " + string.Join(" or ", candidates.Select(each => Generic(argument.Class, each)))));
+                        ? ", two markers of one kind. The generator cannot tell which marker it belongs to. Write RequiredAccess and pass the argument to the call it belongs to"
+                        : ". The generator cannot tell which marker it belongs to. Name the resource of its marker, with " + string.Join(" or ", candidates.Select(each => Generic(argument.Class, each)))));
                 return;
             }
 
@@ -1420,14 +1423,14 @@ internal sealed record RequestRequirement(
             if (orOwn.Concat(own).GroupBy(static each => each.Name, StringComparer.Ordinal).FirstOrDefault(static same => same.Select(static each => each.Kind).Distinct().Count() > 1) is { } both)
             {
                 Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, both.First().Location ?? _location, _name,
-                    "marks '" + both.Key + "' [Own] and [OrOwn]: [Own] says the caller's own alone and [OrOwn] the caller's own or the permission, so keep the one it means");
+                    "marks '" + both.Key + "' [Own] and [OrOwn]. [Own] means the caller's own alone, and [OrOwn] means the caller's own or the permission. Keep the one the request means");
                 return;
             }
 
             if (!type.IsAbstract)
             {
-                var unread = orOwn.Where(marker => permissions.Count == 0 && !ReadWithABase(marker, StatedKind.Permission)).Select(marker => (marker, "requires no permission: [OrOwn] makes the caller's own the alternative of a permission, which a marker such as [OnResource(permission)] carries or [RequiresPermission(permission)] names, so put one on the request; for the caller's own alone, put [OwnOnly] on the request and mark the member [Own]"))
-                    .Concat(own.Where(marker => ownOnly is null && !ReadWithABase(marker, StatedKind.OwnOnly)).Select(marker => (marker, "is not [OwnOnly]: [Own] names the caller's own of a request about it alone, so put [OwnOnly] on the request; for the caller's own or a permission, mark it [OrOwn] beside the permission")))
+                var unread = orOwn.Where(marker => permissions.Count == 0 && !ReadWithABase(marker, StatedKind.Permission)).Select(marker => (marker, "requires no permission. [OrOwn] makes the caller's own an alternative to a permission. Put a permission on the request, on a permission marker such as [OnResource(permission)] or with [RequiresPermission(permission)]. For the caller's own alone, put [OwnOnly] on the request and mark the member [Own]"))
+                    .Concat(own.Where(marker => ownOnly is null && !ReadWithABase(marker, StatedKind.OwnOnly)).Select(marker => (marker, "is not [OwnOnly]. [Own] names the value of a request about the caller's own alone. Put [OwnOnly] on the request. For the caller's own or a permission, mark the member [OrOwn] beside the permission")))
                     .ToList();
                 if (unread.Count > 0)
                 {
@@ -1524,10 +1527,11 @@ internal sealed record RequestRequirement(
                 if (on.Count != 1)
                 {
                     Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, at, _name, on.Count == 0
-                        ? marked + ", and marks no member of a '" + resource.Name + "' with a marker of where a permission is held: " + Bracketed(orOwn.Class)
-                          + " pairs the caller's own with the permission of the marker on that resource, so mark its id, or name the resource of the marker it pairs with"
+                        ? marked + ", and the request has no permission marker on the id of a '" + resource.Name + "'. " + Bracketed(orOwn.Class)
+                          + " pairs the caller's own with the permission of the marker on that resource. Put a permission marker on the id of the '" + resource.Name
+                          + "', or name the resource of a marker on the request"
                         : marked + " beside " + Listed(on.Select(static each => each.Named)) + ", two markers on a '" + resource.Name
-                          + "': which permission the caller's own is the alternative of cannot be told, so compute the requirement as RequiredAccess");
+                          + "'. The generator cannot tell which permission the caller's own replaces. Compute the requirement as RequiredAccess");
                     return null;
                 }
 
@@ -1539,11 +1543,11 @@ internal sealed record RequestRequirement(
                 var alternatives = permissions.Where(static each => each.Place is { OwnAlternative: not null }).ToList();
                 Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, at, _name,
                     marked + " beside " + Listed(permissions.Select(static each => each.Named)) + (oneKind
-                        ? ", two permissions of one kind: which one the caller's own is the alternative of cannot be told, so compute the requirement as RequiredAccess"
+                        ? ", two permissions of one kind. The generator cannot tell which permission the caller's own replaces. Compute the requirement as RequiredAccess"
                         : alternatives.Count > 0
-                            ? ": [OrOwn] pairs with one permission, so name the resource whose permission the caller's own is the alternative of, "
+                            ? ". [OrOwn] pairs with one permission. Name the resource whose permission the caller's own replaces, with "
                               + string.Join(" or ", alternatives.Select(each => Generic(orOwn.Class, each.Place!)))
-                            : ": [OrOwn] pairs with one permission, so compute the requirement as RequiredAccess"));
+                            : ". [OrOwn] pairs with one permission. Compute the requirement as RequiredAccess"));
                 return null;
             }
             else
@@ -1555,7 +1559,7 @@ internal sealed record RequestRequirement(
             {
                 Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, at, _name,
                     "marks '" + orOwn.Name + "' " + Bracketed(orOwn.Class) + " beside '" + place.Name + "' " + Bracketed(place.Class)
-                    + ", which says where the permission is checked and not what the request acts on: the caller would send one where it holds the permission for another subject, so a permission held there would act on any; compute the requirement as RequiredAccess where the request needs it");
+                    + ", which marks the place where the permission is checked and not what the request acts on. A caller could send a place where it holds the permission together with somebody else's value. The permission held at that place would then act on any value. Compute the requirement as RequiredAccess where the request needs it");
                 return null;
             }
 

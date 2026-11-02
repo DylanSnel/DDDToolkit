@@ -99,13 +99,13 @@ public sealed class PermissionsAnalyzer : DiagnosticAnalyzer
         else if (levels.Count > 0 && !isPermission)
         {
             Report(context, Where(levels[0], field), at,
-                "carries a level, and is no public const string: a permission is a constant a request names on a marker or in [RequiresPermission], public so the modules that ask it can. Declare it public const string.");
+                "has a level, and is no public const string. A permission is a constant that a request names on a marker or in [RequiresPermission], and the modules that ask for it name it too, so it is public. Declare it public const string.");
         }
         else if (levels.FirstOrDefault(static each => each.ConstructorArguments.Length > 0) is { } named && inPermissions && isPermission)
         {
             Report(context, Where(named, field), at,
-                "carries [" + AsWritten(named) + "(...)], a level with a permission of its own: the constant is the permission, and a level says where it is asked. "
-                + "[" + AsWritten(named) + "(permission)] is the marker of a request's member; on the constant write [" + AsWritten(named) + "].");
+                "has [" + AsWritten(named) + "(...)], a level with a permission argument. The constant is the permission, and the level only says where it is asked. "
+                + "[" + AsWritten(named) + "(permission)] is the marker of a request's member. On the constant, write [" + AsWritten(named) + "].");
         }
         else if (levels.Count == 0 && inPermissions && isPermission)
         {

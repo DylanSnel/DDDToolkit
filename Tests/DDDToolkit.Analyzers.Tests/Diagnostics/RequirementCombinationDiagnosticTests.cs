@@ -110,8 +110,8 @@ public class RequirementCombinationDiagnosticTests
         var atUnit = OverTheDomain("public sealed record MoveSeat([OrOwn] SeatId Seat, [AtUnit(\"tenancy.seats.manage\")] OrganizationUnitId Unit) : IBillingRequest;");
 
         atUnit.ShouldHaveExactlyDiagnostics("DDD00085");
-        Message(atUnit, "DDD00085", at: "OrOwn").Should().Contain("marks 'Seat' [OrOwn] beside 'Unit' [AtUnit], which says where the permission is checked and not what the request acts on")
-            .And.Contain("would send one where it holds the permission for another subject");
+        Message(atUnit, "DDD00085", at: "OrOwn").Should().Contain("marks 'Seat' [OrOwn] beside 'Unit' [AtUnit], which marks the place where the permission is checked and not what the request acts on")
+            .And.Contain("could send a place where it holds the permission together with somebody else's value");
         atUnit.ShouldNotContain("BillingAccessBehavior.", "MoveSeat");
 
         OverTheDomain("public sealed record LeaveDocument([OnResource(\"documents.manage\")] DocumentId Document, [OrOwn] Guid User) : IBillingRequest;")
@@ -125,17 +125,17 @@ public class RequirementCombinationDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00085");
         Message(result, "DDD00085", at: "OrOwn").Should()
-            .Be("'UnfileDocument' marks 'FiledBy' [OrOwn] beside 'Document' [OnResource] and 'Folder' [OnResource]: [OrOwn] pairs with one permission, so name the resource whose permission the caller's own is the alternative of, [OrOwn<Document>] or [OrOwn<Folder>]");
+            .Be("'UnfileDocument' marks 'FiledBy' [OrOwn] beside 'Document' [OnResource] and 'Folder' [OnResource]. [OrOwn] pairs with one permission. Name the resource whose permission the caller's own replaces, with [OrOwn<Document>] or [OrOwn<Folder>]");
         result.ShouldNotContain("BillingAccessBehavior.", "UnfileDocument");
     }
 
     [Theory]
-    [InlineData("[RequiresPermission(\"billing.move\")] public sealed record MoveSeat([AtUnit(\"billing.move\")] OrganizationUnitId To, [OrOwn] SeatId Seat) : IBillingRequest;", "OrOwn", "beside [RequiresPermission] and 'To' [AtUnit]: [OrOwn] pairs with one permission, so compute the requirement as RequiredAccess")]
-    [InlineData("public sealed record MergeDocuments([OnResource(\"documents.edit\")] DocumentId Into, [OnResource(\"documents.edit\")] DocumentId From, [OrOwn] SeatId Seat) : IBillingRequest;", "OrOwn", "beside 'Into' [OnResource] and 'From' [OnResource], two permissions of one kind: which one the caller's own is the alternative of cannot be told, so compute the requirement as RequiredAccess")]
-    [InlineData("public sealed record MergeDocuments([OnResource(\"documents.edit\")] DocumentId Into, [OnResource(\"documents.edit\")] DocumentId From, [OrOwn<Document>] SeatId Seat) : IBillingRequest;", "OrOwn<Document>", "beside 'Into' [OnResource] and 'From' [OnResource], two markers on a 'Document': which permission the caller's own is the alternative of cannot be told, so compute the requirement as RequiredAccess")]
-    [InlineData("public sealed record EditDocument([OnResource(\"documents.edit\")] DocumentId Document, [OrOwn<Folder>] SeatId Seat) : IBillingRequest;", "OrOwn<Folder>", "marks 'Seat' [OrOwn<Folder>], and marks no member of a 'Folder' with a marker of where a permission is held")]
-    [InlineData("[RequiresPermission(\"tenancy.seats.manage\")] public sealed record RenameSeat([OrOwn<Document>] SeatId Seat) : IBillingRequest;", "OrOwn<Document>", "marks 'Seat' [OrOwn<Document>], and marks no member of a 'Document' with a marker of where a permission is held")]
-    [InlineData("public sealed record MoveSeat([AtUnit(\"tenancy.seats.manage\")] OrganizationUnitId Unit, [OrOwn<OrganizationUnit>] SeatId Seat) : IBillingRequest;", "OrOwn<OrganizationUnit>", "marks 'Seat' [OrOwn<OrganizationUnit>] beside 'Unit' [AtUnit], which says where the permission is checked and not what the request acts on")]
+    [InlineData("[RequiresPermission(\"billing.move\")] public sealed record MoveSeat([AtUnit(\"billing.move\")] OrganizationUnitId To, [OrOwn] SeatId Seat) : IBillingRequest;", "OrOwn", "beside [RequiresPermission] and 'To' [AtUnit]. [OrOwn] pairs with one permission. Compute the requirement as RequiredAccess")]
+    [InlineData("public sealed record MergeDocuments([OnResource(\"documents.edit\")] DocumentId Into, [OnResource(\"documents.edit\")] DocumentId From, [OrOwn] SeatId Seat) : IBillingRequest;", "OrOwn", "beside 'Into' [OnResource] and 'From' [OnResource], two permissions of one kind. The generator cannot tell which permission the caller's own replaces. Compute the requirement as RequiredAccess")]
+    [InlineData("public sealed record MergeDocuments([OnResource(\"documents.edit\")] DocumentId Into, [OnResource(\"documents.edit\")] DocumentId From, [OrOwn<Document>] SeatId Seat) : IBillingRequest;", "OrOwn<Document>", "beside 'Into' [OnResource] and 'From' [OnResource], two markers on a 'Document'. The generator cannot tell which permission the caller's own replaces. Compute the requirement as RequiredAccess")]
+    [InlineData("public sealed record EditDocument([OnResource(\"documents.edit\")] DocumentId Document, [OrOwn<Folder>] SeatId Seat) : IBillingRequest;", "OrOwn<Folder>", "marks 'Seat' [OrOwn<Folder>], and the request has no permission marker on the id of a 'Folder'")]
+    [InlineData("[RequiresPermission(\"tenancy.seats.manage\")] public sealed record RenameSeat([OrOwn<Document>] SeatId Seat) : IBillingRequest;", "OrOwn<Document>", "marks 'Seat' [OrOwn<Document>], and the request has no permission marker on the id of a 'Document'")]
+    [InlineData("public sealed record MoveSeat([AtUnit(\"tenancy.seats.manage\")] OrganizationUnitId Unit, [OrOwn<OrganizationUnit>] SeatId Seat) : IBillingRequest;", "OrOwn<OrganizationUnit>", "marks 'Seat' [OrOwn<OrganizationUnit>] beside 'Unit' [AtUnit], which marks the place where the permission is checked and not what the request acts on")]
     public void OrOwn_that_cannot_tell_the_permission_it_pairs_with_or_pairs_with_a_unit_is_DDD00085(string request, string at, string said)
     {
         var result = OverTheDomain(request);

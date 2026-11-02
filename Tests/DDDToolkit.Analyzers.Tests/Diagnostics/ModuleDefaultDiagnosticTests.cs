@@ -132,7 +132,7 @@ public class ModuleDefaultDiagnosticTests
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "IBillingRequest").Should()
             .Contain("'IBillingRequest' requires a permission as the default of its module, and no package this project references says where a permission without a marker is held")
-            .And.Contain("a default reads no member of a request");
+            .And.Contain("A default reads no member of a request, so its permission has no marker. Put the permission on each request");
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class ModuleDefaultDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "AtUnit").Should()
-            .Contain("marks 'Unit' [AtUnit] and names no permission: the marker carries the permission held where it marks, so write [AtUnit(permission)]");
+            .Contain("marks 'Unit' [AtUnit] and names no permission. A permission marker takes the permission as its argument. Write [AtUnit(permission)]");
     }
 
     [Fact]

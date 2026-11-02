@@ -208,7 +208,7 @@ public class RequirementAttributeDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "AtUnit").Should()
-            .Contain("'OpenLedger' marks 'Unit' [AtUnit] and names no permission: the marker carries the permission held where it marks, so write [AtUnit(permission)]");
+            .Contain("'OpenLedger' marks 'Unit' [AtUnit] and names no permission. A permission marker takes the permission as its argument. Write [AtUnit(permission)]");
         result.ShouldNotContain("BillingAccessBehavior.", "OpenLedger", "no line is written for a marker that names nothing to hold");
     }
 
@@ -282,7 +282,7 @@ public class RequirementAttributeDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "ExpectedVersion").Should()
-            .Contain("marks 'ExpectedVersion' [ExpectedVersion], which goes with [OnResource], and marks no member [OnResource]", where);
+            .Contain("marks 'ExpectedVersion' [ExpectedVersion], which belongs to [OnResource], and the request has no [OnResource]. Put [OnResource(permission)] on the member it belongs to", where);
     }
 
     [Fact]
@@ -292,7 +292,7 @@ public class RequirementAttributeDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "ExpectedVersion").Should()
-            .Be("'FileDocument' marks 'Version' [ExpectedVersion] beside 'Document' [OnResource] and 'Folder' [OnResource]: name the resource whose marker it goes with, [ExpectedVersion<Document>] or [ExpectedVersion<Folder>]");
+            .Be("'FileDocument' marks 'Version' [ExpectedVersion] beside 'Document' [OnResource] and 'Folder' [OnResource]. The generator cannot tell which marker it belongs to. Name the resource of its marker, with [ExpectedVersion<Document>] or [ExpectedVersion<Folder>]");
         result.ShouldNotContain("BillingAccessBehavior.", "FileDocument");
     }
 
@@ -305,7 +305,7 @@ public class RequirementAttributeDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: version).Should()
-            .Contain("marks 'Version' [" + version + "] beside 'Into' [OnResource] and 'From' [OnResource], two markers of one kind: which call it goes to cannot be told, so write RequiredAccess");
+            .Contain("marks 'Version' [" + version + "] beside 'Into' [OnResource] and 'From' [OnResource], two markers of one kind. The generator cannot tell which marker it belongs to. Write RequiredAccess and pass the argument to the call it belongs to");
     }
 
     [Fact]
@@ -315,7 +315,7 @@ public class RequirementAttributeDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "ExpectedVersion<Folder>").Should()
-            .Contain("marks 'Version' [ExpectedVersion<Folder>], which goes with [OnResource] on a 'Folder', and marks no member [OnResource] on the id of 'Folder'");
+            .Contain("marks 'Version' [ExpectedVersion<Folder>], which belongs to [OnResource] on a 'Folder', and the request has no [OnResource] on the id of a 'Folder'. Put [OnResource(permission)] on the id of the 'Folder'");
     }
 
     [Fact]
@@ -372,7 +372,7 @@ public class RequirementAttributeDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "RequiresPermission(\"documents.read\")").Should()
-            .Contain("'ReadAll' carries [RequiresPermission], a permission without a marker, and no package this project references says where a permission without a marker is held")
+            .Contain("'ReadAll' has [RequiresPermission], a permission without a marker, and no package this project references declares where such a permission is held")
             .And.Contain("[OnResource(permission)]");
     }
 
