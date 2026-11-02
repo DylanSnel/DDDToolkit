@@ -246,7 +246,7 @@ public static partial class SupabaseMigrations
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty or white space.</exception>
     /// <exception cref="InvalidOperationException">While the files write the privileges, the options' bookkeeping role is one of Postgres's or Supabase's own.</exception>
     public static SupabaseMigrationReport Compare(DbContext context, string directory = DefaultDirectory, SupabaseMigrationOptions? options = null)
-        => Run(context, null, directory, options, write: false, names: null, script: null);
+        => Run(context, null, directory, options, write: false, names: null, script: null, ahead: null);
 
     /// <summary>
     /// Writes a file for every migration that has none, and reports on the rest. It never overwrites or
@@ -262,7 +262,7 @@ public static partial class SupabaseMigrations
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty or white space.</exception>
     /// <exception cref="InvalidOperationException">While the files write the privileges, the options' bookkeeping role is one of Postgres's or Supabase's own.</exception>
     public static SupabaseMigrationReport Export(DbContext context, string directory = DefaultDirectory, SupabaseMigrationOptions? options = null)
-        => Run(context, null, directory, options, write: true, names: null, script: null);
+        => Run(context, null, directory, options, write: true, names: null, script: null, ahead: null);
 
     /// <summary>
     /// Throws unless every migration has its file, as generated, and no exported file has outlived its
@@ -383,10 +383,14 @@ public static partial class SupabaseMigrations
                 EnsureDefined(context, options, export);
             }
 
+            // One context's model ahead of its migrations holds back every access file of the run: another module's
+            // file may call a function the waiting one makes.
+            var ahead = contexts.Where(HasPendingModelChanges).Select(context => context.GetType().Name).ToList();
+
             var reports = new List<SupabaseMigrationReport>(all.Count + 1);
             foreach (var (context, script) in PostgresRowAccess.Scripts(contexts, options.RowAccessRules, options.RowAccessFunctions, export))
             {
-                reports.Add(Run(context, all[contexts.IndexOf(context)].Module, directory, options, write, names, script));
+                reports.Add(Run(context, all[contexts.IndexOf(context)].Module, directory, options, write, names, script, ahead));
             }
 
             // Last, so a new file comes after every module's, the access files that make the roles it grants among
@@ -456,7 +460,7 @@ public static partial class SupabaseMigrations
         return options.RowAccessContributions.Any(contribution => contribution.Contribute(context, export) is not null);
     }
 
-    private static SupabaseMigrationReport Run(DbContext context, string? module, string directory, SupabaseMigrationOptions? options, bool write, IReadOnlyDictionary<string, string>? names, string? script)
+    private static SupabaseMigrationReport Run(DbContext context, string? module, string directory, SupabaseMigrationOptions? options, bool write, IReadOnlyDictionary<string, string>? names, string? script, IReadOnlyList<string>? ahead)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
@@ -511,13 +515,14 @@ public static partial class SupabaseMigrations
 
         options ??= new SupabaseMigrationOptions();
         names ??= PostgresRowAccess.FunctionNamesOf([context], options.RowAccessFunctions, ExportOf(options, names: null));
+        ahead ??= HasPendingModelChanges(context) ? [context.GetType().Name] : [];
         var renamed = new List<RenamedResource>();
-        if (Access(context, module ?? ModuleNameOf(context.GetType()), directory, existing, files, options, names, script, write, renamed) is { } access)
+        if (Access(context, module ?? ModuleNameOf(context.GetType()), directory, existing, files, options, names, script, write, renamed, ahead) is { } access)
         {
             entries.Add(access);
         }
 
-        return new SupabaseMigrationReport(directory, entries, renamed);
+        return new SupabaseMigrationReport(directory, entries, renamed, ahead);
     }
 
     /// <summary>
@@ -534,6 +539,12 @@ public static partial class SupabaseMigrations
     /// would also sort before the module's first migration, which is added later and so has a later version. The
     /// export after that migration writes the module's first file, after it.
     /// </para>
+    /// <para>
+    /// Nothing new either while the model of a context of the export has changes its migrations do not make yet. The
+    /// file is written from the model, so it would grant columns and make policies on tables no migration has made, and
+    /// the migration that makes them, added later, would sort after it. The entry is then
+    /// <see cref="SupabaseMigrationStatus.Deferred"/>, and the export after that migration writes the file, after it.
+    /// </para>
     /// </summary>
     /// <param name="context">The context whose rules, access functions and contributions the file says; the access files whose first line names its type are its own.</param>
     /// <param name="module">The module the file is named after, <c>&lt;version&gt;_access.&lt;module&gt;.ddd.sql</c>.</param>
@@ -545,6 +556,7 @@ public static partial class SupabaseMigrations
     /// <param name="script">The module's script, written with every other module's; null to write it knowing this module alone.</param>
     /// <param name="write">Whether to write a new file; when not, the file a write would add is reported missing.</param>
     /// <param name="renamed">Where the resources with members whose names changed since the newest file are added.</param>
+    /// <param name="ahead">The contexts of the export whose models have changes their migrations do not make yet; while there is one, no file is written.</param>
     private static SupabaseMigrationEntry? Access(
         DbContext context,
         string module,
@@ -555,7 +567,8 @@ public static partial class SupabaseMigrations
         IReadOnlyDictionary<string, string> names,
         string? script,
         bool write,
-        List<RenamedResource> renamed)
+        List<RenamedResource> renamed,
+        IReadOnlyList<string> ahead)
     {
         // A context without a migration has made no table: a file now would make policies on tables nobody made,
         // and would sort before the migration that makes them.
@@ -610,6 +623,13 @@ public static partial class SupabaseMigrations
             return new(Path.GetFileNameWithoutExtension(latest).Split('.')[0], SupabaseMigrationStatus.Unchanged, latest);
         }
 
+        // A model ahead of its migrations: a file now would name columns and tables no migration has made yet, and
+        // would sort before the migration that makes them.
+        if (ahead.Count > 0)
+        {
+            return new($"{module} row access rules", SupabaseMigrationStatus.Deferred, Path.Combine(directory, $"_access.{module}.ddd.sql"));
+        }
+
         if (!write)
         {
             return new($"{module} row access rules", SupabaseMigrationStatus.Missing, Path.Combine(directory, $"_access.{module}.ddd.sql"));
@@ -624,6 +644,15 @@ public static partial class SupabaseMigrations
 
         return new($"{version}_access", SupabaseMigrationStatus.Created, path);
     }
+
+    /// <summary>
+    /// Whether <paramref name="context"/>'s model has changes its migrations do not make yet, which
+    /// <c>dotnet ef migrations add</c> would put in a new migration: Entity Framework compares the model with the
+    /// migrations' model snapshot. Migrations without a snapshot, such as hand-written ones, say nothing of the model
+    /// they make, and are taken to make this one.
+    /// </summary>
+    internal static bool HasPendingModelChanges(DbContext context)
+        => context.GetService<IMigrationsAssembly>().ModelSnapshot is not null && context.Database.HasPendingModelChanges();
 
     /// <summary>
     /// Refuses SQL of the context that asks a function no module defines: a contract published without its

@@ -921,6 +921,14 @@ not import that namespace, add the `using` the message names, or a `global using
 reference Mediator, add the package `Mediator.Abstractions` to the project the message names, or remove the call and
 ask `AccessChecks<TRequests>.RequireAsync` yourself.
 
+## DDD00108
+
+Warning, from the build that runs the Supabase export: the model of the context the message names has changes its
+migrations do not make yet, such as a property added (by you or by a package upgrade) before `dotnet ef migrations
+add`. The access files are written from the model, so the build writes none until a migration makes it, and reports
+each as `Deferred`. Add the migration with `dotnet ef migrations add <Name>`; the next build writes the access files
+after it. Do not write the access file by hand, delete the property's mapping, or turn the export off to silence it.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a
