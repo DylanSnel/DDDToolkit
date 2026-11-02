@@ -157,4 +157,20 @@ public class PermissionDescriptionDiagnosticTests
         result.ShouldHaveDiagnostic("DDD00092", at: "Prefix");
         result.ShouldNotHaveDiagnostic("DDD00099");
     }
+
+    [Fact]
+    public void A_level_with_a_permission_of_its_own_on_a_constant_is_DDD00092()
+    {
+        // [AtUnit(permission)] is the marker of a request's unit; on a constant, the constant is the permission.
+        var result = Run(
+            """
+                /// <summary>Open a board at a unit.</summary>
+                [AtUnit("boards.create")]
+                public const string Create = "boards.create";
+            """);
+
+        result.ShouldHaveDiagnostic("DDD00092", at: "AtUnit(\"boards.create\")").GetMessage(CultureInfo.InvariantCulture).Should()
+            .Be("'BoardPermissions.Create' carries [AtUnit(...)], a level with a permission of its own: the constant is the permission, and a level says where it is asked. "
+                + "[AtUnit(permission)] is the marker of a request's member; on the constant write [AtUnit].");
+    }
 }

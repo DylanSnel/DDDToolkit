@@ -23,7 +23,8 @@ public class RequirementCombinationDiagnosticTests
 
     [Theory]
     [InlineData("[InTenant, RequiresPermission(\"billing.close\")] public sealed record CloseTheBooks(int Year) : IBillingRequest;", "InTenant", "[InTenant] beside [RequiresPermission], which requires it already")]
-    [InlineData("[RequiresPermission(\"billing.close\"), InTenant] public sealed record CloseTheBooks([AtUnit] OrganizationUnitId Unit) : IBillingRequest;", "InTenant", "[InTenant] beside [RequiresPermission] with [AtUnit], which requires it already")]
+    [InlineData("[InTenant] public sealed record CloseTheBooks([AtUnit(\"billing.close\")] OrganizationUnitId Unit) : IBillingRequest;", "InTenant", "[InTenant] beside 'Unit' [AtUnit], which requires it already")]
+    [InlineData("[InTenant] public sealed record CloseTheBooks([OnResource(\"documents.edit\")] DocumentId Document, [AtUnit(\"billing.close\")] OrganizationUnitId Unit) : IBillingRequest;", "InTenant", "[InTenant] beside 'Unit' [AtUnit], which requires it already")]
     [InlineData("[SignedIn, Operator] public sealed record CloseTheBooks(int Year) : IBillingRequest;", "SignedIn", "[SignedIn] beside [Operator], which requires it already")]
     public void A_requirement_attribute_its_neighbour_already_requires_is_DDD00084_a_warning_and_the_line_is_written(string request, string at, string said)
     {
@@ -106,15 +107,41 @@ public class RequirementCombinationDiagnosticTests
     [Fact]
     public void OrOwn_beside_AtUnit_is_DDD00085_and_beside_OnResource_it_is_not()
     {
-        var atUnit = OverTheDomain("[RequiresPermission(\"tenancy.seats.manage\")] public sealed record MoveSeat([OrOwn] SeatId Seat, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;");
+        var atUnit = OverTheDomain("public sealed record MoveSeat([OrOwn] SeatId Seat, [AtUnit(\"tenancy.seats.manage\")] OrganizationUnitId Unit) : IBillingRequest;");
 
         atUnit.ShouldHaveExactlyDiagnostics("DDD00085");
         Message(atUnit, "DDD00085", at: "OrOwn").Should().Contain("marks 'Seat' [OrOwn] beside 'Unit' [AtUnit], which says where the permission is checked and not what the request acts on")
             .And.Contain("would send one where it holds the permission for another subject");
         atUnit.ShouldNotContain("BillingAccessBehavior.", "MoveSeat");
 
-        OverTheDomain("[RequiresPermission(\"documents.manage\")] public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] Guid User) : IBillingRequest;")
+        OverTheDomain("public sealed record LeaveDocument([OnResource(\"documents.manage\")] DocumentId Document, [OrOwn] Guid User) : IBillingRequest;")
             .ShouldHaveExactlyDiagnostics();
+    }
+
+    [Fact]
+    public void A_bare_OrOwn_beside_permissions_of_two_kinds_is_DDD00085_and_names_the_generic_form()
+    {
+        var result = OverTheDomain("public sealed record UnfileDocument([OnResource(\"documents.edit\")] DocumentId Document, [OnResource(\"folders.file\")] FolderId Folder, [OrOwn] SeatId FiledBy) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00085");
+        Message(result, "DDD00085", at: "OrOwn").Should()
+            .Be("'UnfileDocument' marks 'FiledBy' [OrOwn] beside 'Document' [OnResource] and 'Folder' [OnResource]: [OrOwn] pairs with one permission, so name the resource whose permission the caller's own is the alternative of, [OrOwn<Document>] or [OrOwn<Folder>]");
+        result.ShouldNotContain("BillingAccessBehavior.", "UnfileDocument");
+    }
+
+    [Theory]
+    [InlineData("[RequiresPermission(\"billing.move\")] public sealed record MoveSeat([AtUnit(\"billing.move\")] OrganizationUnitId To, [OrOwn] SeatId Seat) : IBillingRequest;", "OrOwn", "beside [RequiresPermission] and 'To' [AtUnit]: [OrOwn] pairs with one permission, so compute the requirement as RequiredAccess")]
+    [InlineData("public sealed record MergeDocuments([OnResource(\"documents.edit\")] DocumentId Into, [OnResource(\"documents.edit\")] DocumentId From, [OrOwn] SeatId Seat) : IBillingRequest;", "OrOwn", "beside 'Into' [OnResource] and 'From' [OnResource], two permissions of one kind: which one the caller's own is the alternative of cannot be told, so compute the requirement as RequiredAccess")]
+    [InlineData("public sealed record MergeDocuments([OnResource(\"documents.edit\")] DocumentId Into, [OnResource(\"documents.edit\")] DocumentId From, [OrOwn<Document>] SeatId Seat) : IBillingRequest;", "OrOwn<Document>", "beside 'Into' [OnResource] and 'From' [OnResource], two markers on a 'Document': which permission the caller's own is the alternative of cannot be told, so compute the requirement as RequiredAccess")]
+    [InlineData("public sealed record EditDocument([OnResource(\"documents.edit\")] DocumentId Document, [OrOwn<Folder>] SeatId Seat) : IBillingRequest;", "OrOwn<Folder>", "marks 'Seat' [OrOwn<Folder>], and marks no member of a 'Folder' with a marker of where a permission is held")]
+    [InlineData("[RequiresPermission(\"tenancy.seats.manage\")] public sealed record RenameSeat([OrOwn<Document>] SeatId Seat) : IBillingRequest;", "OrOwn<Document>", "marks 'Seat' [OrOwn<Document>], and marks no member of a 'Document' with a marker of where a permission is held")]
+    [InlineData("public sealed record MoveSeat([AtUnit(\"tenancy.seats.manage\")] OrganizationUnitId Unit, [OrOwn<OrganizationUnit>] SeatId Seat) : IBillingRequest;", "OrOwn<OrganizationUnit>", "marks 'Seat' [OrOwn<OrganizationUnit>] beside 'Unit' [AtUnit], which says where the permission is checked and not what the request acts on")]
+    public void OrOwn_that_cannot_tell_the_permission_it_pairs_with_or_pairs_with_a_unit_is_DDD00085(string request, string at, string said)
+    {
+        var result = OverTheDomain(request);
+
+        result.ShouldHaveExactlyDiagnostics("DDD00085");
+        Message(result, "DDD00085", at: at).Should().Contain(said);
     }
 
     [Theory]
@@ -211,7 +238,7 @@ public class RequirementCombinationDiagnosticTests
     }
 
     [Fact]
-    public void A_derived_request_that_opens_the_door_its_base_closes_or_requires_a_second_permission_is_reported()
+    public void A_derived_request_that_opens_the_door_its_base_closes_is_reported()
     {
         var anonymous = OverTheDomain("[SignedIn] public abstract record Report : IBillingRequest; [AllowAnonymous] public sealed record PublicReport : Report;");
         anonymous.ShouldHaveExactlyDiagnostics("DDD00079");
@@ -220,10 +247,19 @@ public class RequirementCombinationDiagnosticTests
         var below = OverTheDomain("[AllowAnonymous] public abstract record Open : IBillingRequest; [SignedIn] public sealed record Closed : Open;");
         below.ShouldHaveExactlyDiagnostics("DDD00079");
         Message(below, "DDD00079", at: "Closed").Should().Contain("beside [SignedIn], deriving from 'Open', which carries [AllowAnonymous]");
+    }
 
-        var twoPermissions = OverTheDomain("[RequiresPermission(\"billing.close\")] public abstract record Closing : IBillingRequest; [RequiresPermission(\"billing.audit\")] public sealed record AuditTheBooks : Closing;");
-        twoPermissions.ShouldHaveExactlyDiagnostics("DDD00080");
-        Message(twoPermissions, "DDD00080", at: "AuditTheBooks").Should().Contain("requires two permissions, [RequiresPermission] of 'Closing' and [RequiresPermission]");
-        twoPermissions.ShouldNotContain("BillingAccessBehavior.", "AuditTheBooks =>");
+    [Fact]
+    public void A_derived_request_with_a_permission_of_its_own_holds_to_its_base_s_as_well()
+    {
+        // No marker has to tell the two apart any more: each permission is a requirement of its own, the base's first.
+        var result = OverTheDomain("[RequiresPermission(\"billing.close\")] public abstract record Closing : IBillingRequest; [RequiresPermission(\"billing.audit\")] public sealed record AuditTheBooks : Closing;");
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain(
+            "BillingAccessBehavior.",
+            "global::Shop.Billing.AuditTheBooks => global::DDDToolkit.Access.AccessRequirement.All(global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"billing.close\"), "
+            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"billing.audit\")),");
     }
 }

@@ -10,8 +10,8 @@ namespace DDDToolkit.Analyzers.Analyzers;
 /// <summary>
 /// DDD00092: the shape of a module's permissions, which the packages' generators read and nothing else. A class marked
 /// <c>[Permissions]</c> is static; every <c>public const string</c> of it is a permission and carries a level, an
-/// attribute derived from <c>PermissionLevelAttribute</c>; a level is on such a constant and nowhere else; and a permission
-/// is declared once in a class.
+/// attribute derived from <c>PermissionLevelAttribute</c>, written without constructor arguments; a level is on such a
+/// constant and nowhere else; and a permission is declared once in a class.
 /// <para>
 /// DDD00099: a permission says what it lets somebody do, for the screens that put permissions into roles, with
 /// <c>Description</c> on its level or in the constant's <c>&lt;summary&gt;</c>; a retired one is shown nowhere and needs
@@ -20,8 +20,8 @@ namespace DDDToolkit.Analyzers.Analyzers;
 /// <para>
 /// The levels are the packages' own, Tenancy's <c>[AtTenant]</c> and <c>[AtUnit]</c> and Membership's
 /// <c>[On&lt;TResource&gt;]</c>, and the core knows them only by what they derive from. Whether a level fits what it is
-/// asked on is the package's to say. <c>[AtUnit]</c> on a member of a request is the request's marker, and is not
-/// judged here.
+/// asked on is the package's to say. <c>[AtUnit(permission)]</c> on a member of a request is the request's marker, and is
+/// not judged here; on a constant it names a second permission where the constant is the permission, and is refused.
 /// </para>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -94,7 +94,13 @@ public sealed class PermissionsAnalyzer : DiagnosticAnalyzer
         else if (levels.Count > 0 && !isPermission)
         {
             Report(context, Where(levels[0], field), at,
-                "carries a level, and is no public const string: a permission is a constant a request names in [RequiresPermission], public so the modules that ask it can. Declare it public const string.");
+                "carries a level, and is no public const string: a permission is a constant a request names on a marker or in [RequiresPermission], public so the modules that ask it can. Declare it public const string.");
+        }
+        else if (levels.FirstOrDefault(static each => each.ConstructorArguments.Length > 0) is { } named && inPermissions && isPermission)
+        {
+            Report(context, Where(named, field), at,
+                "carries [" + AsWritten(named) + "(...)], a level with a permission of its own: the constant is the permission, and a level says where it is asked. "
+                + "[" + AsWritten(named) + "(permission)] is the marker of a request's member; on the constant write [" + AsWritten(named) + "].");
         }
         else if (levels.Count == 0 && inPermissions && isPermission)
         {

@@ -59,6 +59,8 @@ public class RequirementAttributeGenerationTests
         [EntityId<Guid>] public readonly partial record struct UserId;
         [EntityId<Guid>] public readonly partial record struct DocumentId;
         [EntityId<Guid>] public readonly partial record struct DocumentShareId;
+        [EntityId<Guid>] public readonly partial record struct FolderId;
+        [EntityId<Guid>] public readonly partial record struct FolderShareId;
         """;
 
     /// <summary>The module's domain, in a project of its own as an application has it: Tenancy's classes, and a document with members.</summary>
@@ -91,6 +93,21 @@ public class RequirementAttributeGenerationTests
             public UserId OwnerId { get; private set; }
 
             public partial IReadOnlyList<DocumentShare> Shares { get; }
+        }
+
+        [Member<FolderShareId, UserId, NamedRole, Folder>]
+        public sealed partial class FolderShare;
+
+        [AggregateRoot<FolderId>]
+        public sealed partial class Folder
+        {
+            public static MembershipCodes Codes { get; } = MembershipCodes.Under("folders");
+
+            public Folder(FolderId id, UserId owner) : base(id) => OwnerId = owner;
+
+            public UserId OwnerId { get; private set; }
+
+            public partial IReadOnlyList<FolderShare> Shares { get; }
         }
         """;
 
@@ -269,12 +286,12 @@ public class RequirementAttributeGenerationTests
     }
 
     [Theory]
-    [InlineData("public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;", "a positional parameter of a record")]
-    [InlineData("public sealed record OpenLedger(string Name, [property: AtUnit] OrganizationUnitId Unit) : IBillingRequest;", "the property a positional parameter declares")]
-    [InlineData("public sealed class OpenLedger(string name, OrganizationUnitId unit) : IBillingRequest { public string Name { get; } = name; [AtUnit] public OrganizationUnitId Unit { get; } = unit; }", "an ordinary property")]
-    public void A_key_at_a_unit_reads_the_member_its_marker_is_on(string request, string marked)
+    [InlineData("public sealed record OpenLedger(string Name, [AtUnit(\"billing.open-ledger\")] OrganizationUnitId Unit) : IBillingRequest;", "a positional parameter of a record")]
+    [InlineData("public sealed record OpenLedger(string Name, [property: AtUnit(\"billing.open-ledger\")] OrganizationUnitId Unit) : IBillingRequest;", "the property a positional parameter declares")]
+    [InlineData("public sealed class OpenLedger(string name, OrganizationUnitId unit) : IBillingRequest { public string Name { get; } = name; [AtUnit(\"billing.open-ledger\")] public OrganizationUnitId Unit { get; } = unit; }", "an ordinary property")]
+    public void A_permission_at_a_unit_reads_the_member_its_marker_is_on(string request, string marked)
     {
-        var result = Module("[RequiresPermission(\"billing.open-ledger\")]\n" + request).RunCore();
+        var result = Module(request).RunCore();
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
@@ -294,15 +311,13 @@ public class RequirementAttributeGenerationTests
     // ------------------------------------------------------------------ Membership's
 
     [Fact]
-    public void A_key_on_a_resource_reads_the_resource_and_the_version_the_caller_read()
+    public void A_permission_on_a_resource_reads_the_resource_and_the_version_the_caller_read()
     {
         var result = Module(
             """
-            [RequiresPermission("documents.share")]
-            public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IBillingRequest;
+            public sealed record ShareDocument([OnResource("documents.share")] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IBillingRequest;
 
-            [RequiresPermission("documents.read")]
-            public sealed record ReadDocument([OnResource] DocumentId Document) : IBillingRequest;
+            public sealed record ReadDocument([OnResource("documents.read")] DocumentId Document) : IBillingRequest;
             """).RunCore();
 
         result.ShouldCompile();
@@ -490,19 +505,17 @@ public class RequirementAttributeGenerationTests
     }
 
     [Fact]
-    public void Requests_that_share_an_abstract_shape_each_say_their_key_and_read_the_unit_it_carries()
+    public void A_marker_a_base_declares_holds_for_what_derives_from_it_and_a_derived_record_marks_the_parameter_its_base_declares()
     {
         var result = Module(
             """
-            public abstract record UnitCommand([property: AtUnit] OrganizationUnitId Unit) : IBillingRequest;
+            public abstract record UnitCommand([property: AtUnit("billing.open-ledger")] OrganizationUnitId Unit) : IBillingRequest;
 
-            [RequiresPermission("billing.open-ledger")]
             public sealed record OpenLedger(OrganizationUnitId Unit) : UnitCommand(Unit);
 
             public abstract record PlainUnitCommand(OrganizationUnitId Unit) : IBillingRequest;
 
-            [RequiresPermission("billing.close-ledger")]
-            public sealed record CloseLedger([AtUnit] OrganizationUnitId Unit) : PlainUnitCommand(Unit);
+            public sealed record CloseLedger([AtUnit("billing.close-ledger")] OrganizationUnitId Unit) : PlainUnitCommand(Unit);
             """).RunCore();
 
         result.ShouldCompile();
@@ -510,7 +523,7 @@ public class RequirementAttributeGenerationTests
         result.ShouldContain(
             Hint,
             "global::Shop.Billing.OpenLedger request => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtUnit(\"billing.open-ledger\", request.Unit),",
-            "the marker the base declares on its property");
+            "a marker is a requirement wherever it is declared, so the derived request gets the line its base's marker says");
         result.ShouldContain(
             Hint,
             "global::Shop.Billing.CloseLedger request => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtUnit(\"billing.close-ledger\", request.Unit),",
