@@ -55,13 +55,13 @@ internal sealed class EfMemberStore<TContext, TResource, TResourceId, TMember, T
 
     /// <inheritdoc />
     /// <remarks>
-    /// A plain tracked load by id, under the context's own rules, of the whole aggregate: the resource, its members and
-    /// each member's roles. The access rules are not part of it: the manager asked them first.
+    /// A plain tracked load by id, under the context's own rules, of the whole aggregate in one query: the resource, its
+    /// members and each member's roles. The access rules are not part of it: the manager asked them first.
     /// </remarks>
     public async Task<TResource?> FindAsync(TResourceId resource, long? expectedVersion, CancellationToken cancellationToken)
     {
         var context = Context;
-        var found = await context.Set<TResource>().AsTracking().FirstOrDefaultAsync(candidate => candidate.Id.Equals(resource), cancellationToken).ConfigureAwait(false);
+        var found = await context.Set<TResource>().AsTracking().AsSingleQuery().FirstOrDefaultAsync(candidate => candidate.Id.Equals(resource), cancellationToken).ConfigureAwait(false);
         if (found is not null)
         {
             context.ExpectVersion(found, expectedVersion);
@@ -78,7 +78,7 @@ internal sealed class EfMemberStore<TContext, TResource, TResourceId, TMember, T
 
         var about = resources.Distinct().ToList();
         return await ReadAsync(
-            context => context.Set<TResource>().AsNoTracking().Where(candidate => about.Contains(candidate.Id)).Within(reach, context).ToListAsync(cancellationToken),
+            context => context.Set<TResource>().AsNoTracking().AsSingleQuery().Where(candidate => about.Contains(candidate.Id)).Within(reach, context).ToListAsync(cancellationToken),
             cancellationToken).ConfigureAwait(false);
     }
 

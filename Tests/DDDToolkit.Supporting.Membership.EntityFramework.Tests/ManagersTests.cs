@@ -1,4 +1,7 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
@@ -57,6 +60,26 @@ public sealed class ManagersTests
         await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => filing.Services.AsAsync(TestUsers.User(data.Ben), provider =>
             provider.GetRequiredService<DocumentShareManager>().RemoveAsync(data.Minutes, newcomer, Cancellation)));
         (await filing.Services.ReadAsync(data.Minutes)).Version.Should().Be(answered.Version);
+    }
+
+    [Fact]
+    public async Task A_resource_loads_its_members_and_their_roles_in_one_query_without_a_warning()
+    {
+        // The warning Entity Framework logs for a query that loads two collections, the members and their roles,
+        // without saying how, fails the query here instead.
+        using var filing = await SqliteFiling.SeededAsync(wiring: (options, provider) => options.UseDDDToolkit(provider)
+            .ConfigureWarnings(warnings => warnings.Throw(RelationalEventId.MultipleCollectionIncludeWarning)));
+        var data = filing.Scenario;
+        var newcomer = UserId.CreateSequential();
+
+        // A change loads the resource whole, and a list reads the resources the caller sees.
+        var answered = await filing.Services.AsAsync(TestUsers.User(data.Ada), provider =>
+            provider.GetRequiredService<DocumentShareManager>().AddAsync(data.Minutes, newcomer, DocumentMembership.Onlooker, until: null, Cancellation));
+        var listed = await filing.Services.AsAsync(TestUsers.User(data.Ada), provider =>
+            provider.GetRequiredService<DocumentShareManager>().ListAsync([data.Minutes], Cancellation));
+
+        answered.Shares.Should().Contain(share => share.MemberId == newcomer);
+        listed[data.Minutes].Should().Contain(member => member.MemberId == newcomer);
     }
 
     [Fact]
