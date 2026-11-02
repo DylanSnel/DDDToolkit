@@ -14,6 +14,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
+- **A request requires a permission on each of two resources, or at each of two units, with attributes.** A marker
+  carries its permission, and several markers on one request all hold: the generator writes `AccessRequirement.All` of
+  their calls, after the attributes on the request, in the order they are written. Attaching an asset to a board is
+  `AttachAssetCommand([OnResource(BoardPermissions.Edit)] BoardId Board, [OnResource(AssetPermissions.Use)] AssetId Asset)`,
+  moving a seat is `[AtUnit(permission)]` on the unit it leaves and on the unit it moves to, and moving a project is
+  `[OnResource(permission)]` on the project and `[AtUnit(permission)]` on the unit. `[ExpectedVersion<TResource>]` names the
+  resource whose version the caller read, and `[OrOwn<TResource>]` the resource whose permission the caller's own is the
+  alternative of, in its place in the `All`. Each check decides its own part, refuses under its own resource's codes and
+  keeps a hold on its own resource. A package declares such a generic argument with `[PermissionMarkerArgument]` as it
+  declares the bare one. See [Where the permission is held](docs/access-requirements.md#where-the-permission-is-held).
+- **New rows in the diagnostics of a marker.** DDD00080 reports a marker without its permission, a version that cannot
+  tell which marker it goes with, and one naming a resource no marker is on; DDD00085 a bare `[OrOwn]` beside two
+  permissions, `[OrOwn<TResource>]` naming a class no marker is on, and `[OrOwn]` beside two permissions of one kind;
+  DDD00092 a level written with a permission, `[AtUnit(permission)]`, on a permission constant; DDD00093 an
+  `[OnResource(permission)]` whose permission is declared on another resource only; DDD00104 a marker that carries a
+  permission beside `[Operator]`. DDD00081, DDD00084 and DDD00096 apply to each marker and each pair on its own.
+
 - **An id makes a new one of itself: `TId.Create()`.** Ids are made in code before the save, never by the database,
   so a change and every event of it know the id from the start. Every id the generator writes over a `Guid`, declared
   with `[EntityId<Guid>]`, asked for by `[AggregateRoot<Guid>]` or written by a package's switch, gets `Create()`,
@@ -3192,6 +3209,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **The permission goes on its marker: `[OnResource(permission)]` and `[AtUnit(permission)]`.** A request said its
+  permission with `[RequiresPermission(permission)]` and where it is held with a bare marker on a member, so one request
+  could say one permission in one place, and a request with a permission on two resources wrote `RequiredAccess` by
+  hand. The marker now carries its permission: `EditBoardCommand([OnResource(BoardPermissions.Edit)] BoardId Board, string Name)`.
+  The bare `[OnResource]` no longer compiles, since its constructor takes the permission. A bare `[AtUnit]` stays the
+  level of a permission constant, and on a request's member it is DDD00080. `[RequiresPermission(permission)]` stays for a
+  permission without a marker, held for the whole tenant where Tenancy says so, and as a module's default. Beside markers
+  it is one more requirement, and a request with a `[RequiresPermission]` of its own below a base with one requires both.
+  `PermissionMarkerAttribute` says that a marker's constructor takes the permission. A request's own constant is named with
+  the request's name on a positional parameter, `[OnResource(ChangeProjectName.RequiredPermission)]`, since C# binds that
+  attribute outside the record. The samples, the test hosts, the docs and the tutorials say it this way, and the Tenancy
+  sample's `MoveProjectToUnit` says its two permissions with a marker on each, the Projects module's own
+  `[AtProjectUnit(permission)]` for its case at a unit. Membership's `OwnAlternativeAnalyzer` is `OnResourceAnalyzer`. No
+  package has users yet, so there is no shim and no alias for the old form.
 - **`MadeFrom` is `FromStarterRole`**, on `CustomRoleAggregate` and on `CustomRoleDraft`, through the mapping, its indexes
   (`IX_{table}_TenantId_FromStarterRole`), the samples, the test hosts and the docs: the word Tenancy uses. Committed
   migrations stay as they are. A new migration renames the column. No package has users yet, so there is no alias.
