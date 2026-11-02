@@ -464,7 +464,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         Of(new StatedRequests.ForTheSignedIn()).Should().Be(AccessRequirement.SignedIn());
         Of(new StatedRequests.InTheTenant()).Should().Be(TenancyAccess.InTenant());
         Of(new StatedRequests.ManageEverySeat()).Should().Be(TenancyAccess.AtTenant(TenancyPermissions.SeatsManage), "a permission without a marker is held for the whole tenant");
-        Of(new StatedRequests.ManageSeatsAt(_north)).Should().Be(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, _north), "[AtUnit] marks the unit");
+        Of(new StatedRequests.ManageSeatsAt(_north)).Should().Be(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, _north), "[AtUnit(permission)] marks the unit");
         Of(new StatedRequests.ForOperators()).Should().Be(TenancyAccess.Operator());
         Of(new StatedRequests.ForOperatorsInTenant(_harbor.Tenant)).Should().Be(TenancyAccess.Operator(_harbor.Tenant), "[ForTenant] marks the tenant");
         Of(new StatedRequests.ForOperatorsInTheNamedTenant()).Should().Be(TenancyAccess.Operator(OperatorTenant.FromRequest));
@@ -601,21 +601,24 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task Two_permissions_in_two_places_are_both_asked_and_the_first_that_is_not_held_refuses()
     {
-        // A seat moves from one unit to another: the permission to manage seats at both, the one it leaves first.
-        static Declaring MoveSeat(OrganizationUnitId from, OrganizationUnitId to)
-            => new(AccessRequirement.All(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, from), TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, to)));
+        // A seat moves from one unit to another: the permission to manage seats at both, the one it leaves first, said with a
+        // marker on each unit, which carries the permission.
+        var seat = _harbor.AdminSeat;
+        StatedRequests.MoveSeat MoveSeat(OrganizationUnitId from, OrganizationUnitId to) => new(seat, from, to);
+        ((IHostRequest)MoveSeat(_north, _harbor.RootUnit)).RequiredAccess.Should().Be(
+            AccessRequirement.All(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, _north), TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, _harbor.RootUnit)));
 
         // Seth manages seats at North: within North he moves a seat, and not to the root.
         var northPier = await _services.AddUnitAsync(_harbor.Tenant, _north, "North Pier");
         _services.Commands.Reset();
-        await _services.BySeat(_harbor.Tenant, _seth, scoped => RequireAsync(scoped, MoveSeat(_north, northPier)));
+        await _services.BySeat(_harbor.Tenant, _seth, scoped => Stated(scoped, MoveSeat(_north, northPier)));
         _services.Commands.Count.Should().Be(2, "each permission at its unit, in a statement of its own");
 
-        var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(_harbor.Tenant, _seth, scoped => RequireAsync(scoped, MoveSeat(_north, _harbor.RootUnit))));
+        var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(_harbor.Tenant, _seth, scoped => Stated(scoped, MoveSeat(_north, _harbor.RootUnit))));
         refusal.Arguments["Unit"].Should().Be(_harbor.RootUnit, "the case that failed refuses, naming its own unit");
 
         // Ada holds it at the root, and so everywhere below it.
-        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, MoveSeat(_north, _harbor.RootUnit)));
+        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => Stated(scoped, MoveSeat(_north, _harbor.RootUnit)));
     }
 
     // ------------------------------------------------------------------ whose cases, and whose context

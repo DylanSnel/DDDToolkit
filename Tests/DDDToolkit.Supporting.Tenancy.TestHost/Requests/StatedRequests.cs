@@ -30,8 +30,16 @@ public static class StatedRequests
 
     /// <summary>The key that manages seats, at the unit it names or above it.</summary>
     /// <param name="Unit">The unit.</param>
-    [RequiresPermission(TenancyPermissions.SeatsManage)]
-    public sealed record ManageSeatsAt([AtUnit] OrganizationUnitId Unit) : IHostRequest;
+    public sealed record ManageSeatsAt([AtUnit(TenancyPermissions.SeatsManage)] OrganizationUnitId Unit) : IHostRequest;
+
+    /// <summary>A seat moves from one unit to another: the key that manages seats at both, the one it leaves first.</summary>
+    /// <param name="Seat">The seat.</param>
+    /// <param name="From">The unit it leaves.</param>
+    /// <param name="To">The unit it moves to.</param>
+    public sealed record MoveSeat(
+        SeatId Seat,
+        [AtUnit(TenancyPermissions.SeatsManage)] OrganizationUnitId From,
+        [AtUnit(TenancyPermissions.SeatsManage)] OrganizationUnitId To) : IHostRequest;
 
     /// <summary>One of the application's operators. A command of it runs as operator work in no tenant.</summary>
     [Operator]

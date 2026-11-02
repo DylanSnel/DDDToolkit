@@ -137,6 +137,20 @@ public sealed class TwoResourcesInOneContextTests
         await RequireAsync(TestUsers.Staff(data.Nobody), new ListFolders());
         (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(CurrentUserSnapshot.Anonymous, new ListFolders()))).Code.Should().Be("folders.not-permitted");
         filing.Commands.Count.Should().Be(0);
+
+        // A request with a marker on a document and one on a folder: each check decides its own part, each in a statement of
+        // its own, and keeps what it read as its own resource's.
+        var both = new FileDocumentInFolder(data.Minutes, data.Cabinet, ExpectedVersion: version);
+        filing.Commands.Reset();
+        await filing.Services.AsAsync(TestUsers.Staff(data.Clerk, data.Ada), async provider =>
+        {
+            await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(both, Cancellation);
+
+            provider.GetRequiredService<Checked<MemberHold<DocumentId>>>().TakeFor(both).Should().Be(new MemberHold<DocumentId>(data.Minutes, MemberVia.Members, version, Until: null));
+            provider.GetRequiredService<Checked<MemberHold<FolderId>>>().TakeFor(both).Via.Should().Be(MemberVia.Members);
+        });
+        filing.Commands.Count.Should().Be(2, "the document and the folder, each read once by its own check");
+        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotFound, () => RequireAsync(TestUsers.User(data.Ada), both))).Code.Should().Be("folders.not-found", "Ada edits the minutes, and is no staff of the cabinet");
     }
 
     [Fact]

@@ -265,9 +265,69 @@ public sealed class MemberAccessCheckTests
         folders.Asked.Should().Equal("caller", "hold " + FolderPermissions.File, "caller");
 
         // Every requirement the module's requests declare has a check in its set.
-        IRequireAccess[] requests = [share, file, new ListDocuments(), new ListFolders()];
+        IRequireAccess[] requests = [share, file, new ListDocuments(), new ListFolders(), new FileDocumentInFolder(Minutes, Cabinet)];
         requests.Should().OnlyContain(request => checks.Decides(request.RequiredAccess));
     }
+
+    [Fact]
+    public async Task A_request_with_a_marker_on_each_of_two_kinds_of_resource_is_decided_part_by_part_and_keeps_a_hold_on_each()
+    {
+        var documents = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.Edit, MemberVia.Members));
+        var folders = new StubAccess<Folder, FolderId>(FolderMembership.Rules).Sees(Cabinet, version: 9, (FolderPermissions.File, MemberVia.Members));
+        await using var provider = TwoChecks(documents, folders);
+        await using var scope = provider.CreateAsyncScope();
+        var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IFilingRequest>>();
+
+        // The markers carry their permissions, and the version goes with the document's: all of the two, as they are written.
+        var file = new FileDocumentInFolder(Minutes, Cabinet, ExpectedVersion: 4);
+        ((IRequireAccess)file).RequiredAccess.Should().Be(AccessRequirement.All(
+            MemberAccess.On(DocumentPermissions.Edit, Minutes, 4),
+            MemberAccess.On(FolderPermissions.File, Cabinet)));
+
+        await checks.RequireAsync(file, Cancellation);
+
+        // Each check asked its own resource, once, and what each read is kept as that resource's, for a save to be held to.
+        documents.Asked.Should().Equal("caller", "hold " + DocumentPermissions.Edit);
+        folders.Asked.Should().Equal("caller", "hold " + FolderPermissions.File);
+        scope.ServiceProvider.GetRequiredService<Checked<MemberHold<DocumentId>>>().TakeFor(file).Should().Be(new MemberHold<DocumentId>(Minutes, MemberVia.Members, 4, Until: null));
+        scope.ServiceProvider.GetRequiredService<Checked<MemberHold<FolderId>>>().TakeFor(file).Should().Be(new MemberHold<FolderId>(Cabinet, MemberVia.Members, 9, Until: null));
+    }
+
+    [Fact]
+    public async Task Of_two_kinds_of_resource_the_one_that_refuses_refuses_under_its_own_codes_and_nothing_is_kept()
+    {
+        // The caller edits the minutes, and only reads in the cabinet: the folder's part refuses.
+        var documents = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.Edit, MemberVia.Members));
+        var folders = new StubAccess<Folder, FolderId>(FolderMembership.Rules).Sees(Cabinet, version: 9, (FolderPermissions.Read, MemberVia.Members));
+        await using var provider = TwoChecks(documents, folders);
+        await using var scope = provider.CreateAsyncScope();
+        var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IFilingRequest>>();
+        var file = new FileDocumentInFolder(Minutes, Cabinet);
+
+        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => checks.RequireAsync(file, Cancellation).AsTask()))
+            .Arguments.Should().Contain("Permission", FolderPermissions.File);
+        FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<Checked<MemberHold<DocumentId>>>().TakeFor(file))
+            .Should().Throw<InvalidOperationException>("the document's part passed, and a refused request keeps nothing");
+
+        // The other way round: the document's part refuses first, under the document's codes, and the folder is never asked.
+        var refusing = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
+        var filing = new StubAccess<Folder, FolderId>(FolderMembership.Rules).Sees(Cabinet, version: 9, (FolderPermissions.File, MemberVia.Members));
+        await using var other = TwoChecks(refusing, filing);
+        await using var otherScope = other.CreateAsyncScope();
+        (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => otherScope.ServiceProvider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(file, Cancellation).AsTask()))
+            .Arguments.Should().Contain("Permission", DocumentPermissions.Edit);
+        filing.Asked.Should().BeEmpty();
+    }
+
+    /// <summary>A module with both checks in its one set, over the two stubs.</summary>
+    private static ServiceProvider TwoChecks(StubAccess<Document, DocumentId> documents, StubAccess<Folder, FolderId> folders)
+        => new ServiceCollection()
+            .AddSingleton<MembershipAccessManager<Document>>(documents)
+            .AddSingleton<MembershipAccessManager<Folder>>(folders)
+            .AddSingleton<ICurrentUser, CurrentUser>()
+            .AddAccessCheck<IFilingRequest, MemberAccessCheck<Document, DocumentId>>()
+            .AddAccessCheck<IFilingRequest, MemberAccessCheck<Folder, FolderId>>()
+            .BuildServiceProvider(validateScopes: true);
 
     [Fact]
     public async Task A_requirement_about_a_kind_of_resource_nobody_registered_a_check_for_lets_nobody_through()

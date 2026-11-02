@@ -17,8 +17,7 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Commands;
 /// <param name="Parent">The unit it hangs under.</param>
 /// <param name="Name">Its name.</param>
 /// <param name="Kind">What kind of unit it is, or <see langword="null"/> to leave it unsaid.</param>
-[RequiresPermission(TenancyPermissions.UnitsManage)]
-public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;
+public sealed record AddOrganizationUnit([AtUnit(TenancyPermissions.UnitsManage)] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;
 
 /// <summary>Handles <see cref="AddOrganizationUnit"/> with the Tenancy package's manager, which checks the caller, decides and saves.</summary>
 /// <param name="organization">The package's organization manager.</param>
