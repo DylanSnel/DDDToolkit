@@ -22,6 +22,7 @@ name: Supabase Live
 # the Management API. When the API gives none, the run logs the HTTP status and the keys it listed, and
 # without branching it uses the secret SUPABASE_SECRET_KEY. The API answers 403 to an access token with
 # API keys read, because ?reveal=true needs more than read. So without branching, set SUPABASE_SECRET_KEY.
+# The pooler's host also comes from the API. When the token may not read it, the run finds the host itself.
 #
 # Needs the secrets SUPABASE_ACCESS_TOKEN (a personal access token; Development Branches read-write,
 # Project Settings read, Database read, API keys read) and, without branching, SUPABASE_DB_PASSWORD, plus
@@ -147,9 +148,35 @@ jobs:
           fi
           echo "::add-mask::$password"
 
-          host=$(api "projects/$ref/config/database/pooler" | jq -r '.[] | select(.database_type == "PRIMARY") | .db_host')
           user="postgres.$ref"
           encoded=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$password")
+
+          # The pooler's host comes from the Management API. An access token may lack the right to read it.
+          # The run then tries the two hosts Supabase gives a region's pooler, aws-0 and aws-1, and keeps the
+          # first one that accepts the project's user and password.
+          status=$(curl -s -o pooler.json -w '%{http_code}' \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$ref/config/database/pooler" || true)
+          host=""
+          if [ "$status" = "200" ]; then
+            host=$(jq -r '.[] | select(.database_type == "PRIMARY") | .db_host' pooler.json || true)
+          fi
+          rm -f pooler.json
+          if [ -z "$host" ]; then
+            region=$(api "projects/$ref" | jq -r '.region // empty' || true)
+            for prefix in aws-0 aws-1; do
+              candidate="$prefix-$region.pooler.supabase.com"
+              if [ -n "$region" ] && PGCONNECT_TIMEOUT=10 psql "postgresql://$user:$encoded@$candidate:5432/postgres" -tAc 'select 1' > /dev/null 2>&1; then
+                host="$candidate"
+                break
+              fi
+            done
+            if [ -z "$host" ]; then
+              echo "::error::No pooler host for $ref. The Management API answered $status for it, and neither aws-0 nor aws-1 in region '${region:-unknown}' accepted the database password."
+              exit 1
+            fi
+            echo "::notice::The Management API answered $status for the pooler of $ref. The run connects through $host, which accepted the database password."
+          fi
 
           echo "DATABASE_URL=postgresql://$user:$encoded@$host:5432/postgres" >> "$GITHUB_ENV"
           # What the Supabase AppHost reads to point the monolith at a live project instead of a container.
