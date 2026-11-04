@@ -3,10 +3,11 @@
 [Identifiers](identifiers.md) recommends the struct form of an identifier, because of its memory layout. This page
 has the measurements behind that advice, including two places where the measurements first disagreed with it. The
 [Tenancy section](#tenancy-the-shape-of-the-access-data) measures the database shapes behind the Tenancy
-supporting domain. Four sections measure code beside the identifiers:
+supporting domain. Five sections measure code beside the identifiers:
 [value object equality](#value-object-equality), [FluentValidation](#fluentvalidation),
-[a read that skips a named query filter](#skipping-a-named-query-filter) and
-[a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates).
+[a read that skips a named query filter](#skipping-a-named-query-filter),
+[a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates) and
+[a batch of outbox messages](#delivering-a-batch-of-outbox-messages).
 
 The benchmarks are in `Benchmarks/DDDToolkit.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
 Run them with:
@@ -435,6 +436,35 @@ projection writer creates an `EntityEntry` only for Tenancy's own classes.
 Most of the remaining cost above the baseline is the three `DetectChanges` calls of the toolkit's interceptors. Each
 call compares every tracked entity with its snapshot, and costs about as much as Entity Framework's own call. An
 interceptor cannot skip the call, because another interceptor may change an entity between two of them.
+
+## Delivering a batch of outbox messages
+
+The benchmark puts 10, 100 or 1,000 pending rows in an outbox, and delivers them with one `ProcessPendingAsync` call
+to a sink that does nothing. The sink is not registered in the container, so the processor creates it. Each operation
+first makes the rows pending again with one `ExecuteUpdate`, which takes 0.07 to 1.1 ms and allocates 62 KB. The
+benchmark is `OutboxProcessorBenchmarks`.
+
+| Messages | Before | After |
+|---|---|---|
+| 10 | 713 μs, 570 KB | 569 μs, 303 KB |
+| 100 | 34.8 ms, 30,797 KB | 5.45 ms, 1,678 KB |
+| 1,000 | 2,811 ms, 2,950,340 KB | 45.8 ms, 15,421 KB |
+
+Before, the time and the memory grew with the square of the batch size. Now they grow with the batch size. The times
+differed by up to a factor of two between runs on this machine. The allocations were the same in every run.
+
+The processor saves the mark of each message on its own. It used to read the batch tracked, so each save compared
+every row of the batch with its snapshot. A save calls `DetectChanges` 4 times, including Entity Framework's own call.
+A batch of 1,000 rows therefore made 4 million row comparisons.
+
+- **The batch is read untracked.** The processor attaches a row while it delivers the row, and detaches it after the
+  save. A row that the context already tracks, because the caller saved its event through the same context, keeps its
+  entry.
+- **Each sink is resolved once per batch.** The processor resolved every sink for every message, so a sink that is not
+  registered in the container was created for every message.
+- **The check for a handler's changes reads only the changed entries.** Where the host requires an explicit current
+  user, the processor checks before and after each in-process dispatch which entities a handler changed. It reads the
+  added, modified and deleted entries from the state manager, as the save interceptors do.
 
 ## Tenancy: the shape of the access data
 

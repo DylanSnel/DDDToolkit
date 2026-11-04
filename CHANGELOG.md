@@ -3265,6 +3265,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
   On a context that tracks 1,000 aggregates, a save of one changed aggregate went from 1,443 μs and 2.4 MB to 442 μs
   and 1.3 MB. See [Performance](docs/performance.md#a-save-on-a-context-that-tracks-many-aggregates).
+- **The outbox processor reads a batch untracked and resolves each sink once per batch.** The processor read the
+  batch tracked and saved each message on its own. So every save compared all rows of the batch with their snapshots.
+  Now the processor attaches a row while it delivers the row, and detaches it after the save. A row that the context
+  already tracks keeps its entry.
+  - The processor resolved every sink for every message. Now it resolves a sink when the first message of a batch
+    reaches the sink. A sink registered as transient serves the whole batch. A sink that fails to resolve is resolved
+    again for the next message.
+  - Where the host requires an explicit current user, the check for changes that a handler left on the context reads
+    only the changed entries.
+
+  A batch of 1,000 messages went from 2.8 s and 2.9 GB to 46 ms and 15 MB. See
+  [Performance](docs/performance.md#delivering-a-batch-of-outbox-messages).
 - **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
   `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
   `GetEqualityComponents()` with LINQ, so every comparison allocated two iterators and boxed each value-type property
@@ -4550,6 +4562,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a new collection of keys on every call. On Entity Framework 10.0.0 to 10.0.2 that compiled the seat lookup again on
   every authenticated request, and added a new entry to the query cache each time. They use `IgnoreTenantFilter()`
   now. See [Performance](docs/performance.md#skipping-a-named-query-filter).
+- **The outbox processor saves the outcome of a finished delivery after cancellation.** The processor saved the mark
+  with the batch's cancellation token. When the host stopped during a delivery, the save was cancelled, and the
+  message was delivered again later. Now the save of the outcome may run for 5 seconds after cancellation was
+  requested. See [Running the processor](docs/event-delivery.md#running-the-processor).
 
 - **The Supabase export writes no access file for a context without a migration.** A context marked
   `[SupabaseMigrations]` whose first migration was not added yet got `{version}_access.{module}.ddd.sql` all the same,

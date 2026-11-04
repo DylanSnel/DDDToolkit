@@ -151,7 +151,8 @@ public sealed class OutboxOptions
     /// <summary>
     /// Delivers published messages to <typeparamref name="TSink"/>. The sink is taken from the scope
     /// the processor runs in when it is registered there, and otherwise constructed with its
-    /// constructor services injected.
+    /// constructor services injected. The processor does this once per batch, so a transient sink
+    /// serves every message of the batch.
     /// </summary>
     public OutboxOptions SendTo<TSink>() where TSink : IIntegrationEventSink
     {

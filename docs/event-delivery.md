@@ -500,6 +500,16 @@ neither a sink nor a dispatch delegate.
 Each message is saved through the same scoped context. A handler that resolves that context and changes an aggregate
 commits its change together with the processed mark. Events that this change raises become new outbox rows.
 
+The processor reads the claimed batch untracked. It attaches a row to the context while it delivers that row, and
+detaches the row after its save. So each save compares one outbox row with its snapshot, and not every row of the
+batch. A row that the context already tracks, because the caller saved its event through the same context, keeps its
+entry and stays tracked. The processor reads such a row again first, because its values are from before the claim.
+
+Cancellation stops the batch before the next message, and the delivery receives the token. When a delivery has
+finished, the processor still saves its outcome, the mark or the failure. That save may run for 5 seconds after
+cancellation was requested. So a message that was delivered just before the host stopped is marked, and is not
+delivered again. The messages that the batch did not reach are released, so another processor can claim them at once.
+
 ### Failures, retries and poison messages
 
 A handler that throws does not stop the batch. The processor then:
