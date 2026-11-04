@@ -2499,6 +2499,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `DDDToolkit.Abstractions` alone and no Entity Framework. Membership's package references it. Membership's generator,
   which ships in that package, reports both diagnostics. `[Owner]` stays the core's, since the core's owner checks read
   it. See [Beside an organization](docs/membership/beside-an-organization.md#reach-from-above).
+- **A place that never changes: `[At(Fixed = true)]`.** New in 3.2.0-preview.12. `HasMembers` then calls
+  `IsFixedAfterInsert` on the `[At]` property. Entity Framework throws on a save that changes the place. The
+  privileges a Postgres export writes leave the column out of `UPDATE`. `Fixed` is false by default, so `[At]` alone
+  lets a resource move. The context needs no `IsFixedAfterInsert` call for the place. See
+  [Beside an organization](docs/membership/beside-an-organization.md#reach-from-above).
 - **`[OrOwn]` on a resource whose owner holds the permission says nothing: DDD00096.** A warning at `[OrOwn]` on the
   id of a resource with members beside `[OnResource]`, where the required permission is one its owner holds by
   owning. The owner passes the permission check already.

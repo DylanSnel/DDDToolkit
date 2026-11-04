@@ -292,6 +292,37 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
     }
 
     [Fact]
+    public async Task With_the_privileges_written_from_the_policies_a_caller_who_may_change_a_plot_does_not_move_it_to_another_garden()
+    {
+        // A plot marks its garden [At(Fixed = true)]. The privileges the export writes leave that column out of UPDATE.
+        using var garden = await PostgresGarden.CreateAsync(postgres, secured: false);
+        var data = garden.Scenario;
+
+        string script;
+        using (var model = PostgresGarden.Model())
+        {
+            script = PostgresRowAccess.Script(model, PostgresGarden.Rules, null, new RowAccessExport { Contributions = PostgresGarden.Contributions, WriteGrants = true });
+        }
+
+        script.Should().MatchRegex("GRANT UPDATE \\([^)]*\"Name\"[^)]*\\) ON TABLE \"gardens\"\\.\"Plots\" TO authenticated;")
+            .And.NotMatchRegex("GRANT UPDATE \\([^)]*\"GardenId\"[^)]*\\) ON TABLE \"gardens\"\\.\"Plots\"");
+        await garden.ExecuteAsync(script);
+
+        // Eve fences the beans, so she may change the plot. She does not move it to the orchard.
+        await using (var eve = await garden.SessionAsync(data.Eve))
+        {
+            (await FluentActions.Awaiting(() => eve.ListAsync<object>($"""UPDATE {Gardens}"Plots" SET "GardenId" = $2 WHERE "Id" = $1""", data.Beans.Value, data.Orchard.Value))
+                .Should().ThrowAsync<Npgsql.PostgresException>()).Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.InsufficientPrivilege);
+        }
+
+        // The plot's name is hers to change.
+        await using (var eve = await garden.SessionAsync(data.Eve))
+        {
+            (await eve.ListAsync<string>($"""UPDATE {Gardens}"Plots" SET "Name" = 'Runner beans' WHERE "Id" = $1 RETURNING "Name" """, data.Beans.Value)).Should().Equal("Runner beans");
+        }
+    }
+
+    [Fact]
     public async Task What_is_held_through_a_role_of_plots_is_one_statement_under_the_policies_and_reads_the_role_rows()
     {
         using var garden = await PostgresGarden.CreateAsync(postgres, asUser: true);

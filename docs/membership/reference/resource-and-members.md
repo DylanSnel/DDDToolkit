@@ -984,6 +984,24 @@ One per aggregate root, on the root itself, of the id of the place. It is never 
 
 The marker is in a package of its own, with no Entity Framework and nothing else of Membership's. Membership's own package references it, so a project with Membership has the marker as well.
 
+| Member | Summary |
+|---|---|
+| [`Fixed`](#fixed) | `Fixed = true` keeps the aggregate where it was added. |
+
+#### `Fixed`
+
+```csharp
+public bool Fixed { get; set; }
+```
+
+`Fixed = true` keeps the aggregate where it was added. The place decides who reaches the aggregate from above, so an application with no command that moves it can fix the place:
+
+```csharp
+[At(Fixed = true)] public OrganizationUnitId UnitId { get; private set; }
+```
+
+Membership's mapping then fixes the column once the row exists, as `IsFixedAfterInsert()` does in a context. Entity Framework throws on a save that changes it. The privileges a Postgres export writes leave the column out of `UPDATE`. The default is false, so an aggregate can be moved unless the domain says otherwise.
+
 ## Custom role
 
 Namespace `DDDToolkit.Supporting.Membership`.

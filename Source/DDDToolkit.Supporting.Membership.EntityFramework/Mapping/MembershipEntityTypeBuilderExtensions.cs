@@ -44,7 +44,8 @@ public static class MembershipEntityTypeBuilderExtensions
     /// a permission held from above is compared with: a resource whose rules let it be reached from above
     /// (<see cref="Access.MembershipRules.ReachFromAbove"/>) is held by a caller that holds the permission at that place, or
     /// above it, as the application answers where that is (<see cref="IPlacesReached{TResourceId, TPlaceId}"/>). The
-    /// package keeps no places: it reads that column, and nothing of what is above it.
+    /// package keeps no places: it reads that column, and nothing of what is above it. A place marked
+    /// <c>[At(Fixed = true)]</c> is fixed once the row exists (<c>IsFixedAfterInsert</c>).
     /// </para>
     /// <para>
     /// The type arguments are inferred from the collection. The member class's own id, what a member is known by and
@@ -163,7 +164,12 @@ public static class MembershipEntityTypeBuilderExtensions
         resource.HasAnnotation(MembershipModel.OwnerAnnotation, owner.Name);
         if (at is not null)
         {
-            resource.Property(at.PropertyType, at.Name);
+            var place = resource.Property(at.PropertyType, at.Name);
+            if (at.GetCustomAttribute<AtAttribute>(inherit: true)!.Fixed)
+            {
+                place.IsFixedAfterInsert();
+            }
+
             resource.HasAnnotation(MembershipModel.AtAnnotation, at.Name);
         }
 

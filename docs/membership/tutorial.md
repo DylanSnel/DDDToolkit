@@ -142,15 +142,15 @@ package and Tenancy's markers package. Boards' context uses the Entity Framework
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.11" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.11" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.11" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.11" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.11" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.11" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.11" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.11" />
-    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.11" />
+    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.12" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.12" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.12" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.12" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.12" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.12" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.12" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.12" />
+    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.12" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
@@ -1856,7 +1856,8 @@ board he is a member of.
 - **Members come first**: when a caller holds a permission both as a member and from above, Membership reports it as
   held through membership.
 - **The unit decides who reaches the board**, so moving a board changes who can reach it. Harbor has no command that
-  moves a board, so `IsFixedAfterInsert` fixes the unit once the board is saved.
+  moves a board, so `[At(Fixed = true)]` fixes the unit once the board is saved. `Fixed` is false by default, so an
+  application that moves its boards writes `[At]` alone.
 
 ### What you write
 
@@ -1887,8 +1888,8 @@ public sealed partial class Board
     [OfTenant]
     public TenantId TenantId { get; private set; }
 
-    // Where the board hangs: a permission held here, or above, reaches the board.
-    [At]
+    // Where the board hangs: a permission held here, or above, reaches the board. A board never moves.
+    [At(Fixed = true)]
     public OrganizationUnitId UnitId { get; private set; }
 
     public string Name { get; private set; } = string.Empty;
@@ -1923,60 +1924,14 @@ public static class BoardMembership
 }
 ```
 
-**`Harbor.Boards.Infrastructure/Persistence/BoardsContext.cs`**
-
-```csharp {29-33}
-using DDDToolkit.EntityFramework.Conventions;
-using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Supporting.Tenancy.EntityFramework;
-using Harbor.Boards.Domain.Aggregates.BoardRoles;
-using Harbor.Boards.Domain.Aggregates.Boards;
-using Harbor.Boards.Infrastructure.Converters;
-using Harbor.Tenancy.Contracts.ValueObjects;
-using Microsoft.EntityFrameworkCore;
-
-namespace Harbor.Boards.Infrastructure.Persistence;
-
-[SupabaseMigrations]
-public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbContext(options)
-{
-    public const string Schema = "boards";
-
-    public DbSet<Board> Boards => Set<Board>();
-
-    public DbSet<BoardRole> BoardRoles => Set<BoardRole>();
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.HasDefaultSchema(Schema);
-
-        // Tenancy's rows, read through its functions, so a question about the organization is part of this context's queries.
-        modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
-
-        // The conventions map the members, the role, the tenant and the role's two indexes.
-        modelBuilder.Entity<Board>(board =>
-        {
-            // Where a board hangs decides who reaches it from above, so no statement moves it once it is there.
-            board.Property(row => row.UnitId).IsFixedAfterInsert();
-        });
-    }
-
-    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
-    {
-        configurationBuilder.AddDDDToolkitConventions();
-        configurationBuilder.StoreDateTimeOffsetsAsUtc();
-        configurationBuilder.AddBoardsConverters();
-    }
-}
-```
-
 ### What it does
 
 - `[At]` and `reachFromAbove: true`: the boards functions call Tenancy's function for the units where the caller holds
   a permission. They then include the boards that hang at those units or below them. So the read policy of step 4 now
   lets those boards through too, and `db.Boards` lists them. Membership's check does the same in C#.
-- `IsFixedAfterInsert`: Entity Framework throws on a save that changes a board's unit. The export also leaves `UnitId`
-  out of the columns a caller may update.
+- `Fixed = true`: Membership's mapping fixes `UnitId` once the row exists, as `IsFixedAfterInsert()` does in a context.
+  Entity Framework throws on a save that changes a board's unit. The export also leaves `UnitId` out of the columns a
+  caller may update.
 - The tables did not change, so there is no new migration. The export writes a new `<v>_access.boards.ddd.sql`.
 
 ### Run it

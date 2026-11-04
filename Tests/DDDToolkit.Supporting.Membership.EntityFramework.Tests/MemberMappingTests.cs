@@ -358,6 +358,34 @@ public sealed class MemberMappingTests
     }
 
     [Fact]
+    public async Task A_place_marked_fixed_is_written_once_and_a_save_that_moved_it_is_refused()
+    {
+        // A plot marks its garden [At(Fixed = true)]. A crate marks its bay [At] and is put in another bay by PutIn.
+        using var depot = new SqliteDepot();
+        using (var scope = depot.Services.Provider.CreateScope())
+        {
+            scope.ServiceProvider.GetRequiredService<DepotContext>().Model.FindEntityType(typeof(Crate))!.FindProperty(nameof(Crate.BayId))!.GetAfterSaveBehavior()
+                .Should().Be(PropertySaveBehavior.Save, "a place without Fixed can be moved");
+        }
+
+        using var garden = await SqliteGarden.SeededAsync();
+        var data = garden.Scenario;
+        using (var scope = garden.Services.Provider.CreateScope())
+        {
+            scope.ServiceProvider.GetRequiredService<GardenContext>().Model.FindEntityType(typeof(Plot))!.FindProperty(nameof(Plot.GardenId))!.GetAfterSaveBehavior()
+                .Should().Be(PropertySaveBehavior.Throw);
+        }
+
+        // A save that moved the beans to the orchard, by whatever went round the domain.
+        var moved = await FluentActions.Awaiting(() => garden.Services.ChangeAsync(async context =>
+                Break.Set(await context.Plots.SingleAsync(plot => plot.Id == data.Beans, TestContext.Current.CancellationToken), nameof(Plot.GardenId), data.Orchard)))
+            .Should().ThrowAsync<InvalidOperationException>();
+        moved.Which.Message.Should().Contain(nameof(Plot.GardenId));
+
+        (await garden.Services.ReadAsync(data.Beans)).GardenId.Should().Be(data.Meadow);
+    }
+
+    [Fact]
     public void Where_a_resource_sits_is_named_as_a_property_of_the_resource()
     {
         // What a place is known by is the resource's own to say, on its class with [At]: here a document sits at its owner.

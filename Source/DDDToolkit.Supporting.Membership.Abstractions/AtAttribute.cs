@@ -27,4 +27,17 @@ namespace DDDToolkit.Supporting.Membership;
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Property, Inherited = false)]
-public sealed class AtAttribute : Attribute;
+public sealed class AtAttribute : Attribute
+{
+    /// <summary>
+    /// <c>Fixed = true</c> keeps the aggregate where it was added. The place decides who reaches the aggregate from
+    /// above, so an application with no command that moves it can fix the place:
+    /// <code>
+    /// [At(Fixed = true)] public OrganizationUnitId UnitId { get; private set; }
+    /// </code>
+    /// Membership's mapping then fixes the column once the row exists, as <c>IsFixedAfterInsert()</c> does in a context.
+    /// Entity Framework throws on a save that changes it. The privileges a Postgres export writes leave the column out
+    /// of <c>UPDATE</c>. The default is false, so an aggregate can be moved unless the domain says otherwise.
+    /// </summary>
+    public bool Fixed { get; set; }
+}
