@@ -175,14 +175,14 @@ public sealed class RowAccessPrivilegeTests
             [
                 $"GRANT INSERT ON TABLE {Outbox} TO authenticated, ddd_system_in;",
                 $"GRANT SELECT, DELETE ON TABLE {Outbox} TO ddd_system;",
-                $"GRANT UPDATE (\"Attempts\", \"LastError\", \"NextAttemptAt\", \"ProcessedAt\") ON TABLE {Outbox} TO ddd_system;",
+                $"GRANT UPDATE (\"Attempts\", \"LastError\", \"LockedBy\", \"LockedUntil\", \"NextAttemptAt\", \"ProcessedAt\") ON TABLE {Outbox} TO ddd_system;",
             ],
-            "the processor says how a delivery went, and the event's name, payload and version stay as they were raised");
+            "the processor claims a row and says how a delivery went, and the event's name, payload and version stay as they were raised");
 
-        // The columns are the model's: the four properties, whatever a naming convention calls their columns.
+        // The columns are the model's: the six properties, whatever a naming convention calls their columns.
         using var model = ApiaryContext.ForScripts();
         var outbox = model.Model.FindEntityType(typeof(OutboxMessage))!;
-        string[] written = [nameof(OutboxMessage.Attempts), nameof(OutboxMessage.LastError), nameof(OutboxMessage.NextAttemptAt), nameof(OutboxMessage.ProcessedAt)];
+        string[] written = [nameof(OutboxMessage.Attempts), nameof(OutboxMessage.LastError), nameof(OutboxMessage.LockedBy), nameof(OutboxMessage.LockedUntil), nameof(OutboxMessage.NextAttemptAt), nameof(OutboxMessage.ProcessedAt)];
         written.Should().OnlyContain(name => outbox.FindProperty(name) != null, "the script names the properties the processor writes by their names");
     }
 

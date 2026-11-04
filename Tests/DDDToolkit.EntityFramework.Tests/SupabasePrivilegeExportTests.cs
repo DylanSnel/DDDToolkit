@@ -118,7 +118,7 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
             .And.Contain("GRANT UPDATE (\"Capacity\", \"Name\") ON TABLE \"public\".\"Shelves\" TO authenticated;\n")
             .And.Contain("GRANT INSERT ON TABLE \"ddd\".\"OutboxMessages\" TO authenticated, ddd_system_in;\n")
             .And.Contain("GRANT SELECT, DELETE ON TABLE \"ddd\".\"OutboxMessages\" TO ddd_system;\n")
-            .And.Contain("GRANT UPDATE (\"Attempts\", \"LastError\", \"NextAttemptAt\", \"ProcessedAt\") ON TABLE \"ddd\".\"OutboxMessages\" TO ddd_system;\n")
+            .And.Contain("GRANT UPDATE (\"Attempts\", \"LastError\", \"LockedBy\", \"LockedUntil\", \"NextAttemptAt\", \"ProcessedAt\") ON TABLE \"ddd\".\"OutboxMessages\" TO ddd_system;\n")
             .And.Contain("        CREATE ROLE ddd_system NOLOGIN NOINHERIT;\n", "system=ddd_system reached the export, which makes the role");
         sql.Should().NotContain("TO anon;", "no rule is for a visitor, so a visitor gets nothing");
 

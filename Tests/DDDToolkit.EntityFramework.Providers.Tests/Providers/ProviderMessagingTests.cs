@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
@@ -219,6 +221,74 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
         _dispatched.OfType<ShelfCreated>().Select(e => e.Name).Should().Equal("healthy", "broken");
     }
 
+    /// <summary>
+    /// Two processors, each in a host of its own, drain one outbox at the same time. Their claims run side by side
+    /// on this server, so this is where the claim's repeated condition has to hold: a row that one claim took after
+    /// the other's subquery read it must be left out of the other's update.
+    /// </summary>
+    [Fact]
+    public async Task Two_processors_draining_one_outbox_at_once_deliver_every_message_exactly_once()
+    {
+        SkipIfUnavailable();
+
+        const int Messages = 200;
+        var deliveries = new ConcurrentDictionary<Guid, int>();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Cancellation);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+
+        ProviderHost Processor() => new(
+            Database,
+            options => options.UseOutbox(outbox => outbox.RegisterEvent<ShelfCreated>().SendTo(new CountingSink(deliveries))),
+            services => services.AddOutboxProcessor<ProviderContext>());
+
+        using var first = Processor();
+        using var second = Processor();
+
+        await first.InScopeAsync(async context =>
+        {
+            for (var i = 0; i < Messages; i++)
+            {
+                context.Shelves.Add(NewShelf($"Shelf {i}"));
+            }
+
+            await context.SaveChangesAsync(Cancellation);
+        });
+
+        // A claim that ran at the same moment as the other's can come back empty while the other still holds
+        // rows, so each processor keeps polling until no row is pending.
+        async Task DrainAsync(ProviderHost host)
+        {
+            while (true)
+            {
+                var delivered = await host.InScopeAsync((_, services) => services
+                    .GetRequiredService<OutboxProcessor<ProviderContext>>()
+                    .ProcessPendingAsync(batchSize: 10, timeout.Token));
+
+                if (delivered > 0)
+                {
+                    continue;
+                }
+
+                await using var check = Database.CreateContext();
+                if (!await check.Outbox.AnyAsync(m => m.ProcessedAt == null, timeout.Token))
+                {
+                    return;
+                }
+
+                await Task.Delay(5, timeout.Token);
+            }
+        }
+
+        await Task.WhenAll(Task.Run(() => DrainAsync(first), timeout.Token), Task.Run(() => DrainAsync(second), timeout.Token));
+
+        deliveries.Should().HaveCount(Messages, "every message is delivered");
+        deliveries.Values.Should().OnlyContain(count => count == 1, "no message is delivered by both processors");
+
+        await using var rows = Database.CreateContext();
+        (await rows.Outbox.CountAsync(m => m.ProcessedAt == null || m.LockedBy != null || m.Attempts != 1, Cancellation))
+            .Should().Be(0, "every row is marked once and released");
+    }
+
     [Fact]
     public async Task A_rolled_back_transaction_takes_the_outbox_row_with_it()
     {
@@ -429,6 +499,18 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
         ProcessedAt = at,
         Attempts = 1,
     };
+
+    /// <summary>Counts the deliveries of every message.</summary>
+    private sealed class CountingSink(ConcurrentDictionary<Guid, int> deliveries) : IIntegrationEventSink
+    {
+        public async Task SendAsync(IntegrationEventMessage message, CancellationToken cancellationToken = default)
+        {
+            deliveries.AddOrUpdate(message.MessageId, 1, (_, count) => count + 1);
+
+            // Long enough for the other processor to claim and deliver in between.
+            await Task.Delay(1, cancellationToken);
+        }
+    }
 
     /// <summary>Holds everyone who arrives until <paramref name="count"/> have.</summary>
     private sealed class Rendezvous(int count)

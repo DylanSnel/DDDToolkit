@@ -6,6 +6,7 @@ using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Storage;
 using DDDToolkit.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -25,11 +26,23 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// </para>
 /// <para>
 /// Guarantees: at-least-once. A message is marked processed (and saved) only after everything it was
-/// handed to returned; a crash in between redelivers it, and two processors racing on the same table
-/// may both deliver a row. Consumers must therefore be idempotent, keyed by
+/// handed to returned; a crash in between redelivers it. Consumers must therefore be idempotent, keyed by
 /// <see cref="IDomainEvent.EventId"/> (= <see cref="OutboxMessage.Id"/> =
 /// <see cref="IntegrationEventMessage.MessageId"/>); <c>DomainEventInbox&lt;TContext&gt;</c> does that for
 /// you on the receiving side.
+/// </para>
+/// <para>
+/// <b>Two processors on one table.</b> A batch starts with a claim: one <c>UPDATE</c> that writes a new
+/// <see cref="OutboxMessage.LockedBy"/> and a <see cref="OutboxMessage.LockedUntil"/>
+/// <see cref="OutboxOptions.LeaseDuration"/> ahead on the oldest due rows that no other processor holds. The
+/// statement repeats that condition on the row it changes, so of two processors that claim at once, each
+/// row goes to one of them. Every mark carries the claim in its <c>WHERE</c> clause, because
+/// <c>LockedBy</c> is a concurrency token, and clears it. A mark that changes no row means another processor
+/// claimed the message after this lease ended: the save fails, nothing it carried is written, and the
+/// message counts neither as delivered nor as failed. The processor starts a message only while at least
+/// half the lease is left, and releases the rows it did not reach when it stops early, is cancelled or
+/// throws. So two processors deliver one message twice only when one delivery takes longer than half the
+/// lease.
 /// </para>
 /// <para>
 /// <b>When one sink fails and another succeeds</b>, every sink is still attempted: a broken transport
@@ -78,6 +91,12 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// </summary>
 public sealed class OutboxProcessor<TContext> where TContext : DbContext
 {
+    /// <summary>How long <see cref="ReleaseAsync"/> waits for the database.</summary>
+    private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>The machine and the process, the readable part of every claim this process writes.</summary>
+    private static readonly string ClaimPrefix = DescribeProcess();
+
     private readonly TContext _context;
     private readonly IServiceProvider _serviceProvider;
     private readonly DDDEntityFrameworkOptions _options;
@@ -115,11 +134,17 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     }
 
     /// <summary>
-    /// Loads up to <paramref name="batchSize"/> pending messages that are due, oldest first (by write
-    /// time, then by the event's <c>OccurredAt</c>), and delivers them. A message that failed is due again
-    /// at its <see cref="OutboxMessage.NextAttemptAt"/>, so the messages behind it are loaded in the
-    /// meantime. Returns the number of messages delivered successfully. Order is best-effort: retries
-    /// and concurrent processors can reorder delivery.
+    /// Claims up to <paramref name="batchSize"/> pending messages that are due and that no other processor
+    /// holds, oldest first (by write time, then by the event's <c>OccurredAt</c>), and delivers them. A
+    /// message that failed is due again at its <see cref="OutboxMessage.NextAttemptAt"/>, so the messages
+    /// behind it are claimed in the meantime. Returns the number of messages delivered successfully. Order is
+    /// best-effort: retries and concurrent processors can reorder delivery.
+    /// <para>
+    /// The claim holds the messages for <see cref="OutboxOptions.LeaseDuration"/>. When less than half of it is
+    /// left, the processor stops the batch and releases the messages it did not reach; the next call claims
+    /// them again. The same release runs when <paramref name="cancellationToken"/> stops the batch or a save
+    /// throws.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="batchSize"/> is below 1.</exception>
     public async Task<int> ProcessPendingAsync(int batchSize = 100, CancellationToken cancellationToken = default)
@@ -130,33 +155,167 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         using var bookkeeping = ToolkitWork.BeginBookkeeping(_requireExplicitCurrentUser);
 
         var outbox = _outbox;
-        var maxAttempts = outbox.MaxAttempts;
-        var now = _options.TimeProvider.GetUtcNow();
+        var claimedAt = _options.TimeProvider.GetUtcNow();
+        var lease = outbox.LeaseDuration;
+        var claim = NewClaim();
 
-        var messages = await _context.Set<OutboxMessage>()
+        var messages = await ClaimAsync(claim, claimedAt, claimedAt + lease, batchSize, outbox.MaxAttempts, cancellationToken).ConfigureAwait(false);
+        if (messages.Count == 0)
+        {
+            return 0;
+        }
+
+        // A message started at this moment or later could still run when the lease ends.
+        var startBefore = claimedAt + (lease / 2);
+        var processed = 0;
+        var finished = 0;
+
+        try
+        {
+            foreach (var message in messages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (_options.TimeProvider.GetUtcNow() >= startBefore)
+                {
+                    _logger.LogInformation(
+                        "Less than half of the {LeaseDuration} lease on the outbox of {Context} is left; {Count} claimed messages are released for the next batch.",
+                        lease, typeof(TContext).Name, messages.Count - finished);
+                    break;
+                }
+
+                if (await DeliverOneAsync(message, outbox, cancellationToken).ConfigureAwait(false))
+                {
+                    processed++;
+                }
+
+                finished++;
+            }
+        }
+        finally
+        {
+            if (finished < messages.Count)
+            {
+                await ReleaseAsync(claim).ConfigureAwait(false);
+            }
+        }
+
+        return processed;
+    }
+
+    /// <summary>
+    /// Writes <paramref name="claim"/> into up to <paramref name="batchSize"/> due rows that no processor holds,
+    /// and loads the rows it wrote, oldest first.
+    /// <para>
+    /// One <c>UPDATE</c> takes the rows. Its subquery picks the oldest candidates, and its own <c>WHERE</c> clause
+    /// repeats the condition on the row it changes. A database checks that clause on the row it is about to
+    /// change after the row lock: Postgres re-reads a row another transaction changed, SQL Server reads under an
+    /// update lock, and SQLite runs one writer at a time. So a row another processor claimed after the
+    /// subquery read it is left out, and no row is claimed twice. Without <c>RETURNING</c> in Entity Framework,
+    /// a second query loads the claimed rows by their claim.
+    /// </para>
+    /// </summary>
+    private async Task<List<OutboxMessage>> ClaimAsync(string claim, DateTimeOffset now, DateTimeOffset until, int batchSize, int maxAttempts, CancellationToken cancellationToken)
+    {
+        var rows = _context.Set<OutboxMessage>();
+
+        var candidates = rows
             .Where(message => message.ProcessedAt == null && message.Attempts < maxAttempts)
             .Where(message => message.NextAttemptAt == null || message.NextAttemptAt <= now)
+            .Where(message => message.LockedUntil == null || message.LockedUntil <= now)
             // Write time, then occurrence time (events written by one save share CreatedAt), then id.
             .OrderBy(message => message.CreatedAt)
             .ThenBy(message => message.OccurredAt)
             .ThenBy(message => message.Id)
             .Take(batchSize)
+            .Select(message => message.Id);
+
+        var claimed = await rows
+            .Where(message => candidates.Contains(message.Id))
+            .Where(message => message.ProcessedAt == null && message.Attempts < maxAttempts)
+            .Where(message => message.NextAttemptAt == null || message.NextAttemptAt <= now)
+            .Where(message => message.LockedUntil == null || message.LockedUntil <= now)
+            .ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(message => message.LockedBy, claim)
+                    .SetProperty(message => message.LockedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (claimed == 0)
+        {
+            return [];
+        }
+
+        var messages = await rows
+            .Where(message => message.LockedBy == claim)
+            .OrderBy(message => message.CreatedAt)
+            .ThenBy(message => message.OccurredAt)
+            .ThenBy(message => message.Id)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var processed = 0;
-
         foreach (var message in messages)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (await DeliverOneAsync(message, outbox, cancellationToken).ConfigureAwait(false))
+            // A row this context tracked before the claim comes back as that instance, with the values it
+            // had then. The mark's WHERE clause takes LockedBy's original value, so it has to be this claim.
+            if (message.LockedBy != claim)
             {
-                processed++;
+                await _context.Entry(message).ReloadAsync(cancellationToken).ConfigureAwait(false);
             }
         }
 
-        return processed;
+        return messages;
+    }
+
+    /// <summary>
+    /// Clears <paramref name="claim"/> from the rows that still hold it, so another processor can claim them at
+    /// once instead of after the lease. It runs on its own timeout, because the batch's token may be the reason
+    /// it runs. A failure is logged and not thrown: the lease then ends on its own.
+    /// </summary>
+    private async Task ReleaseAsync(string claim)
+    {
+        using var timeout = new CancellationTokenSource(ReleaseTimeout);
+
+        try
+        {
+            var released = await _context.Set<OutboxMessage>()
+                .Where(message => message.LockedBy == claim)
+                .ExecuteUpdateAsync(
+                    set => set
+                        .SetProperty(message => message.LockedBy, (string?)null)
+                        .SetProperty(message => message.LockedUntil, (DateTimeOffset?)null),
+                    timeout.Token)
+                .ConfigureAwait(false);
+
+            _logger.LogDebug("Released {Count} outbox messages of {Context} that the batch did not finish.", released, typeof(TContext).Name);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Releasing the unfinished outbox messages of {Context} failed. They are claimed again when their lease ends.", typeof(TContext).Name);
+        }
+    }
+
+    /// <summary>A new claim: <see cref="ClaimPrefix"/> and a Guid, so two batches never share one.</summary>
+    private static string NewClaim() => ClaimPrefix + Guid.NewGuid().ToString("N");
+
+    private static string DescribeProcess()
+    {
+        string machine;
+        try
+        {
+            machine = Environment.MachineName;
+        }
+        catch (InvalidOperationException)
+        {
+            machine = "unknown";
+        }
+
+        var process = $":{Environment.ProcessId}:";
+
+        // The Guid takes 32 characters, so the machine name is cut to what remains.
+        var room = DomainEventStorage.MaxLockedByLength - 32 - process.Length;
+        return (machine.Length <= room ? machine : machine[..room]) + process;
     }
 
     /// <summary>
@@ -165,6 +324,11 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     /// a sink that writes to this database commits with the mark or not at all; otherwise the mark is
     /// its own write and delivery is at-least-once, which is what a sink outside the database gives you
     /// anyway.
+    /// <para>
+    /// Both marks clear the lease. Each save of the row carries the claim in its <c>WHERE</c> clause, so when
+    /// another processor took the message over, the save fails and <see cref="LeaseLost"/> takes what it
+    /// carried off the context.
+    /// </para>
     /// </summary>
     private async Task<bool> DeliverOneAsync(OutboxMessage message, OutboxOptions outbox, CancellationToken cancellationToken)
     {
@@ -186,6 +350,13 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
                 message.NextAttemptAt = null;
                 message.LastError = null;
                 delivered = true;
+            }
+            catch (Exception exception) when (TookOver(exception, message))
+            {
+                // A handler or a sink saved through this context, and the save found the lease gone.
+                await RollBackAsync(transaction).ConfigureAwait(false);
+                LeaseLost(message);
+                return false;
             }
             catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
@@ -215,12 +386,16 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
                     entry.Property(m => m.NextAttemptAt).IsModified = true;
                     entry.Property(m => m.LastError).IsModified = true;
 
-                    await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    await SaveMarkAsync(message, cancellationToken).ConfigureAwait(false);
                     return false;
                 }
             }
 
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            if (!await SaveMarkAsync(message, cancellationToken).ConfigureAwait(false))
+            {
+                await RollBackAsync(transaction).ConfigureAwait(false);
+                return false;
+            }
 
             if (transaction is not null)
             {
@@ -235,6 +410,75 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
             {
                 await transaction.DisposeAsync().ConfigureAwait(false);
             }
+        }
+    }
+
+    /// <summary>
+    /// Clears the lease and saves the mark. Returns <see langword="false"/> when the save found the row claimed
+    /// by another processor; <see cref="LeaseLost"/> has then taken the save's changes off the context.
+    /// </summary>
+    private async Task<bool> SaveMarkAsync(OutboxMessage message, CancellationToken cancellationToken)
+    {
+        message.LockedBy = null;
+        message.LockedUntil = null;
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception exception) when (TookOver(exception, message))
+        {
+            LeaseLost(message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="exception"/>, or an exception inside it, is a save that found
+    /// <paramref name="message"/> claimed by another processor. With the toolkit's interceptors the save
+    /// throws a <see cref="Exceptions.ConcurrencyConflictException"/> around Entity Framework's
+    /// <see cref="DbUpdateConcurrencyException"/>; without them, the latter alone.
+    /// </summary>
+    private static bool TookOver(Exception exception, OutboxMessage message)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is DbUpdateConcurrencyException concurrency && concurrency.Entries.Any(entry => ReferenceEquals(entry.Entity, message)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Another processor claimed <paramref name="message"/> after this lease ended, and holds it now. The
+    /// message is neither delivered nor failed here. The save that found it out wrote nothing, so its changes
+    /// come off the context: the row, the outbox rows the save's events added, and what a handler left
+    /// unsaved. Otherwise the next message's mark would write them.
+    /// </summary>
+    private void LeaseLost(OutboxMessage message)
+    {
+        _logger.LogWarning(
+            "Outbox message {MessageId} ({EventName}) was claimed by another processor after this lease ended. Its delivery here is not recorded, and the other processor delivers it.",
+            message.Id, message.EventName);
+
+        foreach (var entry in _context.ChangeTracker.Entries().ToList())
+        {
+            if (ReferenceEquals(entry.Entity, message) || entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
+    }
+
+    private static async Task RollBackAsync(IDbContextTransaction? transaction)
+    {
+        if (transaction is not null)
+        {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }
 
