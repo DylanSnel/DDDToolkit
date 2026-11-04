@@ -13,6 +13,11 @@
       benchmarks honest: they break with the rest of the solution when the generators change.
     -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
+    <!--
+      The access check benchmarks name the classes of the Membership and Tenancy test hosts, which belong to the modules
+      Filing and Tenancy. A benchmark is no module of the application, so the module boundary does not apply to it.
+    -->
+    <NoWarn>$(NoWarn);DDD00022</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +28,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Source\DDDToolkit\DDDToolkit.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+    <!--
+      The access check benchmarks ask Membership and Tenancy about the resources and tenants of the test hosts. Each
+      host is the smallest application that declares the package's classes, with the code its generators write.
+    -->
+    <ProjectReference Include="..\..\Tests\DDDToolkit.Supporting.Membership.TestHost\DDDToolkit.Supporting.Membership.TestHost.csproj" />
+    <ProjectReference Include="..\..\Tests\DDDToolkit.Supporting.Tenancy.TestHost\DDDToolkit.Supporting.Tenancy.TestHost.csproj" />
   </ItemGroup>
 
   <!-- Generators. NuGet consumers get these transitively through the packages above. -->
