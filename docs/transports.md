@@ -619,10 +619,10 @@ row:
 
 - **The `IDomainEvent`.** Every sink would have to serialize the event, so every sink would need your JSON options.
   A sink would also put the domain type on the wire without a decision to publish it.
-- **The `OutboxMessage` row.** The row carries `Attempts`, `NextAttemptAt`, `ProcessedAt` and `LastError`. These
-  fields are this process's bookkeeping, and a transport does not need them. The row would also put Entity Framework
-  into the sink's signature. A sink project would then have to reference `DDDToolkit.EntityFramework` to send an
-  HTTP request.
+- **The `OutboxMessage` row.** The row carries `Attempts`, `NextAttemptAt`, `ProcessedAt`, `LastError`, `LockedBy`
+  and `LockedUntil`. These fields are this process's bookkeeping, and a transport does not need them. The row would
+  also put Entity Framework into the sink's signature. A sink project would then have to reference
+  `DDDToolkit.EntityFramework` to send an HTTP request.
 
 The envelope is in the core `DDDToolkit` package. It has no Entity Framework types, and it carries what a transport
 routes on:

@@ -109,6 +109,14 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<string>("LockedBy")
+                        .IsConcurrencyToken()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -138,9 +146,9 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("EndsAt");
 
-                    b.Property<bool>("OfCaller")
+                    b.Property<bool>("OfCurrentSeat")
                         .HasColumnType("boolean")
-                        .HasColumnName("OfCaller");
+                        .HasColumnName("OfCurrentSeat");
 
                     b.Property<Guid>("Parent")
                         .HasColumnType("uuid")
