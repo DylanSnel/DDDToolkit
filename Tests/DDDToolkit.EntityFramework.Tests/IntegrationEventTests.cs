@@ -7,6 +7,7 @@ using DDDToolkit.EntityFramework.Tests.Domain.Events;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using DDDToolkit.ExampleApi.Domain.UserAggregate.ValueObjects;
 using DDDToolkit.ExampleLibrary.Common.ValueObjects;
+using DDDToolkit.Interfaces;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -286,6 +287,89 @@ public sealed class IntegrationEventTests : IDisposable
 
         processed.Should().Be(1, "a sink alone is a complete configuration; no dispatch delegate is needed");
         target.Messages.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_sink_is_resolved_once_per_batch()
+    {
+        var target = new RecordingSink();
+        var built = 0;
+        using var host = CreateHost(
+            outbox => outbox.SendTo(_ =>
+            {
+                built++;
+                return new InjectedSink(target);
+            }),
+            dispatchThroughRecorder: false);
+        await SaveShelfAsync(host, "Fiction");
+        await SaveShelfAsync(host, "Poetry");
+        await SaveShelfAsync(host, "Travel");
+
+        var processed = await ProcessAsync(host);
+
+        processed.Should().Be(3);
+        target.Messages.Should().HaveCount(3);
+        built.Should().Be(1, "the first message of the batch resolves the sink, and the other two use it");
+    }
+
+    [Fact]
+    public async Task A_sink_that_failed_to_resolve_is_resolved_again_for_the_next_message()
+    {
+        var target = new RecordingSink();
+        var built = 0;
+        using var host = CreateHost(
+            outbox => outbox.SendTo(_ => ++built == 1 ? throw new InvalidOperationException("The transport is not ready.") : new InjectedSink(target)),
+            dispatchThroughRecorder: false);
+        await SaveShelfAsync(host, "Fiction");
+        await SaveShelfAsync(host, "Poetry");
+
+        var processed = await ProcessAsync(host);
+
+        processed.Should().Be(1);
+        built.Should().Be(2);
+        target.Messages.Should().ContainSingle();
+
+        using var check = _db.CreateLibraryContext();
+        var failed = await check.Outbox.SingleAsync(row => row.ProcessedAt == null, TestContext.Current.CancellationToken);
+        failed.Attempts.Should().Be(1);
+        failed.LastError.Should().Contain("The transport is not ready.");
+    }
+
+    [Fact]
+    public async Task A_delivered_message_is_marked_when_cancellation_comes_during_its_delivery()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var sink = new CancellingSink(cancellation);
+        using var host = CreateHost(outbox => outbox.SendTo(sink));
+        await SaveShelfAsync(host, "Fiction");
+        await SaveShelfAsync(host, "Poetry");
+
+        var process = () => host.InScopeAsync((_, services) =>
+            services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync(cancellationToken: cancellation.Token));
+
+        await process.Should().ThrowAsync<OperationCanceledException>("the batch stops before the next message");
+
+        var delivered = sink.Messages.Should().ContainSingle().Subject;
+        using var check = _db.CreateLibraryContext();
+        var rows = await check.Outbox.ToListAsync(TestContext.Current.CancellationToken);
+        var marked = rows.Single(row => row.Id == delivered.MessageId);
+        marked.ProcessedAt.Should().Be(_clock.GetUtcNow(), "the delivery finished, so its mark is saved after the cancellation");
+        marked.Attempts.Should().Be(1);
+        var next = rows.Single(row => row.Id != delivered.MessageId);
+        next.ProcessedAt.Should().BeNull();
+        next.Attempts.Should().Be(0, "the processor did not start the second delivery");
+    }
+
+    /// <summary>Records a message and then cancels the batch, as a host that stops during a delivery does.</summary>
+    private sealed class CancellingSink(CancellationTokenSource cancellation) : IIntegrationEventSink
+    {
+        public List<IntegrationEventMessage> Messages { get; } = [];
+
+        public async Task SendAsync(IntegrationEventMessage message, CancellationToken cancellationToken = default)
+        {
+            Messages.Add(message);
+            await cancellation.CancelAsync();
+        }
     }
 
     [Fact]

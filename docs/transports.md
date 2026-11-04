@@ -607,6 +607,10 @@ public sealed class ServiceBusSink(ServiceBusSender sender) : IIntegrationEventS
 the sink and injects the services of its constructor. `SendTo(sink)` takes an instance that you already have, which
 suits tests.
 
+The processor resolves each sink once per batch, when the first message of the batch reaches the sink. The other
+messages of the batch use the same instance, also when the sink is registered as transient. A sink that fails to
+resolve counts as a failed send for that message, and the next message resolves it again.
+
 The outbox passes every message it publishes to every sink on that outbox. A message counts as delivered only when
 all sinks accepted it.
 [When one sink fails and another does not](integration-events.md#when-one-sink-fails-and-another-does-not) explains
