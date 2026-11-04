@@ -20,8 +20,8 @@ name: Supabase Live
 # deleted again, whose tokens the monolith checks against the keys the project publishes and whose queries
 # run under the project's row level security. Making them takes a secret key, which the run reads through
 # the Management API. When the API gives none, the run logs the HTTP status and the keys it listed, and
-# without branching it uses the secret SUPABASE_SECRET_KEY. An access token with API keys read did not get
-# the project's secret key from the API, so without branching set SUPABASE_SECRET_KEY.
+# without branching it uses the secret SUPABASE_SECRET_KEY. The API answers 403 to an access token with
+# API keys read, because ?reveal=true needs more than read. So without branching, set SUPABASE_SECRET_KEY.
 #
 # Needs the secrets SUPABASE_ACCESS_TOKEN (a personal access token; Development Branches read-write,
 # Project Settings read, Database read, API keys read) and, without branching, SUPABASE_DB_PASSWORD, plus
