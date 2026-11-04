@@ -950,6 +950,14 @@ add`. The access files are written from the model, so the build writes none unti
 each as `Deferred`. Add the migration with `dotnet ef migrations add <Name>`; the next build writes the access files
 after it. Do not write the access file by hand, delete the property's mapping, or turn the export off to silence it.
 
+## DDD00109
+
+Error, at the marker argument or at `[OrOwn]`: it stands beside `[OnResource(permission)]` on a collection of ids. That
+marker becomes `MemberAccess.OnEach(permission, request.Boards)`, which takes the permission and the collection and
+nothing more. `[ExpectedVersion]` names the version of one resource, and `[OrOwn]` the caller's own on one resource.
+Remove the attribute, or send one request for each resource where a version or the caller's own is needed. An
+`[ExpectedVersion]` beside a marker on one id of the same resource belongs to that marker and is not reported.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

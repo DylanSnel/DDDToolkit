@@ -347,7 +347,9 @@ See `tenancy/postgres.md` ("Row level security on Postgres"): "Default read poli
   - `[RequiresPermission(permission)]` for the whole tenant;
   - permission markers on the member where the permission is held: Tenancy's `[AtUnit(permission)]` on a unit, and
     Membership's `[OnResource(permission)]` on a resource, with `[ExpectedVersion]` on the version read. A request
-    requires every marker on it. Beside markers on two kinds of resource, use `[ExpectedVersion<TResource>]`;
+    requires every marker on it. Beside markers on two kinds of resource, use `[ExpectedVersion<TResource>]`.
+    `[OnResource(permission)]` on a collection of ids, `IReadOnlyCollection<BoardId> Boards`, requires the permission on
+    each, in one statement for every 200 ids; it takes no `[ExpectedVersion]` and no `[OrOwn]` (DDD00109);
   - Membership's `[SeenWith<TResourceId>(permission)]` for a query that shows the resources the permission is held on;
   - the core's `[OrOwn]` on a seat beside the request's only permission, for the caller's own seat or the permission
     (`RenameSeat`). It does not pair with `[AtUnit]`. Beside several permissions, use `[OrOwn<TResource>]`;
