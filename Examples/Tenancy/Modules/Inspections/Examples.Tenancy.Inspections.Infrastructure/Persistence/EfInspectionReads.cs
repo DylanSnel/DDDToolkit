@@ -90,7 +90,7 @@ internal sealed class EfInspectionReads(IDbContextFactory<InspectionsContext> co
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
 
         return await NewestFirst(db.Inspections
-                .IgnoreQueryFilters([TenancyQueryFilter.Name])
+                .IgnoreTenantFilter()
                 .Where(inspection => inspection.TenantId == tenant && inspection.ProjectId == project))
             .Select(Read)
             .ToListAsync(cancellationToken);

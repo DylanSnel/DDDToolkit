@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
@@ -113,11 +114,29 @@ public abstract class TenantFilterTests(TestDatabases databases) : IAsyncLifetim
         {
             (await Names(widgets.Widgets)).Should().Equal("kept");
             (await Names(widgets.Widgets.IgnoreQueryFilters([TestWidgetContext.SoftDelete]))).Should().Equal(["binned", "kept"], "skipping the soft delete keeps the tenant filter");
-            (await Names(widgets.Widgets.IgnoreQueryFilters([TenancyQueryFilter.Name]))).Should().Equal(["kept", "next door"], "skipping the tenant filter keeps the soft delete");
+            (await Names(widgets.Widgets.IgnoreTenantFilter())).Should().Equal(["kept", "next door"], "skipping the tenant filter keeps the soft delete");
         }
 
         static async Task<List<string>> Names(IQueryable<Widget> widgets)
             => await widgets.OrderBy(widget => widget.Name).Select(widget => widget.Name).ToListAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Skipping_the_tenant_filter_passes_the_same_keys_on_every_call()
+    {
+        // Entity Framework's query cache compares the keys by reference unless they are an array. A new
+        // collection per call made 10.0.0 to 10.0.2 compile the query again on every call.
+        await using var scope = _services.Scope();
+        var widgets = scope.ServiceProvider.GetRequiredService<TestWidgetContext>();
+
+        var first = KeysOf(widgets.Widgets.IgnoreTenantFilter());
+        var second = KeysOf(widgets.Widgets.IgnoreTenantFilter());
+
+        first.Should().BeOfType<string[]>().Which.Should().Equal(TenancyQueryFilter.Name);
+        second.Should().BeSameAs(first);
+
+        static object? KeysOf(IQueryable<Widget> query)
+            => ((ConstantExpression)((MethodCallExpression)query.Expression).Arguments[1]).Value;
     }
 
     [Fact]

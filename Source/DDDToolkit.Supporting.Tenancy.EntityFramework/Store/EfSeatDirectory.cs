@@ -119,12 +119,12 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
 
     /// <summary>The identity's seats in every tenant: past the tenant filter, and no other.</summary>
     private IQueryable<TSeat> SeatsOf(Guid identity)
-        => context.Set<TSeat>().IgnoreQueryFilters([TenancyQueryFilter.Name]).Where(seat => seat.Identity == identity);
+        => context.Set<TSeat>().IgnoreTenantFilter().Where(seat => seat.Identity == identity);
 
     /// <summary>Every tenant, or the one with <paramref name="slug"/> when there is one: past the tenant filter, and no other.</summary>
     private IQueryable<TTenant> Tenants(TenantSlug? slug)
     {
-        var tenants = context.Set<TTenant>().IgnoreQueryFilters([TenancyQueryFilter.Name]);
+        var tenants = context.Set<TTenant>().IgnoreTenantFilter();
         return slug is null ? tenants : tenants.Where(tenant => tenant.Slug == slug);
     }
 
@@ -144,7 +144,7 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
                     nameof(TenantNameRow<TTenantId>.Id),
                     nameof(TenantNameRow<TTenantId>.Slug),
                     nameof(TenantNameRow<TTenantId>.Name)))
-            : context.Set<TOrganization>().IgnoreQueryFilters([TenancyQueryFilter.Name])
+            : context.Set<TOrganization>().IgnoreTenantFilter()
                 .Select(organization => new TenantNameRow<TTenantId> { Id = organization.Id, Slug = string.Empty, Name = organization.Name });
 
     /// <summary>What the query reads, before the slug becomes the string the directory answers with.</summary>
