@@ -378,6 +378,8 @@ public sealed class TellTheAdministrators(IShopAdministrators administrators, IM
 - On Postgres the export protects the column ([What the policies check](postgres.md#what-the-policies-check)). No seat
   changes it. Nobody changes the starter role a role came from. A role that a seat adds names no starter role, or is
   an exact copy of one.
+- `PermissionsFromStarterRole` and `FromStarterRole` are `[Bookkeeping]`. A GraphQL type that binds by convention leaves
+  them out ([Personal data and bookkeeping](../graphql.md#personal-data-and-bookkeeping-are-left-out)).
 
 ## Who may give a role
 

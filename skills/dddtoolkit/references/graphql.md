@@ -15,7 +15,7 @@ using Ordering.Domain.GraphQl;                       // generated: {AssemblyName
 
 builder.Services
     .AddGraphQLServer()
-    .AddDDDToolkitTypes()                            // once per schema: [Internal] members and methods are no fields
+    .AddDDDToolkitTypes()                            // once per schema: [Internal], [PersonalData], [Bookkeeping] and methods are no fields
     .AddOrderingGraphQlRuntimeBindings()             // generated, per assembly that declares ids or single value objects
     .AddDDDToolkitErrors()                           // failures as coded errors
     .AddDDDToolkitMutationConventions()              // refusals as typed errors in a mutation's payload
@@ -113,6 +113,14 @@ public static async Task<IReadOnlyDictionary<ProjectId, ProjectCrew>> GetCrewByP
 
 - Declare a type over the application's own record with `[ObjectType<T>]`. No output record, no `From(...)`
   mapping. The exception is a reference to another module's entity, which is a record of its key alone.
+- A type class binds by convention unless it says otherwise. `AddDDDToolkitTypes()` leaves out `[Internal]` members,
+  the methods of entities, value objects and the packages' classes (`[assembly: ToolkitPackage]`), and members marked
+  `[PersonalData]` or `[Bookkeeping]`. A package class with `[DisplayName]` names its type, as `Placement`. Write only
+  the differences: `descriptor.Ignore(...)` for a property the application does not show, a resolver for a marked
+  member it does show, and `descriptor.Name(...)` for Membership's `MemberRole`, which has no display name.
+- `[BindMember(nameof(Board.UnitId))]` on `GetUnit` puts `unit` in the place of `unitId`. Never put `[BindMember]` on
+  a resolver named like the member it binds (`GetAddedBy` for `AddedBy`). HotChocolate's generator ignores the bound
+  field by name and removes the resolver's field with it. The method alone already replaces the property's field.
 - A field a client may not ask for is a resolver behind a generated `[DataLoader]`, never a list loaded
   with its parent. No hand-written `BatchDataLoader` class.
 - A list is paged by HotChocolate: the query takes GreenDonut's `PagingArguments` and answers `Page<T>`,

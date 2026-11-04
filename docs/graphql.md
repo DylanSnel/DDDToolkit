@@ -332,6 +332,57 @@ public readonly partial record struct LoginId
 `DDDToolkit.HotChocolate.Attributes`. HotChocolate's `GraphQLTypeAttribute` is a different attribute. It annotates
 single members and arguments.
 
+## Binding fields by convention
+
+HotChocolate binds a type's fields by convention unless the type calls `BindFieldsExplicitly()`. Every public
+property becomes a field, and so does every public method that returns a value. A type class over an application's
+class then needs code only for what differs from the class. `AddDDDToolkitTypes()` makes that safe for the toolkit's
+own classes and for the classes of its packages, such as Tenancy and Membership:
+
+| What | Default | The application shows it with |
+|---|---|---|
+| A member marked `[Internal]` | Removed | Nothing. It is never part of an API. |
+| A method of an entity, an aggregate, a value object or a package class | Removed | A resolver in the type class |
+| A member marked `[PersonalData]` or `[Bookkeeping]` | Removed | A resolver in the type class, or `BindFieldsExplicitly()` that lists it |
+| A generic package class with `[DisplayName]` | Named after the display name | `descriptor.Name(...)` |
+
+The sections below explain each row. A type class over an application's own aggregate uses two more tools:
+
+- `descriptor.Ignore(board => board.People)` removes a property that the application does not show.
+- `[BindMember(nameof(Board.UnitId))]` on a resolver puts the resolver's field in the place of the property. The
+  schema then has `unit` and no `unitId`.
+
+```csharp
+[ObjectType<Board>]
+internal static partial class BoardType
+{
+    static partial void Configure(IObjectTypeDescriptor<Board> descriptor) => descriptor.Ignore(board => board.People);
+
+    [BindMember(nameof(Board.UnitId))]
+    public static ReferencedOrganizationUnit? GetUnit([Parent] Board board) => new(board.UnitId);
+}
+```
+
+### A resolver named like the member it binds
+
+HotChocolate's generator applies `[BindMember]` by ignoring the field of the bound member. It looks that field up by
+its name. A resolver that has the member's name has that same field name. `GetAddedBy` bound to `AddedBy` is one, and
+the generator then removes the resolver's field as well. The schema has no `addedBy` field at all.
+
+Leave `[BindMember]` off such a resolver. A method with a property's name already takes the place of that property's
+field:
+
+```csharp
+[ObjectType<BoardMember>]
+internal static partial class BoardMemberType
+{
+    // The resolver is the field addedBy. With [BindMember(nameof(BoardMember.AddedBy))] the schema would have no addedBy.
+    public static ReferencedSeat? GetAddedBy([Parent] BoardMember member) => member.AddedBy is { } seat ? new(seat) : null;
+}
+```
+
+`[BindMember]` is for a resolver whose name differs from the member, such as `GetUnit` in the place of `UnitId`.
+
 ## Internal members are removed from the schema
 
 The toolkit marks its bookkeeping members with `[Internal]`. `IgnoreInternalFieldsInterceptor` removes every such
@@ -410,6 +461,83 @@ type Money {
 
 As with `[Internal]`, the interceptor removes the fields during discovery. A type that only a method's argument
 referenced, such as `MoneyInput`, therefore never enters the schema.
+
+### The methods of the packages' classes
+
+A package also has plain classes that implement neither `IEntity` nor `IValueObject`. Membership's
+`MemberRole<TMemberId, TRoleId>` and Tenancy's `RoleGrant<TSeatId, TRoleId>` are two of them. Both have
+`AppliesAt(moment)`. Without the toolkit, each would print a field `appliesAt(moment: DateTime!): Boolean!`.
+
+Tenancy and Membership mark their assemblies with `[assembly: ToolkitPackage]`. The interceptor removes the method
+fields of every class declared in such an assembly, as it does for an entity. A closed generic class, such as
+`MemberRole<SeatId, BoardRoleId>`, is declared in the assembly of its definition. An application does not mark its
+own assemblies, so the methods of its own records stay fields.
+
+## Personal data and bookkeeping are left out
+
+Some stored members do not belong in an API unless the application chooses to show them. The packages mark them
+with two attributes from `DDDToolkit.Abstractions.Attributes`:
+
+- `[PersonalData]` marks data about a person. Tenancy marks the seat's `Identity`, the id of the person's account at
+  the identity provider, and the invitation's `Address`.
+- `[Bookkeeping]` marks a record that a package keeps for its own work. Tenancy's role and Membership's custom role
+  mark `FromStarterRole` and `PermissionsFromStarterRole`, which they keep to follow their starter role.
+
+`AddDDDToolkitTypes()` registers `PersonalDataAndBookkeepingFieldsInterceptor`. On an object type, an interface type
+or an input object type that binds by convention, it removes the fields of the marked members. The members are still
+stored and mapped. `[Internal]` would remove them from the database model too.
+
+The application shows a marked member in one of two ways:
+
+- **A resolver in the type class.** A method named like the property takes the place of the property's field, and a
+  field with a resolver of its own stays.
+
+  ```csharp
+  [ObjectType<Seat>]
+  internal static partial class SeatType
+  {
+      // The field identity, which the application chose to show.
+      public static Guid GetIdentity([Parent] Seat seat) => seat.Identity;
+  }
+  ```
+
+- **`BindFieldsExplicitly()` that lists the member.** The interceptor leaves a type that binds explicitly alone.
+
+A member named with `descriptor.Field(seat => seat.Identity)` on a type that still binds by convention is removed
+with the others. HotChocolate records such a field as it records the fields it found itself. Give the field a
+resolver, or bind the type explicitly.
+
+An application marks its own members the same way. The Tenancy sample marks its invitation's `InvitedAccount`.
+
+## Display names of the packages' classes
+
+HotChocolate names a generic type after its type arguments. Tenancy's `Placement<SeatId, OrganizationUnitId, RoleId>`
+would be `PlacementOfSeatIdAndOrganizationUnitIdAndRoleId`. An application closes Tenancy's generic classes once, so
+Tenancy gives each of them a name with `[DisplayName]` from `DDDToolkit.Abstractions.Attributes`:
+
+| Class | Type name |
+|---|---|
+| `Placement<TSeatId, TUnitId, TRoleId>` | `Placement` |
+| `RoleGrant<TSeatId, TRoleId>` | `RoleGrant` |
+| `NamedUnit<TUnitId>` | `NamedUnit` |
+| `SeatInTenant<TSeat>` | `SeatInTenant` |
+| `SeatManager.SeatOverview`, `PermissionReach`, `UnitRef` | `SeatOverview`, `PermissionReach`, `UnitRef` |
+| `OrganizationManager.UnitInTree` | `UnitInTree` |
+| `TenantManager.TenantListing`, `TenantPage` | `TenantListing`, `TenantPage` |
+| `InvitationManager.IssuedInvitation`, `AcceptedInvitation` | `IssuedInvitation`, `AcceptedInvitation` |
+
+`DisplayNameTypesInterceptor` uses the display name for the object type and the interface type over the class. An
+input object type keeps HotChocolate's name.
+
+- **The application's own name wins.** `descriptor.Name("OrganizationUnitName")` in a type class over
+  `NamedUnit<OrganizationUnitId>` names the type `OrganizationUnitName`. The interceptor only replaces HotChocolate's
+  default name.
+- **A display name must be a GraphQL name.** It has letters, digits and underscores only, and its first character is
+  not a digit. Any other name fails the schema build with a message that names the class.
+- **Membership's classes have no display name.** An application with boards and projects closes `MemberRole` twice.
+  Two types of one name would be one type in a composed schema. Name each with `descriptor.Name("BoardMemberRole")`.
+- **The attribute shares its simple name with `System.ComponentModel.DisplayNameAttribute`.** A file that imports both
+  namespaces needs an alias for one of them.
 
 ## Failures as GraphQL errors
 
