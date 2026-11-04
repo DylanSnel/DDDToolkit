@@ -126,18 +126,11 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
 
         facts.RequireTenantFilters();
 
-        if (context.ChangeTracker.AutoDetectChangesEnabled)
-        {
-            context.ChangeTracker.DetectChanges();
-        }
+        // DetectChanges runs once. The check and RecordWhoChanged use the same list, because the check changes no entry.
+        var changed = ChangedEntries.Detect(context);
 
-        foreach (var entry in context.ChangeTracker.Entries())
+        foreach (var entry in changed)
         {
-            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
-            {
-                continue;
-            }
-
             if (ScopedEntryOf(context, entry) is not { } scoped)
             {
                 continue;
@@ -157,7 +150,7 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
         // After the check, so a refused save changes nothing: every row left is of the caller's tenant.
         if (facts.RecordsWhoChanged)
         {
-            RecordWhoChanged(context);
+            RecordWhoChanged(context, changed);
         }
     }
 
@@ -168,7 +161,7 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
     /// who did.
     /// </summary>
     /// <exception cref="InvalidOperationException">The columns were mapped for another seat id than the caller's.</exception>
-    private static void RecordWhoChanged(DbContext context)
+    private static void RecordWhoChanged(DbContext context, List<EntityEntry> changed)
     {
         // The check let the save through, so the caller acts in a tenant, and has an actor.
         if (TenancyUsers.Ambient?.Actor is not { } actor)
@@ -180,14 +173,9 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
         var seat = actor.Kind == TenancyActorKind.Seat ? actor.SeatId : null;
         var identity = actor.Kind == TenancyActorKind.Operator ? actor.Operator : null;
 
-        // Listed first: filling a row in may change the state of its entry.
-        foreach (var entry in context.ChangeTracker.Entries().ToList())
+        // The list was made before this loop, because filling in a row can change the state of its entry.
+        foreach (var entry in changed)
         {
-            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
-            {
-                continue;
-            }
-
             if (RowOf(context, entry) is not { } row || row.State is EntityState.Deleted or EntityState.Detached)
             {
                 continue;

@@ -37,13 +37,15 @@ internal static class EntitiesToCheck
         var found = new HashSet<object>(ReferenceEqualityComparer.Instance);
         var targets = new List<IHasInvariants>();
 
-        // Find detects changes first, so the loop below sees the same save this one did.
-        foreach (var root in ChangedAggregateRoots.Find(context))
+        // DetectChanges runs once. The roots and the entries below come from the same list.
+        var changed = ChangedEntries.Detect(context);
+
+        foreach (var root in ChangedAggregateRoots.Find(context, changed))
         {
             Add(root.Entity, found, targets);
         }
 
-        foreach (var entry in context.ChangeTracker.Entries())
+        foreach (var entry in changed)
         {
             if (entry.State is EntityState.Added or EntityState.Modified)
             {

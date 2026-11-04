@@ -3,10 +3,7 @@ using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace DDDToolkit.EntityFramework.Interceptors;
 
@@ -43,8 +40,6 @@ namespace DDDToolkit.EntityFramework.Interceptors;
 /// </summary>
 public sealed class AggregateVersionInterceptor : SaveChangesInterceptor
 {
-    private const int MaxOwnershipDepth = 32;
-
     /// <inheritdoc />
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -158,7 +153,7 @@ public sealed class AggregateVersionInterceptor : SaveChangesInterceptor
                 continue;
             }
 
-            var roots = FindOwningRoots(context, entry).ToList();
+            var roots = ChangedAggregateRoots.RootsOf(context, entry);
             if (roots.Count == 0)
             {
                 return [];
@@ -170,128 +165,20 @@ public sealed class AggregateVersionInterceptor : SaveChangesInterceptor
         return rows;
     }
 
-    /// <summary>Increments the version of every aggregate root that this save touches, once per root.</summary>
+    /// <summary>
+    /// Increments the version of every aggregate root that this save touches, once per root. The roots come from
+    /// <see cref="ChangedAggregateRoots"/>.
+    /// </summary>
     public static void BumpVersions(DbContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.ChangeTracker.AutoDetectChangesEnabled)
+        // Find returns a copy. Bumping a root whose only change is in a child sets its entry to Modified.
+        foreach (var root in ChangedAggregateRoots.Find(context))
         {
-            context.ChangeTracker.DetectChanges();
+            var version = root.Property(nameof(IAggregateRoot.Version));
+            version.CurrentValue = root.State == EntityState.Added ? 1L : ((long)(version.CurrentValue ?? 0L)) + 1;
         }
-
-        var bumped = new HashSet<object>(ReferenceEqualityComparer.Instance);
-
-        foreach (var entry in context.ChangeTracker.Entries().ToList())
-        {
-            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
-            {
-                continue;
-            }
-
-            if (entry.Entity is IAggregateRoot)
-            {
-                if (entry.State != EntityState.Deleted)
-                {
-                    Bump(entry, bumped);
-                }
-
-                continue;
-            }
-
-            foreach (var root in FindOwningRoots(context, entry))
-            {
-                if (root.State != EntityState.Deleted)
-                {
-                    Bump(root, bumped);
-                }
-            }
-        }
-    }
-
-    private static void Bump(EntityEntry root, HashSet<object> bumped)
-    {
-        if (!bumped.Add(root.Entity))
-        {
-            return;
-        }
-
-        var version = root.Property(nameof(IAggregateRoot.Version));
-        version.CurrentValue = root.State == EntityState.Added ? 1L : ((long)(version.CurrentValue ?? 0L)) + 1;
-    }
-
-    /// <summary>
-    /// Walks from a child entry to the aggregate root(s) it belongs to: through the ownership when
-    /// the entity is owned, otherwise through foreign keys whose principal is an aggregate root that
-    /// has a navigation back to this entity (the shape of a child table inside an aggregate).
-    /// </summary>
-    private static IEnumerable<EntityEntry> FindOwningRoots(DbContext context, EntityEntry child)
-    {
-        var results = new List<EntityEntry>();
-        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance) { child.Entity };
-        Walk(context, child, results, visited, depth: 0);
-        return results;
-    }
-
-    private static void Walk(DbContext context, EntityEntry current, List<EntityEntry> results, HashSet<object> visited, int depth)
-    {
-        if (depth >= MaxOwnershipDepth)
-        {
-            return;
-        }
-
-        foreach (var foreignKey in OwnerForeignKeys(current.Metadata))
-        {
-            var principal = FindPrincipal(context, current, foreignKey);
-            if (principal is null || !visited.Add(principal.Entity))
-            {
-                continue;
-            }
-
-            if (principal.Entity is IAggregateRoot)
-            {
-                results.Add(principal);
-            }
-            else
-            {
-                Walk(context, principal, results, visited, depth + 1);
-            }
-        }
-    }
-
-    private static IEnumerable<IForeignKey> OwnerForeignKeys(IEntityType entityType)
-    {
-        var ownership = entityType.FindOwnership();
-        if (ownership is not null)
-        {
-            return [ownership];
-        }
-
-        return entityType.GetForeignKeys().Where(static fk =>
-            fk.PrincipalToDependent is not null
-            && typeof(IAggregateRoot).IsAssignableFrom(fk.PrincipalEntityType.ClrType));
-    }
-
-    private static EntityEntry? FindPrincipal(DbContext context, EntityEntry dependent, IForeignKey foreignKey)
-    {
-        if (foreignKey.DependentToPrincipal is { } navigation)
-        {
-            var target = dependent.Navigation(navigation.Name).CurrentValue;
-            if (target is not null)
-            {
-                return context.Entry(target);
-            }
-        }
-
-        // Owned entities usually have no navigation back to their owner, only the (often shadow) FK.
-        // The state manager resolves the tracked principal from the FK values through its identity map
-        // without touching the database. This is EF Core internal API (EF1001); it has been stable
-        // since EF Core 3 and is the documented escape hatch for exactly this lookup.
-#pragma warning disable EF1001 // Internal EF Core API usage.
-        var stateManager = context.GetService<IStateManager>();
-        var principalEntry = stateManager.FindPrincipal(dependent.GetInfrastructure(), foreignKey);
-        return principalEntry is null ? null : new EntityEntry(principalEntry);
-#pragma warning restore EF1001
     }
 
     private static ConcurrencyConflictException Translate(ConcurrencyExceptionEventData eventData)

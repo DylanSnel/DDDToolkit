@@ -3,9 +3,10 @@
 [Identifiers](identifiers.md) recommends the struct form of an identifier, because of its memory layout. This page
 has the measurements behind that advice, including two places where the measurements first disagreed with it. The
 [Tenancy section](#tenancy-the-shape-of-the-access-data) measures the database shapes behind the Tenancy
-supporting domain. Three sections measure code beside the identifiers:
-[value object equality](#value-object-equality), [FluentValidation](#fluentvalidation) and
-[a read that skips a named query filter](#skipping-a-named-query-filter).
+supporting domain. Four sections measure code beside the identifiers:
+[value object equality](#value-object-equality), [FluentValidation](#fluentvalidation),
+[a read that skips a named query filter](#skipping-a-named-query-filter) and
+[a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates).
 
 The benchmarks are in `Benchmarks/DDDToolkit.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
 Run them with:
@@ -195,18 +196,18 @@ change.
 
 ### Parse without a substring
 
-The 96 bytes of the struct's `Parse` were one string: the generated `TryParse` cut the value out of the input past
-the prefix with `Substring`, and then parsed that copy. It now parses the value from a span of the input. A wrapped
-type without a `TryParse` over `ReadOnlySpan<char>` keeps the `Substring`.
+The 96 bytes of the struct's `Parse` were one string. The generated `TryParse` called `Substring` to cut the value
+out of the input after the prefix, and parsed that copy. It now parses a span of the input. A wrapped type without a
+`TryParse` over `ReadOnlySpan<char>` still calls `Substring`.
 
 | | Before | After |
 |---|---|---|
 | Struct id `Parse` | 45.40 ns, 96 B | 27.60 ns, none |
 | Record id `Parse` | 61.47 ns, 152 B | 41.06 ns, 56 B |
 
-The 56 bytes that stay for the record form are the identifier itself. This table and the ones below come from a later
-run than the tables above, in process (`--inProcess`). In that run the times of code that did not change moved by up
-to a factor of two between the before and the after run, so read the bytes first. The allocations are exact.
+The 56 bytes of the record form are the identifier object itself. This table and the ones below come from a later run
+than the tables above, with `--inProcess`. In that run, the times of unchanged code differed by up to a factor of two
+between the before and the after run. The allocations are exact, so compare the bytes first.
 
 ## Value object equality
 
@@ -219,33 +220,35 @@ one hash, and 1,000 lookups that hit in a dictionary keyed by the value object.
 | `GetHashCode` | 59.92 ns, 128 B | 11.61 ns, none |
 | 1,000 dictionary lookups | 153.25 μs, 272,001 B | 38.03 μs, none |
 
-This was the defect of the record identifier, still in every value object. The generator wrote the equality over
-`GetEqualityComponents()`:
+The generator wrote the equality of every value object over `GetEqualityComponents()`, as it did for record
+identifiers before [the fix above](#comparing-ids-in-an-array):
 
 ```csharp
 return Enumerable.SequenceEqual(GetEqualityComponents(), other.GetEqualityComponents());
 ```
 
-Each comparison made two iterators and boxed the `decimal` twice. The hash made an iterator, a `Select` and a box.
-The hash had two more faults. `Aggregate` had no seed, so a value object without compared properties threw on
-`GetHashCode()`. XOR made (a, b) and (b, a) one hash.
+Each comparison allocated two iterators and boxed the `decimal` twice. The hash allocated an iterator, a `Select`
+iterator and a box. The hash had two more faults. `Aggregate` had no seed, so `GetHashCode()` threw for a value object
+without compared properties. XOR gave (a, b) and (b, a) the same hash.
 
-The generator now compares each property with the equality of its own type, and adds each one to a `HashCode`:
+The generator now compares each property with `EqualityComparer<T>.Default` of its type, and adds each property to a
+`HashCode`:
 
 ```csharp
 return EqualityComparer<decimal>.Default.Equals(Amount, other.Amount)
     && EqualityComparer<string>.Default.Equals(Currency, other.Currency);
 ```
 
-`Equals` gives the same answer, because it compares the same properties with the same equality. The hash is a
-different number, which depends on the order of the properties.
+`Equals` returns the same result as before, because it compares the same properties with the same equality. The hash
+is a different number, and it depends on the order of the properties.
 
 ## FluentValidation
 
-A single value object with two FluentValidation rules, `NotEmpty().EmailAddress()`, made from text and then asked
-`IsValid`. The value is new on every call, so the validation runs every time. The benchmarks are in
-`Benchmarks/DDDToolkit.Benchmarks.FluentValidation`, a project of their own: the FluentValidation generator gives
-every value object and record id of a project a validator, which would change the identifiers measured above.
+The benchmark creates a single value object with two FluentValidation rules, `NotEmpty().EmailAddress()`, and reads
+`IsValid`. Each call creates a new value, so the validation runs on every call. The benchmarks are in their own
+project, `Benchmarks/DDDToolkit.Benchmarks.FluentValidation`. The FluentValidation generator adds a validator to every
+value object and record id of a project. In `DDDToolkit.Benchmarks` that would change the identifiers measured
+above.
 
 | | Before | After |
 |---|---|---|
@@ -259,10 +262,11 @@ var validator = new Validator();
 var result = validator.Validate(this);
 ```
 
-The constructor of a validator runs every rule declaration, with its expression tree and rule objects. That was most
-of the cost. Every value also allocated an empty list for its failures, and `Errors` made a new wrapper on every read.
-The first validation of a type now builds its validator, and every value of the type shares it. A valid value keeps
-one shared empty `Errors`. What remains is the value itself and FluentValidation's own work for one run.
+The constructor of a validator runs every rule declaration and builds an expression tree and rule objects for each.
+That was most of the cost. Every value also allocated an empty list for its failures, and every read of `Errors`
+allocated a new wrapper. Now the first validation of a type builds the validator, and every value of the type uses
+that instance. A valid value uses one shared empty `Errors` collection. The remaining bytes are the value itself and
+FluentValidation's own allocations for one run.
 
 ## The Entity Framework round trip
 
@@ -358,11 +362,11 @@ provider.
 
 ## Skipping a named query filter
 
-Tenancy's tenant filter is a named query filter, and a read across tenants skips it by name. The seat lookup does that
-on every authenticated request. The benchmark reads one row by key past a named filter, with the key of the filter
-passed two ways: a new collection on every call, as `IgnoreQueryFilters([name])` writes, and one array for every
-call, as `IgnoreTenantFilter()` passes. It ran on the floor the packages allow, Entity Framework 10.0.0, and on the
-version the repository builds with, 10.0.12.
+Tenancy's tenant filter is a named query filter. A read across tenants skips it by name, and the seat lookup does that
+on every authenticated request. The benchmark reads one row by key and skips one named filter. It passes the filter
+key in two ways. `IgnoreQueryFilters([name])` creates a new collection on every call. `IgnoreTenantFilter()` passes
+the same static array on every call. The benchmark ran on Entity Framework 10.0.0, the lowest version the packages
+allow, and on 10.0.12, the version the repository builds with.
 
 | | Entity Framework 10.0.0 | Entity Framework 10.0.12 |
 |---|---|---|
@@ -371,15 +375,66 @@ version the repository builds with, 10.0.12.
 
 The two columns are separate runs, so compare the rows within a column.
 
-- **On 10.0.0, a new collection compiles the query on every call.** Entity Framework keeps the keys as a constant in
-  the query. Its query cache compares that constant by reference unless it is an array. A new collection is never the
-  same reference, so the lookup misses the cache, compiles the query again and adds a new cache entry. That is 182
-  times the time and 17 times the memory of a hit.
-- **From 10.0.3 on, Entity Framework copies the keys into an array.** The cache hits either way. The new collection
-  costs its copy and nothing more.
-- **`IgnoreTenantFilter()` passes one array.** It hits the cache from 10.0.0 on. The seat directory and the tenant
-  listing use it, and so can an application. The benchmark is `QueryFilterKeyBenchmarks`. Run the floor with
-  `-p:DDDDependencyVersions=Floor` and `--inProcess`.
+- **On 10.0.0, a new collection compiles the query on every call.** Entity Framework stores the keys as a constant in
+  the query. Its query cache compares that constant by reference unless it is an array. A new collection is a new
+  reference, so the lookup misses the cache, compiles the query again and adds a cache entry. The miss takes 182 times
+  the time and 17 times the memory of a hit.
+- **From 10.0.3, Entity Framework copies the keys into an array.** The cache then hits for both forms. The new
+  collection costs only the copy.
+- **`IgnoreTenantFilter()` passes the same array on every call.** The cache hits from 10.0.0. The seat directory and the
+  tenant listing use it, and an application can use it too. The benchmark is `QueryFilterKeyBenchmarks`. To run it on
+  10.0.0, build with `-p:DDDDependencyVersions=Floor` and run with `--inProcess`.
+
+## A save on a context that tracks many aggregates
+
+The benchmark changes one aggregate and calls `SaveChanges` on a context that tracks 10 or 1,000 aggregates. It runs
+the save with the toolkit's interceptors for domain events, invariants and versions, and as a baseline with Entity
+Framework alone. The benchmark is `SaveChangesBenchmarks`.
+
+| | Tracked | Before | After |
+|---|---|---|---|
+| Entity Framework alone | 10 | 11.21 μs, 11.68 KB | 11.16 μs, 11.68 KB |
+| With the toolkit | 10 | 28.52 μs, 35.95 KB | 16.69 μs, 23.78 KB |
+| Entity Framework alone | 1,000 | 208.66 μs, 328.79 KB | 118.60 μs, 328.79 KB |
+| With the toolkit | 1,000 | 1,442.94 μs, 2,402.67 KB | 442.42 μs, 1,292.21 KB |
+
+The baseline code did not change, so the difference in its time is noise between the two runs. Compare the ratios
+instead. At 1,000 tracked aggregates, the save with the toolkit took 6.9 times the baseline before and 3.7 times
+after. It allocated 7.3 times the baseline before and 3.9 times after.
+
+Each interceptor used to run this code:
+
+```csharp
+if (context.ChangeTracker.AutoDetectChangesEnabled)
+{
+    context.ChangeTracker.DetectChanges();
+}
+
+foreach (var entry in context.ChangeTracker.Entries().ToList())
+```
+
+`Entries()` calls `DetectChanges` again and creates an `EntityEntry` for every tracked entity, unchanged ones
+included. With the event, invariant and version interceptors, one save called `DetectChanges` 7 times, including the
+call Entity Framework makes itself.
+
+- **One `DetectChanges` per interceptor.** The event interceptor calls it once per round. A save without events now
+  calls it 4 times, including Entity Framework's own call.
+- **Only the changed entries.** The interceptors read the added, modified and deleted entries from Entity
+  Framework's state manager, which keeps a separate set of entries for each state. The invariant interceptor uses one
+  list for the roots and for the entries.
+- **An `EntityEntry` only for an aggregate with events.** The event interceptor still checks every tracked aggregate
+  for events, because an aggregate can raise an event without a change to a column. `AggregateRoot.DomainEvents`
+  returns the same read-only view on every read.
+- **One walk from a child to its root.** The invariant and the version interceptor share it. It reuses its collections
+  for all children of a save, caches the owner keys per entity type, and gets a tracked principal's entry from the
+  state manager.
+
+Tenancy's save interceptor and Membership's hold interceptor read the changed entries in the same way. Tenancy's
+projection writer creates an `EntityEntry` only for Tenancy's own classes.
+
+Most of the remaining cost above the baseline is the three `DetectChanges` calls of the toolkit's interceptors. Each
+call compares every tracked entity with its snapshot, and costs about as much as Entity Framework's own call. An
+interceptor cannot skip the call, because another interceptor may change an entity between two of them.
 
 ## Tenancy: the shape of the access data
 
