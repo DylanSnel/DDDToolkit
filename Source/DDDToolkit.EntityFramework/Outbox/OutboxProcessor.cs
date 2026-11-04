@@ -2,10 +2,14 @@ using System.Text.Json;
 using DDDToolkit.Access;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Integration;
+using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Storage;
 using DDDToolkit.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -50,7 +54,9 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// <para>
 /// Each message is saved individually through the same context, so when an in-process handler resolves
 /// that scoped context and changes an aggregate without saving it, its change commits together with the
-/// processed mark, unless the host requires an explicit current user (below).
+/// processed mark, unless the host requires an explicit current user (below). The batch is read untracked, and a
+/// row is tracked only while it is delivered. So the save of a mark compares one outbox row with its snapshot, and
+/// not every row of the batch.
 /// </para>
 /// <para>
 /// <b>Who it runs as.</b> Where the host requires an explicit current user
@@ -120,6 +126,14 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     /// at its <see cref="OutboxMessage.NextAttemptAt"/>, so the messages behind it are loaded in the
     /// meantime. Returns the number of messages delivered successfully. Order is best-effort: retries
     /// and concurrent processors can reorder delivery.
+    /// <para>
+    /// Each sink is resolved when the first message of the batch reaches it, and serves the rest of the batch.
+    /// </para>
+    /// <para>
+    /// Cancellation stops the batch before the next message, and is passed to the delivery. When a delivery has
+    /// finished, its outcome is still saved: that save may run for 5 seconds after cancellation was requested. A
+    /// message delivered just before the host stopped is therefore marked, and is not delivered again.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="batchSize"/> is below 1.</exception>
     public async Task<int> ProcessPendingAsync(int batchSize = 100, CancellationToken cancellationToken = default)
@@ -133,7 +147,9 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         var maxAttempts = outbox.MaxAttempts;
         var now = _options.TimeProvider.GetUtcNow();
 
+        // Untracked: each row is tracked only while it is delivered.
         var messages = await _context.Set<OutboxMessage>()
+            .AsNoTracking()
             .Where(message => message.ProcessedAt == null && message.Attempts < maxAttempts)
             .Where(message => message.NextAttemptAt == null || message.NextAttemptAt <= now)
             // Write time, then occurrence time (events written by one save share CreatedAt), then id.
@@ -144,15 +160,46 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        if (messages.Count == 0)
+        {
+            return 0;
+        }
+
+        // One slot per sink, filled when the first message reaches the sink.
+        var sinks = outbox.HasSinks ? new IIntegrationEventSink?[outbox.Sinks.Count] : [];
+
+        // Cancellation of the batch starts the timer of the outcome token. The outcome token cancels the save of an
+        // outcome only when that timer runs out.
+        using var outcomes = cancellationToken.CanBeCanceled ? new CancellationTokenSource() : null;
+        using var stopping = outcomes is null
+            ? default
+            : cancellationToken.Register(static state => ((CancellationTokenSource)state!).CancelAfter(OutcomeTimeAfterCancellation), outcomes);
+        var outcomeToken = outcomes?.Token ?? CancellationToken.None;
+
         var processed = 0;
 
-        foreach (var message in messages)
+        foreach (var row in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (await DeliverOneAsync(message, outbox, cancellationToken).ConfigureAwait(false))
+            // A caller that saved events through this context still tracks their rows. Such a row keeps its entry,
+            // and stays tracked after the delivery.
+            var tracked = TrackedRow(row);
+            var entry = tracked ?? _context.Attach(row);
+
+            try
             {
-                processed++;
+                if (await DeliverOneAsync(entry, outbox, sinks, outcomeToken, cancellationToken).ConfigureAwait(false))
+                {
+                    processed++;
+                }
+            }
+            finally
+            {
+                if (tracked is null)
+                {
+                    entry.State = EntityState.Detached;
+                }
             }
         }
 
@@ -160,14 +207,42 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     }
 
     /// <summary>
+    /// How long the save of an outcome may run after cancellation was requested. The delivery has already
+    /// happened, so a cancelled save would deliver the message again.
+    /// </summary>
+    private static readonly TimeSpan OutcomeTimeAfterCancellation = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// The entry of the row with the key of <paramref name="row"/> when the context tracks one, or
+    /// <see langword="null"/>. The state manager finds it by its key and does not call <c>DetectChanges</c>.
+    /// </summary>
+    private EntityEntry<OutboxMessage>? TrackedRow(OutboxMessage row)
+    {
+#pragma warning disable EF1001 // The state manager is Entity Framework's internal API.
+        var key = _context.Model.FindEntityType(typeof(OutboxMessage))!.FindPrimaryKey()!;
+        return _context.GetService<IStateManager>().TryGetEntryTyped(key, row.Id) is { } tracked
+            ? new EntityEntry<OutboxMessage>(tracked)
+            : null;
+#pragma warning restore EF1001
+    }
+
+    /// <summary>
     /// Attempts one message and saves the outcome. With
     /// <see cref="OutboxOptions.DeliverInTransaction"/> the attempt and the mark share a transaction, so
     /// a sink that writes to this database commits with the mark or not at all; otherwise the mark is
     /// its own write and delivery is at-least-once, which is what a sink outside the database gives you
-    /// anyway.
+    /// anyway. The outcome is saved with <paramref name="outcomes"/>, which is cancelled only 5 seconds after
+    /// <paramref name="cancellationToken"/>.
     /// </summary>
-    private async Task<bool> DeliverOneAsync(OutboxMessage message, OutboxOptions outbox, CancellationToken cancellationToken)
+    private async Task<bool> DeliverOneAsync(
+        EntityEntry<OutboxMessage> entry,
+        OutboxOptions outbox,
+        IIntegrationEventSink?[] sinks,
+        CancellationToken outcomes,
+        CancellationToken cancellationToken)
     {
+        var message = entry.Entity;
+
         // Owned only when the caller has none: joining theirs is what lets a caller batch the whole run.
         var transaction = outbox.DeliverInTransaction && _context.Database.CurrentTransaction is null
             ? await _context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false)
@@ -180,7 +255,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
 
             try
             {
-                await DeliverAsync(message, outbox, cancellationToken).ConfigureAwait(false);
+                await DeliverAsync(message, outbox, sinks, cancellationToken).ConfigureAwait(false);
 
                 message.ProcessedAt = _options.TimeProvider.GetUtcNow();
                 message.NextAttemptAt = null;
@@ -210,21 +285,20 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
                     // A sink that saved through this context saved the incremented Attempts with it,
                     // and the rollback took that write back while the change tracker still counts it
                     // as done. Mark the bookkeeping as changed so it is written whatever a sink saved.
-                    var entry = _context.Entry(message);
                     entry.Property(m => m.Attempts).IsModified = true;
                     entry.Property(m => m.NextAttemptAt).IsModified = true;
                     entry.Property(m => m.LastError).IsModified = true;
 
-                    await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    await _context.SaveChangesAsync(outcomes).ConfigureAwait(false);
                     return false;
                 }
             }
 
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await _context.SaveChangesAsync(outcomes).ConfigureAwait(false);
 
             if (transaction is not null)
             {
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(outcomes).ConfigureAwait(false);
             }
 
             return delivered;
@@ -266,7 +340,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         return delay < DateTimeOffset.MaxValue - now ? now + delay : DateTimeOffset.MaxValue;
     }
 
-    private async Task DeliverAsync(OutboxMessage message, OutboxOptions outbox, CancellationToken cancellationToken)
+    private async Task DeliverAsync(OutboxMessage message, OutboxOptions outbox, IIntegrationEventSink?[] sinks, CancellationToken cancellationToken)
     {
         var domainEvent = Deserialize(message, outbox, _options.Contracts);
 
@@ -286,7 +360,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
             return;
         }
 
-        await PublishAsync(published, outbox, cancellationToken).ConfigureAwait(false);
+        await PublishAsync(published, outbox, sinks, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -331,11 +405,18 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     /// handler ran; by reference, since an entity's own equality may be its id.
     /// </summary>
     private HashSet<object> PendingChanges()
-        => new(
-            _context.ChangeTracker.Entries()
-                .Where(entry => entry.Entity is not OutboxMessage && entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
-                .Select(entry => entry.Entity),
-            ReferenceEqualityComparer.Instance);
+    {
+        var pending = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var entry in ChangedEntries.Detect(_context))
+        {
+            if (entry.Entity is not OutboxMessage)
+            {
+                pending.Add(entry.Entity);
+            }
+        }
+
+        return pending;
+    }
 
     /// <summary>
     /// Takes the changes a handler left on this processor's context since <paramref name="before"/> off it, so
@@ -343,10 +424,8 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     /// </summary>
     private List<string> DropChangesLeftSince(HashSet<object> before)
     {
-        var left = _context.ChangeTracker.Entries()
-            .Where(entry => entry.Entity is not OutboxMessage
-                && entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
-                && !before.Contains(entry.Entity))
+        var left = ChangedEntries.Detect(_context)
+            .Where(entry => entry.Entity is not OutboxMessage && !before.Contains(entry.Entity))
             .ToList();
 
         foreach (var entry in left)
@@ -357,18 +436,24 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         return [.. left.Select(entry => entry.Metadata.DisplayName()).Distinct(StringComparer.Ordinal)];
     }
 
-    private async Task PublishAsync(IntegrationEventMessage published, OutboxOptions outbox, CancellationToken cancellationToken)
+    /// <summary>
+    /// Sends <paramref name="published"/> to every sink of <paramref name="outbox"/>. <paramref name="sinks"/> holds
+    /// the sinks the batch has resolved so far, at the position of their registration.
+    /// </summary>
+    private async Task PublishAsync(IntegrationEventMessage published, OutboxOptions outbox, IIntegrationEventSink?[] sinks, CancellationToken cancellationToken)
     {
         List<string>? failedSinks = null;
         List<Exception>? failures = null;
 
-        foreach (var registration in outbox.Sinks)
+        for (var i = 0; i < sinks.Length; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var registration = outbox.Sinks[i];
 
             try
             {
-                var sink = registration.Resolve(_serviceProvider);
+                // A sink that failed to resolve stays empty, so the next message resolves it again.
+                var sink = sinks[i] ??= registration.Resolve(_serviceProvider);
                 await sink.SendAsync(published, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

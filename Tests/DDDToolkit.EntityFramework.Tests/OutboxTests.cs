@@ -164,6 +164,54 @@ public sealed class OutboxTests(ExplicitCurrentUserPostgres postgres) : IDisposa
     }
 
     [Fact]
+    public async Task The_processor_tracks_a_row_only_while_it_delivers_it()
+    {
+        using var host = CreateHost();
+        await host.InScopeAsync(async context =>
+        {
+            context.Shelves.Add(NewShelf("First"));
+            context.Shelves.Add(NewShelf("Second"));
+            await context.SaveChangesAsync();
+        });
+
+        var tracked = await host.InScopeAsync(async (context, services) =>
+        {
+            var processed = await services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync();
+            processed.Should().Be(2);
+            return context.ChangeTracker.Entries<OutboxMessage>().Count();
+        });
+
+        tracked.Should().Be(0, "the processor reads the batch untracked and detaches each row after its save");
+        using var check = _db.CreateLibraryContext();
+        (await check.Outbox.ToListAsync(TestContext.Current.CancellationToken))
+            .Should().HaveCount(2).And.OnlyContain(row => row.ProcessedAt == _clock.GetUtcNow() && row.Attempts == 1);
+    }
+
+    [Fact]
+    public async Task A_row_the_context_already_tracks_is_marked_through_its_own_entry()
+    {
+        using var host = CreateHost();
+
+        await host.InScopeAsync(async (context, services) =>
+        {
+            context.Shelves.Add(NewShelf());
+            await context.SaveChangesAsync();
+            var row = context.ChangeTracker.Entries<OutboxMessage>().Single().Entity;
+
+            var processed = await services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync();
+
+            processed.Should().Be(1);
+            row.ProcessedAt.Should().Be(_clock.GetUtcNow(), "the processor marks the instance that the context tracks");
+            row.Attempts.Should().Be(1);
+            context.Entry(row).State.Should().Be(EntityState.Unchanged, "a row the caller tracked stays tracked");
+            return processed;
+        });
+
+        using var check = _db.CreateLibraryContext();
+        (await check.Outbox.SingleAsync(TestContext.Current.CancellationToken)).ProcessedAt.Should().Be(_clock.GetUtcNow());
+    }
+
+    [Fact]
     public async Task Positional_record_events_round_trip_with_their_EventId_and_OccurredAt()
     {
         using var host = CreateHost();
