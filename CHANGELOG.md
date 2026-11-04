@@ -2191,8 +2191,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     save, since nothing keeps its marked classes to a tenant.
 
   See [Keeping tenants apart](docs/tenancy/keeping-tenants-apart.md).
-- **`IgnoreTenantFilter()` reads past the tenant filter.** It skips the tenant filter and keeps every other named
-  filter, as `IgnoreQueryFilters([TenancyQueryFilter.Name])` does. It passes one array of keys on every call, so
+- **`IgnoreTenantFilter()` skips the tenant filter.** It keeps every other named filter, as
+  `IgnoreQueryFilters([TenancyQueryFilter.Name])` does. It passes the same static array of keys on every call, so
   Entity Framework finds the compiled query in its cache. With a new collection per call, Entity Framework 10.0.0 to
   10.0.2 compiled the query again on every call, because its query cache compares the keys by reference unless they
   are an array. The docs and the Tenancy sample use it. See
@@ -3224,6 +3224,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **The save interceptors call `DetectChanges` once and read only the changed entries.** Each interceptor used to
+  call `DetectChanges()` and then `ChangeTracker.Entries()`. `Entries()` calls `DetectChanges` again and creates an
+  `EntityEntry` for every tracked entity. One save called `DetectChanges` 7 times. Now each interceptor calls it once
+  and reads the added, modified and deleted entries from Entity Framework's state manager. A save without events calls
+  it 4 times, including Entity Framework's own call.
+  - The event interceptor creates an `EntityEntry` only for an aggregate with pending events. It no longer calls
+    `DetectChanges` after a round of handlers, because the next round calls it first.
+  - `AggregateRoot.DomainEvents` returns the same read-only view on every read.
+  - The invariant and the version interceptor share one walk from a child to its aggregate root.
+  - Tenancy's save interceptor and Membership's hold interceptor read the changed entries in the same way. Tenancy's
+    save interceptor uses one list for its check and for the columns that record who changed a row. Tenancy's
+    projection writer creates an `EntityEntry` only for Tenancy's own classes.
+
+  On a context that tracks 1,000 aggregates, a save of one changed aggregate went from 1,443 μs and 2.4 MB to 442 μs
+  and 1.3 MB. See [Performance](docs/performance.md#a-save-on-a-context-that-tracks-many-aggregates).
 - **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
   `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
   `GetEqualityComponents()` with LINQ, so every comparison allocated two iterators and boxed each value-type property
@@ -4501,10 +4516,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Fixed
 
-- **A value object without compared properties has a hash.** `GetHashCode()` threw an `InvalidOperationException`
-  for a `[ValueObject]` without properties, or with only `[DontCompare]` and `[Internal]` ones, and for a value object
-  written by hand whose `GetEqualityComponents()` yields nothing. `Aggregate` had no seed, so an empty sequence threw.
-  The generated hash and the hash of `ValueObject` start from a `HashCode` now.
+- **`GetHashCode()` no longer throws for a value object without compared properties.** It threw an
+  `InvalidOperationException` for a `[ValueObject]` without properties, or with only `[DontCompare]` and `[Internal]`
+  ones, and for a hand-written value object whose `GetEqualityComponents()` yields nothing. `Aggregate` had no seed,
+  so it threw on an empty sequence. The generated hash and the hash of `ValueObject` now start from a `HashCode`.
 - **Tenancy's seat lookup is compiled once.** The seat directory and the tenant listing skipped the tenant filter with
   a new collection of keys on every call. On Entity Framework 10.0.0 to 10.0.2 that compiled the seat lookup again on
   every authenticated request, and added a new entry to the query cache each time. They use `IgnoreTenantFilter()`

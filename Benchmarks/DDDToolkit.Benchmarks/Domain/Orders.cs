@@ -14,6 +14,9 @@ public partial class StructOrder
 
     /// <summary>A payload column, so the row is not just the key.</summary>
     public string Reference { get; private set; }
+
+    /// <summary>Changes the payload, so a save has one row to write.</summary>
+    public void ChangeReference(string reference) => Reference = reference;
 }
 
 /// <summary>
