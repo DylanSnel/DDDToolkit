@@ -8,7 +8,9 @@ using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace DDDToolkit.EntityFramework.Interceptors;
 
@@ -115,11 +117,15 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
 
         for (var round = 1; ; round++)
         {
-            var tracked = Tracked(context);
+            var tracked = WithPendingEvents(context);
+            if (tracked.Count == 0)
+            {
+                return;
+            }
 
             // Picked on the first round that has something to dispatch, and before it is dequeued: a context
             // that may not dispatch keeps its events, so a refusal loses none.
-            if (outbox is null && services is null && _options.Dispatcher is not null && HasPending(tracked))
+            if (outbox is null && services is null && _options.Dispatcher is not null)
             {
                 services = ServicesFor(context);
             }
@@ -132,10 +138,6 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
             }
 
             var batch = Dequeue(tracked);
-            if (batch.Count == 0)
-            {
-                return;
-            }
 
             if (round > _options.MaxDispatchRounds)
             {
@@ -161,12 +163,8 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
             var events = batch.SelectMany(item => item.Events).ToList();
             await dispatcher(services!, events, cancellationToken).ConfigureAwait(false);
 
-            // Handlers may have modified tracked entities without EF noticing yet; detect so the
-            // save (and the concurrency interceptor) sees those changes and the next round sees new events.
-            if (context.ChangeTracker.AutoDetectChangesEnabled)
-            {
-                context.ChangeTracker.DetectChanges();
-            }
+            // Handlers may change tracked entities without calling DetectChanges. The next round calls it first, so
+            // that round sees new events, and the later interceptors see the changes of the handlers.
         }
     }
 
@@ -235,29 +233,43 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
         _providerIsScoped = true;
     }
 
-    /// <summary>The tracked aggregates, listed once per round, because listing them makes Entity Framework detect changes.</summary>
-    private static List<EntityEntry<IHasDomainEvents>> Tracked(DbContext context)
-        => context.ChangeTracker.Entries<IHasDomainEvents>().ToList();
-
-    private static bool HasPending(List<EntityEntry<IHasDomainEvents>> tracked)
+    /// <summary>
+    /// Lists the tracked aggregates that have pending events, once per round. Calls <c>DetectChanges</c> first when
+    /// <c>AutoDetectChangesEnabled</c> is on, so an aggregate that a handler added through a navigation is tracked
+    /// before the list is made.
+    /// <para>
+    /// The loop visits every tracked entity, unchanged ones included, because an aggregate can raise an event without a
+    /// change to a column. An <see cref="EntityEntry"/> is created only for an aggregate with pending events.
+    /// </para>
+    /// </summary>
+    private static List<EntityEntry> WithPendingEvents(DbContext context)
     {
-        foreach (var entry in tracked)
+        if (context.ChangeTracker.AutoDetectChangesEnabled)
         {
-            if (entry.Entity.DomainEvents.Count > 0)
-            {
-                return true;
-            }
+            context.ChangeTracker.DetectChanges();
         }
 
-        return false;
+        List<EntityEntry>? pending = null;
+
+#pragma warning disable EF1001 // Internal EF Core API usage.
+        foreach (var entry in context.GetService<IStateManager>().Entries)
+        {
+            if (entry.Entity is IHasDomainEvents { DomainEvents.Count: > 0 })
+            {
+                (pending ??= []).Add(new EntityEntry(entry));
+            }
+        }
+#pragma warning restore EF1001
+
+        return pending ?? [];
     }
 
     /// <summary>Whether an event still on its aggregate is one <paramref name="log"/> keeps.</summary>
-    private static bool KeepsPending(List<EntityEntry<IHasDomainEvents>> tracked, EventLogOptions log)
+    private static bool KeepsPending(List<EntityEntry> tracked, EventLogOptions log)
     {
         foreach (var entry in tracked)
         {
-            foreach (var domainEvent in entry.Entity.DomainEvents)
+            foreach (var domainEvent in ((IHasDomainEvents)entry.Entity).DomainEvents)
             {
                 if (log.Keeps(domainEvent))
                 {
@@ -269,13 +281,13 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
         return false;
     }
 
-    private static List<(EntityEntry Entry, IReadOnlyList<IDomainEvent> Events)> Dequeue(List<EntityEntry<IHasDomainEvents>> tracked)
+    private static List<(EntityEntry Entry, IReadOnlyList<IDomainEvent> Events)> Dequeue(List<EntityEntry> tracked)
     {
-        var batch = new List<(EntityEntry, IReadOnlyList<IDomainEvent>)>();
+        var batch = new List<(EntityEntry, IReadOnlyList<IDomainEvent>)>(tracked.Count);
 
         foreach (var entry in tracked)
         {
-            var events = entry.Entity.DequeueDomainEvents();
+            var events = ((IHasDomainEvents)entry.Entity).DequeueDomainEvents();
             if (events.Count > 0)
             {
                 batch.Add((entry, events));

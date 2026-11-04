@@ -166,7 +166,8 @@ With `DispatchInProcess` and no outbox, handlers run inside `SaveChanges`, befor
 delegate that passes the events to your handlers, you get three things:
 
 - The changes that a handler makes on the same `DbContext` are part of the same save, and so of the same
-  transaction. The interceptor calls `DetectChanges` after each round, so it sees those changes.
+  transaction. The interceptor calls `DetectChanges` at the start of each round, so the round after the handlers
+  sees those changes.
 - A handler that throws aborts the save. Nothing is written.
 - Events that handlers raise on tracked aggregates are dispatched in a further round.
 
@@ -602,9 +603,9 @@ unknown event names and the background service. `OutboxRetryTests.cs` next to it
 
 Both modes run through the same loop in `PublishDomainEventsInterceptor`, once per `SaveChanges`:
 
-1. Take the pending events off every tracked aggregate. If there are none, stop.
+1. Call `DetectChanges`, and take the pending events off every tracked aggregate. If there are none, stop.
 2. In outbox mode, add a row per event and go back to step 1.
-3. Otherwise, call the dispatch delegate with the whole batch, call `DetectChanges`, and go back to step 1.
+3. Otherwise, call the dispatch delegate with the whole batch, and go back to step 1.
 
 The loop exists because a handler may change a tracked aggregate, and that change may raise another event.
 `MaxDispatchRounds` limits the loop to 10 rounds by default. If another batch of events appears after that many

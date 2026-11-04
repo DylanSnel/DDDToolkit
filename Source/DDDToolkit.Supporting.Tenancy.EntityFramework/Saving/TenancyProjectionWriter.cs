@@ -3,6 +3,8 @@ using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
@@ -411,8 +413,19 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
         public static Changes Of(ChangeTracker tracker)
         {
             var changes = new Changes();
-            foreach (var entry in tracker.Entries())
+
+            // The loop visits every tracked entry, unchanged ones included, because the writer looks up seats, roles and
+            // organizations in these maps. An EntityEntry is created only for Tenancy's own classes.
+#pragma warning disable EF1001 // Internal EF Core API usage.
+            foreach (var tracked in tracker.Context.GetService<IStateManager>().Entries)
             {
+                if (tracked.Entity is not (TSeat or TRole or TOrganization or TUnit or RoleGrant<TSeatId, TRoleId> or Placement<TSeatId, TUnitId, TRoleId>))
+                {
+                    continue;
+                }
+
+                var entry = new EntityEntry(tracked);
+#pragma warning restore EF1001
                 if (entry.State is EntityState.Added or EntityState.Modified)
                 {
                     switch (entry.Entity)

@@ -275,21 +275,11 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
     /// </summary>
     private static List<EntityEntry> ChangedRoots(DbContext context)
     {
-        if (context.ChangeTracker.AutoDetectChangesEnabled)
-        {
-            context.ChangeTracker.DetectChanges();
-        }
-
         var found = new HashSet<object>(ReferenceEqualityComparer.Instance);
         var roots = new List<EntityEntry>();
 
-        foreach (var entry in context.ChangeTracker.Entries().ToList())
+        foreach (var entry in ChangedEntries.Detect(context))
         {
-            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
-            {
-                continue;
-            }
-
             if (entry.Entity is IAggregateRoot)
             {
                 Add(entry, found, roots);
