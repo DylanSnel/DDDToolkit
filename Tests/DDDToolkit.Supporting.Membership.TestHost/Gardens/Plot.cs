@@ -44,8 +44,8 @@ public sealed partial class Plot
         Members.Open(now);
     }
 
-    /// <summary>The garden the plot is in.</summary>
-    [At]
+    /// <summary>The garden the plot is in. A plot is never moved to another garden, so the place is fixed.</summary>
+    [At(Fixed = true)]
     public GardenId GardenId { get; private set; }
 
     /// <summary>What the plot is called.</summary>
