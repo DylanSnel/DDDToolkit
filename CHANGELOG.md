@@ -3246,6 +3246,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - The bookkeeping role gets `UPDATE` on `LockedBy` and `LockedUntil` in the scripts written with `WriteGrants`.
   - Every module of both samples that has an outbox has a migration `OutboxLease`, with its Supabase SQL. The
     modules with row access rules have a new access file after it.
+  - The claim adds two statements per batch. A batch of 1,000 messages allocates about 2.8 KB more per message. See
+    [Performance](docs/performance.md#the-cost-of-the-claim).
 
   An existing outbox table needs the two columns before the new processor polls. No package has users yet, so the
   claim has no opt-out. See [Several processors on one table](docs/event-delivery.md#several-processors-on-one-table)
