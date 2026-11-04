@@ -105,8 +105,27 @@ internal static class Emit
         writer.Line("static " + typeName + " " + SingleValueInterface(typeName, valueType) + ".FromValue(" + valueType + " value) => new(value);");
     }
 
-    /// <summary>The generated record-equality members used by the value object family (mirrors the historical output).</summary>
-    public static void RecordEqualityMembers(CodeWriter writer, string typeName, bool hashCodeFromComponents)
+    /// <summary>
+    /// Equality for a <c>[ValueObject]</c> and its twin: each compared property directly, in declaration order,
+    /// with <c>EqualityComparer&lt;T&gt;.Default</c> of its own type.
+    /// <para>
+    /// It used to walk <c>GetEqualityComponents()</c> with <c>SequenceEqual</c>, and hash it with
+    /// <c>Aggregate</c>. Every comparison then allocated two iterators and boxed each value-type property
+    /// twice. The hash had no seed, so a value object without compared properties threw on
+    /// <c>GetHashCode()</c>. It combined with XOR, so (a, b) and (b, a) had the same hash. The answer of
+    /// <c>Equals</c> is the same: the components are the same properties, compared by the same equality.
+    /// </para>
+    /// </summary>
+    /// <param name="components">The compared properties, by name and type.</param>
+    /// <param name="hashCodeFromComponents">
+    /// Whether to write the hash. The twin takes the hash of the value object it derives from, which compares
+    /// the same properties.
+    /// </param>
+    public static void RecordEqualityMembers(
+        CodeWriter writer,
+        string typeName,
+        IReadOnlyList<(string Name, string TypeName)> components,
+        bool hashCodeFromComponents)
     {
         using (writer.Block("public virtual bool Equals(" + typeName + "? other)"))
         {
@@ -116,21 +135,46 @@ internal static class Emit
             writer.Line("}");
             writer.Line();
             EqualityContractCheck(writer);
-            writer.Line("return global::System.Linq.Enumerable.SequenceEqual(GetEqualityComponents(), other.GetEqualityComponents());");
+            writer.Line("if (ReferenceEquals(this, other))");
+            writer.Line("{");
+            writer.Line("    return true;");
+            writer.Line("}");
+            writer.Line();
+
+            if (components.Count == 0)
+            {
+                writer.Line("return true;");
+            }
+            else
+            {
+                for (var index = 0; index < components.Count; index++)
+                {
+                    var (name, type) = components[index];
+                    var compare = "global::System.Collections.Generic.EqualityComparer<" + type + ">.Default.Equals(" + name + ", other." + name + ")";
+                    var start = index == 0 ? "return " : "    && ";
+                    var end = index == components.Count - 1 ? ";" : string.Empty;
+                    writer.Line(start + compare + end);
+                }
+            }
         }
 
         writer.Line();
 
-        if (hashCodeFromComponents)
-        {
-            writer.Line("public override int GetHashCode()");
-            writer.Line("    => global::System.Linq.Enumerable.Aggregate(");
-            writer.Line("        global::System.Linq.Enumerable.Select(GetEqualityComponents(), static component => component?.GetHashCode() ?? 0),");
-            writer.Line("        static (left, right) => left ^ right);");
-        }
-        else
+        if (!hashCodeFromComponents)
         {
             writer.Line("public override int GetHashCode() => base.GetHashCode();");
+            return;
+        }
+
+        using (writer.Block("public override int GetHashCode()"))
+        {
+            writer.Line("var hash = new global::System.HashCode();");
+            foreach (var (name, type) in components)
+            {
+                writer.Line("hash.Add(" + name + ", global::System.Collections.Generic.EqualityComparer<" + type + ">.Default);");
+            }
+
+            writer.Line("return hash.ToHashCode();");
         }
     }
 
