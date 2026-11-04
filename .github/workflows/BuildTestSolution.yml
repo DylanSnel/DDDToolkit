@@ -27,6 +27,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Both jobs have run out of disk on the runner while they built, packed and tested. The runner image
+      # comes with the Android SDK, the Haskell toolchain, Swift and CodeQL, and nothing in this repository
+      # uses them. Removing them before the build gives the job that space. The two df calls show the free
+      # space before and after in the log.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/local/.ghcup /opt/ghc /usr/share/swift /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -90,6 +100,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      # The same cleanup as in the job above, for the same reason.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/local/.ghcup /opt/ghc /usr/share/swift /opt/hostedtoolcache/CodeQL
+          df -h /
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
