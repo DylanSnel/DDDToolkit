@@ -48,6 +48,24 @@ public static class MemberAccess
         => new(permission, resource, expectedVersion);
 
     /// <summary>
+    /// The caller holds <paramref name="permission"/> on each of <paramref name="resources"/>. The check reads them in one
+    /// statement for every 200 resources, and refuses the request when one resource is refused. <c>[OnResource]</c> on a
+    /// member that is a collection of ids says it:
+    /// <code>
+    /// public sealed record ArchiveBoards([OnResource(BoardPermissions.Edit)] IReadOnlyCollection&lt;BoardId&gt; Boards) : IBoardsRequest;
+    /// </code>
+    /// is <c>MemberAccess.OnEach(BoardPermissions.Edit, request.Boards)</c>.
+    /// </summary>
+    /// <param name="permission">The permission the request needs on each resource.</param>
+    /// <param name="resources">The resources, from the request. A resource named twice is asked about once.</param>
+    /// <typeparam name="TResourceId">The resource's id.</typeparam>
+    /// <exception cref="ArgumentException"><paramref name="permission"/> is blank.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="resources"/> is null.</exception>
+    public static MemberAccess<TResourceId>.OnEach OnEach<TResourceId>(string permission, IEnumerable<TResourceId> resources)
+        where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+        => new(permission, resources);
+
+    /// <summary>
     /// The caller is shown only the resources it holds <paramref name="permission"/> on. For queries only.
     /// </summary>
     /// <param name="permission">The permission that decides what the query shows.</param>

@@ -106,3 +106,4 @@ DDD00105 | DDDToolkit.Tenancy | Warning | [Operator] on a query names no tenant 
 DDD00106 | DDDToolkit.Membership | Info | A member or role manager is not written
 DDD00107 | DDDToolkit.Access | Error | The registration of an access behavior is written and in scope where it is called
 DDD00108 | DDDToolkit.Supabase | Warning | The migrations make the model the access files are written from
+DDD00109 | DDDToolkit.Access | Error | A permission marker on a collection of ids takes no marker argument and no [OrOwn]

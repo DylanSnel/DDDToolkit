@@ -335,6 +335,55 @@ public class RequirementAttributeGenerationTests
         asked.ToString().Should().Contain("documents.share").And.Contain(document.ToString()).And.Contain("7");
     }
 
+    [Theory]
+    [InlineData("IReadOnlyCollection<DocumentId>")]
+    [InlineData("IReadOnlyList<DocumentId>")]
+    [InlineData("IEnumerable<DocumentId>")]
+    [InlineData("DocumentId[]")]
+    [InlineData("List<DocumentId>")]
+    [InlineData("HashSet<DocumentId>")]
+    public void A_permission_on_a_collection_of_resources_answers_OnEach_over_the_collection(string collection)
+    {
+        var result = Module("public sealed record ShareDocuments([OnResource(\"documents.share\")] " + collection + " Documents, UserId With) : IBillingRequest;").RunCore();
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain(Hint, "global::Shop.Billing.ShareDocuments request => global::DDDToolkit.Supporting.Membership.Access.MemberAccess.OnEach(\"documents.share\", request.Documents),");
+    }
+
+    [Fact]
+    public void A_permission_on_a_collection_of_resources_requires_it_on_each_of_them()
+    {
+        var result = Module("public sealed record ShareDocuments([OnResource(\"documents.share\")] DocumentId[] Documents, UserId With) : IBillingRequest;").RunCore();
+
+        var emitted = result.Emit();
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var ids = Array.CreateInstance(emitted.Type("Shop.Billing.DocumentId"), 3);
+        ids.SetValue(IdOf(emitted, "DocumentId", first), 0);
+        ids.SetValue(IdOf(emitted, "DocumentId", second), 1);
+        ids.SetValue(IdOf(emitted, "DocumentId", first), 2);
+        var asked = ((IRequireAccess)emitted.New("Shop.Billing.ShareDocuments", ids, IdOf(emitted, "UserId", Guid.NewGuid()))).RequiredAccess;
+
+        asked.GetType().Name.Should().Be("OnEach");
+        asked.ToString().Should().Contain("documents.share").And.Contain(first.ToString()).And.Contain(second.ToString());
+        ((System.Collections.IEnumerable)asked.GetType().GetProperty("Resources")!.GetValue(asked)!).Cast<object>().Should().HaveCount(2, "a resource named twice is asked about once");
+    }
+
+    [Fact]
+    public void A_permission_on_one_resource_and_one_on_a_collection_are_both_required_and_the_version_belongs_to_the_one()
+    {
+        var result = Module(
+            "public sealed record MergeDocuments([OnResource(\"documents.edit\")] DocumentId Into, [OnResource(\"documents.read\")] IReadOnlyList<DocumentId> From, [ExpectedVersion] long? Version = null) : IBillingRequest;").RunCore();
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain(
+            Hint,
+            "global::Shop.Billing.MergeDocuments request => global::DDDToolkit.Access.AccessRequirement.All(global::DDDToolkit.Supporting.Membership.Access.MemberAccess.On(\"documents.edit\", request.Into, request.Version), "
+            + "global::DDDToolkit.Supporting.Membership.Access.MemberAccess.OnEach(\"documents.read\", request.From)),");
+    }
+
     [Fact]
     public void A_query_seen_with_a_key_answers_SeenWith_over_its_resource()
     {

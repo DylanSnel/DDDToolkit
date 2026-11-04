@@ -25,6 +25,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   Each `MemberAccess.On` call checks its own resource. A refusal contains the refusal codes of the resource that
   failed. The check keeps a hold on each resource. See
   [Where the permission is held](docs/access-requirements.md#where-the-permission-is-held).
+- **A permission marker on a collection of ids: `EachMethod` on `[PermissionMarker]`.** New in 3.2.0-preview.13. A
+  package names the method for a member that is a collection of ids. The generator then holds the collection's element
+  to `IdOf` (DDD00081) and writes that method with the permission and the collection. A marker argument beside such a
+  marker, or `[OrOwn]` paired with it, is DDD00109. Membership's `[OnResource]` names `MemberAccess.OnEach`.
 - **`[ExpectedVersion<TResource>]` and `[OrOwn<TResource>]`.** The type argument is the aggregate root of the id on an
   `[OnResource]` member, for example `Board` for a `BoardId`. `[ExpectedVersion<Board>]` passes the version to the call
   of the marker on the `BoardId`. `[OrOwn<Board>]` makes the caller's own an alternative to that marker's permission
@@ -2504,6 +2508,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   privileges a Postgres export writes leave the column out of `UPDATE`. `Fixed` is false by default, so `[At]` alone
   lets a resource move. The context needs no `IsFixedAfterInsert` call for the place. See
   [Beside an organization](docs/membership/beside-an-organization.md#reach-from-above).
+- **A permission on each resource of a list: `[OnResource(p)]` on a collection of ids.** New in 3.2.0-preview.13. The
+  member can be any type that implements `IEnumerable<TId>`, such as `IReadOnlyCollection<BoardId>`, an array or a set.
+  The generator writes `MemberAccess.OnEach(p, request.Boards)`.
+  - `MemberAccessCheck` reads the resources in one statement for every 200 ids, through the new
+    `IMembershipStorage.HoldEachAsync`. A resource named twice is read once.
+  - One resource that is refused refuses the request. Every `not-found` comes before any `not-permitted`, and the
+    refusal names no resource. An empty collection lets the caller through and reads nothing.
+  - The check keeps a hold on each resource, so the expert hold holds each save to its own.
+  - `MembershipAccessManager<TResource>` has the same questions for a handler: `HoldEachAsync(ids, p)` and
+    `RequireEachAsync(ids, p)`.
+  - `[ExpectedVersion]` or `[OrOwn]` beside a marker on a collection is DDD00109.
+
+  See [Requirements that combine](docs/membership/checks-and-saves.md#requirements-that-combine).
 - **`[OrOwn]` on a resource whose owner holds the permission says nothing: DDD00096.** A warning at `[OrOwn]` on the
   id of a resource with members beside `[OnResource]`, where the required permission is one its owner holds by
   owning. The owner passes the permission check already.

@@ -158,6 +158,46 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<TResourceId, MemberHold<TResourceId>>> HoldEachAsync(
+        IReadOnlyCollection<TResourceId> resources,
+        string permission,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(resources);
+        ArgumentException.ThrowIfNullOrWhiteSpace(permission);
+
+        var about = resources.Distinct().ToList();
+        if (about.Count > MembershipAccessManager.MostResources)
+        {
+            throw new ArgumentException(
+                "What is held is asked about at most " + MembershipAccessManager.MostResources + " different resources at once, and these are "
+                + about.Count + ". RequireEachAsync asks in parts of that size.",
+                nameof(resources));
+        }
+
+        var none = new Dictionary<TResourceId, MemberHold<TResourceId>>();
+        var asked = Ask();
+        var see = See(asked);
+        if (about.Count == 0 || see.Nothing)
+        {
+            return none;
+        }
+
+        // The statement of HoldAsync over every id at once: one row for each resource the user sees, with how it
+        // holds the permission there and until when.
+        var act = ReachFor(permission, asked);
+        var held = await ReadAsync(
+            context => act.HeldWhereSeen(context.Set<TResource>().AsNoTracking().Where(candidate => about.Contains(candidate.Id)), context, see)
+                .Select(found => new { found.Resource.Id, found.Resource.Version, found.AsMember, found.FromAbove, found.Until })
+                .ToListAsync(cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return held.ToDictionary(
+            found => found.Id,
+            found => new MemberHold<TResourceId>(found.Id, act.Via(found.AsMember, found.FromAbove), found.Version, found.Until));
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyDictionary<TResourceId, IReadOnlySet<string>>> PermissionsOnAsync(
         IReadOnlyCollection<TResourceId> resources,
         IReadOnlyCollection<string> permissions,

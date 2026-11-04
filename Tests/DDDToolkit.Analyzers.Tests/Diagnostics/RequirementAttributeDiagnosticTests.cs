@@ -574,4 +574,57 @@ public class RequirementAttributeDiagnosticTests
             .And.Contain("answer RequiredAccess itself, or implement one of them");
         result.ShouldNotContain("BillingAccessBehavior.", "Both", "no line is written that C# could not choose");
     }
+
+    // ------------------------------------------------------------------ DDD00109: a marker on a collection stands alone
+
+    [Fact]
+    public void A_version_beside_a_marker_on_a_collection_is_DDD00109()
+    {
+        var result = Run("public sealed record ShareDocuments([OnResource(\"documents.share\")] IReadOnlyList<DocumentId> Documents, [ExpectedVersion] long? Version = null) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00109");
+        Message(result, "DDD00109", at: "ExpectedVersion").Should()
+            .Be("'ShareDocuments' marks 'Version' [ExpectedVersion] beside 'Documents' [OnResource], a marker on a collection of ids. The check of a collection takes no [ExpectedVersion]. "
+                + "Remove it, or send one request for each resource");
+        result.ShouldHaveDiagnostic("DDD00109", at: "ExpectedVersion").Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void The_caller_s_own_beside_a_marker_on_a_collection_is_DDD00109()
+    {
+        var result = Run("public sealed record LeaveDocuments([OnResource(\"documents.share\")] DocumentId[] Documents, [OrOwn] UserId Member) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00109");
+        Message(result, "DDD00109", at: "OrOwn").Should()
+            .Be("'LeaveDocuments' marks 'Member' [OrOwn] beside 'Documents' [OnResource], a marker on a collection of ids. The caller's own is one value, and the collection names several resources. "
+                + "Remove [OrOwn], or send one request for each resource");
+    }
+
+    [Fact]
+    public void A_collection_of_another_id_is_DDD00081_where_a_member_class_is_seen()
+    {
+        var result = OverTheDomain("public sealed record ShareDocuments([OnResource(\"documents.share\")] IReadOnlyList<SeatId> Documents) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00081");
+        Message(result, "DDD00081", at: "OnResource(\"documents.share\")").Should()
+            .Contain("which is a 'IReadOnlyList<SeatId>': it marks a collection of 'DocumentId' and 'FolderId'");
+    }
+
+    [Fact]
+    public void A_collection_of_the_right_ids_over_the_domain_is_not_reported_and_compiles()
+    {
+        var result = OverTheDomain("public sealed record ShareDocuments([OnResource(\"documents.share\")] IReadOnlyCollection<DocumentId> Documents, UserId With) : IBillingRequest;");
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+    }
+
+    [Fact]
+    public void A_marker_whose_package_names_no_method_for_a_collection_is_held_to_one_id_on_a_collection()
+    {
+        var result = OverTheDomain("public sealed record OpenLedgers([AtUnit(\"billing.open\")] IReadOnlyList<OrganizationUnitId> Units) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics("DDD00081");
+        Message(result, "DDD00081", at: "AtUnit(\"billing.open\")").Should().StartWith("'OpenLedgers' marks 'Units' [AtUnit], which is a 'IReadOnlyList<OrganizationUnitId>'");
+    }
 }

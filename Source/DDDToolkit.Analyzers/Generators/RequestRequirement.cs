@@ -360,7 +360,7 @@ internal sealed record RequestRequirement(
                 {
                     if (MarkerOf(attribute) is { } marker)
                     {
-                        found.Add(marker with { Name = property.Name, Type = property.Type, Property = property, Declaring = current, Location = WhereWritten(attribute, cancellationToken), Position = PositionOf(attribute, cancellationToken) });
+                        found.Add(OnCollection(marker with { Name = property.Name, Type = property.Type, Property = property, Declaring = current, Location = WhereWritten(attribute, cancellationToken), Position = PositionOf(attribute, cancellationToken) }));
                     }
                 }
             }
@@ -400,7 +400,7 @@ internal sealed record RequestRequirement(
                         }
 
                         var property = current.IsRecord ? PropertyNamed(type, parameter.Name) : null;
-                        found.Add(marker with { Name = parameter.Name, Type = parameter.Type, Property = property, OnParameter = here, Declaring = current, Location = WhereWritten(attribute, cancellationToken), Position = PositionOf(attribute, cancellationToken) });
+                        found.Add(OnCollection(marker with { Name = parameter.Name, Type = parameter.Type, Property = property, OnParameter = here, Declaring = current, Location = WhereWritten(attribute, cancellationToken), Position = PositionOf(attribute, cancellationToken) }));
                     }
                 }
             }
@@ -482,6 +482,7 @@ internal sealed record RequestRequirement(
                 var argument = meta.NamedArguments.FirstOrDefault(static named => named.Key == "Argument").Value.Value is int position ? position : 0;
                 var idOfArgument = meta.NamedArguments.Any(static named => named.Key == "IdOfArgument" && named.Value.Value is true);
                 var ownAlternative = meta.NamedArguments.FirstOrDefault(static named => named.Key == "OwnAlternative").Value.Value is string { Length: > 0 } alternative ? alternative : null;
+                var eachMethod = meta.NamedArguments.FirstOrDefault(static named => named.Key == "EachMethod").Value.Value is string { Length: > 0 } each ? each : null;
 
                 // The permission is the marker's string argument: a marker applied without one names none.
                 var permission = attribute.ConstructorArguments.FirstOrDefault(static each => each.Type?.SpecialType == SpecialType.System_String);
@@ -489,6 +490,7 @@ internal sealed record RequestRequirement(
                 {
                     Permission = permission.Type is not null && !permission.IsNull ? Literal(permission) : null,
                     Unbound = attribute.AttributeConstructor is null || attribute.ConstructorArguments.Any(static each => each.Kind == TypedConstantKind.Error),
+                    EachMethod = eachMethod,
                 };
             }
 
@@ -509,6 +511,41 @@ internal sealed record RequestRequirement(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// A permission marker on a collection of ids, where its package names a method for a collection: the marker with the
+    /// collection's element as its member's type, so every check of the id reads the element, and its call names that
+    /// method. Any other marker as it is.
+    /// </summary>
+    private static Marker OnCollection(Marker marker)
+        => marker.Place && marker.EachMethod is not null && ElementOf(marker.Type) is { } element
+            ? marker with { Type = element, Collection = marker.Type }
+            : marker;
+
+    /// <summary>
+    /// The element of a collection: of an array, of <c>IEnumerable&lt;T&gt;</c> itself, or of a type that implements it for
+    /// one <c>T</c>. Null for a string, for a type that implements it for several, and for any other type.
+    /// </summary>
+    private static ITypeSymbol? ElementOf(ITypeSymbol type)
+    {
+        if (type.SpecialType == SpecialType.System_String || type.TypeKind == TypeKind.Error)
+        {
+            return null;
+        }
+
+        if (type is IArrayTypeSymbol { Rank: 1 } array)
+        {
+            return array.ElementType;
+        }
+
+        if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Collections_Generic_IEnumerable_T } enumerable)
+        {
+            return enumerable.TypeArguments[0];
+        }
+
+        var implemented = type.AllInterfaces.Where(static each => each.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T).ToList();
+        return implemented.Count == 1 ? implemented[0].TypeArguments[0] : null;
     }
 
     /// <summary>The class the one type argument of a marker names, <c>Board</c> of <c>[OrOwn&lt;Board&gt;]</c>; null for a marker without one.</summary>
@@ -920,6 +957,21 @@ internal sealed record RequestRequirement(
         /// <summary>The class the type argument of a marker names, <c>Board</c> of <c>[ExpectedVersion&lt;Board&gt;]</c>; null for the bare form.</summary>
         public INamedTypeSymbol? Resource { get; init; }
 
+        /// <summary>The method of the marker's factory for a collection of ids, which its package names; null where it names none.</summary>
+        public string? EachMethod { get; init; }
+
+        /// <summary>
+        /// The member's own type, where it is a collection of ids that the marker's package takes: <c>IReadOnlyCollection&lt;BoardId&gt;</c>.
+        /// <see cref="Type"/> is then the element, <c>BoardId</c>. Null for a member that is one id.
+        /// </summary>
+        public ITypeSymbol? Collection { get; init; }
+
+        /// <summary>Whether the member is a collection of ids, which the call for a collection takes.</summary>
+        public bool Each => Collection is not null;
+
+        /// <summary>The member's own type, as a message names it.</summary>
+        public ITypeSymbol Declared => Collection ?? Type;
+
         /// <summary>The class that declares the marker: the request, or a class it derives from.</summary>
         public INamedTypeSymbol? Declaring { get; init; }
 
@@ -1281,6 +1333,18 @@ internal sealed record RequestRequirement(
                     candidates = candidates.Where(place => id is not null && place.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == id).ToList();
                 }
 
+                // The call for a collection takes no argument beside the collection: an argument belongs to a marker on one id.
+                var onCollections = candidates.Where(static place => place.Each).ToList();
+                candidates = candidates.Where(static place => !place.Each).ToList();
+                if (candidates.Count == 0 && onCollections.Count > 0)
+                {
+                    Report(DiagnosticDescriptors.PermissionMarkerOnCollectionAlone, DeclaredHere(argument) ? argument.Location ?? _location : _location, _name,
+                        (DeclaredHere(argument) ? "marks " + argument.Named : "inherits " + argument.Named + " from '" + argument.Declaring?.Name + "'") + " beside "
+                        + Listed(onCollections.Select(static each => each.Named)) + ", a marker on a collection of ids. The check of a collection takes no "
+                        + Bracketed(argument.Class) + ". Remove it, or send one request for each resource");
+                    return;
+                }
+
                 if (candidates.Count == 1)
                 {
                     _argumentsOf[_places.IndexOf(candidates[0])].Add(argument);
@@ -1348,7 +1412,7 @@ internal sealed record RequestRequirement(
                     var plural = ids.Count > 1;
                     var of = place.Argument > 0 && place.Argument < definition.TypeParameters.Length ? " of the " + definition.TypeParameters[place.Argument].Name : string.Empty;
                     Report(DiagnosticDescriptors.PermissionMarkerOnWrongType, place.Location ?? _location, _name, place.Name, Bracketed(place.Class).Trim('[', ']'),
-                        "which is a '" + Written(place.Type) + "': it marks " + Listed(ids.OrderBy(static id => id, StringComparer.Ordinal).Select(static id => "'" + TemplateRegistrations.LastNameOf(id) + "'"))
+                        "which is a '" + Written(place.Declared) + "': it marks " + (place.Each ? "a collection of " : string.Empty) + Listed(ids.OrderBy(static id => id, StringComparer.Ordinal).Select(static id => "'" + TemplateRegistrations.LastNameOf(id) + "'"))
                         + ", the id" + (plural ? "s" : string.Empty) + of + " of the " + Bracketed(definition) + " class" + (plural ? "es" : string.Empty) + " this project sees");
                     return;
                 }
@@ -1553,6 +1617,14 @@ internal sealed record RequestRequirement(
             else
             {
                 paired = permissions[0];
+            }
+
+            if (paired.Place is { Each: true } collection)
+            {
+                Report(DiagnosticDescriptors.PermissionMarkerOnCollectionAlone, at, _name,
+                    marked + " beside " + collection.Named + ", a marker on a collection of ids. The caller's own is one value, and the collection names several resources. "
+                    + "Remove " + Bracketed(orOwn.Class) + ", or send one request for each resource");
+                return null;
             }
 
             if (paired.Place is { OwnAlternative: null } place)
@@ -1969,11 +2041,11 @@ internal sealed record RequestRequirement(
                 var arguments = new List<string> { place.Permission!, Designation + "." + Identifier(place.Property!.Name) };
                 arguments.AddRange(_argumentsOf[_places.IndexOf(place)].Select(static marker => Designation + "." + Identifier(marker.Property!.Name)));
                 var factory = place.Factory!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                held = factory + "." + Identifier(place.Method) + "(" + string.Join(", ", arguments) + ")";
+                held = factory + "." + Identifier(place.Each ? place.EachMethod! : place.Method) + "(" + string.Join(", ", arguments) + ")";
 
                 // What the caller's own way through still meets where the marker says, as its package names it: the
-                // resource seen, read and kept, on Membership's.
-                there = place.OwnAlternative is { } alternative ? factory + "." + Identifier(alternative) + "(" + string.Join(", ", arguments) + ")" : null;
+                // resource seen, read and kept, on Membership's. A marker on a collection pairs with no caller's own.
+                there = !place.Each && place.OwnAlternative is { } alternative ? factory + "." + Identifier(alternative) + "(" + string.Join(", ", arguments) + ")" : null;
             }
             else
             {

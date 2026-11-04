@@ -128,6 +128,56 @@ public sealed class CombinedRequirementsUnderTheHoldTests
     }
 
     [Fact]
+    public async Task A_permission_on_each_document_of_a_list_keeps_a_hold_on_each_and_all_are_saved_under_the_hold()
+    {
+        using var filing = await FilingAsync();
+        var data = filing.Scenario;
+
+        // Ada owns the minutes, and is given the manager's role on the budget, which Ben owns.
+        await filing.Services.ChangeAsync(data.Budget, budget => budget.GiveRole(data.Ada, DocumentMembership.Manager, MemberPeriod.Open(data.Now.AddDays(-1)), data.Now, by: data.Ben));
+
+        var command = new ShareOnEach([data.Minutes, data.Budget], data.Hal);
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
+        {
+            filing.Commands.Reset();
+            await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation);
+            filing.Commands.Count.Should().Be(1, "the door reads both documents in one statement");
+            Checked<MemberHold<DocumentId>>.FindAllInHand().Select(hold => hold.Resource).Should().Equal([data.Minutes, data.Budget], "one hold for each document of the list");
+
+            var context = provider.GetRequiredService<FilingContext>();
+            foreach (var id in command.Documents)
+            {
+                var document = await context.Documents.AsTracking().SingleAsync(each => each.Id == id, Cancellation);
+                document.ShareWith(command.With, MemberPeriod.Open(data.Now), data.Now, by: data.Ada);
+            }
+
+            await context.SaveChangesAsync(Cancellation);
+        });
+
+        (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Hal);
+        (await filing.Services.ReadAsync(data.Budget)).Shares.Should().Contain(share => share.MemberId == data.Hal);
+    }
+
+    [Fact]
+    public async Task One_document_of_a_list_without_the_permission_refuses_the_request_and_leaves_no_hold()
+    {
+        using var filing = await FilingAsync();
+        var data = filing.Scenario;
+
+        // Ada holds the permission on the minutes and only looks on at the budget.
+        var command = new ShareOnEach([data.Minutes, data.Budget], data.Hal);
+        await filing.Services.AsAsync(TestUsers.User(data.Ada), async provider =>
+        {
+            var refused = (await FluentActions.Awaiting(() => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, Cancellation).AsTask())
+                .Should().ThrowAsync<RefusalException>()).Which;
+            refused.Code.Should().Be(DocumentRefusals.Membership[MembershipRefusals.NotPermitted]);
+
+            FluentActions.Invoking(() => provider.GetRequiredService<Checked<MemberHold<DocumentId>>>().TakeAllFor(command))
+                .Should().Throw<InvalidOperationException>("nothing is kept for a request its check refused");
+        });
+    }
+
+    [Fact]
     public async Task A_permission_on_a_document_and_one_on_a_folder_keep_a_hold_on_each_and_the_document_is_saved_under_the_version_it_named()
     {
         using var filing = await FilingAsync();
