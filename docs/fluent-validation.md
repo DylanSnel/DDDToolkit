@@ -40,21 +40,25 @@ partial record EmailAddress
 {
     [Internal]
     [NotMapped]
-    public ReadOnlyCollection<FluentValidation.Results.ValidationFailure> Errors => _errors.AsReadOnly();
+    public ReadOnlyCollection<FluentValidation.Results.ValidationFailure> Errors => _errors;
 
-    private List<FluentValidation.Results.ValidationFailure> _errors = new();
+    private ReadOnlyCollection<FluentValidation.Results.ValidationFailure> _errors
+        = ReadOnlyCollection<FluentValidation.Results.ValidationFailure>.Empty;
+
+    private static Validator? _sharedValidator;
 
     protected override bool Validate()
     {
-        var validator = new Validator();
-        var result = validator.Validate(this);
-        _errors = result.Errors;
+        var result = (_sharedValidator ??= new Validator()).Validate(this);
+        _errors = result.IsValid
+            ? ReadOnlyCollection<FluentValidation.Results.ValidationFailure>.Empty
+            : result.Errors.AsReadOnly();
         return result.IsValid;
     }
 
     protected override void Validate(ValidationErrorBuilder errors)
     {
-        foreach (var failure in _errors)
+        for (var index = 0; index < _errors.Count; index++)
         {
             // ... copies each failure, with its placeholder values as arguments, into a ValidationError
         }
@@ -66,8 +70,18 @@ partial record EmailAddress
 }
 ```
 
-So the generator states the base class, and you state the rules. A value object with several properties works
-the same way, with one rule per property:
+So the generator states the base class, and you state the rules.
+
+The generator builds the validator once per type, on the first validation, and every value of the type shares it.
+Building a validator runs every rule declaration in its constructor. A valid value with no failures keeps the one
+empty `Errors` collection.
+
+- **A rule reads a changing value through a lambda.** `LessThan(_ => DateTime.Today)` reads the date on every
+  validation. `LessThan(DateTime.Today)` reads it once, when the shared validator is built.
+- **A validator holds no state of its own.** FluentValidation's validators are safe to share between threads, as long
+  as the constructor only declares rules.
+
+A value object with several properties works the same way, with one rule per property:
 
 ```csharp
 [ValueObject]
