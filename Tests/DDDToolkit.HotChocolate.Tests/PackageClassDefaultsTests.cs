@@ -164,10 +164,12 @@ public sealed partial class PackageClassDefaultsTests
     }
 
     [Fact]
-    public void Tenancy_marks_the_seats_identity_and_the_invitations_address_as_personal_data()
+    public void Tenancy_marks_the_seats_identity_as_personal_data_and_leaves_the_invitations_address_unmarked()
     {
         Marked<PersonalDataAttribute>(typeof(SeatAggregate<,,,>), "Identity").Should().BeTrue();
-        Marked<PersonalDataAttribute>(typeof(InvitationAggregate<,,,,>), "Address").Should().BeTrue();
+
+        // Whoever may read invitations needs the address.
+        Marked<PersonalDataAttribute>(typeof(InvitationAggregate<,,,,>), "Address").Should().BeFalse();
     }
 
     [Fact]

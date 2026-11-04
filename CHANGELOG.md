@@ -15,7 +15,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 #### Core
 
 - **Four marks for the classes an API returns, in `DDDToolkit.Abstractions.Attributes`.** New in 3.2.0-preview.14.
-  - `[PersonalData]` marks a stored member that holds data about a person, such as an account id or an e-mail address.
+  - `[PersonalData]` marks a stored member that holds data about a person that no reader of the object needs, such as
+    an account id.
   - `[Bookkeeping]` marks a stored member that a package keeps for its own work.
   - `[DisplayName("Placement")]` gives a class the type name that every API layer uses. The name has no spaces.
   - `[assembly: ToolkitPackage]` marks an assembly as one of the toolkit's packages. The public methods of its classes
@@ -1421,7 +1422,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 #### Tenancy
 
 - **Marks for the API layers on Tenancy's classes.** New in 3.2.0-preview.14.
-  - `[PersonalData]` on the seat's `Identity` and on the invitation's `Address`.
+  - `[PersonalData]` on the seat's `Identity`. The invitation's `Address` is not marked, because whoever may read
+    invitations needs it.
   - `[Bookkeeping]` on the role's `FromStarterRole` and `PermissionsFromStarterRole`.
   - `[DisplayName]` on `Placement`, `RoleGrant`, `NamedUnit`, `SeatInTenant`, and on the managers' records
     `SeatOverview`, `PermissionReach`, `UnitRef`, `UnitInTree`, `TenantListing`, `TenantPage`, `IssuedInvitation` and

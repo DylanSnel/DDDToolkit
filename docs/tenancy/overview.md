@@ -115,7 +115,8 @@ classDiagram
 The classes carry marks that an API layer reads. In GraphQL these are the defaults for a type that binds by convention
 ([GraphQL](../graphql.md#binding-fields-by-convention)):
 
-- The seat's `Identity` and the invitation's `Address` are `[PersonalData]`. They are left out of the type.
+- The seat's `Identity` is `[PersonalData]`. It is left out of the type. The invitation's `Address` is not marked,
+  because whoever may read invitations needs it.
 - The role's `FromStarterRole` and `PermissionsFromStarterRole` are `[Bookkeeping]`. They are left out of the type.
 - `Placement`, `RoleGrant`, `NamedUnit` and the records of the managers have a `[DisplayName]`. The type is named
   `Placement` instead of after its type arguments.

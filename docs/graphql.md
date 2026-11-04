@@ -478,8 +478,9 @@ own assemblies, so the methods of its own records stay fields.
 Some stored members do not belong in an API unless the application chooses to show them. The packages mark them
 with two attributes from `DDDToolkit.Abstractions.Attributes`:
 
-- `[PersonalData]` marks data about a person. Tenancy marks the seat's `Identity`, the id of the person's account at
-  the identity provider, and the invitation's `Address`.
+- `[PersonalData]` marks data about a person that no reader of the object needs. Tenancy marks the seat's `Identity`,
+  the id of the person's account at the identity provider. The invitation's `Address` is not marked, because whoever
+  may read invitations needs it. The query's access check decides who that is.
 - `[Bookkeeping]` marks a record that a package keeps for its own work. Tenancy's role and Membership's custom role
   mark `FromStarterRole` and `PermissionsFromStarterRole`, which they keep to follow their starter role.
 
