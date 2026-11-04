@@ -1466,6 +1466,8 @@ The resource's id is inferred from the argument, and has to be the id the resour
 |---|---|
 | [`HoldAsync(MembershipAccessManager<TResource>, TResourceId, string, CancellationToken)`](#holdasyncmembershipaccessmanagertresource-tresourceid-string-cancellationtoken) | What the caller holds on the resource `resource` names, in one statement: `null` when the caller does not see it, which is also the answer for a resource that does not exist; otherwise its id, the version it is at, and how the caller holds `permission` on it and until when, if it does. |
 | [`RequireAsync(MembershipAccessManager<TResource>, TResourceId, string, CancellationToken)`](#requireasyncmembershipaccessmanagertresource-tresourceid-string-cancellationtoken) | Requires the caller to hold `permission` on the resource `resource` names: what a command or a query about one resource passes before its handler. |
+| [`HoldEachAsync(MembershipAccessManager<TResource>, IReadOnlyCollection<TResourceId>, string, CancellationToken)`](#holdeachasyncmembershipaccessmanagertresource-ireadonlycollectiontresourceid-string-cancellationtoken) | What the caller holds on each of the resources `resources` names, in one statement, keyed by id. |
+| [`RequireEachAsync(MembershipAccessManager<TResource>, IEnumerable<TResourceId>, string, CancellationToken)`](#requireeachasyncmembershipaccessmanagertresource-ienumerabletresourceid-string-cancellationtoken) | Requires the caller to hold `permission` on each of the resources `resources` names: what a request about several resources passes before its handler. |
 | [`ViaAsync(MembershipAccessManager<TResource>, TResourceId, string, CancellationToken)`](#viaasyncmembershipaccessmanagertresource-tresourceid-string-cancellationtoken) | How the caller holds `permission` on the resource `resource` names, or `null` when it does not hold it. |
 | [`PermissionsOnAsync(MembershipAccessManager<TResource>, IReadOnlyCollection<TResourceId>, IReadOnlyCollection<string>, CancellationToken)`](#permissionsonasyncmembershipaccessmanagertresource-ireadonlycollectiontresourceid-ireadonlycollectionstring-cancellationtoken) | The permissions of `permissions` the caller holds on each of the resources `resources` names that it sees, in one statement whatever their number, keyed by id. |
 
@@ -1530,6 +1532,68 @@ Requires the caller to hold `permission` on the resource `resource` names: what 
 **Exceptions**
 
 - `RefusalException`: The caller's own refusal when it is nobody; `not-found` when it may not see the resource, for a missing one too; `not-permitted`, with the `Permission`, when it sees the resource but does not hold the permission.
+
+#### `HoldEachAsync(MembershipAccessManager<TResource>, IReadOnlyCollection<TResourceId>, string, CancellationToken)`
+
+```csharp
+public static Task<IReadOnlyDictionary<TResourceId, MemberHold<TResourceId>>> HoldEachAsync<TResource, TResourceId>(
+    this MembershipAccessManager<TResource> access,
+    IReadOnlyCollection<TResourceId> resources,
+    string permission,
+    CancellationToken cancellationToken)
+    where TResource : class, IEntity<TResourceId>
+    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+```
+
+What the caller holds on each of the resources `resources` names, in one statement, keyed by id. A resource the caller sees has a hold, with [`MemberHold.Via`](#memberholdtresource) `null` where the caller does not hold `permission`. A resource the caller does not see, or that does not exist, is not in the answer. It refuses nobody.
+
+**Parameters**
+
+- `access`: The access manager of the resource's kind.
+- `resources`: The resources' ids, at most [`MembershipAccessManager.MostResources`](#membershipaccessmanager) different ones.
+- `permission`: A permission.
+- `cancellationToken`: Cancels the query.
+
+**Type parameters**
+
+- `TResource`: The resource's aggregate.
+- `TResourceId`: The resource's id.
+
+**Exceptions**
+
+- `ArgumentException`: More than [`MembershipAccessManager.MostResources`](#membershipaccessmanager) different resources are asked about.
+
+#### `RequireEachAsync(MembershipAccessManager<TResource>, IEnumerable<TResourceId>, string, CancellationToken)`
+
+```csharp
+public static Task<IReadOnlyList<MemberHold<TResourceId>>> RequireEachAsync<TResource, TResourceId>(
+    this MembershipAccessManager<TResource> access,
+    IEnumerable<TResourceId> resources,
+    string permission,
+    CancellationToken cancellationToken)
+    where TResource : class, IEntity<TResourceId>
+    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+```
+
+Requires the caller to hold `permission` on each of the resources `resources` names: what a request about several resources passes before its handler. One statement for every [`MembershipAccessManager.MostResources`](#membershipaccessmanager) resources. A resource named twice is asked about once. Every `not-found` comes before any `not-permitted`, and neither names the resource. No resources require a caller the questions can be asked about, and nothing more.
+
+**Parameters**
+
+- `access`: The access manager of the resource's kind.
+- `resources`: The resources' ids.
+- `permission`: The permission needed on each.
+- `cancellationToken`: Cancels the queries.
+
+**Type parameters**
+
+- `TResource`: The resource's aggregate.
+- `TResourceId`: The resource's id.
+
+**Returns**: A hold for each resource, in the order the resources are first named.
+
+**Exceptions**
+
+- `RefusalException`: The caller's own refusal when it is nobody; `not-found` when it may not see one of the resources, for a missing one too; `not-permitted`, with the `Permission`, when it sees all of them but does not hold the permission on one.
 
 #### `ViaAsync(MembershipAccessManager<TResource>, TResourceId, string, CancellationToken)`
 
@@ -1757,6 +1821,7 @@ The storage answers, because whether a membership and a role apply now is compar
 | [`Reach(string)`](#reachstring-1) | The resources the caller reaches for `permission`, as a set the storage puts into a statement: what [`MembershipAccessManager.Reach`](#reachstring) answers. |
 | [`ReachSeen()`](#reachseen-1) | The resources the caller sees, as a set the storage puts into a statement: what [`MembershipAccessManager.ReachSeen`](#reachseen) answers. |
 | [`HoldAsync(TResourceId, string, CancellationToken)`](#holdasynctresourceid-string-cancellationtoken) | What the caller holds on one resource, in one statement: `null` when the caller does not see the resource, which is also the answer for a resource that does not exist; otherwise the resource, its version, and how the caller holds `permission` on it and until when, if it does. |
+| [`HoldEachAsync(IReadOnlyCollection<TResourceId>, string, CancellationToken)`](#holdeachasyncireadonlycollectiontresourceid-string-cancellationtoken) | What the caller holds on each of `resources`, in one statement. |
 | [`PermissionsOnAsync(IReadOnlyCollection<TResourceId>, IReadOnlyCollection<string>, CancellationToken)`](#permissionsonasyncireadonlycollectiontresourceid-ireadonlycollectionstring-cancellationtoken) | The permissions of `permissions` the caller holds on each of `resources` it sees, in one statement whatever their number. |
 
 #### `RequireCurrentUser()`
@@ -1807,6 +1872,27 @@ What the caller holds on one resource, in one statement: `null` when the caller 
 - `resource`: The resource.
 - `permission`: A permission.
 - `cancellationToken`: Cancels the query.
+
+#### `HoldEachAsync(IReadOnlyCollection<TResourceId>, string, CancellationToken)`
+
+```csharp
+Task<IReadOnlyDictionary<TResourceId, MemberHold<TResourceId>>> HoldEachAsync(
+    IReadOnlyCollection<TResourceId> resources,
+    string permission,
+    CancellationToken cancellationToken)
+```
+
+What the caller holds on each of `resources`, in one statement. The answer has a hold for each resource the caller sees, keyed by its id. The hold has the version, and how the caller holds `permission` there and until when. Its [`MemberHold.Via`](#memberholdtresource) is `null` where the caller does not hold the permission. A resource the caller does not see, or that does not exist, is not in the answer. It refuses nobody.
+
+**Parameters**
+
+- `resources`: The resources asked about, at most [`MembershipAccessManager.MostResources`](#membershipaccessmanager) different ones.
+- `permission`: A permission.
+- `cancellationToken`: Cancels the query.
+
+**Exceptions**
+
+- `ArgumentException`: More than [`MembershipAccessManager.MostResources`](#membershipaccessmanager) different resources are asked about.
 
 #### `PermissionsOnAsync(IReadOnlyCollection<TResourceId>, IReadOnlyCollection<string>, CancellationToken)`
 
@@ -1867,6 +1953,7 @@ Which permission a request requires is the application's to say, for the command
 | Member | Summary |
 |---|---|
 | [`On(string, TResourceId, long?)`](#onstring-tresourceid-long) | The caller holds `permission` on `resource`, through its members or however else the resource's rules let a permission be held. |
+| [`OnEach(string, IEnumerable<TResourceId>)`](#oneachstring-ienumerabletresourceid) | The caller holds `permission` on each of `resources`. |
 | [`SeenWith(string)`](#seenwithstring) | The caller is shown only the resources it holds `permission` on. |
 | [`Sees(string, TResourceId, long?)`](#seesstring-tresourceid-long) | The caller sees `resource`, whether or not it holds `permission` there: what a request about the caller's own on the resource requires of it, beside the caller's own, where the permission is the other way through. |
 
@@ -1895,6 +1982,35 @@ The caller holds `permission` on `resource`, through its members or however else
 **Exceptions**
 
 - `ArgumentException`: `permission` is blank.
+
+#### `OnEach(string, IEnumerable<TResourceId>)`
+
+```csharp
+public static OnEach OnEach<TResourceId>(string permission, IEnumerable<TResourceId> resources)
+    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+```
+
+The caller holds `permission` on each of `resources`. The check reads them in one statement for every 200 resources, and refuses the request when one resource is refused. `[OnResource]` on a member that is a collection of ids says it:
+
+```csharp
+public sealed record ArchiveBoards([OnResource(BoardPermissions.Edit)] IReadOnlyCollection<BoardId> Boards) : IBoardsRequest;
+```
+
+is `MemberAccess.OnEach(BoardPermissions.Edit, request.Boards)`.
+
+**Parameters**
+
+- `permission`: The permission the request needs on each resource.
+- `resources`: The resources, from the request. A resource named twice is asked about once.
+
+**Type parameters**
+
+- `TResourceId`: The resource's id.
+
+**Exceptions**
+
+- `ArgumentException`: `permission` is blank.
+- `ArgumentNullException`: `resources` is null.
 
 #### `SeenWith(string)`
 
@@ -2038,6 +2154,14 @@ public sealed record AttachAsset(
 
 becomes `AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use, request.Asset))`. Each `MemberAccess.On` call checks its own resource, keeps a hold on that resource, and refuses with that resource's refusal codes.
 
+The member can be a collection of ids of one resource, any type that implements `IEnumerable<TId>`, such as an array, a list or a set. The caller then holds the permission on each resource:
+
+```csharp
+public sealed record ArchiveBoards([OnResource(BoardPermissions.Edit)] IReadOnlyCollection<BoardId> Boards) : ICommand, IBoardsRequest;
+```
+
+becomes `MemberAccess.OnEach(BoardPermissions.Edit, request.Boards)`. The check reads the resources in one statement for every 200 ids. One resource that is refused refuses the request, with `not-found` before `not-permitted`, and the refusal names no resource. An empty collection lets a caller through that the questions can be asked about. [`ExpectedVersionAttribute`](#expectedversionattribute) and `OrOwnAttribute` do not pair with a marker on a collection (DDD00109).
+
 The resource is what the request acts on, so `OrOwnAttribute` can pair with the marker. The caller is let through when the request is about the caller's own on that resource, or when the caller holds the permission on the resource.
 
 ```csharp
@@ -2080,6 +2204,14 @@ public sealed record AttachAsset(
 ```
 
 becomes `AccessRequirement.All(MemberAccess.On(BoardPermissions.Edit, request.Board, request.Version), MemberAccess.On(AssetPermissions.Use, request.Asset))`. Each `MemberAccess.On` call checks its own resource, keeps a hold on that resource, and refuses with that resource's refusal codes.
+
+The member can be a collection of ids of one resource, any type that implements `IEnumerable<TId>`, such as an array, a list or a set. The caller then holds the permission on each resource:
+
+```csharp
+public sealed record ArchiveBoards([OnResource(BoardPermissions.Edit)] IReadOnlyCollection<BoardId> Boards) : ICommand, IBoardsRequest;
+```
+
+becomes `MemberAccess.OnEach(BoardPermissions.Edit, request.Boards)`. The check reads the resources in one statement for every 200 ids. One resource that is refused refuses the request, with `not-found` before `not-permitted`, and the refusal names no resource. An empty collection lets a caller through that the questions can be asked about. [`ExpectedVersionAttribute`](#expectedversionattribute) and `OrOwnAttribute` do not pair with a marker on a collection (DDD00109).
 
 The resource is what the request acts on, so `OrOwnAttribute` can pair with the marker. The caller is let through when the request is about the caller's own on that resource, or when the caller holds the permission on the resource.
 
@@ -2207,6 +2339,8 @@ The handler needs nothing of it. It loads the resource its request names, which 
 
 What it read it keeps all the same, as a [`MemberHold<TResource>`](#memberholdtresource) in `Checked<T>`, with the request in hand: that costs nothing, and it is what the expert hold holds a save to, where a context asks for it (`UseMemberHolds` of the Entity Framework package). Then a save that changes the resource is refused when it is at another version than the check read, and one that changes a resource no check of the request in hand read is refused outright. A request whose requirement names several resources, two documents of `AccessRequirement.All` say, has a hold kept for each, and each save is held to its own.
 
+A request about several resources of one kind ([`MemberAccess.OnEach`](#memberaccessoneach), which `[OnResource]` on a collection of ids writes) is decided in one statement for every 200 resources. One resource that is refused refuses the request. Every `not-found` comes before any `not-permitted`. A hold is kept for each resource.
+
 The caller's own way through a request about a resource ([`MemberAccess.Sees`](#memberaccesssees), which `[OrOwn]` beside `[OnResource]` writes) is decided the same way, without the permission: `not-found` for a resource the caller may not see, the version compared, and the hold kept.
 
 It decides the cases of its own resource only. A module with two kinds of resource registers two, and a requirement about a kind nobody registered a check for stops the request rather than letting it through.
@@ -2273,6 +2407,18 @@ Holds the caller to `requirement`: returns when the caller meets it, and throws 
 - `RefusalException`: The caller is not who the request requires.
 - `ConcurrencyConflictException`: The resource is not at the version the request expects.
 - `InvalidOperationException`: The requirement is not one of this check's cases.
+
+### `MemberAccess.OnEach`
+
+```csharp
+public sealed record OnEach : MemberAccess<TResourceId>
+```
+
+The permission is held by the caller on each of [`Resources`](#memberaccessoneach). The check reads all of them in one statement for every 200 resources. A resource the caller may not see is `not-found`, exactly as one that does not exist. A resource it may see without holding the permission is `not-permitted`, naming the permission. The request is refused when one resource is refused, and the refusal names no resource. Every `not-found` comes before any `not-permitted`. An empty set of resources requires a caller the questions can be asked about, and nothing more.
+
+| Member | Summary |
+|---|---|
+| `IReadOnlyList<TResourceId> Resources { get; }` | The resources, from the request. Each resource is in the list once, at the place the request first names it. |
 
 ## Asking about a resource by its id
 

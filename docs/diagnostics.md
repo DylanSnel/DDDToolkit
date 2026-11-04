@@ -108,6 +108,7 @@ problem, and the fix.
 | [DDD00106](#ddd00106) | Info | A member or role manager is not written |
 | [DDD00107](#ddd00107) | Error | The registration of an access behavior is written and in scope where it is called |
 | [DDD00108](#ddd00108) | Warning | The migrations make the model the access files are written from |
+| [DDD00109](#ddd00109) | Error | A permission marker on a collection of ids takes no marker argument and no [OrOwn] |
 
 The Meaning column is the title the IDE shows for each id.
 
@@ -144,7 +145,7 @@ rules, by topic:
   [access behavior written for a request interface](access-requirements.md#the-generated-behavior-with-mediator).
   They catch a message that reaches its handler without a check of what it requires. [DDD00107](#ddd00107) names
   the cause when a call to the behavior's registration does not compile.
-- [DDD00077](#ddd00077) to [DDD00086](#ddd00086) and [DDD00089](#ddd00089):
+- [DDD00077](#ddd00077) to [DDD00086](#ddd00086), [DDD00089](#ddd00089) and [DDD00109](#ddd00109):
   [what a request declares](access-requirements.md#what-a-request-declares). They catch a request that declares
   nothing, a request whose attributes say something other than what is checked, and a request that says one
   thing twice.
@@ -4058,6 +4059,31 @@ access files, numbered after it.
 The warning is given only where an access file waits. A change that leaves every access file as it was needs no
 new file. `Check` gives the same warning and does not fail. A context whose migrations have no model snapshot, such
 as migrations written by hand, is taken to have no such changes.
+
+## DDD00109
+
+**A permission marker on a collection of ids takes no marker argument and no `[OrOwn]`.**
+
+```csharp
+public sealed record ArchiveBoardsCommand(
+    [OnResource(BoardPermissions.Edit)] IReadOnlyCollection<BoardId> Boards,
+    [ExpectedVersion] long? Version = null) : ICommand, IBoardsRequest;                           // DDD00109: whose version?
+
+public sealed record LeaveBoardsCommand(
+    [OnResource(BoardPermissions.ManageMembers)] BoardId[] Boards,
+    [OrOwn] SeatId Seat) : ICommand, IBoardsRequest;                                              // DDD00109: own of which board?
+```
+
+`[OnResource(p)]` on a collection of ids becomes `MemberAccess.OnEach(p, request.Boards)`
+([A permission on each resource of a list](membership/checks-and-saves.md#requirements-that-combine)). That call takes
+the permission and the collection, and nothing more.
+
+- `[ExpectedVersion]` names the version of one resource. Beside a marker on a collection there is no resource for it
+  to belong to.
+- `[OrOwn]` makes the caller's own an alternative to the permission on one resource. A collection names several.
+
+A request that also has `[OnResource]` on one id of the same resource is not reported: the marker argument belongs to
+that marker. Remove the marker argument, or send one request for each resource.
 
 ## Building the model fails: the owned type must carry the key part
 
