@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Tenancy.Access;
@@ -12,5 +13,6 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <param name="Name">The unit's name.</param>
 /// <param name="Path">The names of the unit and the units above it, the root first, joined with <c>" / "</c>.</param>
 /// <param name="Depth">How deep the unit is, the root being 1.</param>
+[DisplayName("NamedUnit")]
 public sealed record NamedUnit<TUnitId>(TUnitId Id, string Name, string Path, int Depth)
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>;

@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Attributes;
+
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
@@ -18,5 +20,6 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <param name="Slug">The slug its tenant is selected by.</param>
 /// <param name="OrganizationName">Its tenant's name.</param>
 /// <param name="TenantStatus">Where its tenant is in its life.</param>
+[DisplayName("SeatInTenant")]
 public sealed record SeatInTenant<TSeat>(TSeat Seat, string Slug, string OrganizationName, TenantStatus TenantStatus)
     where TSeat : class;

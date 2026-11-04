@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Tenancy;
@@ -12,6 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </summary>
 /// <typeparam name="TSeatId">The application's seat id.</typeparam>
 /// <typeparam name="TRoleId">The application's role id.</typeparam>
+[DisplayName("RoleGrant")]
 public sealed class RoleGrant<TSeatId, TRoleId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>

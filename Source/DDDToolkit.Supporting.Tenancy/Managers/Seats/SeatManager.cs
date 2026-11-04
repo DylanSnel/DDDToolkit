@@ -713,6 +713,7 @@ public class SeatManager<
     /// The moment the overview holds for: the permissions are those held then, and a grant of the seat applies then when
     /// <c>grant.AppliesAt(AsOf)</c>.
     /// </param>
+    [DisplayName("SeatOverview")]
     public sealed record SeatOverview(
         TTenant Tenant,
         string TenantName,
@@ -752,6 +753,7 @@ public class SeatManager<
     /// <param name="AtTenant">Whether the seat holds it for the whole tenant: one of its grants is at the root.</param>
     /// <param name="GrantedAt">The units a grant of the seat gives it at, each once, by its path from the root.</param>
     /// <param name="Reaches">Every unit it holds the permission at: those, and every unit below them, each once, by path.</param>
+    [DisplayName("PermissionReach")]
     public sealed record PermissionReach(string Permission, bool AtTenant, IReadOnlyList<UnitRef> GrantedAt, IReadOnlyList<UnitRef> Reaches);
 
     /// <summary>
@@ -760,6 +762,7 @@ public class SeatManager<
     /// </summary>
     /// <param name="Id">The unit.</param>
     /// <param name="Path">The names of the unit and the units above it, the root first, joined with <c>" / "</c>.</param>
+    [DisplayName("UnitRef")]
     public sealed record UnitRef(TUnitId Id, string Path);
 
     // ------------------------------------------------------------------ helpers

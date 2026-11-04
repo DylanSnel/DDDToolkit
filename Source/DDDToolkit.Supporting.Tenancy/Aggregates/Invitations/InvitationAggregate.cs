@@ -58,6 +58,7 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
     /// The address the invitation is for, as it was given, while the invitation is open; <see langword="null"/>
     /// once it was accepted or cancelled.
     /// </summary>
+    [PersonalData]
     public string? Address { get; private set; }
 
     /// <summary>The unit the seat is placed in, as its primary placement.</summary>

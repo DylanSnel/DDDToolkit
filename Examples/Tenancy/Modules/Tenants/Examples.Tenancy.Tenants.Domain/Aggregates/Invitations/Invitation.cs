@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Attributes;
+
 namespace Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 
 /// <summary>
@@ -29,7 +31,12 @@ public sealed partial class Invitation
     /// address is invited again, and an account nobody ever used is deleted by it when the invitation is
     /// cancelled. It is forgotten with the address when the invitation is cancelled. An accepted invitation keeps
     /// it: it is then the account behind the seat the acceptance made.
+    /// <para>
+    /// The id is personal data. A GraphQL type that binds by convention leaves it out. <c>InvitationType</c> binds
+    /// explicitly and does not list it.
+    /// </para>
     /// </remarks>
+    [PersonalData]
     public Guid? InvitedAccount { get; private set; }
 
     /// <summary>Keeps the id of the account the identity provider made for this invitation's address.</summary>

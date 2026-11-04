@@ -54,6 +54,7 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
     public TTenantId TenantId { get; private set; }
 
     /// <summary>The verified identity the seat belongs to: the subject of its token. Never changes.</summary>
+    [PersonalData]
     public Guid Identity { get; private set; }
 
     /// <summary>Whether the seat's grants count.</summary>
