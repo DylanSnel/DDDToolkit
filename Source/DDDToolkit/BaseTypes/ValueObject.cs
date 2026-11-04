@@ -113,10 +113,22 @@ public abstract record ValueObject : IValueObject
     protected abstract IEnumerable<object?> GetEqualityComponents();
 
 
+    /// <summary>
+    /// The hash of <see cref="GetEqualityComponents"/>, for a value object the generator does not write. The
+    /// generator writes a hash of its own, from the compared properties, without walking the components.
+    /// </summary>
     public override int GetHashCode()
-        => GetEqualityComponents()
-            .Select(x => x?.GetHashCode() ?? 0)
-            .Aggregate((x, y) => x ^ y);
+    {
+        // A seed, so a value object without components has a hash. Aggregate without one threw on an empty
+        // sequence.
+        var hash = new HashCode();
+        foreach (var component in GetEqualityComponents())
+        {
+            hash.Add(component);
+        }
+
+        return hash.ToHashCode();
+    }
 
     protected ValueObject()
     {

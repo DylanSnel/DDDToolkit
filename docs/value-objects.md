@@ -102,16 +102,28 @@ partial record PersonName : ValueObject, IValidatable<ValidPersonName>
 
     public virtual bool Equals(PersonName? other)
     {
-        // ... null and type checks
-        return Enumerable.SequenceEqual(GetEqualityComponents(), other.GetEqualityComponents());
+        // ... null, type and reference checks
+        return EqualityComparer<string>.Default.Equals(FirstName, other.FirstName)
+            && EqualityComparer<string>.Default.Equals(LastName, other.LastName);
     }
 
-    // GetHashCode over the same components, a constructor for JSON, ToValid() and With(...)
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(FirstName, EqualityComparer<string>.Default);
+        hash.Add(LastName, EqualityComparer<string>.Default);
+        return hash.ToHashCode();
+    }
+
+    // a constructor for JSON, ToValid() and With(...)
 }
 ```
 
-Add a property, and the next build adds it to `GetEqualityComponents()`. Nobody keeps a list of members up to date by
-hand. In a hand-written value object, that list is the part that goes wrong.
+Add a property, and the next build adds it to `Equals`, `GetHashCode` and `GetEqualityComponents()`. Nobody keeps a
+list of members up to date by hand. In a hand-written value object, that list is the part that goes wrong.
+
+`Equals` and `GetHashCode` read the properties directly. They allocate nothing and box no value-type property.
+`GetEqualityComponents()` yields the same properties as objects, for code that walks them.
 
 Properties you declare yourself must be `{ get; protected init; }`. Any other accessor reports
 [DDD00010](diagnostics.md#ddd00010) or [DDD00011](diagnostics.md#ddd00011), and a code fix changes the accessor to

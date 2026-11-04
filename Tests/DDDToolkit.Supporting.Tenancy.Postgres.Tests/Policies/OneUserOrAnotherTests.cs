@@ -63,7 +63,7 @@ public sealed class OneUserOrAnotherTests(TenancyPostgres postgres)
         var read = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped =>
         {
             await RequireAsync(scoped, log);
-            return await scoped.Tallies().Tallies.IgnoreQueryFilters([TenancyQueryFilter.Name]).Select(tally => tally.Name).OrderBy(name => name).ToListAsync(Cancellation);
+            return await scoped.Tallies().Tallies.IgnoreTenantFilter().Select(tally => tally.Name).OrderBy(name => name).ToListAsync(Cancellation);
         });
         read.Should().Equal(["Barrels", "Crates"], "Harbor's, and no other tenant's: Tenancy keeps a seat to its tenant, whatever the module's rule says");
 
@@ -74,7 +74,7 @@ public sealed class OneUserOrAnotherTests(TenancyPostgres postgres)
             var across = await services.InScopeAsync(async scoped =>
             {
                 await RequireAsync(scoped, log);
-                return await scoped.Tallies().Tallies.IgnoreQueryFilters([TenancyQueryFilter.Name]).Select(tally => tally.Name).OrderBy(name => name).ToListAsync(Cancellation);
+                return await scoped.Tallies().Tallies.IgnoreTenantFilter().Select(tally => tally.Name).OrderBy(name => name).ToListAsync(Cancellation);
             });
             across.Should().Equal(["Apples", "Barrels", "Crates"]);
         }

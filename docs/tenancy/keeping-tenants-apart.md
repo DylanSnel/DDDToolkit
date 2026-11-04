@@ -59,7 +59,7 @@ modelBuilder.Entity<Delivery>().ScopeToTenant(delivery => delivery.ShipperTenant
   tenant column out of `UPDATE`.
 - **The filter has a name**, `TenancyQueryFilter.Name` (`tenancy.current-tenant`). A filter of yours on the same
   class, such as a soft delete, applies next to it. A read across tenants skips only the tenant filter with
-  `IgnoreQueryFilters([TenancyQueryFilter.Name])`.
+  `IgnoreTenantFilter()`.
 - **Your filter hides rows from your queries only.** Tenancy's bookkeeping skips every filter. It reads the hidden
   rows when it writes rights, and when it checks that a slug, a person or a role name is free. Those checks take the
   place of a unique index, so they must see every row, as a unique index in the database does. A seat that your

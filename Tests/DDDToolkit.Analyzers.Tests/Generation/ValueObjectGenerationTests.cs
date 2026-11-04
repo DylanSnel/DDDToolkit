@@ -169,6 +169,47 @@ public class ValueObjectGenerationTests
         var left = emitted.New("Sample.Nothing");
         ((IEnumerable<object?>)emitted.Call(left, "GetEqualityComponents")!).Should().BeEmpty();
         left.Should().Be(emitted.New("Sample.Nothing"));
+        left.GetHashCode().Should().Be(emitted.New("Sample.Nothing").GetHashCode(), "a value object without compared properties has a hash, and does not throw");
+    }
+
+    [Fact]
+    public void Equality_compares_the_properties_directly_without_walking_the_components()
+    {
+        var result = Names();
+
+        result.ShouldNotContain(Hint.Of("Sample.PersonName"), "SequenceEqual");
+        result.ShouldNotContain(Hint.Of("Sample.PersonName"), "Aggregate");
+        result.ShouldContain(Hint.Of("Sample.PersonName"), "Default.Equals(FirstName, other.FirstName)");
+        result.ShouldContain(Hint.Of("Sample.PersonName"), "Default.Equals(LastName, other.LastName)");
+    }
+
+    [Fact]
+    public void The_hash_depends_on_the_order_of_the_properties()
+    {
+        var emitted = GeneratorTestHost.Create(Preamble +
+            """
+            [ValueObject]
+            public partial record Pair
+            {
+                public Pair(int left, int right)
+                {
+                    Left = left;
+                    Right = right;
+                }
+
+                public int Left { get; protected init; }
+
+                public int Right { get; protected init; }
+            }
+            """).RunCore().Emit();
+
+        var oneTwo = emitted.New("Sample.Pair", 1, 2);
+        var twoOne = emitted.New("Sample.Pair", 2, 1);
+
+        oneTwo.Should().NotBe(twoOne);
+        oneTwo.GetHashCode().Should().NotBe(twoOne.GetHashCode(), "the old hash combined with XOR, so (1, 2) and (2, 1) collided");
+        oneTwo.GetHashCode().Should().Be(emitted.New("Sample.Pair", 1, 2).GetHashCode());
+        emitted.Call(oneTwo, "ToValid")!.Should().Be(emitted.Call(emitted.New("Sample.Pair", 1, 2), "ToValid"));
     }
 
     [Fact]

@@ -159,7 +159,8 @@ if (OrderId.TryParse(candidate, out var parsed))   // false when malformed or nu
 ```
 
 `TryParse` does the work, and `Parse` calls it. The generated body handles the optional prefix and the invariant
-culture:
+culture. It parses the value from the text past the prefix, without cutting the value out as a new string. A wrapped
+type without a `TryParse` over `ReadOnlySpan<char>` gets the same body with `Substring`:
 
 **OrderId.g.cs, shortened**
 
@@ -172,12 +173,13 @@ public static bool TryParse([NotNullWhen(true)] string? input, out OrderId resul
         return false;
     }
 
-    if (IdPrefix.Length != 0 && input.StartsWith(IdPrefix + "_", StringComparison.Ordinal))
+    var text = input.AsSpan();
+    if (IdPrefix.Length != 0 && text.StartsWith(IdPrefix + "_", StringComparison.Ordinal))
     {
-        input = input.Substring(IdPrefix.Length + 1);
+        text = text.Slice(IdPrefix.Length + 1);
     }
 
-    if (!Guid.TryParse(input, CultureInfo.InvariantCulture, out var value))
+    if (!Guid.TryParse(text, CultureInfo.InvariantCulture, out var value))
     {
         return false;
     }

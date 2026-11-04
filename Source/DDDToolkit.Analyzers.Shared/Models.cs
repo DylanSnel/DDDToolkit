@@ -138,6 +138,13 @@ internal sealed record ValueTypeInfo(
 {
     /// <summary>Whether Parse/TryParse can be generated for ids wrapping this type.</summary>
     public bool CanParse => IsString || HasFormatProviderTryParse;
+
+    /// <summary>
+    /// True when the type also has a static <c>TryParse(ReadOnlySpan&lt;char&gt;, IFormatProvider, out T)</c>, as every
+    /// BCL primitive has on .NET 7 and later. The id's <c>TryParse</c> then reads the value past the prefix without
+    /// cutting it out of the input as a new string.
+    /// </summary>
+    public bool HasSpanTryParse { get; init; }
 }
 
 internal sealed record PropertyInfo(

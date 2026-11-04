@@ -250,7 +250,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         /// </remarks>
         public async Task<IReadOnlyList<TenantProject>> OfTenantAsync(TenantId tenant, CancellationToken cancellationToken)
             => await db.Projects.AsNoTracking()
-                .IgnoreQueryFilters([TenancyQueryFilter.Name])
+                .IgnoreTenantFilter()
                 .Where(project => project.TenantId == tenant)
                 .OrderBy(project => project.Number)
                 .Select(project => new TenantProject(

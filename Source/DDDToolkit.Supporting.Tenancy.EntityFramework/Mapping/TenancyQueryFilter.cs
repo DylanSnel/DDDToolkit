@@ -14,9 +14,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <para>
 /// It is a named filter, so an application's own filter on the same entity, a soft delete say, is another
 /// named filter and both apply. A read that must look across tenants for the application, as finding a
-/// person's seats does, skips it by name with <c>IgnoreQueryFilters([TenancyQueryFilter.Name])</c>, which
-/// leaves every other filter in place. Tenancy's own bookkeeping, the rows a save writes and the checks that
-/// stand in for a unique index, skips every filter: it must see each row the database holds.
+/// person's seats does, skips it with <see cref="IgnoreTenantFilter{TEntity}"/>, which leaves every other
+/// filter in place. Tenancy's own bookkeeping, the rows a save writes and the checks that stand in for a
+/// unique index, skips every filter: it must see each row the database holds.
 /// </para>
 /// </summary>
 public static class TenancyQueryFilter
@@ -24,7 +24,31 @@ public static class TenancyQueryFilter
     /// <summary>The filter's name, for <c>IgnoreQueryFilters</c>.</summary>
     public const string Name = "tenancy.current-tenant";
 
+    /// <summary>
+    /// The filter's name, in the one array every read that skips the filter passes. Entity Framework keeps the
+    /// keys of <c>IgnoreQueryFilters</c> as a constant in the query, and its query cache compares that
+    /// constant by reference unless it is an array. A new collection on every call, as
+    /// <c>IgnoreQueryFilters([Name])</c> writes, made 10.0.0 to 10.0.2 compile the query again on every call.
+    /// From 10.0.3 on, Entity Framework copies any collection that is not an array into a new array.
+    /// </summary>
+    private static readonly string[] Names = [Name];
+
     private static readonly MethodInfo CurrentMethod = typeof(TenancyQueryFilter).GetMethod(nameof(Current))!;
+
+    /// <summary>
+    /// <paramref name="query"/> without the tenant filter, and with every other named filter, a soft delete
+    /// say: for a read that must look across tenants for the application, as finding a person's seats does.
+    /// <para>
+    /// It passes one array for every call. So Entity Framework finds the compiled query in its cache, from
+    /// 10.0.0 on, and allocates no copy of the keys.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TEntity">The entity the query reads.</typeparam>
+    /// <param name="query">The query to read past the tenant filter.</param>
+    /// <returns>The query, without the tenant filter.</returns>
+    public static IQueryable<TEntity> IgnoreTenantFilter<TEntity>(this IQueryable<TEntity> query)
+        where TEntity : class
+        => query.IgnoreQueryFilters(Names);
 
     /// <summary>
     /// The tenant the current Tenancy user acts in, or <see langword="null"/> when it acts in none, which

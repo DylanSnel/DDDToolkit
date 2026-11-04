@@ -8,6 +8,7 @@
   </Folder>
   <Folder Name="/Benchmarks/">
     <Project Path="Benchmarks/DDDToolkit.Benchmarks/DDDToolkit.Benchmarks.csproj" />
+    <Project Path="Benchmarks/DDDToolkit.Benchmarks.FluentValidation/DDDToolkit.Benchmarks.FluentValidation.csproj" />
   </Folder>
   <Folder Name="/Source/">
     <Project Path="Source/DDDToolkit.Abstractions/DDDToolkit.Abstractions.csproj" />

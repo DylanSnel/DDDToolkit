@@ -68,6 +68,43 @@ public class FluentValidationGeneratorTests
     }
 
     [Fact]
+    public void One_validator_serves_every_value_of_the_type_and_each_value_keeps_its_own_failures()
+    {
+        var emitted = Run(
+            """
+            [SingleValueObject<string>]
+            public partial record EmailAddress
+            {
+                public static int ValidatorsBuilt;
+
+                public static EmailAddress Create(string value) => new(value);
+
+                partial class Validator
+                {
+                    public Validator()
+                    {
+                        ValidatorsBuilt++;
+                        RuleFor(x => x.Value).NotEmpty().EmailAddress();
+                    }
+                }
+            }
+            """).Emit();
+
+        var bad = emitted.CallStatic("Sample.EmailAddress", "Create", "not-an-address")!;
+        var good = emitted.CallStatic("Sample.EmailAddress", "Create", "ada@example.com")!;
+        var otherBad = emitted.CallStatic("Sample.EmailAddress", "Create", "")!;
+
+        emitted.Property(bad, "IsValid").Should().Be(false);
+        emitted.Property(good, "IsValid").Should().Be(true);
+        emitted.Property(otherBad, "IsValid").Should().Be(false);
+
+        emitted.Type("Sample.EmailAddress").GetField("ValidatorsBuilt")!.GetValue(null).Should().Be(1, "building a validator runs every rule declaration, so it happens once per type");
+        ((IEnumerable<ValidationFailure>)emitted.Property(bad, "Errors")!).Should().ContainSingle().Which.ErrorCode.Should().Be("EmailValidator");
+        ((IEnumerable<ValidationFailure>)emitted.Property(good, "Errors")!).Should().BeEmpty();
+        ((IEnumerable<ValidationFailure>)emitted.Property(otherBad, "Errors")!).Should().NotBeEmpty();
+    }
+
+    [Fact]
     public void An_invalid_value_object_cannot_become_its_always_valid_twin()
     {
         var emitted = Run(
