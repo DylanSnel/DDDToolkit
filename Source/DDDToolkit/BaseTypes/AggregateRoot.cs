@@ -36,9 +36,17 @@ public abstract class AggregateRoot<TIdObject> : Entity<TIdObject>, IAggregateRo
     /// </remarks>
     public long Version { get; private set; }
 
+    /// <summary>
+    /// The read-only view of <see cref="_domainEvents"/>, made on the first read. A view does not copy the list, so
+    /// one serves every read. The save asks every tracked aggregate for its events, so a new view per read was an
+    /// allocation per aggregate on every save.
+    /// </summary>
+    [Internal]
+    private System.Collections.ObjectModel.ReadOnlyCollection<IDomainEvent>? _domainEventsView;
+
     /// <summary>The events raised since the aggregate was loaded or last saved, in order.</summary>
     [Internal]
-    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
+    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEventsView ??= _domainEvents.AsReadOnly();
 
     /// <summary>Records a domain event. Only the aggregate itself can raise events.</summary>
     protected void RaiseDomainEvent(IDomainEvent domainEvent)
