@@ -137,8 +137,8 @@ writes a lock from the same marks:
     unless the caller may name owners (tutorial step 4, and the sample's `SeatsOpenProjectsWhereTheyMay`).
   - *Where a resource hangs*, for a resource [reached from above](beside-an-organization.md#reach-from-above). A
     caller who may change that column could move the resource to a place where the caller holds the locking
-    permission. Fix the column (`IsFixedAfterInsert`, [step 8](tutorial.md#step-8-reach-from-above)) or guard it with
-    a trigger (the sample's `UnitChangesWithItsPermissions`).
+    permission. Fix the column with `[At(Fixed = true)]` ([step 8](tutorial.md#step-8-reach-from-above)) or guard it
+    with a trigger (the sample's `UnitChangesWithItsPermissions`).
   - *Who is put on a list.* A row's member cannot change after insert, because the column is left out of `UPDATE`.
     Your rules decide who may be added (the sample's `CrewSeatsOfTheProjectsTenant`).
 - **Other columns follow your rule for changing the resource.** That rule lets every permission that changes the row
