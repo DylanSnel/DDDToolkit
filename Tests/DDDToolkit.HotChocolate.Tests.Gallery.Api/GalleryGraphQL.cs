@@ -82,8 +82,29 @@ public static partial class ReferencedCuratorType
 }
 
 /// <summary>The gallery's root fields.</summary>
+/// <summary>
+/// The staff list's curator. Email is personal data, which the toolkit's conventions leave out. The type class shows it
+/// with a resolver named like the property, which takes the place of the property's field.
+/// </summary>
+/// <remarks>
+/// GetRoom is bound to Room with <c>[BindMember]</c>. HotChocolate's generator then ignores the field named room, and
+/// that field is the resolver's own. The schema has no room.
+/// </remarks>
+[ObjectType<CuratorProfile>]
+public static partial class CuratorProfileType
+{
+    public static string GetEmail([Parent] CuratorProfile curator) => curator.Email;
+
+    [BindMember(nameof(CuratorProfile.Room))]
+    public static string GetRoom([Parent] CuratorProfile curator) => curator.Room;
+}
+
 public static class GalleryQueries
 {
+    /// <summary>The curators of the staff list.</summary>
+    [Query]
+    public static IReadOnlyList<CuratorProfile> GetCurators([Service] GalleryDesk desk) => desk.Curators;
+
     /// <summary>Every exhibit: a list, so a rule on a field of an exhibit is asked for all of them at once.</summary>
     [Query]
     public static IReadOnlyList<ExhibitOverview> GetExhibits([Service] GalleryDesk desk) => desk.Exhibits;

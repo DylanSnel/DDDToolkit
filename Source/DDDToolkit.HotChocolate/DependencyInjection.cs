@@ -15,11 +15,18 @@ namespace DDDToolkit.HotChocolate;
 public static class DependencyInjection
 {
     /// <summary>
-    /// Registers the toolkit's schema conventions: the <see cref="IgnoreInternalFieldsInterceptor"/>,
-    /// which hides every member marked <c>[Internal]</c>; the <see cref="DomainBehaviourFieldsInterceptor"/>,
-    /// which lets entities, aggregates and value objects publish their properties by convention and never
-    /// their methods; the <see cref="ShareableValueObjectsInterceptor"/>, which marks value objects
-    /// <c>@shareable</c> in a Fusion source schema; and the <c>DomainEvent</c> interface type.
+    /// Registers the toolkit's schema conventions and the <c>DomainEvent</c> interface type.
+    /// <list type="bullet">
+    /// <item><see cref="IgnoreInternalFieldsInterceptor"/> hides every member marked <c>[Internal]</c>.</item>
+    /// <item><see cref="DomainBehaviourFieldsInterceptor"/> leaves the methods of entities, aggregates, value objects and
+    /// the toolkit's package classes out of a type that binds by convention.</item>
+    /// <item><see cref="PersonalDataAndBookkeepingFieldsInterceptor"/> leaves members marked <c>[PersonalData]</c> or
+    /// <c>[Bookkeeping]</c> out of a type that binds by convention.</item>
+    /// <item><see cref="DisplayNameTypesInterceptor"/> names a type after the <c>[DisplayName]</c> of its class, unless
+    /// the application names it.</item>
+    /// <item><see cref="ShareableValueObjectsInterceptor"/> marks value objects <c>@shareable</c> in a Fusion source
+    /// schema.</item>
+    /// </list>
     /// </summary>
     /// <remarks>
     /// <para>
@@ -45,6 +52,8 @@ public static class DependencyInjection
 
         builder.TryAddTypeInterceptor(typeof(IgnoreInternalFieldsInterceptor));
         builder.TryAddTypeInterceptor(typeof(DomainBehaviourFieldsInterceptor));
+        builder.TryAddTypeInterceptor(typeof(PersonalDataAndBookkeepingFieldsInterceptor));
+        builder.TryAddTypeInterceptor(typeof(DisplayNameTypesInterceptor));
         builder.TryAddTypeInterceptor(typeof(ShareableValueObjectsInterceptor));
 
         builder.AddHotChocolateTypes();

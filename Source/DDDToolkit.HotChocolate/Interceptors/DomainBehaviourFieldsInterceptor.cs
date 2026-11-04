@@ -1,13 +1,15 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using HotChocolate.Configuration;
 using HotChocolate.Types.Descriptors.Configurations;
+using System.Collections.Concurrent;
 using System.Reflection;
 
 namespace DDDToolkit.HotChocolate.Interceptors;
 
 /// <summary>
-/// Keeps the methods of entities, aggregates and value objects out of a schema that binds their fields by
-/// convention: such a type publishes its properties, not its behaviour.
+/// Keeps the methods of entities, aggregates, value objects and the classes of the toolkit's packages out of a schema
+/// that binds their fields by convention. Such a type publishes its properties, not its behaviour.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,7 +21,12 @@ namespace DDDToolkit.HotChocolate.Interceptors;
 /// </para>
 /// <para>
 /// So on an implicitly bound object type whose runtime type implements <see cref="IEntity"/> or
-/// <see cref="IValueObject"/>, the fields that come from the type's own methods are removed. What stays:
+/// <see cref="IValueObject"/>, the fields that come from the type's own methods are removed. The same holds for a
+/// class declared in an assembly marked <see cref="ToolkitPackageAttribute">[assembly: ToolkitPackage]</see>.
+/// Tenancy and Membership carry the mark. Their plain classes, such as <c>RoleGrant&lt;TSeatId, TRoleId&gt;</c> and
+/// <c>MemberRole&lt;TMemberId, TRoleId&gt;</c>, implement neither interface and have methods such as
+/// <c>AppliesAt(moment)</c>. The mark is on the assembly, so an application's own classes are never matched by name or
+/// namespace. What stays:
 /// </para>
 /// <list type="bullet">
 /// <item>a type declared with <c>BindFieldsExplicitly()</c>, untouched: it publishes what it lists, methods included;</item>
@@ -42,7 +49,7 @@ public sealed class DomainBehaviourFieldsInterceptor : TypeInterceptor
     {
         if (configuration is not ObjectTypeConfiguration { IsExtension: false } objectType
             || !objectType.Fields.IsImplicitBinding()
-            || !IsDomainType(objectType.RuntimeType))
+            || !(IsDomainType(objectType.RuntimeType) || IsPackageType(objectType.RuntimeType)))
         {
             return;
         }
@@ -52,14 +59,21 @@ public sealed class DomainBehaviourFieldsInterceptor : TypeInterceptor
             var field = objectType.Fields[index];
 
             if (field is { Member: MethodInfo method, Resolver: null, PureResolver: null }
-                && IsDomainType(method.ReflectedType ?? method.DeclaringType))
+                && (IsDomainType(method.ReflectedType ?? method.DeclaringType) || IsPackageType(method.DeclaringType)))
             {
                 objectType.Fields.RemoveAt(index);
             }
         }
     }
 
+    private static readonly ConcurrentDictionary<Assembly, bool> PackageAssemblies = new();
+
     private static bool IsDomainType(Type? type)
         => type is not null
             && (typeof(IEntity).IsAssignableFrom(type) || typeof(IValueObject).IsAssignableFrom(type));
+
+    // A constructed generic type, such as MemberRole<SeatId, BoardRoleId>, is declared in the assembly of its definition.
+    private static bool IsPackageType(Type? type)
+        => type is not null
+            && PackageAssemblies.GetOrAdd(type.Assembly, static assembly => assembly.IsDefined(typeof(ToolkitPackageAttribute), inherit: false));
 }
