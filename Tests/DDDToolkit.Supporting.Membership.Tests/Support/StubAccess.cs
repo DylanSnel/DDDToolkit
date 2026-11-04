@@ -84,6 +84,29 @@ public sealed class StubAccess<TResource, TResourceId>(MembershipRules rules) : 
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyDictionary<TResourceId, MemberHold<TResourceId>>> HoldEachAsync(
+        IReadOnlyCollection<TResourceId> resources,
+        string permission,
+        CancellationToken cancellationToken)
+    {
+        Asked.Add("holds " + permission + " on " + resources.Count);
+        if (resources.Distinct().Count() > MembershipAccessManager.MostResources)
+        {
+            throw new ArgumentException("More resources than one statement asks about.", nameof(resources));
+        }
+
+        IReadOnlyDictionary<TResourceId, MemberHold<TResourceId>> held = resources.Distinct()
+            .Where(_seen.ContainsKey)
+            .ToDictionary(
+                resource => resource,
+                resource => _seen[resource].Held.TryGetValue(permission, out var via)
+                    ? new MemberHold<TResourceId>(resource, via, _seen[resource].Version, Until)
+                    : new MemberHold<TResourceId>(resource, null, _seen[resource].Version, null));
+
+        return Task.FromResult(held);
+    }
+
+    /// <inheritdoc />
     public Task<IReadOnlyDictionary<TResourceId, IReadOnlySet<string>>> PermissionsOnAsync(
         IReadOnlyCollection<TResourceId> resources,
         IReadOnlyCollection<string> permissions,

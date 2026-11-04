@@ -42,6 +42,30 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
     }
 
     [Fact]
+    public async Task What_is_held_on_three_resources_is_one_statement_and_a_request_on_each_of_them_is_refused_after_it()
+    {
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asUser: true);
+        var data = filing.Scenario;
+        var commands = filing.Services.Commands;
+
+        // Ada owns the minutes, looks on at the budget, and is no member of the outline.
+        var held = await filing.Services.AsAsync(TestUsers.User(data.Ada), provider => provider.GetRequiredService<MembershipAccessManager<Document>>()
+            .HoldEachAsync([data.Minutes, data.Budget, data.Outline], DocumentPermissions.View, Cancellation));
+        commands.Count.Should().Be(1);
+        held.Keys.Should().BeEquivalentTo([data.Minutes, data.Budget], "the policies and the question both hide the outline from Ada");
+        held[data.Minutes].Via.Should().NotBeNull();
+        held[data.Budget].Via.Should().Be(MemberVia.Members);
+
+        // The request on each of the three: the same one statement, then not-found for the outline.
+        commands.Reset();
+        var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestUsers.User(data.Ada), provider => provider.GetRequiredService<MembershipAccessManager<Document>>()
+                .RequireEachAsync([data.Minutes, data.Budget, data.Outline], DocumentPermissions.View, Cancellation)))
+            .Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
+        refused.Which.Code.Should().Be(DocumentRefusals.Membership[MembershipRefusals.NotFound]);
+        commands.Count.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Questions_asked_side_by_side_each_run_as_their_caller_on_a_context_of_their_own()
     {
         // A host whose contexts come from a pool with a factory, and run as the caller under the policies.

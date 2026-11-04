@@ -81,6 +81,36 @@ public sealed class MemberStatementTests
     }
 
     [Fact]
+    public async Task What_is_held_on_many_resources_is_read_in_one_statement_and_is_what_each_resource_alone_answers()
+    {
+        using var filing = await SqliteFiling.SeededAsync();
+        var data = filing.Scenario;
+        DocumentId[] about = [data.Minutes, data.Budget, data.Outline, DocumentId.CreateSequential(), data.Minutes];
+
+        foreach (var user in data.Users)
+        {
+            foreach (var permission in FilingScenario.DocumentPermissionsAsked)
+            {
+                filing.Commands.Reset();
+                var held = await filing.DocumentsAsync(TestUsers.User(user), access => access.HoldEachAsync(about, permission, Cancellation));
+                filing.Commands.Count.Should().Be(1, "what " + user + " holds of " + permission + " on every document is one statement");
+
+                foreach (var document in about.Distinct())
+                {
+                    var alone = await filing.DocumentsAsync(TestUsers.User(user), access => access.HoldAsync(document, permission, Cancellation));
+                    held.GetValueOrDefault(document).Should().Be(alone, "the hold of " + user + " for " + permission + " is the one HoldAsync reads");
+                }
+            }
+        }
+
+        // Required on two documents Ada sees and holds the permission on: the same one statement, and a hold for each.
+        filing.Commands.Reset();
+        var holds = await filing.DocumentsAsync(TestUsers.User(data.Ada), access => access.RequireEachAsync([data.Minutes, data.Budget, data.Minutes], DocumentPermissions.View, Cancellation));
+        filing.Commands.Count.Should().Be(1);
+        holds.Select(hold => hold.Resource).Should().Equal(data.Minutes, data.Budget);
+    }
+
+    [Fact]
     public async Task Nothing_is_read_where_nothing_can_be_answered()
     {
         using var filing = await SqliteFiling.SeededAsync();

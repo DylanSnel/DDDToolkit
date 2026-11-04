@@ -74,6 +74,20 @@ public sealed class PermissionMarkerAttribute(Type factory, string method) : Att
     public Type[] Implies { get; set; } = [];
 
     /// <summary>
+    /// The method of <see cref="Factory"/> that makes the requirement when the marked member is a collection of ids, a
+    /// type that implements <c>IEnumerable&lt;TId&gt;</c> for one id type. The method takes the permission and the
+    /// collection. Membership's <c>[OnResource]</c> names <c>MemberAccess.OnEach</c>, so
+    /// <c>[OnResource(BoardPermissions.Edit)] IReadOnlyCollection&lt;BoardId&gt; Boards</c> becomes
+    /// <c>MemberAccess.OnEach(BoardPermissions.Edit, request.Boards)</c>. The generator holds the collection's element to
+    /// what <see cref="IdOf"/> says of a single id (DDD00081). A marker argument beside such a marker, or <c>[OrOwn]</c>
+    /// paired with it, is DDD00109.
+    /// <para>
+    /// The default is <see langword="null"/>. A marker without it on a collection is DDD00081, as on any other type.
+    /// </para>
+    /// </summary>
+    public string? EachMethod { get; set; }
+
+    /// <summary>
     /// The method of <see cref="Factory"/> that the caller's own way through must still pass at the marked member. A
     /// marker with this property allows <see cref="OrOwnAttribute"/> to pair with it. Set it on a marker whose member is
     /// what the request acts on. The method takes what <see cref="Method"/> takes: the permission, the marked member and
