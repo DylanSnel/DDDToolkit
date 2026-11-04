@@ -95,6 +95,30 @@ public sealed class LettersReadContext(DbContextOptions<LettersReadContext> opti
     }
 }
 
+/// <summary>Which label the letters of a scope's context hide, or none.</summary>
+public sealed class LabelView
+{
+    public string? Hidden { get; set; }
+}
+
+/// <summary>The letters, with a query filter that reads a member of the context: the label it hides.</summary>
+public sealed class HidingLettersContext(DbContextOptions<HidingLettersContext> options, LabelView view) : DbContext(options)
+{
+    public DbSet<Letter> Letters => Set<Letter>();
+
+    /// <summary>The label this context hides, or none: what the filter reads.</summary>
+    public string? Hidden => view.Hidden;
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        => modelBuilder.Entity<Letter>().HasQueryFilter(letter => Hidden == null || letter.Label != Hidden);
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.AddDDDToolkitConventions();
+        configurationBuilder.AddEfTestsConverters();
+    }
+}
+
 /// <summary>
 /// The owner of an aggregate, read by the Entity Framework package for the core's check of <c>[Own]</c> on the aggregate's
 /// id: <c>AddDDDToolkitEntityFramework</c> registers the reader for every id, it finds the context that maps the aggregate
@@ -164,6 +188,41 @@ public sealed class AggregateOwnerTests : IDisposable
         var statement = _statements.Read.Should().ContainSingle("one row is read, once").Subject;
         statement.Should().Contain("\"Postman\"").And.Contain("FROM \"Letters\"").And.Contain("LIMIT");
         statement.Should().NotContain("\"Label\"").And.NotContain("\"Version\"", "only the owner's column is read");
+    }
+
+    [Fact]
+    public async Task Every_check_sends_the_same_compiled_statement_with_the_letter_s_id_as_its_parameter()
+    {
+        await using var host = Host();
+
+        await AskAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(AnnsLetter));
+        await AskAsync(host, CurrentUserSnapshot.User(Bob), new DeliverLetter(BobsLetter));
+        (await RefusedAsync(host, CurrentUserSnapshot.User(Ann), new DeliverLetter(NoLetter))).Code.Should().Be(ToolkitRefusals.NotFound);
+
+        _statements.Read.Should().HaveCount(3, "one statement for each check").And.OnlyContain(statement => statement == _statements.Read[0], "the query is compiled once, and the id is its parameter");
+    }
+
+    [Fact]
+    public async Task The_compiled_statement_reads_the_query_filter_of_the_context_it_runs_on_for_every_check()
+    {
+        var services = Services();
+        services.AddScoped<LabelView>();
+        services.AddDbContext<HidingLettersContext>(Configure);
+        await using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        async Task AskHidingAsync(string? hidden)
+        {
+            await using var scope = host.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<LabelView>().Hidden = hidden;
+            using var running = TestAccess.BeginAs(CurrentUserSnapshot.User(Ann));
+            await scope.ServiceProvider.GetRequiredService<AccessChecks<ILettersRequest>>().RequireAsync(new DeliverLetter(AnnsLetter), Cancellation);
+        }
+
+        // The filter reads a member of the context, which each scope sets: the same compiled statement follows it each time.
+        var hidden = await FluentActions.Awaiting(() => AskHidingAsync("Books")).Should().ThrowAsync<RefusalException>();
+        hidden.Which.Code.Should().Be(ToolkitRefusals.NotFound, "the context of this scope hides the letter");
+        await AskHidingAsync(hidden: null);
+        await FluentActions.Awaiting(() => AskHidingAsync("Books")).Should().ThrowAsync<RefusalException>();
     }
 
     [Fact]

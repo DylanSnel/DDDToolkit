@@ -39,6 +39,12 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// gives nothing where the questions read either. A filter that reads what is around the work, and not the
 /// context, holds on every context, and takes nothing from a reading on a context of its own.
 /// </para>
+/// <para>
+/// The statement of a check on one resource, or on a list of them, is compiled once for each shape it takes, where it
+/// compares with values alone (<see cref="CompiledHolds{TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId}"/>).
+/// Where the roles are rows, or the rules let a resource be reached from above, the statement holds a query the
+/// application answers for the caller, and it is composed for each check.
+/// </para>
 /// </remarks>
 internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId> : IMembershipStorage<TResource, TResourceId>, IMemberQueries<TResource>
     where TContext : DbContext
@@ -53,6 +59,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     private readonly IDbContextFactory<TContext>? _contexts;
     private readonly MembershipRegistration _registration;
     private readonly MemberNamesOf<TContext, TResource, TRoleId> _names;
+    private readonly CompiledHolds<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId> _holds;
     private readonly Func<CurrentUserSnapshot, TMemberId?> _asMember;
     private readonly ICurrentMember<TResourceId, TMemberId>? _resolved;
     private readonly IRolesWithPermission<TResourceId, TRoleId>? _kept;
@@ -74,6 +81,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         _services = services;
         _contexts = services.GetService<IDbContextFactory<TContext>>();
         _names = services.GetRequiredService<MemberNamesOf<TContext, TResource, TRoleId>>();
+        _holds = services.GetRequiredService<CompiledHolds<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>>();
         _user = services.GetRequiredService<ICurrentUser>();
         _clock = services.GetRequiredService<TimeProvider>();
 
@@ -146,6 +154,14 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         // Whether it is there for the user is the filter; how the user holds the permission on it, and until
         // when, is what is read. A permission held from above is held for as long as the resource is seen.
         var act = ReachFor(permission, asked);
+        if (CompiledHolds<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>.Compiles(act, see))
+        {
+            var row = await ReadAsync(context => _holds.HoldAsync(context, resource, act, see, cancellationToken), cancellationToken).ConfigureAwait(false);
+            return row is null
+                ? null
+                : new MemberHold<TResourceId>(resource, act.Via(row.AsMember, row.FromAbove), row.Version, row.Until);
+        }
+
         var held = await ReadAsync(
             context => act.HeldWhereSeen(context.Set<TResource>().AsNoTracking().Where(candidate => candidate.Id.Equals(resource)), context, see)
                 .Select(found => new { found.Resource.Version, found.AsMember, found.FromAbove, found.Until })
@@ -186,6 +202,14 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         // The statement of HoldAsync over every id at once: one row for each resource the user sees, with how it
         // holds the permission there and until when.
         var act = ReachFor(permission, asked);
+        if (CompiledHolds<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>.Compiles(act, see))
+        {
+            var rows = await ReadAsync(context => _holds.HoldEachAsync(context, about, act, see, cancellationToken), cancellationToken).ConfigureAwait(false);
+            return rows.ToDictionary(
+                found => found.Id,
+                found => new MemberHold<TResourceId>(found.Id, act.Via(found.AsMember, found.FromAbove), found.Version, found.Until));
+        }
+
         var held = await ReadAsync(
             context => act.HeldWhereSeen(context.Set<TResource>().AsNoTracking().Where(candidate => about.Contains(candidate.Id)), context, see)
                 .Select(found => new { found.Resource.Id, found.Resource.Version, found.AsMember, found.FromAbove, found.Until })

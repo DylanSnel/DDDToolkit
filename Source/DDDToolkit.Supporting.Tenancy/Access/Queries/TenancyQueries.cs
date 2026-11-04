@@ -10,6 +10,11 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <c>Equals</c>, an empty answer is the source's own set filtered to nothing, and every set that has a
 /// tenant is kept to the user's tenant here too, next to whatever filter the storage applies.
 /// </para>
+/// <para>
+/// The three questions an access check asks, a permission for the whole tenant, a permission at a unit, and a unit of
+/// the tenant for system work, go to the source first. A source may answer them with a query it keeps, as the Entity
+/// Framework source does with compiled queries. Where it answers <see langword="null"/>, they are worked out over its sets.
+/// </para>
 /// </summary>
 internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
     ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
@@ -272,6 +277,11 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
         var tenant = user.Tenant!.Value;
         var seat = user.Seat!.Value;
         var moment = now;
+        if (source.HoldsAtTenantAsync(tenant, seat, permission, moment, cancellationToken) is { } answered)
+        {
+            return answered;
+        }
+
         var atRoot = from right in source.SeatRights
                      where right.TenantId.Equals(tenant) && right.SeatId.Equals(seat) && right.Permission == permission
                            && right.StartsAt <= moment && (right.EndsAt == null || right.EndsAt > moment)
@@ -290,14 +300,16 @@ internal sealed class TenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>(
             return Task.FromResult(false);
         }
 
+        var tenant = user.Tenant!.Value;
         if (kind == TenancyUserKind.SystemInTenant)
         {
             // Every permission, but only at a unit of its own tenant.
-            var tenant = user.Tenant!.Value;
-            return executor.AnyAsync(source.Units.Where(row => row.TenantId.Equals(tenant) && row.Id.Equals(unit)), cancellationToken);
+            return source.HasUnitAsync(tenant, unit, cancellationToken)
+                ?? executor.AnyAsync(source.Units.Where(row => row.TenantId.Equals(tenant) && row.Id.Equals(unit)), cancellationToken);
         }
 
-        return executor.AnyAsync(UnitsWhereIHold(permission).Where(held => held.Equals(unit)), cancellationToken);
+        return source.HoldsAtAsync(tenant, user.Seat!.Value, permission, unit, now, cancellationToken)
+            ?? executor.AnyAsync(UnitsWhereIHold(permission).Where(held => held.Equals(unit)), cancellationToken);
     }
 
     /// <summary>The user's kind; system work outside any tenant has nothing to ask about here.</summary>

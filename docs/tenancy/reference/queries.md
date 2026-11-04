@@ -608,6 +608,9 @@ A source may already keep every set to the current tenant. The queries keep to t
 | `IQueryable<PlacementRow<TSeatId, TUnitId>> Placements { get; }` | Where seats are placed. |
 | `IQueryable<SeatRow<TTenantId, TSeatId>> Seats { get; }` | The seats. |
 | [`SeatsHoldingPermissionAt(string, TUnitId)`](#seatsholdingpermissionatstring-tunitid-1) | The seats that hold `permission` at `unit` now, as the storage itself answers the calling seat, or `null` when it has no answer of its own and the question is worked out over the rows above. |
+| [`HoldsAtTenantAsync(TTenantId, TSeatId, string, DateTimeOffset, CancellationToken)`](#holdsattenantasyncttenantid-tseatid-string-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at the root unit of `tenant` at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
+| [`HoldsAtAsync(TTenantId, TSeatId, string, TUnitId, DateTimeOffset, CancellationToken)`](#holdsatasyncttenantid-tseatid-string-tunitid-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at `unit` or at a unit above it at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
+| [`HasUnitAsync(TTenantId, TUnitId, CancellationToken)`](#hasunitasyncttenantid-tunitid-cancellationtoken) | Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over [`Units`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). |
 
 #### `SeatsHoldingPermissionAt(string, TUnitId)`
 
@@ -621,6 +624,64 @@ The seats that hold `permission` at `unit` now, as the storage itself answers th
 
 - `permission`: A live permission of the catalogue.
 - `unit`: The unit.
+
+#### `HoldsAtTenantAsync(TTenantId, TSeatId, string, DateTimeOffset, CancellationToken)`
+
+```csharp
+Task<bool>? HoldsAtTenantAsync(
+    TTenantId tenant,
+    TSeatId seat,
+    string permission,
+    DateTimeOffset moment,
+    CancellationToken cancellationToken)
+```
+
+Whether `seat` holds `permission` at the root unit of `tenant` at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. The answer is the one [`ITenancyQueries.HoldsAtTenantAsync`](#holdsattenantasyncstring-cancellationtoken) works out over [`SeatRights`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid) and [`Units`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). A storage that compiles its queries answers here, so a check of a permission for the whole tenant builds no query.
+
+**Parameters**
+
+- `tenant`: The seat's tenant.
+- `seat`: The seat.
+- `permission`: A live permission of the catalogue.
+- `moment`: The moment a right must apply at.
+- `cancellationToken`: Stops the reading.
+
+#### `HoldsAtAsync(TTenantId, TSeatId, string, TUnitId, DateTimeOffset, CancellationToken)`
+
+```csharp
+Task<bool>? HoldsAtAsync(
+    TTenantId tenant,
+    TSeatId seat,
+    string permission,
+    TUnitId unit,
+    DateTimeOffset moment,
+    CancellationToken cancellationToken)
+```
+
+Whether `seat` holds `permission` at `unit` or at a unit above it at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. The answer is the one [`ITenancyQueries.HoldsAtAsync`](#holdsatasyncstring-tunitid-cancellationtoken) works out over [`SeatRights`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid) and [`UnitPaths`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid).
+
+**Parameters**
+
+- `tenant`: The seat's tenant.
+- `seat`: The seat.
+- `permission`: A live permission of the catalogue.
+- `unit`: The unit.
+- `moment`: The moment a right must apply at.
+- `cancellationToken`: Stops the reading.
+
+#### `HasUnitAsync(TTenantId, TUnitId, CancellationToken)`
+
+```csharp
+Task<bool>? HasUnitAsync(TTenantId tenant, TUnitId unit, CancellationToken cancellationToken)
+```
+
+Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over [`Units`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). System work in a tenant holds every permission at every unit of that tenant, so this is its check of a permission at a unit.
+
+**Parameters**
+
+- `tenant`: The tenant.
+- `unit`: The unit.
+- `cancellationToken`: Stops the reading.
 
 ### `IQueryExecutor`
 

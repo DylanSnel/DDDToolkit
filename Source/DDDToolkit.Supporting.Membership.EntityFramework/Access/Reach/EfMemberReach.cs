@@ -75,6 +75,19 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
     /// <summary>Whether the caller reaches nothing: it holds the permission in no way the rules know.</summary>
     public bool Nothing => !Everything && HeldBy == MemberHeldBy.None;
 
+    /// <summary>
+    /// Whether the reach puts no query of its own into a statement: no roles kept as rows, and no hold from above. Its
+    /// conditions then compare with values alone, so a statement has one shape for every caller, by
+    /// <see cref="HeldBy"/>, and can be compiled once (<see cref="CompiledHolds{TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId}"/>).
+    /// </summary>
+    public bool ComparesValuesOnly => _asked is null;
+
+    /// <summary>The roles the rules declare that give the permission, as values; empty where the rules declare none for it.</summary>
+    public List<TRoleId> DeclaredRoles => _roles;
+
+    /// <summary>Who the caller is as a member, for the ways that ask it.</summary>
+    public TMemberId Member => _member;
+
     /// <inheritdoc />
     public IQueryable<TResource> Within(IQueryable<TResource> resources, DbContext? context)
         => Everything ? resources : Where(resources, Held(ContextOf(resources, context)));
@@ -226,41 +239,37 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
     /// <see langword="null"/> for a reach that does not ask it.
     /// </summary>
     /// <remarks>
-    /// What the conditions compare with is copied into locals first, so Entity Framework sees values to send
-    /// as parameters, and the sets the application answers as subqueries, where it would otherwise see members
-    /// of this object.
+    /// What the conditions compare with is read from one object of values (<see cref="ReachValues{TMemberId, TRoleId}"/>), so
+    /// Entity Framework sees values to send as parameters, and the sets the application answers as subqueries, where it
+    /// would otherwise see members of this reach.
     /// </remarks>
     private (Expression<Func<TResource, bool>>? AsMember, Expression<Func<TResource, bool>>? FromAbove) Held(DbContext? context)
     {
-        var members = _names.Members;
-        var owner = _names.Owner;
-        var member = _member;
-        var now = Now;
-        var roles = Roles(context);
+        var values = Values(context);
 
         // A permission of the resource is held by matching the owner, never through a role.
         Expression<Func<TResource, bool>>? owns = HeldBy.HasFlag(MemberHeldBy.Owner)
-            ? resource => EF.Property<TMemberId>(resource, owner).Equals(member)
+            ? resource => EF.Property<TMemberId>(resource, values.Owner).Equals(values.Member)
             : null;
 
         Expression<Func<TResource, bool>>? joined =
 
             // A membership that applies now, whatever roles it holds, or none.
-            HeldBy.HasFlag(MemberHeldBy.Membership) ? resource => EF.Property<IEnumerable<TMember>>(resource, members).Any(row =>
-                row.MemberId.Equals(member)
-                && row.StartsAt <= now
-                && (row.EndsAt == null || row.EndsAt > now))
+            HeldBy.HasFlag(MemberHeldBy.Membership) ? resource => EF.Property<IEnumerable<TMember>>(resource, values.Members).Any(row =>
+                row.MemberId.Equals(values.Member)
+                && row.StartsAt <= values.Now
+                && (row.EndsAt == null || row.EndsAt > values.Now))
 
             // A role that gives the permission, held now, in a membership that applies now: a role counts only inside
             // its membership.
-            : HeldBy.HasFlag(MemberHeldBy.Roles) ? resource => EF.Property<IEnumerable<TMember>>(resource, members).Any(row =>
-                row.MemberId.Equals(member)
-                && row.StartsAt <= now
-                && (row.EndsAt == null || row.EndsAt > now)
+            : HeldBy.HasFlag(MemberHeldBy.Roles) ? resource => EF.Property<IEnumerable<TMember>>(resource, values.Members).Any(row =>
+                row.MemberId.Equals(values.Member)
+                && row.StartsAt <= values.Now
+                && (row.EndsAt == null || row.EndsAt > values.Now)
                 && row.Roles.Any(held =>
-                    roles.Contains(held.RoleId)
-                    && held.StartsAt <= now
-                    && (held.EndsAt == null || held.EndsAt > now)))
+                    values.Roles.Contains(held.RoleId)
+                    && held.StartsAt <= values.Now
+                    && (held.EndsAt == null || held.EndsAt > values.Now)))
             : null;
 
         var asMember = owns is null ? joined
@@ -274,11 +283,12 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
     }
 
     /// <summary>
-    /// The roles that give the permission: the ones the rules declare, as values, or, where the roles are rows, the
-    /// ones their table or the application answers, as a query of the statement's own context.
+    /// What the conditions compare with, for a statement on <paramref name="context"/>. The roles that give the permission
+    /// are the ones the rules declare, as values, or, where the roles are rows, the ones their table or the application
+    /// answers, as a query of the statement's own context.
     /// </summary>
-    private IEnumerable<TRoleId> Roles(DbContext? context)
-        => HeldBy.HasFlag(MemberHeldBy.Roles) && _asked?.Roles is { } kept ? kept(context!) : _roles;
+    private ReachValues<TMemberId, TRoleId> Values(DbContext? context)
+        => new(_names.Members, _names.Owner, _member, Now, HeldBy.HasFlag(MemberHeldBy.Roles) && _asked?.Roles is { } kept ? kept(context!) : _roles);
 
     /// <summary>
     /// The first moment the caller no longer holds the permission on a resource as one of its members, as its
@@ -292,40 +302,36 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
     /// </summary>
     private Expression? HeldUntil(ParameterExpression about, DbContext? context)
     {
-        var members = _names.Members;
-        var owner = _names.Owner;
-        var member = _member;
-        var now = Now;
-        var roles = Roles(context);
+        var values = Values(context);
 
         Expression<Func<TResource, DateTimeOffset?>>? joined =
-            HeldBy.HasFlag(MemberHeldBy.Membership) ? resource => EF.Property<IEnumerable<TMember>>(resource, members)
+            HeldBy.HasFlag(MemberHeldBy.Membership) ? resource => EF.Property<IEnumerable<TMember>>(resource, values.Members)
                 .Where(row =>
-                    row.MemberId.Equals(member)
-                    && row.StartsAt <= now
-                    && (row.EndsAt == null || row.EndsAt > now))
+                    row.MemberId.Equals(values.Member)
+                    && row.StartsAt <= values.Now
+                    && (row.EndsAt == null || row.EndsAt > values.Now))
                 .Select(row => row.EndsAt)
                 .FirstOrDefault()
 
-            : HeldBy.HasFlag(MemberHeldBy.Roles) ? resource => EF.Property<IEnumerable<TMember>>(resource, members)
+            : HeldBy.HasFlag(MemberHeldBy.Roles) ? resource => EF.Property<IEnumerable<TMember>>(resource, values.Members)
                 .Where(row =>
-                    row.MemberId.Equals(member)
-                    && row.StartsAt <= now
-                    && (row.EndsAt == null || row.EndsAt > now)
+                    row.MemberId.Equals(values.Member)
+                    && row.StartsAt <= values.Now
+                    && (row.EndsAt == null || row.EndsAt > values.Now)
                     && row.Roles.Any(held =>
-                        roles.Contains(held.RoleId)
-                        && held.StartsAt <= now
-                        && (held.EndsAt == null || held.EndsAt > now)))
+                        values.Roles.Contains(held.RoleId)
+                        && held.StartsAt <= values.Now
+                        && (held.EndsAt == null || held.EndsAt > values.Now)))
                 .Select(row =>
 
                     // A role with no end of its own that gives the permission now: the membership's end is the hold's.
-                    row.Roles.Any(held => roles.Contains(held.RoleId) && held.StartsAt <= now && held.EndsAt == null)
+                    row.Roles.Any(held => values.Roles.Contains(held.RoleId) && held.StartsAt <= values.Now && held.EndsAt == null)
                         ? row.EndsAt
 
                         // Otherwise the roles that give the permission now all end: the last of them, or the membership if it ends sooner.
                         : row.EndsAt == null
-                          || row.Roles.Where(held => roles.Contains(held.RoleId) && held.StartsAt <= now && held.EndsAt > now).Max(held => held.EndsAt) < row.EndsAt
-                            ? row.Roles.Where(held => roles.Contains(held.RoleId) && held.StartsAt <= now && held.EndsAt > now).Max(held => held.EndsAt)
+                          || row.Roles.Where(held => values.Roles.Contains(held.RoleId) && held.StartsAt <= values.Now && held.EndsAt > values.Now).Max(held => held.EndsAt) < row.EndsAt
+                            ? row.Roles.Where(held => values.Roles.Contains(held.RoleId) && held.StartsAt <= values.Now && held.EndsAt > values.Now).Max(held => held.EndsAt)
                             : row.EndsAt)
                 .FirstOrDefault()
             : null;
@@ -342,7 +348,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
             return asMember;
         }
 
-        Expression<Func<TResource, bool>> owns = resource => EF.Property<TMemberId>(resource, owner).Equals(member);
+        Expression<Func<TResource, bool>> owns = resource => EF.Property<TMemberId>(resource, values.Owner).Equals(values.Member);
         return Expression.Condition(About(owns, about), NoEnd, asMember);
     }
 

@@ -188,6 +188,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddCurrentUser();
         services.AddSingleton(new MemberNamesOf<TContext, TResource, TRoleId>());
+        services.AddSingleton(new CompiledHolds<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>());
 
         // Each made by a factory that holds this resource's rules: the rules themselves are never a service,
         // since a second resource would be handed the first one's.

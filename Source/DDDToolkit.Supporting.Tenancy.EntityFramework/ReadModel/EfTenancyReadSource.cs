@@ -108,6 +108,24 @@ public sealed class EfTenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>
             .Select(holder => holder.SeatId);
     }
 
+    /// <inheritdoc />
+    /// <remarks>Read with a query compiled once for the context's model, over the same untracked sets as the properties above.</remarks>
+    public Task<bool>? HoldsAtTenantAsync(TTenantId tenant, TSeatId seat, string permission, DateTimeOffset moment, CancellationToken cancellationToken)
+        => Compiled.HoldsAtTenant(_context, tenant, seat, permission, moment, cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>Read with a query compiled once for the context's model, over the same untracked sets as the properties above.</remarks>
+    public Task<bool>? HoldsAtAsync(TTenantId tenant, TSeatId seat, string permission, TUnitId unit, DateTimeOffset moment, CancellationToken cancellationToken)
+        => Compiled.HoldsAt(_context, tenant, seat, permission, unit, moment, cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>Read with a query compiled once for the context's model, over the same untracked set as <see cref="Units"/>.</remarks>
+    public Task<bool>? HasUnitAsync(TTenantId tenant, TUnitId unit, CancellationToken cancellationToken)
+        => Compiled.HasUnit(_context, tenant, unit, cancellationToken);
+
+    /// <summary>The access checks' queries, compiled for the context's model.</summary>
+    private TenancyCompiledQueries<TTenantId, TSeatId, TUnitId, TRoleId> Compiled => TenancyCompiledQueries<TTenantId, TSeatId, TUnitId, TRoleId>.For(_context.Model);
+
     /// <summary>
     /// Whether the database of the context keeps the rights: the application's <see cref="TenancyStoreOptions"/>,
     /// on a relational database. Asked once per source.
