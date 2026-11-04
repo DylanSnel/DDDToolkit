@@ -2278,6 +2278,13 @@ internal static class DefinitionFactory
             && method.Parameters[1].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == "global::System.IFormatProvider"
             && method.Parameters[2].RefKind == RefKind.Out
             && SymbolEqualityComparer.Default.Equals(method.Parameters[2].Type, type));
+        var hasSpanTryParse = type.GetMembers("TryParse").OfType<IMethodSymbol>().Any(method =>
+            method.IsStatic
+            && method.Parameters.Length == 3
+            && IsReadOnlySpanOfChar(method.Parameters[0].Type)
+            && method.Parameters[1].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == "global::System.IFormatProvider"
+            && method.Parameters[2].RefKind == RefKind.Out
+            && SymbolEqualityComparer.Default.Equals(method.Parameters[2].Type, type));
 
         return new ValueTypeInfo(
             FullyQualifiedName: fullyQualified,
@@ -2285,7 +2292,15 @@ internal static class DefinitionFactory
             IsString: type.SpecialType == SpecialType.System_String,
             IsGuid: fullyQualified == "global::System.Guid",
             IsValueType: type.IsValueType,
-            HasFormatProviderTryParse: hasFormatProviderTryParse);
+            HasFormatProviderTryParse: hasFormatProviderTryParse)
+        {
+            HasSpanTryParse = hasSpanTryParse,
+        };
+
+        static bool IsReadOnlySpanOfChar(ITypeSymbol parameter)
+            => parameter is INamedTypeSymbol { IsGenericType: true } span
+                && span.ConstructedFrom.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == "global::System.ReadOnlySpan<T>"
+                && span.TypeArguments[0].SpecialType == SpecialType.System_Char;
     }
 
     /// <summary>The single type argument of a generic attribute such as [EntityId&lt;Guid&gt;]; object when the attribute is malformed.</summary>

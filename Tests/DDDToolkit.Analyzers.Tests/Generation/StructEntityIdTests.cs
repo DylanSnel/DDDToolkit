@@ -113,6 +113,47 @@ public class StructEntityIdTests
     }
 
     [Fact]
+    public void TryParse_reads_the_value_past_the_prefix_without_a_substring()
+    {
+        var result = GuidId();
+
+        result.ShouldContain(Hint.Of("Sample.OrderId"), "text = text.Slice(IdPrefix.Length + 1);");
+        result.ShouldNotContain(Hint.Of("Sample.OrderId"), "Substring");
+    }
+
+    [Fact]
+    public void A_value_type_with_only_the_string_TryParse_is_still_parsed_past_its_prefix()
+    {
+        var result = GeneratorTestHost.Create(Preamble +
+            """
+            /// <summary>A value type with TryParse(string, IFormatProvider, out T), and no overload over a span.</summary>
+            public readonly record struct Ticket(int Number)
+            {
+                public static bool TryParse(string? text, IFormatProvider? provider, out Ticket ticket)
+                {
+                    var parsed = int.TryParse(text, provider, out var number);
+                    ticket = new Ticket(number);
+                    return parsed;
+                }
+
+                public override string ToString() => Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            [EntityId<Ticket>("TCK")]
+            public readonly partial record struct TicketId;
+            """).RunCore();
+
+        result.ShouldCompile();
+        result.ShouldContain(Hint.Of("Sample.TicketId"), "Substring");
+
+        var emitted = result.Emit();
+        var (success, parsed) = emitted.TryParse("Sample.TicketId", "TCK_7");
+
+        success.Should().BeTrue();
+        emitted.Property(parsed!, "Value").Should().Be(emitted.New("Sample.Ticket", 7));
+    }
+
+    [Fact]
     public void Empty_is_the_default_and_knows_it()
     {
         var emitted = GuidId().Emit();
