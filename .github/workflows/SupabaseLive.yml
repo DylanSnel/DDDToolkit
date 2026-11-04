@@ -19,7 +19,9 @@ name: Supabase Live
 # The scenarios include signed-in customers: two users made in the project's own Auth for each run, and
 # deleted again, whose tokens the monolith checks against the keys the project publishes and whose queries
 # run under the project's row level security. Making them takes a secret key, which the run reads through
-# the Management API, or from the secret SUPABASE_SECRET_KEY when the access token may not read keys.
+# the Management API. When the API gives none, the run logs the HTTP status and the keys it listed, and
+# without branching it uses the secret SUPABASE_SECRET_KEY. An access token with API keys read did not get
+# the project's secret key from the API, so without branching set SUPABASE_SECRET_KEY.
 #
 # Needs the secrets SUPABASE_ACCESS_TOKEN (a personal access token; Development Branches read-write,
 # Project Settings read, Database read, API keys read) and, without branching, SUPABASE_DB_PASSWORD, plus
@@ -67,7 +69,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      # Optional: only when SUPABASE_ACCESS_TOKEN may not read the project's API keys. The project's, so
+      # Used when the Management API gives no secret key for the project. The project's own key, so
       # without branching only.
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
@@ -157,13 +159,36 @@ jobs:
           # Signed-in customers: the AppHost passes the project's URL to the monolith, which checks tokens
           # against the keys published there, and the scenarios make their customers with a secret key.
           echo "Supabase__Url=https://$ref.supabase.co" >> "$GITHUB_ENV"
-          secret=$(api "projects/$ref/api-keys?reveal=true" \
-            | jq -r '([.[] | select(.type == "secret")] + [.[] | select(.name == "service_role")])[0].api_key // empty' || true)
-          if [ -z "$secret" ] && [ "$BRANCHING" != "true" ]; then
+
+          # The lookup keeps the HTTP status and the names and kinds of the keys it got, never a key itself,
+          # so a run that finds no secret key says why. A key with characters no key contains, such as the
+          # dots of a masked key, does not count as found.
+          status=$(curl -s -o api-keys.json -w '%{http_code}' \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$ref/api-keys?reveal=true" || true)
+          secret=""
+          listed=""
+          if [ "$status" = "200" ]; then
+            usable='def usable: (.api_key // "") | test("^[A-Za-z0-9._-]+$");'
+            secret=$(jq -r "$usable"' ([.[] | select(.type == "secret" and usable)] + [.[] | select(.name == "service_role" and usable)])[0].api_key // empty' api-keys.json || true)
+            listed=$(jq -r "$usable"' [.[] | "\(.name) (\(.type // "no type"), \(if .api_key == null then "no key" elif usable then "key" else "masked key" end))"] | join(", ")' api-keys.json || true)
+          fi
+          rm -f api-keys.json
+          case "$status" in
+            200)     reason="The API answered 200 and listed: ${listed:-no keys}." ;;
+            401|403) reason="The API answered $status, so SUPABASE_ACCESS_TOKEN may not read the keys of $ref." ;;
+            *)       reason="The API answered $status." ;;
+          esac
+          if [ -z "$secret" ] && [ "$BRANCHING" != "true" ] && [ -n "$SUPABASE_SECRET_KEY" ]; then
+            echo "::notice::The Management API gave no secret key for $ref. $reason The run uses the secret SUPABASE_SECRET_KEY."
             secret="$SUPABASE_SECRET_KEY"
           fi
           if [ -z "$secret" ]; then
-            echo "::error::No secret key for $ref, so no customers can be made. Give SUPABASE_ACCESS_TOKEN 'API keys read', or, without branching, set the secret SUPABASE_SECRET_KEY."
+            if [ "$BRANCHING" = "true" ]; then
+              echo "::error::No secret key for $ref, so no customers can be made. $reason A preview branch's key can only come from the Management API."
+            else
+              echo "::error::No secret key for $ref, so no customers can be made. $reason Set the secret SUPABASE_SECRET_KEY to the project's secret key."
+            fi
             exit 1
           fi
           echo "::add-mask::$secret"
