@@ -3224,6 +3224,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **A save walks only what it writes.** The toolkit's interceptors used to call `DetectChanges()` and then
+  `ChangeTracker.Entries()`, which detects the changes again and makes an `EntityEntry` for every tracked entity. One
+  save detected the changes 7 times. Each interceptor now detects them once, and reads the entries the save writes
+  from Entity Framework's state manager. A save without events detects 4 times, Entity Framework's own detection
+  included.
+  - The event interceptor makes an entry only for an aggregate with pending events. It no longer detects again after
+    a round of handlers, since the next round detects first.
+  - `AggregateRoot.DomainEvents` keeps one read-only view.
+  - The invariant and the version interceptor share one walk from a child to its aggregate root.
+  - Tenancy's save interceptor and Membership's hold interceptor read the entries the same way, and Tenancy's save
+    interceptor makes one list for its check and for who changed each row. Tenancy's projection writer makes an entry
+    only for Tenancy's own rows.
+
+  On a context that tracks 1,000 aggregates, a save of one went from 1,443 μs and 2.4 MB to 442 μs and 1.3 MB. See
+  [Performance](docs/performance.md#a-save-on-a-context-that-tracks-many-aggregates).
 - **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
   `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
   `GetEqualityComponents()` with LINQ, so every comparison allocated two iterators and boxed each value-type property

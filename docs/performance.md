@@ -3,9 +3,10 @@
 [Identifiers](identifiers.md) recommends the struct form of an identifier, because of its memory layout. This page
 has the measurements behind that advice, including two places where the measurements first disagreed with it. The
 [Tenancy section](#tenancy-the-shape-of-the-access-data) measures the database shapes behind the Tenancy
-supporting domain. Three sections measure code beside the identifiers:
-[value object equality](#value-object-equality), [FluentValidation](#fluentvalidation) and
-[a read that skips a named query filter](#skipping-a-named-query-filter).
+supporting domain. Four sections measure code beside the identifiers:
+[value object equality](#value-object-equality), [FluentValidation](#fluentvalidation),
+[a read that skips a named query filter](#skipping-a-named-query-filter) and
+[a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates).
 
 The benchmarks are in `Benchmarks/DDDToolkit.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
 Run them with:
@@ -380,6 +381,56 @@ The two columns are separate runs, so compare the rows within a column.
 - **`IgnoreTenantFilter()` passes one array.** It hits the cache from 10.0.0 on. The seat directory and the tenant
   listing use it, and so can an application. The benchmark is `QueryFilterKeyBenchmarks`. Run the floor with
   `-p:DDDDependencyVersions=Floor` and `--inProcess`.
+
+## A save on a context that tracks many aggregates
+
+One `SaveChanges` that writes one changed aggregate, on a context that tracks 10 or 1,000. The save runs with the
+toolkit's interceptors (domain events, invariants and the version) and, as the floor, with Entity Framework alone.
+The benchmark is `SaveChangesBenchmarks`.
+
+| | Tracked | Before | After |
+|---|---|---|---|
+| Entity Framework alone | 10 | 11.21 μs, 11.68 KB | 11.16 μs, 11.68 KB |
+| With the toolkit | 10 | 28.52 μs, 35.95 KB | 16.69 μs, 23.78 KB |
+| Entity Framework alone | 1,000 | 208.66 μs, 328.79 KB | 118.60 μs, 328.79 KB |
+| With the toolkit | 1,000 | 1,442.94 μs, 2,402.67 KB | 442.42 μs, 1,292.21 KB |
+
+The floor did not change, so its time shows the spread between the two runs. Compare the ratios: at 1,000 tracked
+the toolkit's save took 6.9 times the floor before and 3.7 times after. It allocated 7.3 times the floor before and
+3.9 times after.
+
+Each interceptor used to walk the whole change tracker, twice:
+
+```csharp
+if (context.ChangeTracker.AutoDetectChangesEnabled)
+{
+    context.ChangeTracker.DetectChanges();
+}
+
+foreach (var entry in context.ChangeTracker.Entries().ToList())
+```
+
+`Entries()` detects the changes again, and makes an `EntityEntry` for every tracked entity, the unchanged ones
+included. With the version interceptor, the invariant interceptor and the event interceptor, one save detected the
+changes 7 times, Entity Framework's own detection included.
+
+- **One detection per interceptor.** Each detects the changes once, and the event interceptor once per round. With
+  Entity Framework's own, a save without events detects 4 times.
+- **Only the entries the save writes.** The interceptors read them from Entity Framework's state manager, which keeps
+  the entries of each state apart. The invariant interceptor makes one list for the roots and the entries alike.
+- **An entry for an aggregate with events only.** The event interceptor still asks every tracked aggregate for its
+  events, since an aggregate may raise one without a change to a column. `AggregateRoot.DomainEvents` keeps one
+  read-only view, instead of a new one on every read.
+- **One walk from a child to its root.** The invariant and the version interceptor share it. It reuses its
+  collections for every child of a save, reads the owner keys of an entity type once, and takes a tracked principal's
+  entry from the state manager.
+
+Tenancy's save interceptor and Membership's hold interceptor read the changed entries the same way. Tenancy's
+projection writer makes an entry only for Tenancy's own rows.
+
+What stays above the floor is mostly the three detections of the toolkit's interceptors. A detection compares every
+tracked entity with its snapshot, and costs about as much as Entity Framework's own. An interceptor cannot skip it,
+because another interceptor may change an entity between two of them.
 
 ## Tenancy: the shape of the access data
 
