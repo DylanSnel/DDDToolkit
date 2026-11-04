@@ -482,7 +482,7 @@ staff. With the dev login, the role goes to the people that `DevLogin:Operators`
 - The policy is an early check only. Each request also declares `[Operator]`. The access check refuses anyone else
   with `tenancy.operators-only`, seats and system work included.
 - **The reads.** A query with `[Operator]` starts no work. It runs as Orla, through her database role, and reads past
-  the tenant filter (`IgnoreQueryFilters([TenancyQueryFilter.Name])`) for the tenant in the path. Her database role
+  the tenant filter (`IgnoreTenantFilter()`) for the tenant in the path. Her database role
   holds only `SELECT`. It reads a table only where a row rule of the table's module allows it.
 - **The one change.** `RenameTenantProject` declares `[Operator(Scope = ProjectMembership.Scope)]` and names its tenant
   with a `[ForTenant] TenantId Tenant` member. The access check runs its handler as operator work in that tenant, in the

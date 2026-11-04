@@ -2191,6 +2191,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     save, since nothing keeps its marked classes to a tenant.
 
   See [Keeping tenants apart](docs/tenancy/keeping-tenants-apart.md).
+- **`IgnoreTenantFilter()` reads past the tenant filter.** It skips the tenant filter and keeps every other named
+  filter, as `IgnoreQueryFilters([TenancyQueryFilter.Name])` does. It passes one array of keys on every call, so
+  Entity Framework finds the compiled query in its cache. With a new collection per call, Entity Framework 10.0.0 to
+  10.0.2 compiled the query again on every call, because its query cache compares the keys by reference unless they
+  are an array. The docs and the Tenancy sample use it. See
+  [Keeping tenants apart](docs/tenancy/keeping-tenants-apart.md).
 
 #### Membership
 
@@ -3223,6 +3229,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
+  `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
+  `GetEqualityComponents()` with LINQ, so every comparison allocated two iterators and boxed each value-type property
+  twice. `Equals` gives the same answer. The hash is a different number: it now depends on the order of the
+  properties, where the XOR before gave (a, b) and (b, a) the same hash. `GetEqualityComponents()` is still written.
+  See [Performance](docs/performance.md#value-object-equality).
+- **The FluentValidation generator builds one validator per type.** The generated `Validate()` built a new
+  `Validator` on every validation, which ran every rule declaration in its constructor. Now the first validation of a
+  type builds it, and every value of the type shares it. A value no longer allocates an empty list of failures, and
+  `Errors` no longer makes a new wrapper on every read. A rule that reads a changing value in the constructor, such
+  as `LessThan(DateTime.Today)`, now reads it once. Write it with a lambda, `LessThan(_ => DateTime.Today)`, to read
+  it on every validation. See [FluentValidation](docs/fluent-validation.md) and
+  [Performance](docs/performance.md#fluentvalidation).
+- **An id's `TryParse` reads the value past its prefix in place.** For a value type with a `TryParse` over
+  `ReadOnlySpan<char>`, such as `Guid`, `long` and `int`, the generated `TryParse` slices the input past the prefix.
+  Before, it cut the value out as a new string first. See [Performance](docs/performance.md#parse-without-a-substring).
 - **The permission moves from `[RequiresPermission]` to the permission marker.** Before, `[RequiresPermission(permission)]`
   named the permission and a bare `[OnResource]` or `[AtUnit]` named where it is held. A request could require one
   permission in one place. A request with a permission on two resources needed a hand-written `RequiredAccess`. Now the
@@ -4483,6 +4505,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Checking at start-up](docs/supabase.md#checking-at-start-up).
 
 ### Fixed
+
+- **A value object without compared properties has a hash.** `GetHashCode()` threw an `InvalidOperationException`
+  for a `[ValueObject]` without properties, or with only `[DontCompare]` and `[Internal]` ones, and for a value object
+  written by hand whose `GetEqualityComponents()` yields nothing. `Aggregate` had no seed, so an empty sequence threw.
+  The generated hash and the hash of `ValueObject` start from a `HashCode` now.
+- **Tenancy's seat lookup is compiled once.** The seat directory and the tenant listing skipped the tenant filter with
+  a new collection of keys on every call. On Entity Framework 10.0.0 to 10.0.2 that compiled the seat lookup again on
+  every authenticated request, and added a new entry to the query cache each time. They use `IgnoreTenantFilter()`
+  now. See [Performance](docs/performance.md#skipping-a-named-query-filter).
 
 - **The Supabase export writes no access file for a context without a migration.** A context marked
   `[SupabaseMigrations]` whose first migration was not added yet got `{version}_access.{module}.ddd.sql` all the same,

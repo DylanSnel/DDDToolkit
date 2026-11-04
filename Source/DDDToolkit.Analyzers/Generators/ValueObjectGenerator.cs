@@ -32,6 +32,7 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
 
         var visibleProperties = definition.Properties.Where(p => !p.IsInternal).ToList();
         var comparisonProperties = visibleProperties.Where(p => !p.IsDontCompare).ToList();
+        var components = comparisonProperties.Select(p => (p.Name, p.TypeName)).ToList();
         var settableProperties = visibleProperties.Where(p => p.HasSetter).ToList();
 
         var withProperties = definition.GenerateWith ? settableProperties : new System.Collections.Generic.List<PropertyInfo>();
@@ -50,7 +51,7 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
 
                 EmitEqualityComponents(writer, comparisonProperties.Select(p => p.Name));
                 writer.Line();
-                Emit.RecordEqualityMembers(writer, name, hashCodeFromComponents: true);
+                Emit.RecordEqualityMembers(writer, name, components, hashCodeFromComponents: true);
                 writer.Line();
 
                 // A positional record already has its primary constructor, and every other constructor has
@@ -107,7 +108,7 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
                 writer.Line();
                 EmitEqualityComponents(writer, comparisonProperties.Select(p => p.Name));
                 writer.Line();
-                Emit.RecordEqualityMembers(writer, validName, hashCodeFromComponents: false);
+                Emit.RecordEqualityMembers(writer, validName, components, hashCodeFromComponents: false);
 
                 if (withProperties.Count > 0)
                 {

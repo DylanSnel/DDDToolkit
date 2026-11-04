@@ -98,7 +98,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
         int take,
         CancellationToken cancellationToken)
     {
-        var tenants = context.Set<TTenant>().AsNoTracking().IgnoreQueryFilters([TenancyQueryFilter.Name]);
+        var tenants = context.Set<TTenant>().AsNoTracking().IgnoreTenantFilter();
         if (afterSlug is not null)
         {
             tenants = tenants.Where(SlugComesAfter(TenantSlug.Create(afterSlug)));

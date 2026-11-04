@@ -3,7 +3,9 @@
 [Identifiers](identifiers.md) recommends the struct form of an identifier, because of its memory layout. This page
 has the measurements behind that advice, including two places where the measurements first disagreed with it. The
 [Tenancy section](#tenancy-the-shape-of-the-access-data) measures the database shapes behind the Tenancy
-supporting domain.
+supporting domain. Three sections measure code beside the identifiers:
+[value object equality](#value-object-equality), [FluentValidation](#fluentvalidation) and
+[a read that skips a named query filter](#skipping-a-named-query-filter).
 
 The benchmarks are in `Benchmarks/DDDToolkit.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
 Run them with:
@@ -191,6 +193,77 @@ public override string ToString()
 Nothing is boxed, and one string is built. Both forms now allocate 104 bytes. The table above is from after that
 change.
 
+### Parse without a substring
+
+The 96 bytes of the struct's `Parse` were one string: the generated `TryParse` cut the value out of the input past
+the prefix with `Substring`, and then parsed that copy. It now parses the value from a span of the input. A wrapped
+type without a `TryParse` over `ReadOnlySpan<char>` keeps the `Substring`.
+
+| | Before | After |
+|---|---|---|
+| Struct id `Parse` | 45.40 ns, 96 B | 27.60 ns, none |
+| Record id `Parse` | 61.47 ns, 152 B | 41.06 ns, 56 B |
+
+The 56 bytes that stay for the record form are the identifier itself. This table and the ones below come from a later
+run than the tables above, in process (`--inProcess`). In that run the times of code that did not change moved by up
+to a factor of two between the before and the after run, so read the bytes first. The allocations are exact.
+
+## Value object equality
+
+A `[ValueObject]` with two properties, `Money(decimal Amount, string Currency)`: one comparison of two equal values,
+one hash, and 1,000 lookups that hit in a dictionary keyed by the value object.
+
+| | Before | After |
+|---|---|---|
+| `Equals`, same value | 89.08 ns, 144 B | 6.66 ns, none |
+| `GetHashCode` | 59.92 ns, 128 B | 11.61 ns, none |
+| 1,000 dictionary lookups | 153.25 μs, 272,001 B | 38.03 μs, none |
+
+This was the defect of the record identifier, still in every value object. The generator wrote the equality over
+`GetEqualityComponents()`:
+
+```csharp
+return Enumerable.SequenceEqual(GetEqualityComponents(), other.GetEqualityComponents());
+```
+
+Each comparison made two iterators and boxed the `decimal` twice. The hash made an iterator, a `Select` and a box.
+The hash had two more faults. `Aggregate` had no seed, so a value object without compared properties threw on
+`GetHashCode()`. XOR made (a, b) and (b, a) one hash.
+
+The generator now compares each property with the equality of its own type, and adds each one to a `HashCode`:
+
+```csharp
+return EqualityComparer<decimal>.Default.Equals(Amount, other.Amount)
+    && EqualityComparer<string>.Default.Equals(Currency, other.Currency);
+```
+
+`Equals` gives the same answer, because it compares the same properties with the same equality. The hash is a
+different number, which depends on the order of the properties.
+
+## FluentValidation
+
+A single value object with two FluentValidation rules, `NotEmpty().EmailAddress()`, made from text and then asked
+`IsValid`. The value is new on every call, so the validation runs every time. The benchmarks are in
+`Benchmarks/DDDToolkit.Benchmarks.FluentValidation`, a project of their own: the FluentValidation generator gives
+every value object and record id of a project a validator, which would change the identifiers measured above.
+
+| | Before | After |
+|---|---|---|
+| A valid value | 1,573 ns, 2.97 KB | 169 ns, 736 B |
+| An invalid value | 3,447 ns, 4.76 KB | 1,015 ns, 2,592 B |
+
+The generated `Validate()` used to build a new `Validator` on every run:
+
+```csharp
+var validator = new Validator();
+var result = validator.Validate(this);
+```
+
+The constructor of a validator runs every rule declaration, with its expression tree and rule objects. That was most
+of the cost. Every value also allocated an empty list for its failures, and `Errors` made a new wrapper on every read.
+The first validation of a type now builds its validator, and every value of the type shares it. A valid value keeps
+one shared empty `Errors`. What remains is the value itself and FluentValidation's own work for one run.
+
 ## The Entity Framework round trip
 
 This section measures whether the form of the identifier matters to persistence.
@@ -282,6 +355,31 @@ The suite also shows one difference between the providers. A primitive collectio
 native `integer[]` on PostgreSQL and a JSON `nvarchar` on SQL Server. Both round trip, and a LINQ query over the
 collection works on both providers. A SQL query that reads inside the collection needs a different form for each
 provider.
+
+## Skipping a named query filter
+
+Tenancy's tenant filter is a named query filter, and a read across tenants skips it by name. The seat lookup does that
+on every authenticated request. The benchmark reads one row by key past a named filter, with the key of the filter
+passed two ways: a new collection on every call, as `IgnoreQueryFilters([name])` writes, and one array for every
+call, as `IgnoreTenantFilter()` passes. It ran on the floor the packages allow, Entity Framework 10.0.0, and on the
+version the repository builds with, 10.0.12.
+
+| | Entity Framework 10.0.0 | Entity Framework 10.0.12 |
+|---|---|---|
+| One array of keys | 13.37 μs, 9.77 KB | 46.29 μs, 9.90 KB |
+| A new collection per call | 2,440.48 μs, 162.35 KB | 47.82 μs, 9.95 KB |
+
+The two columns are separate runs, so compare the rows within a column.
+
+- **On 10.0.0, a new collection compiles the query on every call.** Entity Framework keeps the keys as a constant in
+  the query. Its query cache compares that constant by reference unless it is an array. A new collection is never the
+  same reference, so the lookup misses the cache, compiles the query again and adds a new cache entry. That is 182
+  times the time and 17 times the memory of a hit.
+- **From 10.0.3 on, Entity Framework copies the keys into an array.** The cache hits either way. The new collection
+  costs its copy and nothing more.
+- **`IgnoreTenantFilter()` passes one array.** It hits the cache from 10.0.0 on. The seat directory and the tenant
+  listing use it, and so can an application. The benchmark is `QueryFilterKeyBenchmarks`. Run the floor with
+  `-p:DDDDependencyVersions=Floor` and `--inProcess`.
 
 ## Tenancy: the shape of the access data
 
@@ -397,5 +495,4 @@ The script of the storage and list comparison is not in the repository. Its numb
 - **The outbox.** The throughput of `OutboxProcessor` under load, and the effect of the `ProcessedAt` index as the
   table grows, are open questions.
 - **JSON and GraphQL.** The generated converters have no benchmarks.
-- **Value objects.** `ValueObject` equality still walks `GetEqualityComponents`, with the cost measured above.
-  Value objects are compared far less often than identifiers, but nobody has measured them.
+- **Larger value objects.** Nothing measures a value object with more than two properties, or with a collection.

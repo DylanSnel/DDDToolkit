@@ -218,7 +218,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         {
             var (filtered, across) = await services.InScopeAsync(async scoped => (
                 await scoped.Tallies().Tallies.Select(tally => tally.Name).ToListAsync(Cancellation),
-                await scoped.Tallies().Tallies.IgnoreQueryFilters([TenancyQueryFilter.Name]).Select(tally => tally.Name).OrderBy(name => name).ToListAsync(Cancellation)));
+                await scoped.Tallies().Tallies.IgnoreTenantFilter().Select(tally => tally.Name).OrderBy(name => name).ToListAsync(Cancellation)));
 
             filtered.Should().BeEmpty("the tenant filter matches nothing for a caller in no tenant");
             across.Should().Equal("Apples", "Crates");

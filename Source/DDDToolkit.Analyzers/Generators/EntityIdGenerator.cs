@@ -358,6 +358,26 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
             writer.Line("    return false;");
             writer.Line("}");
             writer.Line();
+            if (value.HasSpanTryParse && !value.IsString)
+            {
+                // The value is read from the text past the prefix, in place: a Substring was a second string
+                // of the value's length, only to be parsed and dropped.
+                writer.Line("var text = global::System.MemoryExtensions.AsSpan(input);");
+                writer.Line("if (IdPrefix.Length != 0 && global::System.MemoryExtensions.StartsWith(text, IdPrefix + \"_\", global::System.StringComparison.Ordinal))");
+                writer.Line("{");
+                writer.Line("    text = text.Slice(IdPrefix.Length + 1);");
+                writer.Line("}");
+                writer.Line();
+                writer.Line("if (!" + value.FullyQualifiedName + ".TryParse(text, global::System.Globalization.CultureInfo.InvariantCulture, out var value))");
+                writer.Line("{");
+                writer.Line("    return false;");
+                writer.Line("}");
+                writer.Line();
+                writer.Line("result = new(value);");
+                writer.Line("return true;");
+                return;
+            }
+
             writer.Line("if (IdPrefix.Length != 0 && input.StartsWith(IdPrefix + \"_\", global::System.StringComparison.Ordinal))");
             writer.Line("{");
             writer.Line("    input = input.Substring(IdPrefix.Length + 1);");

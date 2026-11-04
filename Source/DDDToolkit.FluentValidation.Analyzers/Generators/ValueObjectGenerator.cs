@@ -56,16 +56,25 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
                 writer.Line("/// <summary>The failures produced by the last validation run; empty when valid or not yet validated.</summary>");
                 writer.Line(KnownTypes.InternalAttributeUsage);
                 writer.Line("[global::System.ComponentModel.DataAnnotations.Schema.NotMapped]");
-                writer.Line("public global::System.Collections.ObjectModel.ReadOnlyCollection<global::FluentValidation.Results.ValidationFailure> Errors => _errors.AsReadOnly();");
+                writer.Line("public global::System.Collections.ObjectModel.ReadOnlyCollection<global::FluentValidation.Results.ValidationFailure> Errors => _errors;");
                 writer.Line();
-                writer.Line("private global::System.Collections.Generic.List<global::FluentValidation.Results.ValidationFailure> _errors = new();");
+                writer.Line("private global::System.Collections.ObjectModel.ReadOnlyCollection<global::FluentValidation.Results.ValidationFailure> _errors");
+                writer.Line("    = global::System.Collections.ObjectModel.ReadOnlyCollection<global::FluentValidation.Results.ValidationFailure>.Empty;");
+                writer.Line();
+                writer.Line("/// <summary>");
+                writer.Line("/// The one validator of this type, built on the first validation. Building a validator runs every rule");
+                writer.Line("/// declaration in its constructor, and a validator holds no state of a run, so one serves every value.");
+                writer.Line("/// Two threads that validate first may each build one; both are the same rules.");
+                writer.Line("/// </summary>");
+                writer.Line("private static Validator? _sharedValidator;");
                 writer.Line();
 
                 using (writer.Block("protected override bool Validate()"))
                 {
-                    writer.Line("var validator = new Validator();");
-                    writer.Line("var result = validator.Validate(this);");
-                    writer.Line("_errors = result.Errors;");
+                    writer.Line("var result = (_sharedValidator ??= new Validator()).Validate(this);");
+                    writer.Line("_errors = result.IsValid");
+                    writer.Line("    ? global::System.Collections.ObjectModel.ReadOnlyCollection<global::FluentValidation.Results.ValidationFailure>.Empty");
+                    writer.Line("    : result.Errors.AsReadOnly();");
                     writer.Line("return result.IsValid;");
                 }
 
@@ -77,8 +86,9 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
                 writer.Line("/// </summary>");
                 using (writer.Block("protected override void Validate(" + KnownTypes.ValidationNamespace + ".ValidationErrorBuilder errors)"))
                 {
-                    using (writer.Block("foreach (var failure in _errors)"))
+                    using (writer.Block("for (var index = 0; index < _errors.Count; index++)"))
                     {
+                        writer.Line("var failure = _errors[index];");
                         writer.Line("// The placeholder values go along as arguments, so the message can be phrased again in");
                         writer.Line("// another language. The same copy ValidationErrorConversions.ToValidationError makes,");
                         writer.Line("// written out because a generated file references nothing it does not have to.");
