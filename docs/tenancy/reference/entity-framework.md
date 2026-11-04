@@ -589,12 +589,33 @@ Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
 
 The query filter that keeps every read of a tenant's rows to the current Tenancy user's tenant. It matches the rows of the tenant a seat or system work in a tenant acts in, and nothing for nobody and for system work outside any tenant.
 
-It is a named filter, so an application's own filter on the same entity, a soft delete say, is another named filter and both apply. A read that must look across tenants for the application, as finding a person's seats does, skips it with `IgnoreTenantFilter()`, which leaves every other filter in place. Tenancy's own bookkeeping, the rows a save writes and the checks that stand in for a unique index, skips every filter: it must see each row the database holds.
+It is a named filter, so an application's own filter on the same entity, a soft delete say, is another named filter and both apply. A read that must look across tenants for the application, as finding a person's seats does, skips it with [`IgnoreTenantFilter<TEntity>`](#ignoretenantfilteriqueryabletentity), which leaves every other filter in place. Tenancy's own bookkeeping, the rows a save writes and the checks that stand in for a unique index, skips every filter: it must see each row the database holds.
 
 | Member | Summary |
 |---|---|
 | `Name = "tenancy.current-tenant"` | The filter's name, for `IgnoreQueryFilters`. |
-| `IgnoreTenantFilter<TEntity>(this IQueryable<TEntity> query)` | The query without the tenant filter, and with every other named filter. It passes one array of keys for every call, so Entity Framework finds the compiled query in its cache. With `IgnoreQueryFilters([TenancyQueryFilter.Name])`, Entity Framework 10.0.0 to 10.0.2 compiles the query again on every call. |
+| [`IgnoreTenantFilter(IQueryable<TEntity>)`](#ignoretenantfilteriqueryabletentity) | `query` without the tenant filter, and with every other named filter, a soft delete say: for a read that must look across tenants for the application, as finding a person's seats does. |
+
+#### `IgnoreTenantFilter(IQueryable<TEntity>)`
+
+```csharp
+public static IQueryable<TEntity> IgnoreTenantFilter<TEntity>(this IQueryable<TEntity> query)
+    where TEntity : class
+```
+
+`query` without the tenant filter, and with every other named filter, a soft delete say: for a read that must look across tenants for the application, as finding a person's seats does.
+
+It passes one array for every call. So Entity Framework finds the compiled query in its cache, from 10.0.0 on, and allocates no copy of the keys.
+
+**Parameters**
+
+- `query`: The query to read past the tenant filter.
+
+**Type parameters**
+
+- `TEntity`: The entity the query reads.
+
+**Returns**: The query, without the tenant filter.
 
 ### `TenancyTable`
 

@@ -43,6 +43,11 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// documents of <c>AccessRequirement.All</c> say, has a hold kept for each, and each save is held to its own.
 /// </para>
 /// <para>
+/// A request about several resources of one kind (<see cref="MemberAccess{TResourceId}.OnEach"/>, which <c>[OnResource]</c> on a
+/// collection of ids writes) is decided in one statement for every 200 resources. One resource that is refused refuses the
+/// request. Every <c>not-found</c> comes before any <c>not-permitted</c>. A hold is kept for each resource.
+/// </para>
+/// <para>
 /// The caller's own way through a request about a resource (<see cref="MemberAccess{TResourceId}.Sees"/>, which
 /// <c>[OrOwn]</c> beside <c>[OnResource]</c> writes) is decided the same way, without the permission: <c>not-found</c> for a
 /// resource the caller may not see, the version compared, and the hold kept.
@@ -90,6 +95,18 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(MembershipAccessMa
                 // Kept under the request, and with it in hand: what the expert hold holds the save to, where a
                 // context asks for it. The handler needs none of it.
                 kept.KeepFor(request, hold);
+                break;
+            }
+
+            case MemberAccess<TResourceId>.OnEach required:
+            {
+                // One statement for every 200 resources. One resource that is refused refuses the request, in the order
+                // one resource is refused in.
+                foreach (var hold in await access.RequireEachAsync(required.Resources, required.Permission, cancellationToken).ConfigureAwait(false))
+                {
+                    kept.KeepFor(request, hold);
+                }
+
                 break;
             }
 

@@ -71,3 +71,9 @@ public sealed record ShareOnBoth(
     [OnResource(DocumentPermissions.Share)] DocumentId First,
     [OnResource(DocumentPermissions.Share)] DocumentId Second,
     UserId With) : IFilingRequest;
+
+/// <summary>
+/// Shares a user on each of a list of documents: the permission that shares, on every one of them. One marker on the
+/// list. The check reads the documents in one statement for every 200 of them.
+/// </summary>
+public sealed record ShareOnEach([OnResource(DocumentPermissions.Share)] IReadOnlyList<DocumentId> Documents, UserId With) : IFilingRequest;

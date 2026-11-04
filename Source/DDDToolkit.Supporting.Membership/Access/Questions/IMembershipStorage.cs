@@ -68,6 +68,22 @@ public interface IMembershipStorage<TResource, TResourceId>
     Task<MemberHold<TResourceId>?> HoldAsync(TResourceId resource, string permission, CancellationToken cancellationToken);
 
     /// <summary>
+    /// What the caller holds on each of <paramref name="resources"/>, in one statement. The answer has a hold for each
+    /// resource the caller sees, keyed by its id. The hold has the version, and how the caller holds
+    /// <paramref name="permission"/> there and until when. Its <see cref="MemberHold{TResource}.Via"/> is
+    /// <see langword="null"/> where the caller does not hold the permission. A resource the caller does not see, or that
+    /// does not exist, is not in the answer. It refuses nobody.
+    /// </summary>
+    /// <param name="resources">The resources asked about, at most <see cref="MembershipAccessManager.MostResources"/> different ones.</param>
+    /// <param name="permission">A permission.</param>
+    /// <param name="cancellationToken">Cancels the query.</param>
+    /// <exception cref="ArgumentException">More than <see cref="MembershipAccessManager.MostResources"/> different resources are asked about.</exception>
+    Task<IReadOnlyDictionary<TResourceId, MemberHold<TResourceId>>> HoldEachAsync(
+        IReadOnlyCollection<TResourceId> resources,
+        string permission,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The permissions of <paramref name="permissions"/> the caller holds on each of <paramref name="resources"/> it
     /// sees, in one statement whatever their number. A resource the caller does not see, or holds none of the
     /// permissions on, is not in the answer.

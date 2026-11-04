@@ -748,6 +748,15 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "A permission marker reads the member it marks: [AtUnit(permission)] the application's unit id, the id its class declared with [OrganizationUnit<TUnitId>] has, and [OnResource(permission)] the id of a resource with members, an aggregate root a class declared with [Member<TId, TMemberId, TRoleId, TResource>] names. The call it gives takes any id, so a unit marked on a seat's id compiles, and lets nobody through: the package's check stops a case over an id it does not decide. So a member of another type is reported, for each marker separately, where the project sees the classes the package's marker names; where it sees none, nothing can be told, and the check says it when the request is sent. A member that may be null, OrganizationUnitId?, is a requirement computed from whether it is given, which the request writes as RequiredAccess. [ExpectedVersion] marks a member of the type the call takes there, a long?.");
 
+    public static readonly DiagnosticDescriptor PermissionMarkerOnCollectionAlone = Create(
+        id: "DDD00109",
+        title: "A permission marker on a collection of ids takes no marker argument and no [OrOwn]",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A permission marker can mark a member that is a collection of ids, where its package names a method for a collection with EachMethod on [PermissionMarker]. Membership's [OnResource] names MemberAccess.OnEach, so [OnResource(BoardPermissions.Edit)] IReadOnlyCollection<BoardId> Boards becomes MemberAccess.OnEach(BoardPermissions.Edit, request.Boards). That call takes the permission and the collection, and nothing more. A marker argument such as [ExpectedVersion] names the version of one resource, so beside a marker on a collection it is reported. [OrOwn] makes the caller's own an alternative to one permission on one resource, so paired with a marker on a collection it is reported. A marker argument that can belong to a marker on one id of the same resource belongs to that marker. Send one request for each resource where a version or the caller's own is needed.");
+
     public static readonly DiagnosticDescriptor QueryRequirementOnCommand = Create(
         id: "DDD00082",
         title: "A requirement for queries only is on a query",

@@ -16,6 +16,7 @@ Membership adds two requirements to [the vocabulary](../access-requirements.md#r
 | On the request | The call | For |
 |---|---|---|
 | `[OnResource(p)]` on the resource, and `[ExpectedVersion]` on the version read | `MemberAccess.On(p, resource, expectedVersion)` | a request on a resource |
+| `[OnResource(p)]` on a collection of ids | `MemberAccess.OnEach(p, resources)` | a request on several resources of one kind |
 | `[SeenWith<TResourceId>(p)]` | `MemberAccess.SeenWith<TResourceId>(p)` | a list ([Access in your own queries](#access-in-your-own-queries)) |
 
 Both [combine](../access-requirements.md#requirements-that-combine) with the other requirements. Each package
@@ -27,6 +28,23 @@ files in the folder. The document's check reads the document, and the folder's c
 keeps a hold on its resource, and refuses with that resource's codes. `[ExpectedVersion<Document>]` names the resource
 whose version the caller read. So the document's check compares the version, and the folder's check only reads the
 folder ([Where the permission is held](../access-requirements.md#where-the-permission-is-held)).
+
+**A permission on each resource of a list.** Put `[OnResource(p)]` on a member that is a collection of ids. Any type
+that implements `IEnumerable<TId>` works, such as an array, a list or a set:
+
+```csharp
+public sealed record ArchiveBoardsCommand([OnResource(BoardPermissions.Edit)] IReadOnlyCollection<BoardId> Boards) : ICommand, IBoardsRequest;
+```
+
+- The generator writes `MemberAccess.OnEach(BoardPermissions.Edit, request.Boards)`.
+- The check reads the boards in one statement for every 200 ids. A board named twice is read once.
+- One board that is refused refuses the request. `boards.not-found` comes before `boards.not-permitted`, and the
+  refusal names no board.
+- An empty collection lets the caller through. The check reads nothing.
+- The check keeps a hold on each board, and each save is held to its own.
+- `[ExpectedVersion]` and `[OrOwn]` name one resource, so beside a marker on a collection they are
+  [DDD00109](../diagnostics.md#ddd00109). Send one request for each board where you need a version.
+- A handler asks the same question with `boardAccess.RequireEachAsync(boards, BoardPermissions.Edit, cancellationToken)`.
 
 **The caller's own, or the permission.** Put `[OrOwn]` beside `[OnResource]`. A member can then leave a document,
 and anybody with the permission can take any member off. The request
