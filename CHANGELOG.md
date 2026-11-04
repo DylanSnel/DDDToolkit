@@ -3273,6 +3273,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
   A batch of 1,000 messages went from 2.8 s and 2.9 GB to 46 ms and 15 MB. See
   [Performance](docs/performance.md#delivering-a-batch-of-outbox-messages).
+- **The access checks of `[Own]`, Membership and Tenancy run compiled queries.** Each check built a LINQ query, and
+  Entity Framework walked it and looked it up in its query cache on every check. Now each check runs a query compiled
+  once with `EF.CompileAsyncQuery`, and sends its values as parameters. The query filters and row level security apply
+  as before.
+  - `[Own]` and `[OrOwn]` on an aggregate's id: the query is compiled when the owner's column is found.
+  - Membership: the statement of a check on one resource, or on a list of them, is compiled once for each shape that
+    the rules and the permission give it. The roles that the rules declare for the permission are constants of the
+    statement. A statement with roles kept as rows, or with a permission held from above, is composed for each check as
+    before.
+  - Tenancy: `ITenancyReadSource` has three new members, `HoldsAtTenantAsync`, `HoldsAtAsync` and `HasUnitAsync`. Each
+    returns `null` by default. The Entity Framework source answers them with queries compiled once per model. For
+    another source, the questions are worked out over its rows, as before.
+
+  A Membership check went from 399 μs and 203 KB to 95 μs and 14.5 KB on SQLite in memory. See
+  [Performance](docs/performance.md#access-checks).
 - **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
   `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
   `GetEqualityComponents()` with LINQ, so every comparison allocated two iterators and boxed each value-type property

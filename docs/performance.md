@@ -3,11 +3,11 @@
 [Identifiers](identifiers.md) recommends the struct form of an identifier, because of its memory layout. This page
 has the measurements behind that advice, including two places where the measurements first disagreed with it. The
 [Tenancy section](#tenancy-the-shape-of-the-access-data) measures the database shapes behind the Tenancy
-supporting domain. Five sections measure code beside the identifiers:
+supporting domain. Six sections measure code beside the identifiers:
 [value object equality](#value-object-equality), [FluentValidation](#fluentvalidation),
 [a read that skips a named query filter](#skipping-a-named-query-filter),
-[a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates) and
-[a batch of outbox messages](#delivering-a-batch-of-outbox-messages).
+[a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates),
+[a batch of outbox messages](#delivering-a-batch-of-outbox-messages) and [access checks](#access-checks).
 
 The benchmarks are in `Benchmarks/DDDToolkit.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
 Run them with:
@@ -465,6 +465,51 @@ A batch of 1,000 rows therefore made 4 million row comparisons.
 - **The check for a handler's changes reads only the changed entries.** Where the host requires an explicit current
   user, the processor checks before and after each in-process dispatch which entities a handler changed. It reads the
   added, modified and deleted entries from the state manager, as the save interceptors do.
+
+## Access checks
+
+Each benchmark makes one check of a request, and the check passes. The scope and its context exist already, so their
+cost is not part of the numbers. Each check reads one statement. The benchmarks are `OwnerCheckBenchmarks`,
+`MemberCheckBenchmarks` and `TenancyCheckBenchmarks`. The Membership and Tenancy benchmarks use the test hosts of the two
+supporting domains.
+
+| Check | Before | After |
+|---|---|---|
+| `[Own]` on a parcel's id, by the parcel's courier | 17.0 μs, 13.6 KB | 6.0 μs, 3.9 KB |
+| `[OnResource(permission)]` on a document, by a member whose role gives the permission | 399 μs, 203 KB | 95 μs, 14.5 KB |
+| `[RequiresPermission]` of Tenancy, for the whole tenant, by its administrator | 61.7 μs, 31.9 KB | 20.1 μs, 6.6 KB |
+| `[AtUnit(permission)]`, by a supervisor at its own unit | 68.9 μs, 36.5 KB | 24.1 μs, 7.2 KB |
+
+The times differed by up to a factor of 1.6 between runs on this machine, because other processes ran beside the
+benchmarks. The allocations differed by less than 3%. Before and after were measured one after the other.
+
+Before, each check built its query as a LINQ expression and handed it to Entity Framework. Entity Framework walked the
+expression to take out its parameters, and computed a hash of it to find the compiled query in its cache. It did not
+translate the query again: a count of Entity Framework's query compilations showed one for each shape of statement.
+Building and walking the expression made most of the cost. Now each check runs a query compiled with
+`EF.CompileAsyncQuery`, and sends its values as parameters.
+
+- **`[Own]`.** The package finds the owner's column of an aggregate the first time a request asks about the aggregate.
+  It now compiles the query that reads the column at the same moment. A check sends the aggregate's id as the one
+  parameter. `[OrOwn]` on an aggregate's id reads the owner in the same way.
+- **Tenancy.** `ITenancyReadSource` has three new members: `HoldsAtTenantAsync`, `HoldsAtAsync` and `HasUnitAsync`. A
+  source answers each with a query it keeps, or returns `null`. The Entity Framework source answers with queries that
+  it compiles once per model. For a source that returns `null`, the questions are worked out over its rows, as before.
+- **Membership.** The statement of a check depends on the rules and the permission, never on the caller. It depends on
+  how the caller can hold the permission, how it sees the resource, whether it is the application's own work, and which
+  roles give the permission. The package compiles the statement once for each of these shapes. The caller and the
+  moment are parameters. The roles are constants of the statement.
+  - Entity Framework 10 sends a list as one parameter per element by default. With the roles as a list parameter, the
+    check allocated 114 KB. With the roles as constants, it allocates 14.5 KB.
+  - A statement with roles kept as rows, or with a permission held from above, contains a query that the application
+    answers for the caller. Such a statement is still composed for each check.
+
+The queries that a module composes into its own query, such as `WhereIHold` and `db.Tenancy().UnitsWhereIHold`, are
+still built for each call.
+
+The query filters and row level security apply as before. A compiled query applies the query filters of the context it
+runs on, and evaluates a filter that reads the context again for every execution. Its command goes through the same
+interceptors. The tests check this with a filter that reads a member of the context, and with Tenancy's tenant filter.
 
 ## Tenancy: the shape of the access data
 
