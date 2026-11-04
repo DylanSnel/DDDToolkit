@@ -3,11 +3,12 @@
 [Identifiers](identifiers.md) recommends the struct form of an identifier, because of its memory layout. This page
 has the measurements behind that advice, including two places where the measurements first disagreed with it. The
 [Tenancy section](#tenancy-the-shape-of-the-access-data) measures the database shapes behind the Tenancy
-supporting domain. Six sections measure code beside the identifiers:
+supporting domain. Seven sections measure code beside the identifiers:
 [value object equality](#value-object-equality), [FluentValidation](#fluentvalidation),
 [a read that skips a named query filter](#skipping-a-named-query-filter),
 [a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates),
-[a batch of outbox messages](#delivering-a-batch-of-outbox-messages) and [access checks](#access-checks).
+[a batch of outbox messages](#delivering-a-batch-of-outbox-messages), [access checks](#access-checks) and
+[several requirements on one request](#several-requirements-on-one-request).
 
 The benchmarks are in `Benchmarks/DDDToolkit.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
 Run them with:
@@ -511,6 +512,48 @@ The query filters and row level security apply as before. A compiled query appli
 runs on, and evaluates a filter that reads the context again for every execution. Its command goes through the same
 interceptors. The tests check this with a filter that reads a member of the context, and with Tenancy's tenant filter.
 
+## Several requirements on one request
+
+A request with a permission marker on each of two members requires both, `AccessRequirement.All` of the two. The toolkit
+checks the cases one after the other, and each case that reads sends a statement of its own. A marker on a list of ids
+reads every resource of the list in one statement. The benchmarks compare the two on SQLite in memory, where a statement
+costs no round trip, and on Postgres, where every statement is one. The benchmarks are `MemberRoundTripBenchmarks` and
+`TenancyRoundTripBenchmarks`. Like the access checks above, they check in a scope that already has its context, and every
+check passes.
+
+Postgres 17 ran in Docker 29.6 on the test machine, reached over localhost. The benchmarks start the container
+themselves, so Docker must run.
+
+The Membership benchmark requires the permission that shares on documents. The caller manages every document.
+
+| Request | SQLite | Postgres |
+|---|---|---|
+| One document, `ShareDocument` | 88.8 μs, 14.4 KB | 1,586 μs, 17.5 KB |
+| Two documents, a marker on each, `ShareOnBoth` | 183.5 μs, 29.2 KB | 3,103 μs, 35.2 KB |
+| The same two documents, one marker on the list, `ShareOnEach` | 198.6 μs, 116.4 KB | 1,588 μs, 20.2 KB |
+
+The Tenancy benchmark requires the permission that manages seats. A supervisor holds it at a region, and so at the two
+units below it.
+
+| Request | SQLite | Postgres |
+|---|---|---|
+| One unit, `ManageSeatsAt` | 20.1 μs, 7.2 KB | 851 μs, 9.4 KB |
+| Two units, a marker on each, `MoveSeat` | 40.7 μs, 14.5 KB | 1,866 μs, 19.0 KB |
+
+- **Each case that reads costs a statement.** On Postgres, the second marker doubles the time of the check: about 1 ms
+  for Tenancy and 1.5 ms for Membership. On SQLite in memory a check takes 20 to 95 μs (see
+  [Access checks](#access-checks)). So on Postgres, the round trip and the work in the database make almost all of the
+  time.
+- **One statement for both documents costs as much as one for one document.** On Postgres, the marker on the list
+  checks two documents in 1,588 μs, and the marker on one document checks it in 1,586 μs.
+- **On SQLite, the list costs 100 KB more than one document.** The statement compares the ids with a list parameter.
+  Entity Framework 10 sends a list as one parameter per element by default, and on SQLite that cost about 100 KB for
+  each execution. On Postgres, the list costs 2.7 KB more than one document.
+
+The cases of a combination are not put into one statement. A case that refuses ends an `All` before the cases after it
+are read, and a case that lets the caller through ends an `Any`. The checks of the cases belong to different packages,
+and may read different contexts.
+
 ## Tenancy: the shape of the access data
 
 The [Tenancy](tenancy/overview.md) supporting domain makes three choices:
@@ -619,8 +662,9 @@ The script of the storage and list comparison is not in the repository. Its numb
 
 ## Not measured
 
-- **Other providers.** Everything before the Tenancy section runs on SQLite in memory. The suite above checks the
-  mapping on PostgreSQL and SQL Server, but does not time it.
+- **Other providers.** Everything before the Tenancy section runs on SQLite in memory, except
+  [several requirements on one request](#several-requirements-on-one-request), which runs on Postgres as well. The suite
+  above checks the mapping on PostgreSQL and SQL Server, but does not time it.
 - **The generators.** Nothing measures the build-time cost of the source generators.
 - **The outbox.** The throughput of `OutboxProcessor` under load, and the effect of the `ProcessedAt` index as the
   table grows, are open questions.
