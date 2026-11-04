@@ -240,7 +240,7 @@ app.Use(async (context, next) =>
 
 The access file writes `current_seat()` like this:
 
-**20261028202433_access.tenants.ddd.sql**
+**20261104141637_access.tenants.ddd.sql**
 
 ```sql
 CREATE OR REPLACE FUNCTION "tenancy".current_seat() RETURNS uuid
@@ -825,7 +825,7 @@ public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 
 The access file writes `seat_identity_is_fixed` like this, shortened:
 
-**20261028202433_access.tenants.ddd.sql**
+**20261104141637_access.tenants.ddd.sql**
 
 ```sql
 CREATE OR REPLACE FUNCTION "tenancy".seat_identity_is_fixed() RETURNS trigger
