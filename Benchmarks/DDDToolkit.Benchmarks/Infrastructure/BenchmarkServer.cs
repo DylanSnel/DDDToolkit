@@ -4,7 +4,7 @@ using Testcontainers.PostgreSql;
 
 namespace DDDToolkit.Benchmarks.Infrastructure;
 
-/// <summary>The database a round-trip benchmark runs on.</summary>
+/// <summary>The database a benchmark of the access checks runs on.</summary>
 public enum BenchmarkServerKind
 {
     /// <summary>SQLite in memory, in the process: a statement costs no round trip.</summary>

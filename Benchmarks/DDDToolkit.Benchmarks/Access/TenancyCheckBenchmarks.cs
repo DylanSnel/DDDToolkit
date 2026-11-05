@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using DDDToolkit.Access;
+using DDDToolkit.Benchmarks.Infrastructure;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.Supporting.Tenancy;
@@ -11,7 +12,6 @@ using DDDToolkit.Supporting.Tenancy.TestHost;
 using DDDToolkit.Supporting.Tenancy.TestHost.Contracts;
 using DDDToolkit.Supporting.Tenancy.TestHost.Persistence;
 using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,14 +22,15 @@ namespace DDDToolkit.Benchmarks.Access;
 /// begun, and the module's checks asked. Both checks pass. <see cref="AtTenant"/> asks for a permission for the whole
 /// tenant, which the tenant's administrator holds at the root. <see cref="AtUnit"/> asks for a permission at a unit,
 /// which a supervisor holds there. Each check reads in one statement. The scope and its context are made once, so their
-/// cost is not measured.
+/// cost is not measured. On SQLite in memory a statement costs no round trip; on Postgres in a container, every statement
+/// is one.
 /// </summary>
 [MemoryDiagnoser]
 public class TenancyCheckBenchmarks
 {
     private readonly StatedRequests.ManageEverySeat _everySeat = new();
 
-    private SqliteConnection _connection = null!;
+    private BenchmarkServer _server = null!;
     private ServiceProvider _services = null!;
     private AsyncServiceScope _scope;
     private AccessChecks<IHostRequest> _checks = null!;
@@ -38,15 +39,18 @@ public class TenancyCheckBenchmarks
     private SeatId _supervisor;
     private StatedRequests.ManageSeatsAt _seatsAtTheUnit = null!;
 
+    /// <summary>The database the checks read.</summary>
+    [Params(BenchmarkServerKind.Sqlite, BenchmarkServerKind.Postgres)]
+    public BenchmarkServerKind Server { get; set; }
+
     /// <summary>
-    /// Creates the database with a tenant of 10 units below its root, a supervisor at each, and a container with the
+    /// Starts the database with a tenant of 10 units below its root, a supervisor at each, and a container with the
     /// toolkit, the test host's Tenancy and the checks of its requests.
     /// </summary>
     [GlobalSetup]
     public void Setup()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _server = BenchmarkServer.StartAsync(Server).GetAwaiter().GetResult();
 
         var collection = new ServiceCollection();
         collection.AddDDDToolkitEntityFramework(options => options.UseOutbox<TestTenancyContext>(outbox => outbox
@@ -54,7 +58,7 @@ public class TenancyCheckBenchmarks
             .AddTenancyInvitationEvents<TenantId, InvitationId, OrganizationUnitId, RoleId, SeatId>()
             .KeepEventLog(log => log.AddTenancyEventLog<TenantId, SeatId, OrganizationUnitId, RoleId>())));
         TestHostTenancy.Add(collection);
-        collection.AddDbContext<TestTenancyContext>((services, options) => options.UseSqlite(_connection).UseDDDToolkit(services));
+        collection.AddDbContext<TestTenancyContext>((services, options) => _server.Use(options).UseDDDToolkit(services));
         _services = collection.BuildServiceProvider();
 
         using (var scope = _services.CreateScope())
@@ -69,13 +73,13 @@ public class TenancyCheckBenchmarks
         _checks = _scope.ServiceProvider.GetRequiredService<AccessChecks<IHostRequest>>();
     }
 
-    /// <summary>Disposes the scope and the container, and closes the database.</summary>
+    /// <summary>Disposes the scope and the container, and stops the database.</summary>
     [GlobalCleanup]
     public void Cleanup()
     {
         _scope.Dispose();
         _services.Dispose();
-        _connection.Dispose();
+        _server.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     /// <summary>The administrator manages every seat of the tenant.</summary>
