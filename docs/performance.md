@@ -472,7 +472,7 @@ A batch of 1,000 rows therefore made 4 million row comparisons.
 Each benchmark makes one check of a request, and the check passes. The scope and its context exist already, so their
 cost is not part of the numbers. Each check reads one statement. The benchmarks are `OwnerCheckBenchmarks`,
 `MemberCheckBenchmarks` and `TenancyCheckBenchmarks`. The Membership and Tenancy benchmarks use the test hosts of the two
-supporting domains.
+supporting domains. The table has the numbers on SQLite in memory. [On Postgres](#on-postgres) has them on Postgres.
 
 | Check | Before | After |
 |---|---|---|
@@ -511,6 +511,33 @@ still built for each call.
 The query filters and row level security apply as before. A compiled query applies the query filters of the context it
 runs on, and evaluates a filter that reads the context again for every execution. Its command goes through the same
 interceptors. The tests check this with a filter that reads a member of the context, and with Tenancy's tenant filter.
+
+### On Postgres
+
+The same three benchmarks run on Postgres 17 in Docker 29.6 on the test machine, reached over localhost. There every
+check is a round trip. The benchmarks start the container themselves, so Docker must run.
+
+The round trip varied a lot on this machine. Within one run, the standard deviation was 0.4 to 1 ms per check. Two runs
+before the ones in the table had means of up to 43 ms. So the table has the median of each run instead of the mean.
+Before and after were measured in turn, twice: before, after, before, after. Each cell has the two medians and the
+allocations.
+
+| Check | Before | After |
+|---|---|---|
+| `[Own]` on a parcel's id, by the parcel's courier | 2.01 and 1.70 ms, 15.1 KB | 1.74 and 1.24 ms, 5.4 KB |
+| `[OnResource(permission)]` on a document, by a member whose role gives the permission | 4.08 and 3.90 ms, 115.7 KB | 3.39 and 3.18 ms, 17.5 KB |
+| `[RequiresPermission]` of Tenancy, for the whole tenant, by its administrator | 2.63 and 5.11 ms, 34.2 KB | 2.04 and 2.25 ms, 9.0 KB |
+| `[AtUnit(permission)]`, by a supervisor at its own unit | 2.53 and 2.54 ms, 38.7 KB | 2.42 and 2.17 ms, 9.4 KB |
+
+- **The median after is lower in each pair.** In seven of the eight pairs it is 0.11 to 0.73 ms lower. On SQLite the
+  checks save 10 to 300 μs of work in the process. The spread of the round trip is larger than both, so these runs do
+  not tell how much of the difference on Postgres the compiled queries make.
+- **The allocations drop as on SQLite.** They differed by less than 3% between runs.
+- **Before, the Membership check allocated 116 KB on Postgres and 203 KB on SQLite.** This fits the list parameter of
+  Entity Framework 10, which cost about 100 KB for each execution on SQLite. On Postgres a list parameter costs a few KB
+  (see [Several requirements on one request](#several-requirements-on-one-request)).
+- **The round trip was slower in these runs than in the next section's.** There a Tenancy check at one unit took
+  0.85 ms. Here it took 2.2 to 2.4 ms. Compare times on Postgres only within one section.
 
 ## Several requirements on one request
 
@@ -663,8 +690,8 @@ The script of the storage and list comparison is not in the repository. Its numb
 ## Not measured
 
 - **Other providers.** Everything before the Tenancy section runs on SQLite in memory, except
-  [several requirements on one request](#several-requirements-on-one-request), which runs on Postgres as well. The suite
-  above checks the mapping on PostgreSQL and SQL Server, but does not time it.
+  [the access checks](#on-postgres) and [several requirements on one request](#several-requirements-on-one-request),
+  which run on Postgres as well. The suite above checks the mapping on PostgreSQL and SQL Server, but does not time it.
 - **The generators.** Nothing measures the build-time cost of the source generators.
 - **The outbox.** The throughput of `OutboxProcessor` under load, and the effect of the `ProcessedAt` index as the
   table grows, are open questions.

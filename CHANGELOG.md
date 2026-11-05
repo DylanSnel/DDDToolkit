@@ -3192,6 +3192,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   container. On Postgres every case that reads costs a statement, about 1 to 1.5 ms there, and one statement for both
   resources costs as much as one for one resource. The benchmarks `MemberRoundTripBenchmarks` and
   `TenancyRoundTripBenchmarks` start the Postgres container themselves.
+- **Docs: the access checks on Postgres.** [On Postgres](docs/performance.md#on-postgres) measures the access checks
+  before and after the compiled queries, on Postgres in a container. The median after is lower in each pair. The spread
+  of the round trip is larger than the difference. `OwnerCheckBenchmarks`, `MemberCheckBenchmarks` and
+  `TenancyCheckBenchmarks` take the database as a parameter, and show the minimum and the median.
 - **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
