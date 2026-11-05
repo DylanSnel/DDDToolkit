@@ -20,6 +20,7 @@ namespace DDDToolkit.Benchmarks.Access;
 /// memory a statement costs no round trip; on Postgres in a container, every statement is one.
 /// </summary>
 [MemoryDiagnoser]
+[MinColumn, MedianColumn]
 public class MemberCheckBenchmarks
 {
     private static readonly Guid Owner = Guid.Parse("a11ce000-0000-4000-8000-000000000001");

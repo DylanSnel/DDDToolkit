@@ -26,6 +26,7 @@ namespace DDDToolkit.Benchmarks.Access;
 /// is one.
 /// </summary>
 [MemoryDiagnoser]
+[MinColumn, MedianColumn]
 public class TenancyCheckBenchmarks
 {
     private readonly StatedRequests.ManageEverySeat _everySeat = new();

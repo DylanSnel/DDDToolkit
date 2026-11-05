@@ -16,6 +16,7 @@ namespace DDDToolkit.Benchmarks.Access;
 /// On SQLite in memory a statement costs no round trip; on Postgres in a container, every statement is one.
 /// </summary>
 [MemoryDiagnoser]
+[MinColumn, MedianColumn]
 public class OwnerCheckBenchmarks
 {
     private static readonly Guid Courier = Guid.Parse("c0c00000-0000-4000-8000-000000000001");
