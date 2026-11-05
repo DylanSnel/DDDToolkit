@@ -135,6 +135,8 @@ for `AddBoardMembershipWithTenancy` ([step 7](tutorial.md#step-7-members)).
   ([Which customer a role belongs to](#which-customer-a-role-belongs-to)).
 - **No starter role is reserved for the owner.** The owner holds no role. A customer may rename, archive and change
   every starter role. A scope with no roles still has resources and owners.
+- **`FromStarterRole` and `PermissionsFromStarterRole` are `[Bookkeeping]`.** A GraphQL type that binds by convention
+  leaves them out ([Personal data and bookkeeping](../graphql.md#personal-data-and-bookkeeping-are-left-out)).
 
 ### Starter roles with Tenancy
 

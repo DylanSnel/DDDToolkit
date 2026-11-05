@@ -14,6 +14,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
+- **Four marks for the classes an API returns, in `DDDToolkit.Abstractions.Attributes`.** New in 3.2.0-preview.14.
+  - `[PersonalData]` marks a stored member that holds data about a person that no reader of the object needs, such as
+    an account id.
+  - `[Bookkeeping]` marks a stored member that a package keeps for its own work.
+  - `[DisplayName("Placement")]` gives a class the type name that every API layer uses. The name has no spaces.
+  - `[assembly: ToolkitPackage]` marks an assembly as one of the toolkit's packages. The public methods of its classes
+    are behaviour.
+
+  Each API layer decides what it does with a mark. `DDDToolkit.HotChocolate` reads all four
+  ([Binding fields by convention](docs/graphql.md#binding-fields-by-convention)). `[Internal]` keeps its meaning. It
+  marks a member that is never stored or serialized. `DisplayNameAttribute` shares its simple name with
+  `System.ComponentModel.DisplayNameAttribute`, so a file that imports both namespaces needs an alias.
+
 - **Several permission markers on one request.** The generator combines the calls of all permission markers on a
   request with `AccessRequirement.All`, in the order they are written. The calls of the request's own requirement
   attributes come first. Two markers of the same kind are allowed, such as two boards or two units.
@@ -1281,6 +1294,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### HotChocolate
 
+- **Defaults for the packages' classes in a type that binds by convention.** New in 3.2.0-preview.14.
+  `AddDDDToolkitTypes()` registers two more interceptors and extends one.
+  - `DomainBehaviourFieldsInterceptor` also removes the method fields of a class declared in an assembly marked
+    `[ToolkitPackage]`. Membership's `MemberRole` and Tenancy's `RoleGrant` no longer print
+    `appliesAt(moment: DateTime!): Boolean!`.
+  - `PersonalDataAndBookkeepingFieldsInterceptor` removes the fields of members marked `[PersonalData]` or
+    `[Bookkeeping]` from object, interface and input object types that bind by convention. A type class shows such a
+    member with a resolver, or with `BindFieldsExplicitly()` that lists it.
+  - `DisplayNameTypesInterceptor` names an object type or an interface type after the `[DisplayName]` of its class.
+    `Placement<SeatId, OrganizationUnitId, RoleId>` is the type `Placement`. A name the application gives with
+    `descriptor.Name(...)` wins. A display name that is no GraphQL name fails the schema build and names the class.
+
+  The GraphQL docs gain a section on binding by convention. It also describes a trap in HotChocolate's generator. A
+  resolver bound with `[BindMember]` to a member of its own name, such as `GetAddedBy` to `AddedBy`, disappears from the
+  schema. See [Binding fields by convention](docs/graphql.md#binding-fields-by-convention).
+
 - **Typed errors in mutation payloads.** `AddDDDToolkitMutationConventions()` in `DDDToolkit.HotChocolate`
   turns on HotChocolate's mutation conventions for every mutation and gives every payload an `errors` list
   typed by the toolkit: `RefusalError` (code, kind, and `field` from the refusal's `Field` argument),
@@ -1391,6 +1420,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   See [Reading the schema from a tool](docs/graphql.md#reading-the-schema-from-a-tool).
 
 #### Tenancy
+
+- **Marks for the API layers on Tenancy's classes.** New in 3.2.0-preview.14.
+  - `[PersonalData]` on the seat's `Identity`. The invitation's `Address` is not marked, because whoever may read
+    invitations needs it.
+  - `[Bookkeeping]` on the role's `FromStarterRole` and `PermissionsFromStarterRole`.
+  - `[DisplayName]` on `Placement`, `RoleGrant`, `NamedUnit`, `SeatInTenant`, and on the managers' records
+    `SeatOverview`, `PermissionReach`, `UnitRef`, `UnitInTree`, `TenantListing`, `TenantPage`, `IssuedInvitation` and
+    `AcceptedInvitation`.
+  - `[assembly: ToolkitPackage]` on the package.
+  - `[Internal]` on the role's computed `Facts`. The managers still read it in code.
+
+  See [Tenancy's overview](docs/tenancy/overview.md) and [GraphQL](docs/graphql.md#binding-fields-by-convention).
 
 - **Tenancy**, the toolkit's first supporting domain: who somebody is in a tenant, and what they may do where in its
   organization. It comes in four packages:
@@ -2203,6 +2244,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Keeping tenants apart](docs/tenancy/keeping-tenants-apart.md).
 
 #### Membership
+
+- **Marks for the API layers on Membership's classes.** New in 3.2.0-preview.14. `[Bookkeeping]` is on the custom
+  role's `FromStarterRole` and `PermissionsFromStarterRole`, and `[assembly: ToolkitPackage]` on the package.
+  `MemberRole` has no `[DisplayName]`, because an application with two resources closes it twice. A type class names
+  it ([Several kinds of resource](docs/membership/resources-and-members.md#several-kinds-of-resource)).
 
 - **Membership**, the toolkit's second supporting domain. `DDDToolkit.Supporting.Membership` is access to one
   resource through its members: a document shared with people, a folder with staff on it. An application

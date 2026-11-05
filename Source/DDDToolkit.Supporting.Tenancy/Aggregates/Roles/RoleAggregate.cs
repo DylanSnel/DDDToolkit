@@ -59,6 +59,7 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     public string Description { get; private set; } = string.Empty;
 
     /// <summary>The key of the starter role the role was copied from, or <see langword="null"/> for a role made by hand. Set when it is made.</summary>
+    [Bookkeeping]
     public string? FromStarterRole { get; private set; }
 
     /// <summary>Whether the role is in use. An archived role grants nothing.</summary>
@@ -75,9 +76,11 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     /// roles remembered it or from a starter role the catalogue did not have then, which follows its starter role as if the starter role had
     /// given it nothing yet.
     /// </summary>
+    [Bookkeeping]
     public IReadOnlyList<string>? PermissionsFromStarterRole { get; private set; }
 
     /// <summary>This role's status and permissions as a snapshot, for a seat's rules.</summary>
+    [Internal]
     public RoleFacts Facts => new(Status == RoleStatus.Active, Permissions);
 
     /// <summary>

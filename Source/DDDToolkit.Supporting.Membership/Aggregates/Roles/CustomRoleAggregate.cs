@@ -108,6 +108,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// <see langword="null"/> for a role a customer made. Set when the role is made and never after, so it
     /// outlasts a new name.
     /// </summary>
+    [Bookkeeping]
     public string? FromStarterRole { get; private set; }
 
     /// <summary>
@@ -117,6 +118,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// starter role's permissions, whatever permissions the draft had. <see langword="null"/> for a role a customer made,
     /// and for a role made before roles remembered this. Such a role follows as if the starter role had given it nothing yet.
     /// </summary>
+    [Bookkeeping]
     public IReadOnlyList<string>? PermissionsFromStarterRole { get; private set; }
 
     /// <summary>

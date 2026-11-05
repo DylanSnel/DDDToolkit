@@ -455,3 +455,8 @@ services.AddFolderMemberAccess<IFilingRequest>();
 - **A composite key works.** Both tables use the resource's full key, with its [`[KeyPart]`](../composite-keys.md)
   parts under their own names. With `HasMembers`, call `HasKey` before `HasMembers`. A key set after `HasMembers` is
   refused where the mapping is read.
+- **In GraphQL, name each resource's `MemberRole` yourself.** `MemberRole<TMemberId, TRoleId>` has no
+  `[DisplayName]`, because two resources close it twice. HotChocolate names it after its type arguments, such as
+  `MemberRoleOfStaffCodeAndNamedRole`. A type class with `descriptor.Name("FolderMemberRole")` gives it a name of yours
+  ([Display names of the packages' classes](../graphql.md#display-names-of-the-packages-classes)). Its method
+  `AppliesAt(moment)` is no field, because the package's assembly is a `[ToolkitPackage]`.

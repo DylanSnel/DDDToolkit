@@ -367,11 +367,13 @@ public class TenantManager<
     /// <param name="Tenant">The tenant, the application's own class, read for the answer and tracked by nobody.</param>
     /// <param name="Name">Its name, which is its organization's.</param>
     /// <param name="ActiveSeats">How many of its seats are active now.</param>
+    [DisplayName("TenantListing")]
     public sealed record TenantListing(TTenant Tenant, string Name, int ActiveSeats);
 
     /// <summary>One page of the tenants an operator lists.</summary>
     /// <param name="Items">The tenants of the page, by slug.</param>
     /// <param name="Next">What to ask the next page with, or <see langword="null"/> when this is the last one.</param>
+    [DisplayName("TenantPage")]
     public sealed record TenantPage(IReadOnlyList<TenantListing> Items, string? Next);
 
     // ------------------------------------------------------------------ helpers

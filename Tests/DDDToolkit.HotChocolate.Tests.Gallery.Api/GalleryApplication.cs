@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Exceptions;
 
 namespace Gallery.Application;
@@ -11,6 +12,9 @@ public sealed record ExhibitOverview(int Id, string Title, int Year, string? Not
 
 /// <summary>A loan of an exhibit. It has no permission: nothing outside the gallery names one.</summary>
 public sealed record LoanOverview(string Lender, int Days);
+
+/// <summary>A curator as the staff list shows one. The e-mail address is personal data. The room is where the curator works.</summary>
+public sealed record CuratorProfile(int Id, string Name, [property: PersonalData] string Email, string Room);
 
 /// <summary>The permissions the gallery's fields ask for.</summary>
 public static class GalleryPermissions
@@ -68,6 +72,11 @@ public sealed class GalleryDesk
     }
 
     public ExhibitOverview? Find(int id) => Exhibits.FirstOrDefault(exhibit => exhibit.Id == id);
+
+    public IReadOnlyList<CuratorProfile> Curators { get; } =
+    [
+        new(41, "Mira Holt", "mira.holt@gallery.test", "East wing"),
+    ];
 
     public IReadOnlyList<LoanOverview> LoansOf(int exhibit)
         => exhibit == 1 ? [new("Harbor Museum", 90), new("Mill Collection", 30)] : [];

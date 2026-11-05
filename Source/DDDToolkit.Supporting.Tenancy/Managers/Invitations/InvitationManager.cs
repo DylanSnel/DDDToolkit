@@ -362,6 +362,7 @@ public class InvitationManager<
     /// The token whoever accepts needs. Send it to the person, in the fragment of a link or in a message's text,
     /// and keep it nowhere.
     /// </param>
+    [DisplayName("IssuedInvitation")]
     public sealed record IssuedInvitation(TInvitation Invitation, string Token)
     {
         /// <summary>Says which invitation and not its token: a record prints its members, and this one must not end up in a log.</summary>
@@ -371,6 +372,7 @@ public class InvitationManager<
     /// <summary>What accepting an invitation gives the person who accepted.</summary>
     /// <param name="Tenant">The tenant they now have a seat in, whose slug the next request selects it by.</param>
     /// <param name="Seat">Their seat, the application's own class.</param>
+    [DisplayName("AcceptedInvitation")]
     public sealed record AcceptedInvitation(TTenant Tenant, TSeat Seat);
 
     // ------------------------------------------------------------------ helpers

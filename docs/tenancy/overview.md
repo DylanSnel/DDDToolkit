@@ -112,6 +112,16 @@ classDiagram
 | **Role** | A named set of permissions. Each tenant has its own roles. A new tenant starts with copies of your starter roles. Your application decides whether a tenant may also make its own ([below](#what-your-application-decides)). | Area manager |
 | **Grant** (`RoleGrant`) | A role given to a seat at one of its placements. It starts at a set time, and ends at a set time or never. | Area manager, for Rhea, at North |
 
+The classes carry marks that an API layer reads. In GraphQL these are the defaults for a type that binds by convention
+([GraphQL](../graphql.md#binding-fields-by-convention)):
+
+- The seat's `Identity` is `[PersonalData]`. It is left out of the type. The invitation's `Address` is not marked,
+  because whoever may read invitations needs it.
+- The role's `FromStarterRole` and `PermissionsFromStarterRole` are `[Bookkeeping]`. They are left out of the type.
+- `Placement`, `RoleGrant`, `NamedUnit` and the records of the managers have a `[DisplayName]`. The type is named
+  `Placement` instead of after its type arguments.
+- The package's assembly is a `[ToolkitPackage]`. Methods such as `RoleGrant.AppliesAt(moment)` are no fields.
+
 ## Reach: a grant covers the units below it
 
 A permission held at a unit also counts at every unit below it. Rhea's role is granted at North, so she holds its

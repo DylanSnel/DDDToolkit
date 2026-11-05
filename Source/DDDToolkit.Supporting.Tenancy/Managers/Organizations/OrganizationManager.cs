@@ -381,6 +381,7 @@ public class OrganizationManager<
     /// <param name="Unit">The unit, the application's own class.</param>
     /// <param name="Path">The names of the unit and the units above it, the root first, joined with <c>" / "</c>.</param>
     /// <param name="Depth">How deep the unit is, the root being 1.</param>
+    [DisplayName("UnitInTree")]
     public sealed record UnitInTree(TUnit Unit, string Path, int Depth);
 
     // ------------------------------------------------------------------ helpers
