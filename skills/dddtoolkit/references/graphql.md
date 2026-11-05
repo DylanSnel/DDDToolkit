@@ -114,7 +114,7 @@ public static async Task<IReadOnlyDictionary<ProjectId, ProjectCrew>> GetCrewByP
 - Declare a type over the application's own record with `[ObjectType<T>]`. No output record, no `From(...)`
   mapping. The exception is a reference to another module's entity, which is a record of its key alone.
 - A type class binds by convention unless it says otherwise. `AddDDDToolkitTypes()` leaves out `[Internal]` members,
-  the methods of entities, value objects and the packages' classes (`[assembly: ToolkitPackage]`), and members marked
+  the methods of entities and value objects (the packages' `RoleGrant` and `MemberRole` included), and members marked
   `[PersonalData]` or `[Bookkeeping]`. A package class with `[DisplayName]` names its type, as `Placement`. Write only
   the differences: `descriptor.Ignore(...)` for a property the application does not show, a resolver for a marked
   member it does show, and `descriptor.Name(...)` for Membership's `MemberRole`, which has no display name.

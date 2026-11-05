@@ -49,7 +49,3 @@ using DDDToolkit.Supporting.Tenancy.Managers;
 // [InTenant] or [SignedIn] beside [OwnOnly] with [Own] on the seat id says nothing more, and neither does [InTenant]
 // beside a permission of Tenancy's with [OrOwn] on it.
 [assembly: OwnedByCurrentUser(IdOf = typeof(SeatAggregateAttribute<>), Implies = [typeof(InTenantAttribute), typeof(SignedInAttribute)])]
-
-// The public methods of this package's classes are behaviour. An API layer leaves them out of a type that binds
-// its fields by convention.
-[assembly: ToolkitPackage]

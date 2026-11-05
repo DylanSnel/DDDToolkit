@@ -14,18 +14,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
-- **Four marks for the classes an API returns, in `DDDToolkit.Abstractions.Attributes`.** New in 3.2.0-preview.14.
+- **Three marks for the classes an API returns, in `DDDToolkit.Abstractions.Attributes`.** New in 3.2.0-preview.14.
   - `[PersonalData]` marks a stored member that holds data about a person that no reader of the object needs, such as
     an account id.
   - `[Bookkeeping]` marks a stored member that a package keeps for its own work.
   - `[DisplayName("Placement")]` gives a class the type name that every API layer uses. The name has no spaces.
-  - `[assembly: ToolkitPackage]` marks an assembly as one of the toolkit's packages. The public methods of its classes
-    are behaviour.
 
-  Each API layer decides what it does with a mark. `DDDToolkit.HotChocolate` reads all four
+  Each API layer decides what it does with a mark. `DDDToolkit.HotChocolate` reads all three
   ([Binding fields by convention](docs/graphql.md#binding-fields-by-convention)). `[Internal]` keeps its meaning. It
   marks a member that is never stored or serialized. `DisplayNameAttribute` shares its simple name with
   `System.ComponentModel.DisplayNameAttribute`, so a file that imports both namespaces needs an alias.
+
+  Preview.14 had a fourth mark, `[assembly: ToolkitPackage]`. Preview.15 removes it. The packages' plain classes with
+  methods are entities and implement `IEntity` instead.
 
 - **Several permission markers on one request.** The generator combines the calls of all permission markers on a
   request with `AccessRequirement.All`, in the order they are written. The calls of the request's own requirement
@@ -1296,9 +1297,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 - **Defaults for the packages' classes in a type that binds by convention.** New in 3.2.0-preview.14.
   `AddDDDToolkitTypes()` registers two more interceptors and extends one.
-  - `DomainBehaviourFieldsInterceptor` also removes the method fields of a class declared in an assembly marked
-    `[ToolkitPackage]`. Membership's `MemberRole` and Tenancy's `RoleGrant` no longer print
-    `appliesAt(moment: DateTime!): Boolean!`.
+  - Membership's `MemberRole` and Tenancy's `RoleGrant` implement `IEntity`, so `DomainBehaviourFieldsInterceptor`
+    removes their method fields. They no longer print `appliesAt(moment: DateTime!): Boolean!`. In preview.14 the
+    interceptor read `[assembly: ToolkitPackage]` instead.
   - `PersonalDataAndBookkeepingFieldsInterceptor` removes the fields of members marked `[PersonalData]` or
     `[Bookkeeping]` from object, interface and input object types that bind by convention. A type class shows such a
     member with a resolver, or with `BindFieldsExplicitly()` that lists it.
@@ -1428,10 +1429,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `[DisplayName]` on `Placement`, `RoleGrant`, `NamedUnit`, `SeatInTenant`, and on the managers' records
     `SeatOverview`, `PermissionReach`, `UnitRef`, `UnitInTree`, `TenantListing`, `TenantPage`, `IssuedInvitation` and
     `AcceptedInvitation`.
-  - `[assembly: ToolkitPackage]` on the package.
   - `[Internal]` on the role's computed `Facts`. The managers still read it in code.
 
   See [Tenancy's overview](docs/tenancy/overview.md) and [GraphQL](docs/graphql.md#binding-fields-by-convention).
+- **`Placement` and `RoleGrant` implement `IEntity`.** New in 3.2.0-preview.15. They are entities with no id of their
+  own. A seat and a unit identify a placement. A seat, a unit and a role identify a grant. Code that reads `IEntity`
+  now treats them as entities. `DDDToolkit.HotChocolate` leaves their methods out of a type that binds by convention.
+  `DDDToolkit.NewtonSoft.Json` fills their private setters. Preview.14 put `[assembly: ToolkitPackage]` on the package
+  instead.
 
 - **Tenancy**, the toolkit's first supporting domain: who somebody is in a tenant, and what they may do where in its
   organization. It comes in four packages:
@@ -2246,9 +2251,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 #### Membership
 
 - **Marks for the API layers on Membership's classes.** New in 3.2.0-preview.14. `[Bookkeeping]` is on the custom
-  role's `FromStarterRole` and `PermissionsFromStarterRole`, and `[assembly: ToolkitPackage]` on the package.
-  `MemberRole` has no `[DisplayName]`, because an application with two resources closes it twice. A type class names
-  it ([Several kinds of resource](docs/membership/resources-and-members.md#several-kinds-of-resource)).
+  role's `FromStarterRole` and `PermissionsFromStarterRole`. `MemberRole` has no `[DisplayName]`, because an
+  application with two resources closes it twice. A type class names it
+  ([Several kinds of resource](docs/membership/resources-and-members.md#several-kinds-of-resource)).
+- **`MemberRole` implements `IEntity`.** New in 3.2.0-preview.15. It is an entity with no id of its own. A member and
+  a role identify it. `DDDToolkit.HotChocolate` leaves its `AppliesAt` out of a type that binds by convention.
+  Preview.14 put `[assembly: ToolkitPackage]` on the package instead.
 
 - **Membership**, the toolkit's second supporting domain. `DDDToolkit.Supporting.Membership` is access to one
   resource through its members: a document shared with people, a folder with staff on it. An application

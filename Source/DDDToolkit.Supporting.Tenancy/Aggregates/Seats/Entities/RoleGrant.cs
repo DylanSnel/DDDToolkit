@@ -7,14 +7,14 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// A role a seat holds at the unit of one of its placements, for a period. It is known by its role within
 /// its placement: a placement holds a role at most once.
 /// <para>
-/// A plain class rather than a toolkit entity, and not extended by the application: a grant is a fact
-/// about a seat, and only the seat changes it.
+/// An entity with no id of its own. Its seat, its unit and its role identify it. Only the seat changes it, and
+/// the application does not extend it.
 /// </para>
 /// </summary>
 /// <typeparam name="TSeatId">The application's seat id.</typeparam>
 /// <typeparam name="TRoleId">The application's role id.</typeparam>
 [DisplayName("RoleGrant")]
-public sealed class RoleGrant<TSeatId, TRoleId>
+public sealed class RoleGrant<TSeatId, TRoleId> : IEntity
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {

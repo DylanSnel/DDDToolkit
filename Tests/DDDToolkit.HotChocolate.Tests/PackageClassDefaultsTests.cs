@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.HotChocolate.Tests.Domain;
 using DDDToolkit.HotChocolate.Tests.GraphQl;
 using DDDToolkit.Supporting.Membership;
@@ -17,7 +18,7 @@ namespace DDDToolkit.HotChocolate.Tests;
 
 /// <summary>
 /// The defaults for the classes of the toolkit's packages in a type that binds by convention. The methods of the
-/// packages' plain classes are no fields. Members marked <c>[PersonalData]</c> or <c>[Bookkeeping]</c> are left out
+/// packages' entities are no fields. Members marked <c>[PersonalData]</c> or <c>[Bookkeeping]</c> are left out
 /// unless the application lists them or resolves them. A class with <c>[DisplayName]</c> names its type, unless the
 /// application names it.
 /// </summary>
@@ -26,7 +27,7 @@ public sealed partial class PackageClassDefaultsTests
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task The_methods_of_the_packages_plain_classes_are_not_fields()
+    public async Task The_methods_of_the_packages_entities_are_not_fields()
     {
         var sdl = await PrintAsync(graphql => graphql.AddQueryType<PackageQuery>());
 
@@ -187,10 +188,11 @@ public sealed partial class PackageClassDefaultsTests
         => Marked<InternalAttribute>(typeof(RoleAggregate<,>), "Facts").Should().BeTrue();
 
     [Fact]
-    public void Both_packages_are_marked_as_toolkit_packages()
+    public void The_packages_entities_without_an_id_of_their_own_are_entities()
     {
-        typeof(Placement<,,>).Assembly.IsDefined(typeof(ToolkitPackageAttribute)).Should().BeTrue();
-        typeof(MemberRole<,>).Assembly.IsDefined(typeof(ToolkitPackageAttribute)).Should().BeTrue();
+        typeof(Placement<,,>).Should().Implement<IEntity>();
+        typeof(RoleGrant<,>).Should().Implement<IEntity>();
+        typeof(MemberRole<,>).Should().Implement<IEntity>();
     }
 
     [Fact]
@@ -215,7 +217,7 @@ public sealed partial class PackageClassDefaultsTests
 
     // The query roots below are this file's own, so the full test schema stays as it is.
 
-    /// <summary>A query that returns the packages' plain classes and an application's own class.</summary>
+    /// <summary>A query that returns the packages' entities and an application's own class.</summary>
     public sealed class PackageQuery
     {
         /// <summary>Membership's role on a member, with its method AppliesAt.</summary>

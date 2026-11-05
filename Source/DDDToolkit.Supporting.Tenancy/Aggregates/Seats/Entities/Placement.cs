@@ -7,15 +7,18 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// Where a seat belongs: one unit, with the roles granted to the seat at that unit. Within its seat it is
 /// known by that unit, because a seat has at most one placement per unit, and at most one of them is primary.
 /// <para>
-/// A placement says where a seat belongs; what it may do there comes from the roles granted with it. A plain
-/// class rather than a toolkit entity, and not extended by the application: only the seat changes it.
+/// A placement says where a seat belongs. What the seat may do there comes from the roles granted with it.
+/// </para>
+/// <para>
+/// An entity with no id of its own. Its seat and its unit identify it. Only the seat changes it, and the
+/// application does not extend it.
 /// </para>
 /// </summary>
 /// <typeparam name="TSeatId">The application's seat id.</typeparam>
 /// <typeparam name="TUnitId">The application's unit id.</typeparam>
 /// <typeparam name="TRoleId">The application's role id.</typeparam>
 [DisplayName("Placement")]
-public sealed class Placement<TSeatId, TUnitId, TRoleId>
+public sealed class Placement<TSeatId, TUnitId, TRoleId> : IEntity
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>

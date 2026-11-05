@@ -459,4 +459,4 @@ services.AddFolderMemberAccess<IFilingRequest>();
   `[DisplayName]`, because two resources close it twice. HotChocolate names it after its type arguments, such as
   `MemberRoleOfStaffCodeAndNamedRole`. A type class with `descriptor.Name("FolderMemberRole")` gives it a name of yours
   ([Display names of the packages' classes](../graphql.md#display-names-of-the-packages-classes)). Its method
-  `AppliesAt(moment)` is no field, because the package's assembly is a `[ToolkitPackage]`.
+  `AppliesAt(moment)` is no field, because `MemberRole` is an entity.
