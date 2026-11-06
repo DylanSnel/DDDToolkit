@@ -27,14 +27,16 @@ public sealed class DeactivatedSeatScenarios(SampleHosts sample) : IClassFixture
     public async Task A_deactivated_seat_leaves_the_crew_of_a_project_it_does_not_own()
     {
         await using var host = await sample.StartAsync();
-        using var rhea = await host.ClientAsync("rhea", Harbor.Slug);
+
+        // Deactivating a seat takes seats.manage for the whole tenant. Ada holds it at the root, and Rhea only at North.
+        using var ada = await host.ClientAsync("ada", Harbor.Slug);
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
         await Outboxes.DrainedAsync(host, Cancellation);
 
         var juno = Harbor.SeatOf(DemoPeople.Juno).Value;
         (await CrewOfPierSevenAsync(leo)).Should().Contain(juno, "Juno is on Pier 7's crew");
 
-        using (var deactivated = await rhea.PostAsync($"/tenancy/seats/{juno}/deactivate", content: null, Cancellation))
+        using (var deactivated = await ada.PostAsync($"/tenancy/seats/{juno}/deactivate", content: null, Cancellation))
         {
             deactivated.StatusCode.Should().Be(HttpStatusCode.OK);
         }
