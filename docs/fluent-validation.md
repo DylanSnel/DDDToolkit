@@ -1,6 +1,6 @@
 # FluentValidation
 
-`DDDToolkit.FluentValidation` lets you write the rules of a value object as a
+`DTS.DDD.FluentValidation` lets you write the rules of a value object as a
 [FluentValidation](https://docs.fluentvalidation.net/) validator. It also lets a value object take part in the
 validator you write for a command or a request. To write the rules of a value object by hand instead, see
 [Value objects](value-objects.md#validation).
@@ -9,7 +9,7 @@ The package needs no registration. A value object creates its validator with `ne
 rest of the package is extension methods.
 
 ```bash
-dotnet add package Temp.DDDToolkit.FluentValidation --prerelease
+dotnet add package DylansTechStack.DDD.FluentValidation --prerelease
 ```
 
 ## A value object's rules
@@ -136,7 +136,7 @@ flowchart LR
     toolkit["<b>ValidationErrors</b><br/><small>the toolkit's ValidationError, with code and arguments</small>"]
     valid["<b>IsValid</b><br/><small>true or false</small>"]
     try["<b>TryToValid()</b><br/><small>and the twin</small>"]
-    localization["<b>DDDToolkit.Localization</b><br/><small>translates by code</small>"]
+    localization["<b>DTS.DDD.Localization</b><br/><small>translates by code</small>"]
     must["<b>MustBeValid()</b><br/><small>in a request validator</small>"]
     rules --> validate
     validate --> errors
@@ -273,7 +273,7 @@ if (errors.Count > 0)
 
 ## Messages in the reader's language
 
-FluentValidation writes `Message` in its own languages. `DDDToolkit.Localization` can write it in the reader's
+FluentValidation writes `Message` in its own languages. `DTS.DDD.Localization` can write it in the reader's
 language instead. Every failure arrives with its code, and with its placeholder values (`MaxLength`,
 `ComparisonValue`, `ValueObject`) in `Arguments`. The localizer looks up a translation by the code, for your own
 codes and for FluentValidation's, and fills it in from the arguments. The value object does not change. See

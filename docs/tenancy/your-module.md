@@ -14,14 +14,14 @@ defines the words.
 
 | Package | What it contains | Where it goes |
 |---|---|---|
-| `DDDToolkit.Supporting.Tenancy` | The model, its rules, its managers and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
-| `DDDToolkit.Supporting.Tenancy.Abstractions` | Tenancy's markers for domain classes: `[OfTenant]`, on the property that says which tenant a row belongs to ([Keeping tenants apart](keeping-tenants-apart.md)). No Entity Framework. `DDDToolkit.Supporting.Tenancy` references it. | The domain project of another module, which sees only Tenancy's ids |
-| `DDDToolkit.Supporting.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, and Tenancy's queries as Entity Framework queries. It works with every provider. | The infrastructure project, which has the context |
-| `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's queries as SQL functions, and row level security (RLS) policies, written by the [export](../supabase.md). It references the Entity Framework package. | The infrastructure project, on Postgres |
+| `DylansTechStack.Tenancy` | The model, its rules, its managers and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
+| `DylansTechStack.Tenancy.Abstractions` | Tenancy's markers for domain classes: `[OfTenant]`, on the property that says which tenant a row belongs to ([Keeping tenants apart](keeping-tenants-apart.md)). No Entity Framework. `DTS.Tenancy` references it. | The domain project of another module, which sees only Tenancy's ids |
+| `DylansTechStack.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, and Tenancy's queries as Entity Framework queries. It works with every provider. | The infrastructure project, which has the context |
+| `DylansTechStack.Tenancy.Postgres` | Tenancy's queries as SQL functions, and row level security (RLS) policies, written by the [export](../supabase.md). It references the Entity Framework package. | The infrastructure project, on Postgres |
 
-The packages are published as `Temp.DDDToolkit.Supporting.Tenancy*`, like
-[every 3.x package](../migrating-to-3.md#the-package-ids). Their version is the version of every other
-`Temp.DDDToolkit.*` package. For now they are prereleases (`--prerelease`), and names can change until a release.
+The packages are `DylansTechStack.Tenancy*`, and their namespaces are `DTS.Tenancy*`. They are part of DTS Pro and are
+not published on nuget.org. Their version is the version of every `DylansTechStack.DDD.*` package. They are 0.x, so
+their names can still change.
 
 ## The model
 
@@ -137,7 +137,7 @@ namespace Shop.Tenants;
 /// ships. Written by the generator, because this project says <c>[assembly: GenerateTenancyClasses]</c> and
 /// neither it nor a project it references declares a class with <c>[RoleAggregate]</c>.
 /// </summary>
-[global::DDDToolkit.Supporting.Tenancy.RoleAggregateAttribute<global::Shop.Tenants.RoleId>]
+[global::DTS.Tenancy.RoleAggregateAttribute<global::Shop.Tenants.RoleId>]
 public sealed partial class Role
 {
 }
@@ -150,8 +150,8 @@ namespace Shop.Tenants;
 /// The id of the class declared with <c>[RoleAggregate]</c>: written by the generator, because this
 /// project says <c>[assembly: GenerateTenancyClasses]</c> and neither it nor a project it references declares <c>RoleId</c>.
 /// </summary>
-[global::DDDToolkit.Abstractions.Attributes.ModuleContract]
-[global::DDDToolkit.Abstractions.Attributes.EntityId<global::System.Guid>]
+[global::DTS.DDD.Abstractions.Attributes.ModuleContract]
+[global::DTS.DDD.Abstractions.Attributes.EntityId<global::System.Guid>]
 public readonly partial record struct RoleId;
 ```
 
@@ -382,7 +382,7 @@ Add one line per class or store to the project that declares the classes, beside
 Every project above uses the new name.
 
 ```csharp
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 [assembly: TemplateFacadeName("SeatManager", "ShopSeatManager")]
 ```
@@ -402,7 +402,7 @@ using DDDToolkit.Abstractions.Attributes;
 | A type of yours with a manager's name exists in a namespace of the declaring project | That manager is not written. [DDD00065](../diagnostics.md#ddd00065) says so on your type: a class in the global namespace would win over yours in every file that imports your namespace. |
 | A project above has an alias with that name | CS0576. Remove the alias. |
 | A project declares a type of yours with a store's name in a namespace | That project gets no alias of the store. [DDD00065](../diagnostics.md#ddd00065) says so on your type. |
-| HotChocolate's generator runs in the declaring project | HotChocolate's generator does not see the managers, because they are another generator's output. Its code over a manager's record, such as `SeatManager.SeatOverview`, does not compile. A module split by layer names those records in its API project, where the generators see them. A module of one project keeps an alias of the manager's name, such as `global using SeatManager = DDDToolkit.Supporting.Tenancy.Managers.SeatManager<...>;`. Every generator reads the alias, and the class is then not written. |
+| HotChocolate's generator runs in the declaring project | HotChocolate's generator does not see the managers, because they are another generator's output. Its code over a manager's record, such as `SeatManager.SeatOverview`, does not compile. A module split by layer names those records in its API project, where the generators see them. A module of one project keeps an alias of the manager's name, such as `global using SeatManager = DTS.Tenancy.Managers.SeatManager<...>;`. Every generator reads the alias, and the class is then not written. |
 
 ### Two modules with Tenancy's classes
 
@@ -423,8 +423,8 @@ for partners' tenants. Each module's domain project then gets its own managers a
 **`Shop.Customers.Domain/Module.cs`**
 
 ```csharp
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.Tenancy;
 
 [assembly: Module("Customers")]
 [assembly: GenerateTenancyClasses]

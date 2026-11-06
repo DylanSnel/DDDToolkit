@@ -1,9 +1,9 @@
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Access;
-using DDDToolkit.Exceptions;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Access;
+using DTS.DDD.Exceptions;
 using Examples.Webshop.Ordering.Contracts;
-using DDDToolkit.Invariants;
-using DDDToolkit.Validation;
+using DTS.DDD.Invariants;
+using DTS.DDD.Validation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;

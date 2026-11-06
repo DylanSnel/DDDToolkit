@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - FluentValidation</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;fluent;validation;fluentvalidation</PackageTags>
+    <Description>FluentValidation integration for the DDDToolkit: generated validators for value objects.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DTS.DDD.FluentValidation.Analyzers\DTS.DDD.FluentValidation.Analyzers.csproj" PrivateAssets="contentfiles;build" />
+    <ProjectReference Include="..\DTS.DDD\DTS.DDD.csproj" />
+  </ItemGroup>
+
+</Project>

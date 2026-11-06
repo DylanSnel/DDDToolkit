@@ -8,7 +8,7 @@ public sealed partial class SourceTreeTests
 {
     /// <summary>
     /// The shop is an application, and an application is not in the toolkit's namespace. Inside
-    /// <c>DDDToolkit.*</c> a plain <c>HotChocolate</c> is the toolkit's <c>DDDToolkit.HotChocolate</c> and not
+    /// <c>DTS.DDD.*</c> a plain <c>HotChocolate</c> is the toolkit's <c>DTS.DDD.HotChocolate</c> and not
     /// HotChocolate's own, which the code HotChocolate generates for an <c>[ObjectType&lt;T&gt;]</c> class cannot
     /// know. So no file of the shop's modules, of its hosts or of their tests declares a namespace that starts
     /// with the toolkit's.
@@ -36,7 +36,7 @@ public sealed partial class SourceTreeTests
             .Should().Contain("Examples.Webshop.Ordering.Domain.Orders", "the scan reads the modules")
             .And.Contain("Examples.Webshop.Pgmq.Storefront.GraphQL", "and the hosts")
             .And.Contain("Examples.AppHost.Tests", "and the tests");
-        declared.Where(found => found.Namespace == "DDDToolkit" || found.Namespace.StartsWith("DDDToolkit.", StringComparison.Ordinal))
+        declared.Where(found => found.Namespace == "DTS.DDD" || found.Namespace.StartsWith("DTS.DDD.", StringComparison.Ordinal))
             .Select(found => $"{found.File}: {found.Namespace}")
             .Should().BeEmpty("the shop's namespaces begin with Examples, as its projects' names do");
     }
@@ -52,6 +52,12 @@ public sealed partial class SourceTreeTests
             if (File.Exists(Path.Combine(directory.FullName, "DDDToolkit.slnx")))
             {
                 return directory.FullName;
+            }
+
+            // A repository that has this one as its submodule core/ runs these tests from there.
+            if (File.Exists(Path.Combine(directory.FullName, "core", "DDDToolkit.slnx")))
+            {
+                return Path.Combine(directory.FullName, "core");
             }
         }
 

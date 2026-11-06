@@ -10,9 +10,9 @@ The diagram shows the three generators. Purple is your code, and green is what e
 ```mermaid
 flowchart LR
     you["<b>Your partial types</b><br/><small>with a toolkit attribute</small>"]
-    core["<b>DDDToolkit</b><br/><small>the core generator</small>"]
-    ef["<b>DDDToolkit.EntityFramework</b><br/><small>its generator</small>"]
-    hc["<b>DDDToolkit.HotChocolate</b><br/><small>its generator</small>"]
+    core["<b>DTS.DDD</b><br/><small>the core generator</small>"]
+    ef["<b>DTS.DDD.EntityFramework</b><br/><small>its generator</small>"]
+    hc["<b>DTS.DDD.HotChocolate</b><br/><small>its generator</small>"]
     coreOut["<b>Domain code</b><br/><small>base types, identifiers, equality,<br/>the always-valid twin, invariant checks</small>"]
     efOut["<b>Mapping</b><br/><small>value converters, ComplexType and Owned,<br/>converter and integration event registrations</small>"]
     hcOut["<b>GraphQL bindings</b><br/><small>type converters, Relay node id serializers</small>"]
@@ -31,9 +31,9 @@ flowchart LR
 Each package carries its generator, so a package reference turns the generator on:
 
 ```bash
-dotnet add package Temp.DDDToolkit --prerelease                   # base types and the core generator
-dotnet add package Temp.DDDToolkit.EntityFramework --prerelease   # its generator: the mapping
-dotnet add package Temp.DDDToolkit.HotChocolate --prerelease      # its generator: the GraphQL bindings
+dotnet add package DylansTechStack.DDD --prerelease                   # base types and the core generator
+dotnet add package DylansTechStack.DDD.EntityFramework --prerelease   # its generator: the mapping
+dotnet add package DylansTechStack.DDD.HotChocolate --prerelease      # its generator: the GraphQL bindings
 ```
 
 The registration methods that the generators write are named after the module the project declares. This sample
@@ -46,7 +46,7 @@ whole folder of projects instead. `[assembly: Module]` in a file of the project 
 </PropertyGroup>
 ```
 
-The generators' own package, `DDDToolkit.Analyzers`, lets them read that property, so the property works wherever the
+The generators' own package, `DTS.DDD.Analyzers`, lets them read that property, so the property works wherever the
 generators run. [The module name in generated code](modules.md#the-module-name-in-generated-code) gives the order in
 which the names are read, and [How the property reaches the generators](modules.md#how-the-property-reaches-the-generators)
 gives the supported ways to reference the toolkit.
@@ -109,7 +109,7 @@ public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 - **Misuse is a compile error.** When the generator cannot handle a declaration, or the declaration would not do what
   it looks like, you get a [diagnostic](diagnostics.md) in the editor. You do not get a type that behaves like a plain
   class without telling you.
-- **One declaration reaches every integration.** Reference `DDDToolkit.EntityFramework` or `DDDToolkit.HotChocolate`,
+- **One declaration reaches every integration.** Reference `DTS.DDD.EntityFramework` or `DTS.DDD.HotChocolate`,
   and their generators add converters and bindings for the same types. Your declaration does not change.
 
 ## `[AggregateRoot]` and `[Entity]`
@@ -120,7 +120,7 @@ constructor that Entity Framework needs to create an object from a row:
 **Order.g.cs, shortened**
 
 ```csharp
-partial class Order : DDDToolkit.BaseTypes.AggregateRoot<Shop.OrderId>
+partial class Order : DTS.DDD.BaseTypes.AggregateRoot<Shop.OrderId>
 {
     /// <summary>Parameterless constructor for persistence frameworks and serializers.</summary>
     protected Order()
@@ -134,14 +134,14 @@ array, then the `CheckInvariants()` seam, then every child entity that the aggre
 **Order.g.cs, shortened**
 
 ```csharp
-    private static readonly DDDToolkit.Invariants.IInvariant<Shop.Order>[] __invariants =
+    private static readonly DTS.DDD.Invariants.IInvariant<Shop.Order>[] __invariants =
     [
         new Shop.Order.MustHaveLines(),
     ];
 
     public override void EnsureInvariants()
     {
-        System.Collections.Generic.List<DDDToolkit.Invariants.InvariantViolation>? violations = null;
+        System.Collections.Generic.List<DTS.DDD.Invariants.InvariantViolation>? violations = null;
         CollectInvariantViolations(ref violations, out var seamFailure);
 
         CollectChildInvariantViolations(ref violations);
@@ -189,7 +189,7 @@ no `OrderId.cs`. `OrderId` is a `readonly record struct` around the `Guid`:
 
 ```csharp
 [System.Text.Json.Serialization.JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
-public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>, DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>, DDDToolkit.Abstractions.Interfaces.ICreatableEntityId<OrderId>
+public readonly partial record struct OrderId : DTS.DDD.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>, DTS.DDD.Interfaces.ISingleValue<OrderId, System.Guid>, DTS.DDD.Abstractions.Interfaces.ICreatableEntityId<OrderId>
 {
     public const string IdPrefix = "ORD";
 
@@ -206,7 +206,7 @@ public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfac
     public static OrderId Parse(string input) { /* the prefix is optional */ }
     public static bool TryParse(string? input, out OrderId result) { /* ... */ }
 
-    static OrderId DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>.FromValue(System.Guid value) => new(value);
+    static OrderId DTS.DDD.Interfaces.ISingleValue<OrderId, System.Guid>.FromValue(System.Guid value) => new(value);
 
     public sealed class SystemTextJsonConverter : System.Text.Json.Serialization.JsonConverter<OrderId> { /* ... */ }
 }
@@ -232,7 +232,7 @@ public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfac
 **Address.g.cs, shortened**
 
 ```csharp
-partial record Address : DDDToolkit.BaseTypes.ValueObject, DDDToolkit.Validation.IValidatable<ValidAddress>
+partial record Address : DTS.DDD.BaseTypes.ValueObject, DTS.DDD.Validation.IValidatable<ValidAddress>
 {
     [System.Text.Json.Serialization.JsonInclude]
     public string Street { get; protected init; } = Street;
@@ -254,7 +254,7 @@ and judges the copy afresh:
 **Address.g.cs, shortened**
 
 ```csharp
-    public virtual Address With(DDDToolkit.BaseTypes.Optional<string> street = default, DDDToolkit.BaseTypes.Optional<string> city = default)
+    public virtual Address With(DTS.DDD.BaseTypes.Optional<string> street = default, DTS.DDD.BaseTypes.Optional<string> city = default)
         => this with { Street = street.Or(Street), City = city.Or(City) };
 }
 ```
@@ -265,7 +265,7 @@ takes a `ValidAddress` does not have to check it again:
 **Address.g.cs, shortened**
 
 ```csharp
-public partial record ValidAddress : Address, DDDToolkit.Abstractions.Interfaces.IAlwaysValid
+public partial record ValidAddress : Address, DTS.DDD.Abstractions.Interfaces.IAlwaysValid
 {
     public ValidAddress(Address value) : base(value)
     {
@@ -306,7 +306,7 @@ this attribute:
 ```csharp
 // The module this project's build declared: its DDD_Module. An [assembly: Module] of the project's
 // own would have been kept instead, and nothing written here.
-[assembly: DDDToolkit.Abstractions.Attributes.ModuleAttribute("Shop")]
+[assembly: DTS.DDD.Abstractions.Attributes.ModuleAttribute("Shop")]
 ```
 
 The generator does not write this file when the project already declares `[assembly: Module]`, so the module is never
@@ -411,7 +411,7 @@ public sealed record ExportSales : IShopRequest;
 **ShopAccessBehavior.g.cs, shortened**
 
 ```csharp
-using DDDToolkit_Generated_IRequireAccess = global::DDDToolkit.Access.IRequireAccess;
+using DDDToolkit_Generated_IRequireAccess = global::DTS.DDD.Access.IRequireAccess;
 
 partial interface IShopRequest
 {
@@ -430,7 +430,7 @@ partial interface IShopRequest
 ```
 
 - The line names `IRequireAccess` through an alias that the file declares. So a namespace of the module called
-  `DDDToolkit`, such as `Contoso.DDDToolkit.Shop`, does not hide the type.
+  `DDDToolkit`, such as `Contoso.DTS.DDD.Shop`, does not hide the type.
 - A request that implements `RequiredAccess` itself gets no line. C# uses the request's member instead of the
   interface's member.
 - The generator combines the calls of several attributes and markers on one request with `AccessRequirement.All`. The
@@ -445,7 +445,7 @@ The member marked `[OrOwn]` names the subject that the request acts on: the watc
 on that watcher of that order. The access check compares the watcher with the caller. It does not check who owns the
 order.
 
-## `DDDToolkit.EntityFramework`
+## `DTS.DDD.EntityFramework`
 
 With the Entity Framework package referenced, its generator adds the mapping. Each id gets a value converter that
 stores the id as its plain value:
@@ -506,7 +506,7 @@ that references Entity Framework writes the rest for the domain project:
 
 See [A module in layers](modules.md#a-module-in-layers).
 
-## `DDDToolkit.HotChocolate`
+## `DTS.DDD.HotChocolate`
 
 With the HotChocolate package referenced, each id gets a type converter and a Relay node id serializer. One method
 binds them all:
@@ -522,7 +522,7 @@ public static HotChocolate.Execution.Configuration.IRequestExecutorBuilder AddSh
     // the same for OrderLineId
 
     // The struct ids, as keys HotChocolate's paging can order a list by: OrderBy(x => x.Id) in front of ToPageAsync.
-    DDDToolkit.HotChocolate.Paging.SingleValueCursorKeySerializer<Shop.OrderId, System.Guid>.Register();
+    DTS.DDD.HotChocolate.Paging.SingleValueCursorKeySerializer<Shop.OrderId, System.Guid>.Register();
     // and for OrderLineId
 
     return builder;

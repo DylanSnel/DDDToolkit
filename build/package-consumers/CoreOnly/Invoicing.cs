@@ -1,4 +1,4 @@
-using DDDToolkit.BaseTypes;
+using DTS.DDD.BaseTypes;
 
 namespace Acme.Billing;
 

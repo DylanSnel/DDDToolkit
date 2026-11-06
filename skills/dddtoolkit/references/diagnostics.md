@@ -87,7 +87,7 @@ Remove `sealed`. The same applies to a record class id.
 ## DDD00014
 
 Warning, once per project and without a line number. The generators run here but the props file of the
-`DDDToolkit.Analyzers` package was not imported, so `<DDD_Module>` is ignored and `{Module}EventNames`,
+`DTS.DDD.Analyzers` package was not imported, so `<DDD_Module>` is ignored and `{Module}EventNames`,
 `Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` are
 named after the assembly. Look at how the project references the generators. A `PackageReference` with
 `ExcludeAssets`, or with an `IncludeAssets` that leaves out `build` and `buildTransitive`: remove the
@@ -230,7 +230,7 @@ them to a name that reads differently.
 
 Error. A `[RowAccess<TAggregate>]` rule has the wrong shape. Make the class `static partial` and give it
 exactly one `public static bool Allows(TAggregate x, IRowUser user)` whose body is one expression (after
-`=>`, or a single `return`). `IRowUser` is `DDDToolkit.Abstractions.Access.IRowUser`, and a rule that takes
+`=>`, or a single `return`). `IRowUser` is `DTS.DDD.Abstractions.Access.IRowUser`, and a rule that takes
 `ICurrentUser` is this error. The same shape holds
 for an `[AccessFunction]`, which may take `string`, `bool`, `int`, `long`, `Guid` or id parameters after the
 user, and needs a one-column permission with `Shape = AccessFunctionShape.Set`. A contract declares nothing, or
@@ -408,7 +408,7 @@ files already exist under the context's name, use that name for the module, or r
 ## DDD00056
 
 Error. An interface marked `[AccessRequests]` that no access behavior can be written for: it does not derive
-from `DDDToolkit.Access.IRequireAccess`, has type parameters, is nested in a type or `file`-local, or gives
+from `DTS.DDD.Access.IRequireAccess`, has type parameters, is nested in a type or `file`-local, or gives
 its behavior the same name as another marked interface of its namespace (`IBillingRequest` and `IBilling`
 both give `BillingAccessBehavior`). Declare it at namespace level as `[AccessRequests] public interface
 IBillingRequest : IRequireAccess;`, or rename one of the two. Until then nothing asks the access checks for
@@ -441,7 +441,7 @@ with a request of the module's before publishing.
 ## DDD00059
 
 Warning, on the aggregate a `[Member<TId, TMemberId, TRoleId, TResource>]` class names as its resource
-(`DDDToolkit.Supporting.Membership`). The package's generator writes a private `Members` property on that
+(`DTS.Membership`). The package's generator writes a private `Members` property on that
 aggregate, a `MemberList<TMember, TId, TMemberId, TRoleId>`, and could not: the message lists what it could
 not tell. It needs exactly one of each on the aggregate: a get-only `partial` collection of the member class
 (`IReadOnlyList<T>`, `IReadOnlyCollection<T>` or `IEnumerable<T>`); the one property of `TMemberId` marked
@@ -462,7 +462,7 @@ Warning, on a `[Member<TId, TMemberId, TRoleId, TResource>]` class whose `TResou
 either `TResource` is no aggregate root (a child entity, the member class itself, a plain class), or it keeps
 its members as another member class already, in a collection of that class. A resource has one member class:
 name the aggregate root the members belong to, or remove the extra member class. The list of the class the
-resource keeps is still written. In a project that also references `DDDToolkit.Supporting.Membership.EntityFramework`
+resource keeps is still written. In a project that also references `DTS.Membership.EntityFramework`
 the same mistake is DDD00045 or DDD00050 instead, an error, on the same class.
 
 ## DDD00061
@@ -493,12 +493,12 @@ writes, such as a data loader's interface (give the method a name of its own).
 
 ## DDD00064
 
-Warning, at the project file. `<DDD_Module>` reached the generators but the `DDDToolkit.Analyzers` package's
+Warning, at the project file. `<DDD_Module>` reached the generators but the `DTS.DDD.Analyzers` package's
 targets file, whose build step declares the module, was not imported: the generators arrived as an analyzer
 assembly or a project reference with `OutputItemType="Analyzer"`, and the property through the props file alone
 or a hand-added `<CompilerVisibleProperty Include="DDD_Module" />`. The code is named after the module and the
 project is no module: events without the module's name, no boundary, no `AddTenancy()` or converters across the
-module's projects. Import `DDDToolkit.Analyzers.targets` beside the props file, or add `[assembly: Module("Name")]`.
+module's projects. Import `DTS.DDD.Analyzers.targets` beside the props file, or add `[assembly: Module("Name")]`.
 Do not silence it with `NoWarn` unless the project is meant to be no module, and then set
 `<DDD_DeclareModule>false</DDD_DeclareModule>` or drop `DDD_Module` instead. An `.editorconfig` `[*.cs]` severity
 does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
@@ -544,7 +544,7 @@ are made in code before the save, never by the database. The message says what i
 - An id written by hand, without `[EntityId<T>]`: add the `Create()` and `ICreatableEntityId<TenantId>`, since no
   generator completes it.
 - A fitting `Create()` without the interface: add the interface, or, for an id of a project that does not target
-  `net10.0`, target `net10.0` there; only that build of DDDToolkit.Abstractions has the interface.
+  `net10.0`, target `net10.0` there; only that build of DTS.DDD.Abstractions has the interface.
 - A `Create()` that is not `public static` or answers another type: make it fit.
 
 The code fix adds a `Create()` stub that throws, the interface, or both; replace the stub's body. Do not switch the
@@ -554,10 +554,10 @@ for it. Other ids need no `Create()`.
 ## DDD00068
 
 Warning, at the project file. `<DDD_ModuleContracts>true</DDD_ModuleContracts>` asks the generator to write
-`[assembly: ModuleContracts]`, and the project cannot name that attribute: it references a `DDDToolkit.Abstractions`
+`[assembly: ModuleContracts]`, and the project cannot name that attribute: it references a `DTS.DDD.Abstractions`
 older than the attribute, or none. The project publishes nothing by the property, and the other modules would hear
-DDD00022 for each of its types. Reference the `DDDToolkit.Abstractions` of the same version as
-`DDDToolkit.Analyzers` (as `DDDToolkit` brings both, a project that references `DDDToolkit` has it). Only if the
+DDD00022 for each of its types. Reference the `DTS.DDD.Abstractions` of the same version as
+`DTS.DDD.Analyzers` (as `DDDToolkit` brings both, a project that references `DDDToolkit` has it). Only if the
 version cannot move, mark the published types `[ModuleContract]` and drop the property. Do not silence it with `NoWarn`.
 An `.editorconfig` `[*.cs]` severity does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
 
@@ -616,7 +616,7 @@ that writes it.
 ## DDD00074
 
 Warning, at `CreateDbContext` of an `IDesignTimeDbContextFactory<TContext>` in a project that references
-`DDDToolkit.EntityFramework`, whose class calls none of `UseDDDToolkitDesignTime`, `UseDDDToolkit`,
+`DTS.DDD.EntityFramework`, whose class calls none of `UseDDDToolkitDesignTime`, `UseDDDToolkit`,
 `UseDDDToolkitCore` and `MigrationsHistoryTable`. `UseDDDToolkit` keeps the migration history in the context's
 default schema; without the call `dotnet ef` and the Supabase export record it in `public` or `dbo`, where the
 application never reads it. Add `.UseDDDToolkitDesignTime()` after the provider:
@@ -635,7 +635,7 @@ both modules' domain projects (the host, a test project), where naming it is CS0
 module's project that references the other module's domain project (it still gets its own, which its own code binds
 to with CS0436, and every project above sees both); or on the first class of a project whose own two classes come to
 one name. Copy the line the message writes out into the project it names, the one that declares that module's
-classes, beside `[assembly: Module]` or the switch, with `using DDDToolkit.Abstractions.Attributes;`:
+classes, beside `[assembly: Module]` or the switch, with `using DTS.DDD.Abstractions.Attributes;`:
 `[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]`, one line per class the message names, or any
 other name a class can have that no namespace or type in the global namespace has (not the module's root namespace),
 and take that module's managers by it above. Where the message names an existing line, give another name in that line instead of adding one.
@@ -825,7 +825,7 @@ between words, starting with a letter, ending with neither separator. It is not 
 
 ## DDD00092
 
-Error, on a `[Permissions]` class or its constants (`DDDToolkit.Access`): the class is not `static`; a public
+Error, on a `[Permissions]` class or its constants (`DTS.DDD.Access`): the class is not `static`; a public
 `const string` has no level; a level (`[AtTenant]`, `[AtUnit]`, `[On<TResource>]`) is on a field that is no public
 `const string`, or on a constant of a class not marked `[Permissions]`; one permission is declared twice; or a level has a
 permission argument, `[AtUnit(permission)]` on a constant. That form is a request's marker. On a constant, write
@@ -865,9 +865,9 @@ owning it (declared `[On<TResource>]` with `Owner = true`, the default), so the 
 
 ## DDD00097
 
-Error, at `[At]` (namespace `DDDToolkit.Supporting.Membership`, package
-`Temp.DDDToolkit.Supporting.Membership.Abstractions`), reported by Membership's generator, which ships in
-`Temp.DDDToolkit.Supporting.Membership`: it goes on one instance property of an aggregate root, the place the root
+Error, at `[At]` (namespace `DTS.Membership`, package
+`DylansTechStack.Membership.Abstractions`), reported by Membership's generator, which ships in
+`DylansTechStack.Membership`: it goes on one instance property of an aggregate root, the place the root
 hangs at, never nullable. Not on an entity inside an aggregate, not on a static property, not twice on one aggregate,
 not on a property that may be empty. Keep one `[At]` property on the root, of a type that is never empty.
 

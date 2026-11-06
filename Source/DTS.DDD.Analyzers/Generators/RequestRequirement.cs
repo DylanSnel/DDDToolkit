@@ -1,0 +1,2100 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using DTS.DDD.Analyzers.Common;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace DTS.DDD.Analyzers;
+
+/// <summary>
+/// A command or a query of a module, read for what it says it requires of its caller with attributes: the line the
+/// generator writes for it into its module's interface, or what stands in the way of one.
+/// </summary>
+/// <remarks>
+/// A request states what it requires in these ways:
+/// <list type="bullet">
+/// <item>with an attribute whose class a package marked <c>[StatesRequirement(typeof(Factory), "Method")]</c>, such as
+/// <c>[SignedIn]</c> or <c>[InTenant]</c>;</item>
+/// <item>with a permission marker on one of its members, whose class a package marked
+/// <c>[PermissionMarker(typeof(Factory), "Method")]</c>, such as <c>[AtUnit(permission)]</c>. The marker's argument is the
+/// permission;</item>
+/// <item>with <c>[RequiresPermission(permission)]</c>, a permission without a marker. A package declares where it is held
+/// with <c>[assembly: PermissionWithoutMarker]</c>;</item>
+/// <item>with <c>[OrOwn]</c> on a member beside one permission, which makes the caller's own an alternative to it.
+/// Beside several permissions, <c>[OrOwn&lt;TResource&gt;]</c> names the marker it pairs with;</item>
+/// <item>with <c>[OwnOnly]</c> and <c>[Own]</c> on a member, for the caller's own alone.</item>
+/// </list> A member marked with an attribute a package marked
+/// <c>[RequirementArgument(typeof(TAttribute))]</c>, such as <c>[ForTenant]</c>, is handed to the call of that attribute, after
+/// its constructor's arguments; a property set where the request carries an attribute goes to its call as a named argument,
+/// <c>scope: "projects"</c>. Nothing here knows a package's attribute by its name: the marks say which call to write, so a
+/// package of the application's own declares attributes the same way. A request requires every attribute on it and every
+/// marker on its members. So the line is the call of each: the attributes in the order they are written, then the
+/// markers in the order they are written, inside <c>AccessRequirement.All(...)</c> where there are several:
+/// <c>global::Shop.AddUnit request =&gt; global::...TenancyAccess.AtUnit("units.manage", request.Parent)</c>.
+/// <para>
+/// It is read from the compilation the request is part of, the classes the package's markers name included, so what it
+/// reports is what the project sees. A type declared in parts is read once, at the first of its parts that may be a
+/// request, whichever part carries the attributes or the interface.
+/// </para>
+/// <para>
+/// A requirement attribute on the module's interface, <c>[AccessRequests, InTenant]</c>, is the module's default: a
+/// request of it that states nothing of its own, by attribute, by answering the property or through a request it
+/// derives from, gets a line with the default's call, <c>global::Shop.ListUnits =&gt; ...TenancyAccess.InTenant()</c>.
+/// The default replaces nothing and stacks onto nothing a request states itself. The interface is read here too, for
+/// what is wrong with its default (DDD00083, DDD00084, DDD00089), and gets no line of its own.
+/// </para>
+/// </remarks>
+/// <param name="FullyQualifiedName">The request's name from <c>global::</c> on.</param>
+/// <param name="Depth">How many classes it derives from: a line for a derived request comes before its base's.</param>
+/// <param name="WrittenInto">The module interfaces of this project, partial, that the line goes into.</param>
+/// <param name="Arm">The line, without its comma, or <see langword="null"/> where the request states nothing with attributes or cannot.</param>
+/// <param name="Diagnostics">What is wrong with what the request says.</param>
+/// <param name="OwnersAsked">
+/// The ids, from <c>global::</c> on, of the aggregates whose owner the line asks about: <c>AccessRequirement.OwnerOf</c>
+/// of a member marked <c>[Own]</c> or <c>[OrOwn]</c>. Empty where no line is written.
+/// </param>
+internal sealed record RequestRequirement(
+    string FullyQualifiedName,
+    int Depth,
+    EquatableArray<string> WrittenInto,
+    string? Arm,
+    EquatableArray<DiagnosticInfo> Diagnostics,
+    EquatableArray<string> OwnersAsked)
+{
+    /// <summary>The name a pattern binds the request to in its line.</summary>
+    public const string Designation = "request";
+
+    private static readonly ConditionalWeakTable<Compilation, List<PermissionWithoutMarker>> PermissionsWithoutMarker = new();
+
+    private static readonly ConditionalWeakTable<Compilation, Dictionary<string, HashSet<string>?>> IdsOfTemplates = new();
+
+    private static readonly ConditionalWeakTable<Compilation, Dictionary<string, List<INamedTypeSymbol>>> SourceTemplateClasses = new();
+
+    private static readonly ConditionalWeakTable<Compilation, OwnTypes> OwnTypesOf = new();
+
+    private static readonly ConditionalWeakTable<IAssemblySymbol, string[]> HandlesByAssembly = new();
+
+    /// <summary>
+    /// A class, a record or a struct that implements something or carries an attribute: what may be a request; and an
+    /// interface that carries an attribute, which may be a module's interface with a default.
+    /// </summary>
+    public static bool MayBeOne(SyntaxNode node, CancellationToken cancellationToken)
+        => node switch
+        {
+            ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax => node is TypeDeclarationSyntax type && (type.BaseList is not null || type.AttributeLists.Count > 0),
+            InterfaceDeclarationSyntax declaration => declaration.AttributeLists.Count > 0,
+            _ => false,
+        };
+
+    /// <summary>
+    /// What the type says it requires, or <see langword="null"/> for a type that is no request and carries no
+    /// requirement attribute and no marker.
+    /// </summary>
+    public static RequestRequirement? Read(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+    {
+        if (context.SemanticModel.GetDeclaredSymbol(context.Node, cancellationToken) is not INamedTypeSymbol type)
+        {
+            return null;
+        }
+
+        // A type declared in parts is read once, and every part's attributes are its. Not at its first part, which may
+        // be a bare 'partial record X;' the predicate never hands over: at the first part the predicate does, so the
+        // attributes or the interface on any part are read, and a request in parts that states nothing is reported.
+        if (type.DeclaringSyntaxReferences.Length > 1 && !IsReadAt(type, context.Node, cancellationToken))
+        {
+            return null;
+        }
+
+        var compilation = context.SemanticModel.Compilation;
+        if (compilation.GetTypeByMetadataName(KnownTypes.RequireAccessInterface) is not { } requireAccess
+            || requireAccess.GetMembers("RequiredAccess").OfType<IPropertySymbol>().FirstOrDefault() is not { } requiredAccess)
+        {
+            return null;
+        }
+
+        var identifier = ((BaseTypeDeclarationSyntax)context.Node).Identifier;
+
+        // An interface is no request: a requirement attribute on it is the default of a module, read for what is wrong
+        // with it. One that carries none is nothing of this.
+        if (type.TypeKind == TypeKind.Interface)
+        {
+            var defaults = StatedOn(type);
+            return defaults.Count == 0
+                ? null
+                : new Reading(type, compilation, requiredAccess, [.. type.AllInterfaces.Where(static each => DefinitionFactory.HasAttribute(each, KnownTypes.AccessRequestsAttribute))], defaults, [], true, identifier, cancellationToken).AsADefault();
+        }
+
+        // A type that is no request and carries no requirement attribute is not looked into further: a marker on a
+        // member of a type no requirement is read from marks nothing, and most types of a project are such types.
+        var modules = type.AllInterfaces.Where(static each => DefinitionFactory.HasAttribute(each, KnownTypes.AccessRequestsAttribute)).ToList();
+        var stated = StatedOn(type);
+        if (modules.Count == 0 && stated.Count == 0)
+        {
+            return null;
+        }
+
+        var markers = MarkersOf(type, cancellationToken);
+
+        // A request with requirements of its own holds to those of the requests it derives from as well, theirs first, as
+        // several [Authorize] do on a controller and the one it derives from: what it carries adds to what its base
+        // requires, and never takes its place. A permission marker is a requirement wherever it is declared. So a request
+        // that inherits one gets a line of its own too, unless it answers the property itself. A request with neither is
+        // matched by its base's line.
+        var implementation = type.FindImplementationForInterfaceMember(requiredAccess);
+        var answersItself = implementation is not null && !modules.Contains(implementation.ContainingType, SymbolEqualityComparer.Default);
+        var line = stated.Count > 0
+                   || markers.Any(each => each.Place && DeclaredOn(each, type))
+                   || (markers.Any(static each => each.Place) && !answersItself);
+        if (line)
+        {
+            stated = [.. InheritedBy(type), .. stated];
+        }
+
+        var reading = new Reading(type, compilation, requiredAccess, modules, stated, markers, line, identifier, cancellationToken);
+        return reading.Result();
+    }
+
+    /// <summary>Whether <paramref name="type"/> declares <paramref name="marker"/> itself, on its constructor or a property of its own, and does not inherit it.</summary>
+    private static bool DeclaredOn(Marker marker, INamedTypeSymbol type)
+        => marker.OnParameter || SymbolEqualityComparer.Default.Equals(marker.Property?.ContainingType, type);
+
+    // ------------------------------------------------------------------ the default of a module
+
+    /// <summary>
+    /// The call the default of <paramref name="module"/> stands for, the requirement attributes on the interface, each
+    /// call in the order they are written and <c>AccessRequirement.All</c> of them where there are several;
+    /// <see langword="null"/> where the interface carries none, or one that may not be a default, which is reported at
+    /// the interface.
+    /// </summary>
+    internal static string? DefaultOf(INamedTypeSymbol module, Compilation compilation)
+    {
+        var stated = StatedOn(module);
+        if (stated.Count == 0
+            || stated.Any(each => RefusedAsADefault(each) is not null)
+            || (stated.Any(static each => each.IsPermission) && PermissionWithoutMarkerIn(compilation).Count != 1))
+        {
+            return null;
+        }
+
+        var calls = stated.Select(each => each.IsPermission ? PermissionWithoutAMarker(each, compilation) : CallOf(each)).ToList();
+        return calls.Count == 1 ? calls[0] : KnownTypes.AccessRequirementUsage + ".All(" + string.Join(", ", calls) + ")";
+    }
+
+    /// <summary>The requirement attributes on a module's interface as a reader writes them: <c>[InTenant]</c>, <c>[SignedIn] and [InTenant]</c>.</summary>
+    internal static string DefaultNamed(INamedTypeSymbol module) => Listed(StatedOn(module).Select(static each => Bracketed(each.Class)));
+
+    /// <summary>
+    /// Why a requirement attribute on a module's interface may not be its default, as a message goes on after naming it;
+    /// <see langword="null"/> where it may. A default is taken by every request of the module that forgets its own, so
+    /// what it lets through, a request that forgot lets through as well.
+    /// </summary>
+    private static string? RefusedAsADefault(Stated each)
+    {
+        if (each.IsAnonymous)
+        {
+            return "a request of the module that forgets to say what it requires would let anyone send it, and a forgotten requirement never opens a door; "
+                   + "put [AllowAnonymous] on each request anyone may send";
+        }
+
+        if (each.Kind == StatedKind.OwnOnly)
+        {
+            return "it reads the member of a request marked [Own], and a default reads no member of a request; put [OwnOnly] on each request about the caller's own";
+        }
+
+        if (each.QueriesOnly)
+        {
+            return "its package declares it for queries only, and a command of the module that says nothing would take it too, where it holds the caller to nothing the command changes (DDD00082); "
+                   + "put " + Bracketed(each.Class) + " on each query";
+        }
+
+        // AttributeUsage leaves the attribute off an interface with CS0592; this says what makes it a default.
+        var usage = each.Class.OriginalDefinition.GetAttributes()
+            .FirstOrDefault(static attribute => attribute.AttributeClass?.ToDisplayString() == "System.AttributeUsageAttribute");
+        return usage is { ConstructorArguments.Length: > 0 } && usage.ConstructorArguments[0].Value is int targets && (targets & (int)AttributeTargets.Interface) == 0
+            ? "the AttributeUsage of its class leaves out interfaces (CS0592), and a requirement attribute is a default where its class allows AttributeTargets.Interface; add it there, or put the attribute on each request"
+            : null;
+    }
+
+    /// <summary>
+    /// The call of a requirement attribute a package marked <c>[StatesRequirement]</c>: its method, with the attribute's
+    /// constructor arguments, then <paramref name="members"/>, the members of the request markers of its arguments mark, and
+    /// then each property set on the attribute as a named argument, its name with a lower case first letter.
+    /// </summary>
+    private static string CallOf(Stated each, IEnumerable<string>? members = null)
+    {
+        var typeArguments = each.Class.TypeArguments.Length > 0
+            ? "<" + string.Join(", ", each.Class.TypeArguments.Select(static argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ">"
+            : string.Empty;
+        var arguments = each.Attribute.ConstructorArguments.Select(Literal)
+            .Concat(members ?? Enumerable.Empty<string>())
+            .Concat(each.Attribute.NamedArguments.Select(static named => Identifier(ParameterNamed(named.Key)) + ": " + Literal(named.Value)));
+        return each.Factory!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + Identifier(each.Method) + typeArguments
+               + "(" + string.Join(", ", arguments) + ")";
+    }
+
+    /// <summary>The parameter a property of an attribute is handed to: its name with a lower case first letter, <c>Scope</c> to <c>scope</c>.</summary>
+    private static string ParameterNamed(string property)
+        => property.Length == 0 ? property : char.ToLowerInvariant(property[0]) + property.Substring(1);
+
+    /// <summary>Whether two attribute classes are the same class, whatever their type arguments.</summary>
+    private static bool Same(INamedTypeSymbol? one, INamedTypeSymbol? other)
+        => one is not null && other is not null && SymbolEqualityComparer.Default.Equals(one.OriginalDefinition, other.OriginalDefinition);
+
+    /// <summary>The permission of <c>[RequiresPermission]</c>, as C# writes it.</summary>
+    private static string PermissionOf(Stated each)
+        => each.Attribute.ConstructorArguments.Length > 0 ? Literal(each.Attribute.ConstructorArguments[0]) : "null";
+
+    /// <summary>
+    /// The call of <c>[RequiresPermission]</c>, a permission without a marker: the one a package says with
+    /// <c>[assembly: PermissionWithoutMarker]</c>, which there is one of, Tenancy's for the whole tenant.
+    /// </summary>
+    private static string PermissionWithoutAMarker(Stated each, Compilation compilation)
+    {
+        var only = PermissionWithoutMarkerIn(compilation)[0];
+        return only.Factory + "." + Identifier(only.Method) + "(" + PermissionOf(each) + ")";
+    }
+
+    /// <summary>
+    /// The requirement attributes of the classes <paramref name="type"/> derives from, the furthest first, each in the
+    /// order it is written, marked with the class that carries it.
+    /// </summary>
+    private static List<Stated> InheritedBy(INamedTypeSymbol type)
+    {
+        var levels = new List<List<Stated>>();
+        for (var current = type.BaseType; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            var carried = current;
+            levels.Add(StatedOn(current).Select(each => each with { InheritedFrom = carried }).ToList());
+        }
+
+        levels.Reverse();
+        return levels.SelectMany(static level => level).ToList();
+    }
+
+    /// <summary>Whether <paramref name="node"/> is the part of a type declared in parts that it is read at: the first that <see cref="MayBeOne"/> takes.</summary>
+    private static bool IsReadAt(INamedTypeSymbol type, SyntaxNode node, CancellationToken cancellationToken)
+    {
+        foreach (var reference in type.DeclaringSyntaxReferences)
+        {
+            if (reference.GetSyntax(cancellationToken) is TypeDeclarationSyntax part && MayBeOne(part, cancellationToken))
+            {
+                return reference.SyntaxTree == node.SyntaxTree && reference.Span == node.Span;
+            }
+        }
+
+        return false;
+    }
+
+    // ------------------------------------------------------------------ what the request carries
+
+    /// <summary>
+    /// The requirement attributes on the type, in the order they are written: those a package marked
+    /// <c>[StatesRequirement]</c>, <c>[RequiresPermission]</c> and <c>[OwnOnly]</c>.
+    /// </summary>
+    private static List<Stated> StatedOn(INamedTypeSymbol type)
+    {
+        var found = new List<Stated>();
+        foreach (var attribute in type.GetAttributes())
+        {
+            if (attribute.AttributeClass is not { } attributeClass)
+            {
+                continue;
+            }
+
+            if (Is(attributeClass, KnownTypes.RequiresPermissionAttribute))
+            {
+                found.Add(new Stated(attribute, attributeClass, null, "", false, StatedKind.Permission, ImmutableArray<INamedTypeSymbol>.Empty));
+                continue;
+            }
+
+            if (Is(attributeClass, KnownTypes.OwnOnlyAttribute))
+            {
+                found.Add(new Stated(attribute, attributeClass, null, "", false, StatedKind.OwnOnly, ImmutableArray<INamedTypeSymbol>.Empty));
+                continue;
+            }
+
+            var states = attributeClass.OriginalDefinition.GetAttributes().FirstOrDefault(static each => each.AttributeClass is { } meta && Is(meta, KnownTypes.StatesRequirementAttribute));
+            if (states is { ConstructorArguments.Length: 2 }
+                && states.ConstructorArguments[0].Value is INamedTypeSymbol factory
+                && states.ConstructorArguments[1].Value is string method)
+            {
+                var queriesOnly = states.NamedArguments.Any(static named => named.Key == "QueriesOnly" && named.Value.Value is true);
+                found.Add(new Stated(attribute, attributeClass, factory, method, queriesOnly, StatedKind.Call, ImpliesOf(states)));
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>The requirement attributes a package's mark says its requirement already requires: its <c>Implies</c>.</summary>
+    private static ImmutableArray<INamedTypeSymbol> ImpliesOf(AttributeData mark)
+        => mark.NamedArguments.FirstOrDefault(static named => named.Key == "Implies").Value is { Kind: TypedConstantKind.Array, IsNull: false } implied
+            ? implied.Values.Select(static each => each.Value).OfType<INamedTypeSymbol>().ToImmutableArray()
+            : ImmutableArray<INamedTypeSymbol>.Empty;
+
+    /// <summary>
+    /// The markers on the type's members: on a property, its own or one it inherits, and on a parameter of its primary
+    /// constructor, which is the property of a positional record. In the order they are written: those of the class the
+    /// type derives from furthest first, and in one class as its source has them.
+    /// </summary>
+    private static List<Marker> MarkersOf(INamedTypeSymbol type, CancellationToken cancellationToken)
+    {
+        var found = new List<Marker>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var current = type; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var property in current.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (property.IsStatic || property.IsIndexer || !seen.Add(property.Name))
+                {
+                    continue;
+                }
+
+                foreach (var attribute in property.GetAttributes())
+                {
+                    if (MarkerOf(attribute) is { } marker)
+                    {
+                        found.Add(OnCollection(marker with { Name = property.Name, Type = property.Type, Property = property, Declaring = current, Location = WhereWritten(attribute, cancellationToken), Position = PositionOf(attribute, cancellationToken) }));
+                    }
+                }
+            }
+        }
+
+        // The primary constructors, the request's own and those of the records it derives from that the project declares:
+        // in a positional record a parameter is the property of its name, which the compiler declares, or which a record
+        // it derives from has already and the compiler leaves to it; in a class or a struct it is no member at all. A
+        // marker on the parameter of a record the request derives from is read with it, as one on its property is, so a
+        // request that adds attributes of its own to its base's reads the base's markers as the base's line does.
+        for (var current = type; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            var here = SymbolEqualityComparer.Default.Equals(current, type);
+            if (!here && !current.IsRecord)
+            {
+                continue;
+            }
+
+            foreach (var constructor in current.InstanceConstructors)
+            {
+                if (!constructor.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is TypeDeclarationSyntax))
+                {
+                    continue;
+                }
+
+                foreach (var parameter in constructor.Parameters)
+                {
+                    foreach (var attribute in parameter.GetAttributes())
+                    {
+                        // A nearer record that marks the same parameter the same way, with the same permission, says it already.
+                        if (MarkerOf(attribute) is not { } marker
+                            || (!here && found.Any(each => each.Name == parameter.Name
+                                && SymbolEqualityComparer.Default.Equals(each.Class.OriginalDefinition, marker.Class.OriginalDefinition)
+                                && each.Permission == marker.Permission)))
+                        {
+                            continue;
+                        }
+
+                        var property = current.IsRecord ? PropertyNamed(type, parameter.Name) : null;
+                        found.Add(OnCollection(marker with { Name = parameter.Name, Type = parameter.Type, Property = property, OnParameter = here, Declaring = current, Location = WhereWritten(attribute, cancellationToken), Position = PositionOf(attribute, cancellationToken) }));
+                    }
+                }
+            }
+        }
+
+        // OrderBy keeps the order of markers it cannot tell apart, those of a class in metadata among them.
+        return found
+            .OrderBy(static each => DepthOf(each.Declaring))
+            .ThenBy(static each => each.Position.File, StringComparer.Ordinal)
+            .ThenBy(static each => each.Position.Start)
+            .ToList();
+    }
+
+    /// <summary>Where an attribute is written, to put markers in the order of the source: its file and its place in it.</summary>
+    private static (string File, int Start) PositionOf(AttributeData attribute, CancellationToken cancellationToken)
+        => attribute.ApplicationSyntaxReference is { } reference ? (reference.SyntaxTree.FilePath, reference.Span.Start) : (string.Empty, 0);
+
+    /// <summary>How many classes <paramref name="type"/> derives from: a base comes before what derives from it.</summary>
+    private static int DepthOf(INamedTypeSymbol? type)
+    {
+        var depth = 0;
+        for (var current = type?.BaseType; current is not null; current = current.BaseType)
+        {
+            depth++;
+        }
+
+        return depth;
+    }
+
+    /// <summary>The instance property of <paramref name="name"/> the type has, its own or the nearest one it inherits.</summary>
+    private static IPropertySymbol? PropertyNamed(INamedTypeSymbol type, string name)
+    {
+        for (var current = type; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            if (current.GetMembers(name).OfType<IPropertySymbol>().FirstOrDefault(static property => !property.IsStatic && !property.IsIndexer) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The marker that <paramref name="attribute"/> is: a permission marker, an argument marker of a permission marker's
+    /// call, an argument marker of a requirement attribute's call, or a marker of the caller's own. Null for any other
+    /// attribute.
+    /// </summary>
+    private static Marker? MarkerOf(AttributeData attribute)
+    {
+        if (attribute.AttributeClass is not { } attributeClass)
+        {
+            return null;
+        }
+
+        if (Is(attributeClass, KnownTypes.OrOwnAttribute) || Is(attributeClass, KnownTypes.OrOwnOfResourceAttribute))
+        {
+            return new Marker(attributeClass, MarkerKind.OrOwn, null, "", null, null, 0, false, ImmutableArray<INamedTypeSymbol>.Empty, null) { Resource = ResourceNamedBy(attributeClass) };
+        }
+
+        if (Is(attributeClass, KnownTypes.OwnAttribute))
+        {
+            return new Marker(attributeClass, MarkerKind.Own, null, "", null, null, 0, false, ImmutableArray<INamedTypeSymbol>.Empty, null);
+        }
+
+        foreach (var meta in attributeClass.OriginalDefinition.GetAttributes())
+        {
+            if (meta.AttributeClass is not { } metaClass)
+            {
+                continue;
+            }
+
+            if (Is(metaClass, KnownTypes.PermissionMarkerAttribute)
+                && meta.ConstructorArguments.Length == 2
+                && meta.ConstructorArguments[0].Value is INamedTypeSymbol factory
+                && meta.ConstructorArguments[1].Value is string method)
+            {
+                var idOf = meta.NamedArguments.FirstOrDefault(static named => named.Key == "IdOf").Value.Value as INamedTypeSymbol;
+                var argument = meta.NamedArguments.FirstOrDefault(static named => named.Key == "Argument").Value.Value is int position ? position : 0;
+                var idOfArgument = meta.NamedArguments.Any(static named => named.Key == "IdOfArgument" && named.Value.Value is true);
+                var ownAlternative = meta.NamedArguments.FirstOrDefault(static named => named.Key == "OwnAlternative").Value.Value is string { Length: > 0 } alternative ? alternative : null;
+                var eachMethod = meta.NamedArguments.FirstOrDefault(static named => named.Key == "EachMethod").Value.Value is string { Length: > 0 } each ? each : null;
+
+                // The permission is the marker's string argument: a marker applied without one names none.
+                var permission = attribute.ConstructorArguments.FirstOrDefault(static each => each.Type?.SpecialType == SpecialType.System_String);
+                return new Marker(attributeClass, MarkerKind.Place, factory, method, null, idOf, argument, idOfArgument, ImpliesOf(meta), ownAlternative)
+                {
+                    Permission = permission.Type is not null && !permission.IsNull ? Literal(permission) : null,
+                    Unbound = attribute.AttributeConstructor is null || attribute.ConstructorArguments.Any(static each => each.Kind == TypedConstantKind.Error),
+                    EachMethod = eachMethod,
+                };
+            }
+
+            if (Is(metaClass, KnownTypes.PermissionMarkerArgumentAttribute)
+                && meta.ConstructorArguments.Length == 1
+                && meta.ConstructorArguments[0].Value is INamedTypeSymbol goesWith)
+            {
+                return new Marker(attributeClass, MarkerKind.Argument, null, "", goesWith, null, 0, false, ImmutableArray<INamedTypeSymbol>.Empty, null) { Resource = ResourceNamedBy(attributeClass) };
+            }
+
+            if (Is(metaClass, KnownTypes.RequirementArgumentAttribute)
+                && meta.ConstructorArguments.Length == 1
+                && meta.ConstructorArguments[0].Value is INamedTypeSymbol requirement)
+            {
+                var idOf = meta.NamedArguments.FirstOrDefault(static named => named.Key == "IdOf").Value.Value as INamedTypeSymbol;
+                return new Marker(attributeClass, MarkerKind.RequirementArgument, null, "", requirement, idOf, 0, false, ImmutableArray<INamedTypeSymbol>.Empty, null);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// A permission marker on a collection of ids, where its package names a method for a collection: the marker with the
+    /// collection's element as its member's type, so every check of the id reads the element, and its call names that
+    /// method. Any other marker as it is.
+    /// </summary>
+    private static Marker OnCollection(Marker marker)
+        => marker.Place && marker.EachMethod is not null && ElementOf(marker.Type) is { } element
+            ? marker with { Type = element, Collection = marker.Type }
+            : marker;
+
+    /// <summary>
+    /// The element of a collection: of an array, of <c>IEnumerable&lt;T&gt;</c> itself, or of a type that implements it for
+    /// one <c>T</c>. Null for a string, for a type that implements it for several, and for any other type.
+    /// </summary>
+    private static ITypeSymbol? ElementOf(ITypeSymbol type)
+    {
+        if (type.SpecialType == SpecialType.System_String || type.TypeKind == TypeKind.Error)
+        {
+            return null;
+        }
+
+        if (type is IArrayTypeSymbol { Rank: 1 } array)
+        {
+            return array.ElementType;
+        }
+
+        if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Collections_Generic_IEnumerable_T } enumerable)
+        {
+            return enumerable.TypeArguments[0];
+        }
+
+        var implemented = type.AllInterfaces.Where(static each => each.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T).ToList();
+        return implemented.Count == 1 ? implemented[0].TypeArguments[0] : null;
+    }
+
+    /// <summary>The class the one type argument of a marker names, <c>Board</c> of <c>[OrOwn&lt;Board&gt;]</c>; null for a marker without one.</summary>
+    private static INamedTypeSymbol? ResourceNamedBy(INamedTypeSymbol attributeClass)
+        => attributeClass.TypeArguments.Length == 1 ? attributeClass.TypeArguments[0] as INamedTypeSymbol : null;
+
+    /// <summary>
+    /// The id of <paramref name="resource"/>, from <c>global::</c> on: what the member of a marker on that class is. Null for a
+    /// class that is no aggregate root or entity the project can tell the id of.
+    /// </summary>
+    private static string? IdOfResource(INamedTypeSymbol resource)
+        => (OwnerDeclarations.AggregateIdOf(resource) ?? EntityDeclarations.IdArgumentOf(resource)) is { TypeKind: not TypeKind.Error } id
+            ? id.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            : null;
+
+    /// <summary>Where an attribute is written, for a diagnostic about it.</summary>
+    private static LocationInfo? WhereWritten(AttributeData attribute, CancellationToken cancellationToken)
+        => attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is { } syntax ? LocationInfo.From(syntax) : null;
+
+    private static bool Is(INamedTypeSymbol type, string metadataName)
+        => EntityDeclarations.MetadataNameOf(type) == metadataName;
+
+    /// <summary>An attribute as a reader writes it, in a message: <c>[RequiresPermission]</c>, <c>[SeenWith&lt;DocumentId&gt;]</c>.</summary>
+    private static string Bracketed(INamedTypeSymbol attributeClass)
+    {
+        var name = attributeClass.Name.EndsWith("Attribute", StringComparison.Ordinal) && attributeClass.Name.Length > "Attribute".Length
+            ? attributeClass.Name.Substring(0, attributeClass.Name.Length - "Attribute".Length)
+            : attributeClass.Name;
+        return "[" + name + (attributeClass.TypeArguments.Length > 0
+            ? "<" + string.Join(", ", attributeClass.TypeArguments.Select(static argument => argument.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))) + ">"
+            : string.Empty) + "]";
+    }
+
+    /// <summary>A type as a reader writes it, in a message.</summary>
+    private static string Written(ITypeSymbol type) => type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+
+    /// <summary>A list of things as a sentence says it: <c>a</c>, <c>a and b</c>, <c>a, b and c</c>.</summary>
+    private static string Listed(IEnumerable<string> items) => DefinitionFactory.Listed(items);
+
+    /// <summary>A name as code writes it, with an <c>@</c> where it is a keyword.</summary>
+    private static string Identifier(string name)
+        => SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None || SyntaxFacts.GetContextualKeywordKind(name) != SyntaxKind.None ? "@" + name : name;
+
+    /// <summary>An argument of an attribute as C# writes it: a literal, an enum's value, a <c>typeof</c>, an array.</summary>
+    private static string Literal(TypedConstant constant)
+    {
+        if (constant.IsNull)
+        {
+            return "null";
+        }
+
+        switch (constant.Kind)
+        {
+            case TypedConstantKind.Primitive when constant.Value is string text:
+                return SymbolDisplay.FormatLiteral(text, quote: true);
+            case TypedConstantKind.Primitive when constant.Value is bool flag:
+                return flag ? "true" : "false";
+            case TypedConstantKind.Primitive when constant.Value is char character:
+                return SymbolDisplay.FormatLiteral(character, quote: true);
+            case TypedConstantKind.Primitive:
+            case TypedConstantKind.Enum:
+                return "(" + constant.Type!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")(" + SymbolDisplay.FormatPrimitive(constant.Value!, quoteStrings: true, useHexadecimalNumbers: false) + ")";
+            case TypedConstantKind.Type:
+                return "typeof(" + ((ITypeSymbol)constant.Value!).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")";
+            case TypedConstantKind.Array:
+                return "new " + constant.Type!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + " { " + string.Join(", ", constant.Values.Select(Literal)) + " }";
+            default:
+                return "default";
+        }
+    }
+
+    /// <summary>
+    /// Where a package says a permission without a marker is held, <c>[assembly: PermissionWithoutMarker]</c>: the project's own
+    /// assembly and every one it references, read once per compilation.
+    /// </summary>
+    private static List<PermissionWithoutMarker> PermissionWithoutMarkerIn(Compilation compilation)
+        => PermissionsWithoutMarker.GetValue(compilation, static compilation =>
+        {
+            var found = new List<PermissionWithoutMarker>();
+            foreach (var assembly in new[] { compilation.Assembly }.Concat(compilation.SourceModule.ReferencedAssemblySymbols))
+            {
+                foreach (var attribute in assembly.GetAttributes())
+                {
+                    if (attribute.AttributeClass is { } attributeClass
+                        && Is(attributeClass, KnownTypes.PermissionWithoutMarkerAttribute)
+                        && attribute.ConstructorArguments.Length == 2
+                        && attribute.ConstructorArguments[0].Value is INamedTypeSymbol factory
+                        && attribute.ConstructorArguments[1].Value is string method)
+                    {
+                        found.Add(new PermissionWithoutMarker(factory.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), method, assembly.Identity.Name, ImpliesOf(attribute)));
+                    }
+                }
+            }
+
+            return found;
+        });
+
+    /// <summary>
+    /// The ids a member may be that is one of the classes the project sees declared with <paramref name="template"/>, or
+    /// of what those classes name at <paramref name="argument"/>. <see langword="null"/> where it cannot tell: no such
+    /// class, or one whose id is written by a generator this one does not see.
+    /// </summary>
+    private static HashSet<string>? IdsFor(INamedTypeSymbol template, int argument, bool idOfArgument, Compilation compilation, CancellationToken cancellationToken)
+    {
+        var key = template.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var known = IdsOfTemplates.GetValue(compilation, static _ => new Dictionary<string, HashSet<string>?>(StringComparer.Ordinal));
+        var asked = key + "#" + argument + (idOfArgument ? "#id" : string.Empty);
+        lock (known)
+        {
+            if (known.TryGetValue(asked, out var ids))
+            {
+                return ids;
+            }
+        }
+
+        var classes = new List<INamedTypeSymbol>();
+        var sources = SourceTemplateClasses.GetValue(compilation, static compilation =>
+        {
+            var found = new Dictionary<string, List<INamedTypeSymbol>>(StringComparer.Ordinal);
+            foreach (var type in DefinitionFactory.TypesIn(compilation.Assembly.GlobalNamespace, CancellationToken.None))
+            {
+                foreach (var attribute in type.GetAttributes())
+                {
+                    if (attribute.AttributeClass is { } attributeClass && EntityDeclarations.TemplateOf(attributeClass) is not null)
+                    {
+                        var definition = attributeClass.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        if (!found.TryGetValue(definition, out var list))
+                        {
+                            found.Add(definition, list = []);
+                        }
+
+                        list.Add(type);
+                    }
+                }
+            }
+
+            return found;
+        });
+        if (sources.TryGetValue(key, out var own))
+        {
+            classes.AddRange(own);
+        }
+
+        classes.AddRange(DefinitionFactory.ReferencedSources(compilation, EntityDeclarations.MetadataNameOf(template), cancellationToken)
+            .Select(static source => source.Symbol)
+            .OfType<INamedTypeSymbol>());
+
+        HashSet<string>? result = new(StringComparer.Ordinal);
+        foreach (var declared in classes)
+        {
+            var named = EntityDeclarations.TemplateArgumentOf(declared, key, argument);
+            var id = idOfArgument ? named is INamedTypeSymbol entity ? EntityDeclarations.IdArgumentOf(entity) : null : named;
+            if (id is null || id.TypeKind == TypeKind.Error || !DefinitionFactory.IsEntityId(id))
+            {
+                // An id this generator cannot see, or one a generator writes for a class over a raw value: no telling.
+                result = null;
+                break;
+            }
+
+            result.Add(id.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        }
+
+        if (result is { Count: 0 })
+        {
+            result = null;
+        }
+
+        lock (known)
+        {
+            known[asked] = result;
+        }
+
+        return result;
+    }
+
+
+    /// <summary>
+    /// What the project can tell of the types something says the caller's own of: those a package names with
+    /// <c>[assembly: OwnedByCurrentUser]</c>, by type or by the template of a class an application declares, with what the caller's
+    /// own of each already requires, and those an <c>IOwnedByCurrentUser&lt;TValue&gt;</c> of a concrete type is declared for, in the
+    /// project or one it references. Read once per compilation, and a referenced assembly once.
+    /// </summary>
+    private static OwnTypes OwnTypesIn(Compilation compilation, CancellationToken cancellationToken)
+        => OwnTypesOf.GetValue(compilation, static compilation =>
+        {
+            var exact = new Dictionary<string, ImmutableArray<INamedTypeSymbol>>(StringComparer.Ordinal);
+            var templates = new List<OwnTemplate>();
+            var handle = compilation.GetTypeByMetadataName(KnownTypes.OwnedByCurrentUserInterface);
+
+            foreach (var assembly in new[] { compilation.Assembly }.Concat(compilation.SourceModule.ReferencedAssemblySymbols))
+            {
+                foreach (var attribute in assembly.GetAttributes())
+                {
+                    if (attribute.AttributeClass is not { } attributeClass || !Is(attributeClass, KnownTypes.OwnedByCurrentUserAttribute))
+                    {
+                        continue;
+                    }
+
+                    var implies = ImpliesOf(attribute);
+                    if (attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is ITypeSymbol of)
+                    {
+                        exact[of.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)] = implies;
+                    }
+
+                    if (attribute.NamedArguments.FirstOrDefault(static named => named.Key == "IdOf").Value.Value is INamedTypeSymbol template)
+                    {
+                        templates.Add(new OwnTemplate(template, implies));
+                    }
+                }
+            }
+
+            if (handle is not null)
+            {
+                // An application's own handle says nothing of what its caller's own requires already: none is counted.
+                foreach (var name in HandlesIn(compilation.Assembly, handle))
+                {
+                    if (!exact.ContainsKey(name))
+                    {
+                        exact.Add(name, ImmutableArray<INamedTypeSymbol>.Empty);
+                    }
+                }
+
+                foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+                {
+                    // Only an assembly that references the toolkit can declare a handle; the framework's are not looked into.
+                    if (assembly.Modules.Any(module => module.ReferencedAssemblySymbols.Contains(handle.ContainingAssembly, SymbolEqualityComparer.Default)))
+                    {
+                        foreach (var name in HandlesByAssembly.GetValue(assembly, each => HandlesIn(each, handle)))
+                        {
+                            if (!exact.ContainsKey(name))
+                    {
+                        exact.Add(name, ImmutableArray<INamedTypeSymbol>.Empty);
+                    }
+                        }
+                    }
+                }
+            }
+
+            return new OwnTypes(exact, templates);
+        });
+
+    /// <summary>The types an <c>IOwnedByCurrentUser&lt;TValue&gt;</c> of <paramref name="assembly"/> is declared for, over a type it names.</summary>
+    private static string[] HandlesIn(IAssemblySymbol assembly, INamedTypeSymbol handle)
+    {
+        var found = new List<string>();
+        foreach (var type in DefinitionFactory.TypesIn(assembly.GlobalNamespace, CancellationToken.None))
+        {
+            if (type.IsAbstract || type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
+            {
+                continue;
+            }
+
+            foreach (var implemented in type.AllInterfaces)
+            {
+                if (SymbolEqualityComparer.Default.Equals(implemented.OriginalDefinition, handle)
+                    && implemented.TypeArguments.Length == 1
+                    && implemented.TypeArguments[0] is { TypeKind: not TypeKind.TypeParameter and not TypeKind.Error } value)
+                {
+                    found.Add(value.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                }
+            }
+        }
+
+        return [.. found];
+    }
+
+    /// <summary>
+    /// Whether something says the caller's own of <paramref name="type"/>: <see langword="true"/> or
+    /// <see langword="false"/> where the project can tell, and <see langword="null"/> where a package names it by a
+    /// template whose classes the project does not see.
+    /// </summary>
+    private static bool? HasOwn(ITypeSymbol type, Compilation compilation, CancellationToken cancellationToken)
+    {
+        var owned = OwnTypesIn(compilation, cancellationToken);
+        var name = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        if (owned.Exact.ContainsKey(name))
+        {
+            return true;
+        }
+
+        var unknown = false;
+        foreach (var template in owned.Templates)
+        {
+            if (IdsFor(template.Template, 0, false, compilation, cancellationToken) is not { } ids)
+            {
+                unknown = true;
+            }
+            else if (ids.Contains(name))
+            {
+                return true;
+            }
+        }
+
+        return unknown ? null : false;
+    }
+
+    /// <summary>
+    /// Whether no handle could ever say the caller's own of <paramref name="type"/>, whatever the project sees
+    /// (<see cref="OwnerDeclarations.CannotHaveOwn"/>).
+    /// </summary>
+    private static bool CannotHaveOwn(ITypeSymbol type) => OwnerDeclarations.CannotHaveOwn(type);
+
+    /// <summary>
+    /// The requirement attributes the caller's own of <paramref name="type"/> already requires, as its package says with
+    /// <c>Implies</c> on <c>[assembly: OwnedByCurrentUser]</c>: none where nothing says.
+    /// </summary>
+    private static ImmutableArray<INamedTypeSymbol> ImpliedByOwn(ITypeSymbol type, Compilation compilation, CancellationToken cancellationToken)
+    {
+        var owned = OwnTypesIn(compilation, cancellationToken);
+        var name = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        if (owned.Exact.TryGetValue(name, out var implies))
+        {
+            return implies;
+        }
+
+        foreach (var template in owned.Templates)
+        {
+            if (IdsFor(template.Template, 0, false, compilation, cancellationToken) is { } ids && ids.Contains(name))
+            {
+                return template.Implies;
+            }
+        }
+
+        return ImmutableArray<INamedTypeSymbol>.Empty;
+    }
+
+    /// <summary>What a requirement attribute on a request is.</summary>
+    private enum StatedKind
+    {
+        /// <summary>One a package marked <c>[StatesRequirement]</c>: its call.</summary>
+        Call,
+
+        /// <summary><c>[RequiresPermission]</c>: a permission without a marker, held where a package says.</summary>
+        Permission,
+
+        /// <summary><c>[OwnOnly]</c>: the caller's own, the member marked <c>[Own]</c>.</summary>
+        OwnOnly,
+    }
+
+    /// <summary>What a marker on a member of a request marks.</summary>
+    private enum MarkerKind
+    {
+        /// <summary>A permission marker, whose argument is the permission: <c>[AtUnit(permission)]</c>, <c>[OnResource(permission)]</c>.</summary>
+        Place,
+
+        /// <summary>One more argument of a permission marker's call: <c>[ExpectedVersion]</c>, <c>[ExpectedVersion&lt;Board&gt;]</c>.</summary>
+        Argument,
+
+        /// <summary>The caller's own, which the permission is the alternative of: <c>[OrOwn]</c>.</summary>
+        OrOwn,
+
+        /// <summary>The caller's own, of an <c>[OwnOnly]</c> request: <c>[Own]</c>.</summary>
+        Own,
+
+        /// <summary>One more argument of the call of a requirement attribute: <c>[ForTenant]</c>, beside <c>[Operator]</c>.</summary>
+        RequirementArgument,
+    }
+
+    /// <summary>A requirement attribute on a request: one a package marked, <c>[RequiresPermission]</c> or <c>[OwnOnly]</c>.</summary>
+    private sealed record Stated(AttributeData Attribute, INamedTypeSymbol Class, INamedTypeSymbol? Factory, string Method, bool QueriesOnly, StatedKind Kind, ImmutableArray<INamedTypeSymbol> Implies)
+    {
+        public bool IsPermission => Kind == StatedKind.Permission;
+
+        public bool IsAnonymous => Is(Class, KnownTypes.AllowAnonymousAttribute);
+
+        /// <summary>The class the request derives from that carries it, or <see langword="null"/> for one the request carries itself.</summary>
+        public INamedTypeSymbol? InheritedFrom { get; init; }
+
+        /// <summary>The attribute as a message names it: <c>[InTenant]</c>, or <c>[InTenant] of 'Report'</c> for one a base carries.</summary>
+        public string Named => Bracketed(Class) + (InheritedFrom is { } from ? " of '" + from.Name + "'" : string.Empty);
+    }
+
+    /// <summary>
+    /// A marker on a member of a request: a permission marker (<see cref="MarkerKind.Place"/>), an argument marker of that
+    /// marker's call, an argument marker of a requirement attribute's call, or a marker of the caller's own.
+    /// </summary>
+    private sealed record Marker(
+        INamedTypeSymbol Class,
+        MarkerKind Kind,
+        INamedTypeSymbol? Factory,
+        string Method,
+        INamedTypeSymbol? GoesWith,
+        INamedTypeSymbol? IdOf,
+        int Argument,
+        bool IdOfArgument,
+        ImmutableArray<INamedTypeSymbol> Implies,
+        string? OwnAlternative)
+    {
+        public bool Place => Kind == MarkerKind.Place;
+
+        public bool IsOwn => Kind is MarkerKind.OrOwn or MarkerKind.Own;
+
+        public string Name { get; init; } = "";
+
+        public ITypeSymbol Type { get; init; } = null!;
+
+        public IPropertySymbol? Property { get; init; }
+
+        public bool OnParameter { get; init; }
+
+        public LocationInfo? Location { get; init; }
+
+        /// <summary>The permission argument of a permission marker, as C# writes it. Null where the marker has none.</summary>
+        public string? Permission { get; init; }
+
+        /// <summary>Whether the compiler could not bind the marker's arguments: its error to report, and no line is written.</summary>
+        public bool Unbound { get; init; }
+
+        /// <summary>The class the type argument of a marker names, <c>Board</c> of <c>[ExpectedVersion&lt;Board&gt;]</c>; null for the bare form.</summary>
+        public INamedTypeSymbol? Resource { get; init; }
+
+        /// <summary>The method of the marker's factory for a collection of ids, which its package names; null where it names none.</summary>
+        public string? EachMethod { get; init; }
+
+        /// <summary>
+        /// The member's own type, where it is a collection of ids that the marker's package takes: <c>IReadOnlyCollection&lt;BoardId&gt;</c>.
+        /// <see cref="Type"/> is then the element, <c>BoardId</c>. Null for a member that is one id.
+        /// </summary>
+        public ITypeSymbol? Collection { get; init; }
+
+        /// <summary>Whether the member is a collection of ids, which the call for a collection takes.</summary>
+        public bool Each => Collection is not null;
+
+        /// <summary>The member's own type, as a message names it.</summary>
+        public ITypeSymbol Declared => Collection ?? Type;
+
+        /// <summary>The class that declares the marker: the request, or a class it derives from.</summary>
+        public INamedTypeSymbol? Declaring { get; init; }
+
+        /// <summary>Where the marker is written, its file and its place in it, for the order of the markers.</summary>
+        public (string File, int Start) Position { get; init; } = (string.Empty, 0);
+
+        /// <summary>The marker as a message names it: <c>'Unit' [AtUnit]</c>.</summary>
+        public string Named => "'" + Name + "' " + Bracketed(Class);
+
+        /// <summary>
+        /// The kind of a permission marker: its class and the type of its member. Two unit markers are of one kind. A board
+        /// marker and an asset marker are of two kinds.
+        /// </summary>
+        public string PlaceKind => Class.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "|" + Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+    }
+
+    /// <summary>Where a package says a permission without a marker is held, and what that permission requires already.</summary>
+    private sealed record PermissionWithoutMarker(string Factory, string Method, string Assembly, ImmutableArray<INamedTypeSymbol> Implies);
+
+    /// <summary>
+    /// The types something says the caller's own of, each with what its caller's own already requires: by name, and by the
+    /// template of a class an application declares.
+    /// </summary>
+    private sealed record OwnTypes(Dictionary<string, ImmutableArray<INamedTypeSymbol>> Exact, List<OwnTemplate> Templates);
+
+    /// <summary>A template whose classes' ids a package says the caller's own of, and what that own already requires.</summary>
+    private sealed record OwnTemplate(INamedTypeSymbol Template, ImmutableArray<INamedTypeSymbol> Implies);
+
+    /// <summary>
+    /// One requirement of a request's line: an attribute on the request or on a class it derives from, or a permission
+    /// marker on one of its members.
+    /// </summary>
+    private sealed record Part(Stated? Stated, Marker? Place)
+    {
+        /// <summary>Whether it is a permission: <c>[RequiresPermission]</c>, or a permission marker.</summary>
+        public bool IsPermission => Place is not null || Stated?.IsPermission == true;
+
+        /// <summary>What it shares with another permission of its kind: a marker's class and the type of its member, or <c>[RequiresPermission]</c>.</summary>
+        public string Kind => Place?.PlaceKind ?? KnownTypes.RequiresPermissionAttribute;
+
+        /// <summary>The part as a message names it: <c>[InTenant]</c>, <c>'Unit' [AtUnit]</c>.</summary>
+        public string Named => Place?.Named ?? Stated!.Named;
+    }
+
+    /// <summary>One request, read: what it says, what is wrong with it, and its line.</summary>
+    /// <param name="line">
+    /// Whether the request gets a line of its own: it has a requirement attribute or a permission marker, or inherits such a
+    /// marker. A request without one is matched by its base's line, or takes the module's default.
+    /// </param>
+    private sealed class Reading(
+        INamedTypeSymbol type,
+        Compilation compilation,
+        IPropertySymbol requiredAccess,
+        List<INamedTypeSymbol> modules,
+        List<Stated> stated,
+        List<Marker> markers,
+        bool line,
+        SyntaxToken identifier,
+        CancellationToken cancellationToken)
+    {
+        private readonly List<DiagnosticInfo> _diagnostics = [];
+
+        /// <summary>
+        /// The members marked <c>[Own]</c> or <c>[OrOwn]</c> that name the id of an aggregate whose owner it marks
+        /// <c>[Owner]</c>, by name, each with that aggregate: the owner of the aggregate is the caller's own of the line.
+        /// </summary>
+        private readonly Dictionary<string, OwnedAggregate> _ownerOf = new(StringComparer.Ordinal);
+        private readonly LocationInfo? _location = LocationInfo.From(identifier);
+        private readonly string _name = Written(type);
+
+        /// <summary>The permission markers that the line reads, in the order they are written.</summary>
+        private readonly List<Marker> _places = line ? markers.Where(static each => each.Place).ToList() : [];
+
+        /// <summary>For each of <see cref="_places"/>, at its index, the members that mark one more argument of its call.</summary>
+        private readonly List<List<Marker>> _argumentsOf = (line ? markers.Where(static each => each.Place) : Enumerable.Empty<Marker>()).Select(static _ => new List<Marker>()).ToList();
+
+        /// <summary>The permission <c>[OrOwn]</c> pairs with, the case the caller's own is the alternative of; null for none.</summary>
+        private Part? _pairedWith;
+
+        private int _errors;
+
+        /// <summary>
+        /// The markers read with the request: every one where it has a line of its own, and those it declares itself where
+        /// it is matched by its base's line, which reads the others.
+        /// </summary>
+        private List<Marker> Considered => line ? markers : markers.Where(DeclaredHere).ToList();
+
+        public RequestRequirement Result()
+        {
+            var local = modules.Where(module => SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly)).ToList();
+            var writable = local.Where(IsWritable).ToList();
+            var implementation = type.FindImplementationForInterfaceMember(requiredAccess);
+
+            // What answers RequiredAccess for the request, where it is not a module's interface, the line's: the request
+            // itself, a class it derives from, or an interface between it and the module's whose own default C# takes
+            // over the module's, so a line written for the request would never be read.
+            var answersItself = implementation is not null && !modules.Contains(implementation.ContainingType, SymbolEqualityComparer.Default);
+
+            // What the request states itself, rather than what it inherits along with a marker of a class it derives from.
+            var statesItself = stated.Any(static each => each.InheritedFrom is null) || markers.Any(each => each.Place && DeclaredHere(each));
+
+            if (statesItself)
+            {
+                StatedOnce(answersItself ? implementation!.ContainingType : null);
+                ReadWhere(local, writable, answered: implementation is not null);
+            }
+
+            MarkedRightly();
+            OwnMarkedRightly();
+            RequirementArgumentsRight();
+            QueriesOnly();
+            Redundant();
+
+            // An attribute the compiler could not bind, a missing using say, is its error to report, not this.
+            var unbound = type.GetAttributes().Any(static attribute => attribute.AttributeClass is null or { TypeKind: TypeKind.Error });
+            var statesNothing = !line && !answersItself && !unbound && !type.IsAbstract && type.TypeKind != TypeKind.Interface && modules.Count > 0 && !InheritsAStatedRequirement();
+
+            // A module with a default answers for a request that states nothing: on a line of its own where the interface
+            // can name it, and in the last arm otherwise, a request of another project's included.
+            if (statesNothing && !modules.Any(static module => StatedOn(module).Count > 0))
+            {
+                if (writable.Count > 0)
+                {
+                    Report(DiagnosticDescriptors.RequestStatesNoRequirement, _location, _name, writable[0].Name,
+                        "it carries no requirement attribute, and does not answer RequiredAccess itself");
+                }
+                else if (implementation is { ContainingType: { TypeKind: TypeKind.Interface } declaring }
+                         && !SymbolEqualityComparer.Default.Equals(declaring.ContainingAssembly, compilation.Assembly))
+                {
+                    Report(DiagnosticDescriptors.RequestStatesNoRequirement, _location, _name, declaring.Name,
+                        "the interface is declared in '" + declaring.ContainingAssembly.Identity.Name + "', and the RequiredAccess written there knows only the requests of that project");
+                }
+            }
+
+            // A warning says what reads oddly and leaves the line as it is; an error means no line, which nothing reads. A
+            // request that only inherits its markers gets its line where the interface can name it, and is matched by its
+            // base's line where it cannot.
+            string? arm = null;
+            if (_errors == 0 && line && writable.Count > 0 && _places.All(static each => each.Permission is not null)
+                && (statesItself || (writable.Count == 1 && CanBeNamedBy(writable[0]))))
+            {
+                arm = Arm(out var requirement);
+                SameAsTheDefault(writable, requirement, answersItself);
+            }
+            else if (_errors == 0 && statesNothing && writable.Count == 1 && CanBeNamedBy(writable[0]) && DefaultOf(writable[0], compilation) is { } byDefault)
+            {
+                arm = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + " => " + byDefault;
+            }
+
+            return new RequestRequirement(
+                type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                DepthOf(type),
+                (arm is null ? [] : writable.Select(static module => module.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))).ToEquatableArray(),
+                arm,
+                _diagnostics.ToEquatableArray(),
+                (arm is null || writable.Count == 0 ? Enumerable.Empty<string>() : _ownerOf.Values.Select(static each => each.Id.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)).Distinct().OrderBy(static id => id, StringComparer.Ordinal)).ToEquatableArray());
+        }
+
+        /// <summary>A module interface of this project the generator writes the property into: partial, and of the shape a behavior is written for.</summary>
+        private bool IsWritable(INamedTypeSymbol module)
+            => AccessRequestsInterface.ProblemWith(module, compilation) is null
+               && module.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is InterfaceDeclarationSyntax declaration && declaration.Modifiers.Any(SyntaxKind.PartialKeyword));
+
+        /// <summary>
+        /// Whether a line of <paramref name="module"/>'s switch can name the request: no type parameters, which a line
+        /// cannot close, and visible from the interface. One that cannot takes the module's default in the last arm.
+        /// </summary>
+        private bool CanBeNamedBy(INamedTypeSymbol module)
+            => type.TypeParameters.Length == 0
+               && type.ContainingType is not { IsGenericType: true }
+               && compilation.IsSymbolAccessibleWithin(type, module);
+
+        /// <summary>
+        /// DDD00084: requirement attributes of the request's own that say what its module's default says, call for call,
+        /// in the same order, so the request would require the same without them. Only on a request nothing derives from:
+        /// one that derives from it holds to its attributes beside its own, and would require less without them.
+        /// </summary>
+        private void SameAsTheDefault(List<INamedTypeSymbol> writable, string requirement, bool answersItself)
+        {
+            if (answersItself
+                || writable.Count != 1
+                || !(type.IsSealed || type.IsValueType)
+                || stated.Count == 0
+                || stated.Any(static each => each.InheritedFrom is not null)
+                || DefaultOf(writable[0], compilation) is not { } byDefault
+                || !string.Equals(byDefault, requirement, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Report(DiagnosticDescriptors.RedundantRequirement, WhereWritten(stated[0].Attribute, cancellationToken) ?? _location, _name,
+                Listed(stated.Select(static each => Bracketed(each.Class))),
+                "the default of its module, " + Listed(StatedOn(writable[0]).Select(static each => Bracketed(each.Class))) + " on '" + writable[0].Name + "'");
+        }
+
+        /// <summary>
+        /// The interface read for its requirement attributes: on the module's interface, marked <c>[AccessRequests]</c> and
+        /// partial, they are the default of its requests, and nothing is wrong with them where each may be one (DDD00089),
+        /// a permission without a marker is held where a package says (DDD00080), and none says what another beside it requires
+        /// already (DDD00084). On any other interface nothing reads them (DDD00083). No line is written for an interface.
+        /// </summary>
+        public RequestRequirement AsADefault()
+        {
+            var carried = Listed(stated.Select(static each => Bracketed(each.Class)));
+            if (!DefinitionFactory.HasAttribute(type, KnownTypes.AccessRequestsAttribute))
+            {
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "a requirement attribute on an interface is the default of a module's requests, which only the module's interface has, the one marked [AccessRequests]"
+                    + (modules.FirstOrDefault() is { } module ? ", '" + module.Name + "' here" : string.Empty)
+                    + "; put it on each request of '" + type.Name + "', or answer RequiredAccess in '" + type.Name + "', which C# takes over the module's for its requests");
+            }
+            else if (AccessRequestsInterface.ProblemWith(type, compilation) is not null)
+            {
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "'" + type.Name + "' is not an interface a behavior can be written for (DDD00056), so nothing is written into it");
+            }
+            else if (!IsWritable(type))
+            {
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "'" + type.Name + "' is not partial, and the generator writes RequiredAccess into it, with its default for the requests that state none; declare it '"
+                    + (type.DeclaredAccessibility == Accessibility.Public ? "public " : "internal ") + "partial interface " + type.Name + " : IRequireAccess;'");
+            }
+            else
+            {
+                foreach (var each in stated)
+                {
+                    if (RefusedAsADefault(each) is { } why)
+                    {
+                        Report(DiagnosticDescriptors.DefaultRequirementRefused, WhereWritten(each.Attribute, cancellationToken) ?? _location, _name, Bracketed(each.Class), why);
+                    }
+                }
+
+                var defaults = PermissionWithoutMarkerIn(compilation);
+                if (stated.Any(static each => each.IsPermission) && defaults.Count != 1)
+                {
+                    Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, _location, _name,
+                        "requires a permission as the default of its module, and " + (defaults.Count == 0
+                            ? "no package this project references says where a permission without a marker is held"
+                            : Listed(defaults.Select(static each => "'" + each.Assembly + "'")) + " each say where a permission without a marker is held")
+                        + ". A default reads no member of a request, so its permission has no marker. Put the permission on each request, on the marker of the place where it is held");
+                }
+
+                if (_errors == 0)
+                {
+                    Redundant();
+                }
+            }
+
+            return new RequestRequirement(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), 0, [], null, _diagnostics.ToEquatableArray(), []);
+        }
+
+        /// <summary>The requirements the request carries itself, as a message names them: <c>[SignedIn] and 'Unit' [AtUnit]</c>.</summary>
+        private string Carried()
+            => Listed(stated.Where(static each => each.InheritedFrom is null).Select(static each => Bracketed(each.Class))
+                .Concat(markers.Where(each => each.Place && DeclaredHere(each)).Select(static each => each.Named)));
+
+        /// <summary>DDD00079 and DDD00078: no attribute that opens the door beside one that closes it, and the requirement said one way.</summary>
+        /// <param name="answeredBy">What answers RequiredAccess for the request other than a line, or <see langword="null"/>.</param>
+        private void StatedOnce(INamedTypeSymbol? answeredBy)
+        {
+            var parts = Parts();
+            if (stated.FirstOrDefault(static each => each.IsAnonymous) is { } anonymous && parts.Count > 1)
+            {
+                // Where the request it derives from is the one that carries [AllowAnonymous], the message says so.
+                var beside = Listed(parts.Where(static each => each.Stated?.IsAnonymous != true).Select(static each => each.Named))
+                             + (anonymous.InheritedFrom is { } from ? ", deriving from '" + from.Name + "', which carries [AllowAnonymous]" : string.Empty);
+                Report(DiagnosticDescriptors.AnonymousBesideARequirement, _location, _name, beside);
+            }
+
+            if (answeredBy is not null)
+            {
+                var through = SymbolEqualityComparer.Default.Equals(answeredBy, type) ? string.Empty : ", through '" + answeredBy.Name + "'";
+                Report(DiagnosticDescriptors.RequestStatesRequirementTwice, _location, _name, Carried(), through);
+            }
+        }
+
+        /// <summary>DDD00083: an interface the generator writes the line into, that can name the request.</summary>
+        /// <param name="local">The module interfaces it implements that this project declares.</param>
+        /// <param name="writable">Those of them the generator writes into.</param>
+        /// <param name="answered">Whether anything answers RequiredAccess for it: the compiler finds no one answer where two interfaces each give one.</param>
+        private void ReadWhere(List<INamedTypeSymbol> local, List<INamedTypeSymbol> writable, bool answered)
+        {
+            var carried = Carried();
+            if (type.TypeParameters.Length > 0 || type.ContainingType is { IsGenericType: true })
+            {
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "it has type parameters, and the line its module's interface gets names one type; answer RequiredAccess instead");
+                return;
+            }
+
+            if (writable.Count == 0)
+            {
+                var foreign = modules.FirstOrDefault(module => !local.Contains(module, SymbolEqualityComparer.Default));
+                var reason = local.FirstOrDefault() is { } notPartial
+                    ? AccessRequestsInterface.ProblemWith(notPartial, compilation) is null
+                        ? "'" + notPartial.Name + "' is not partial, and the generator writes RequiredAccess into it from its requests' attributes; declare it '"
+                          + (notPartial.DeclaredAccessibility == Accessibility.Public ? "public " : "internal ") + "partial interface " + notPartial.Name + " : IRequireAccess;'"
+                        : "'" + notPartial.Name + "' is not an interface a behavior can be written for (DDD00056), so nothing is written into it"
+                    : foreign is not null
+                        ? "its module's interface '" + foreign.Name + "' is declared in '" + foreign.ContainingAssembly.Identity.Name + "', and the generator writes into an interface of the project it compiles; declare the request there, or answer RequiredAccess"
+                        : "it implements no interface marked [AccessRequests], which is where the generator writes what it requires; implement the module's request interface";
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried, reason);
+                return;
+            }
+
+            if (writable.Count > 1 && !answered)
+            {
+                // Each interface implements the property with its own lines, and neither is more specific than the
+                // other: the compiler's CS8705, which says what is ambiguous and not what to do.
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "it implements " + Listed(writable.Select(static module => "'" + module.Name + "'")) + ", each partial with RequiredAccess written into it, and C# takes neither's over the other's (CS8705); "
+                    + "answer RequiredAccess itself, or implement one of them");
+                return;
+            }
+
+            var hidden = writable.FirstOrDefault(module => !compilation.IsSymbolAccessibleWithin(type, module));
+            if (hidden is not null)
+            {
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "'" + hidden.Name + "' cannot name it, nested private as it is" + (type.ContainingType is { } outer ? " in '" + outer.Name + "'" : string.Empty)
+                    + "; make it internal, or answer RequiredAccess");
+            }
+        }
+
+        /// <summary>
+        /// DDD00080 and DDD00081. Each permission marker names its permission. Each argument marker belongs to one permission
+        /// marker. Each marker is on a member that the line can read, of the id type it takes. A permission without a marker
+        /// is held where exactly one package declares.
+        /// </summary>
+        private void MarkedRightly()
+        {
+            // A permission marker without its permission argument names nothing to hold.
+            if (_places.FirstOrDefault(static each => each.Permission is null && !each.Unbound) is { } bare)
+            {
+                Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, DeclaredHere(bare) ? bare.Location ?? _location : _location, _name,
+                    (DeclaredHere(bare) ? "marks " + bare.Named : "inherits " + bare.Named + " from '" + bare.Declaring?.Name + "'")
+                    + " and names no permission. A permission marker takes the permission as its argument. Write " + WithPermission(bare.Class));
+                return;
+            }
+
+            var defaults = PermissionWithoutMarkerIn(compilation);
+            if (defaults.Count != 1 && stated.FirstOrDefault(static each => each.IsPermission && each.InheritedFrom is null) is { } unplaced)
+            {
+                Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, WhereWritten(unplaced.Attribute, cancellationToken) ?? _location, _name,
+                    "has [RequiresPermission], a permission without a marker, and " + (defaults.Count == 0
+                        ? "no package this project references declares where such a permission is held"
+                        : Listed(defaults.Select(static each => "'" + each.Assembly + "'")) + " each declare where such a permission is held")
+                    + ". Put the permission on a permission marker of the place where it is held instead, such as [OnResource(permission)] on a resource of Membership or [AtUnit(permission)] on a unit of Tenancy");
+                return;
+            }
+
+            var arguments = Considered.Where(static each => each.Kind == MarkerKind.Argument).ToList();
+            foreach (var argument in arguments)
+            {
+                var candidates = _places.Where(place => Same(place.Class, argument.GoesWith)).ToList();
+                if (argument.Resource is { } resource)
+                {
+                    var id = IdOfResource(resource);
+                    candidates = candidates.Where(place => id is not null && place.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == id).ToList();
+                }
+
+                // The call for a collection takes no argument beside the collection: an argument belongs to a marker on one id.
+                var onCollections = candidates.Where(static place => place.Each).ToList();
+                candidates = candidates.Where(static place => !place.Each).ToList();
+                if (candidates.Count == 0 && onCollections.Count > 0)
+                {
+                    Report(DiagnosticDescriptors.PermissionMarkerOnCollectionAlone, DeclaredHere(argument) ? argument.Location ?? _location : _location, _name,
+                        (DeclaredHere(argument) ? "marks " + argument.Named : "inherits " + argument.Named + " from '" + argument.Declaring?.Name + "'") + " beside "
+                        + Listed(onCollections.Select(static each => each.Named)) + ", a marker on a collection of ids. The check of a collection takes no "
+                        + Bracketed(argument.Class) + ". Remove it, or send one request for each resource");
+                    return;
+                }
+
+                if (candidates.Count == 1)
+                {
+                    _argumentsOf[_places.IndexOf(candidates[0])].Add(argument);
+                    continue;
+                }
+
+                // An abstract request is a shape the requests that derive from it share, which may mark what the argument goes with.
+                if (candidates.Count == 0 && !line && type.IsAbstract)
+                {
+                    continue;
+                }
+
+                var with = argument.GoesWith is { } goesWith ? Bracketed(goesWith) : "another marker";
+                var withPermission = argument.GoesWith is { } belongsTo ? WithPermission(belongsTo) : "a permission marker";
+                var marked = DeclaredHere(argument) ? "marks " + argument.Named : "inherits " + argument.Named + " from '" + argument.Declaring?.Name + "'";
+                var at = DeclaredHere(argument) ? argument.Location ?? _location : _location;
+                if (candidates.Count == 0)
+                {
+                    Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, at, _name, argument.Resource is { } named
+                        ? marked + ", which belongs to " + with + " on a '" + named.Name + "', and the request has no " + with + " on the id of a '" + named.Name + "'. Put "
+                          + withPermission + " on the id of the '" + named.Name + "', or name the resource of a marker on the request"
+                        : marked + ", which belongs to " + with + ", and the request has no " + with + ". Put " + withPermission
+                          + " on the member it belongs to, or remove " + Bracketed(argument.Class));
+                    return;
+                }
+
+                var oneKind = candidates.Select(static each => each.PlaceKind).Distinct(StringComparer.Ordinal).Count() == 1;
+                Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, at, _name,
+                    marked + " beside " + Listed(candidates.Select(static each => each.Named)) + (oneKind
+                        ? ", two markers of one kind. The generator cannot tell which marker it belongs to. Write RequiredAccess and pass the argument to the call it belongs to"
+                        : ". The generator cannot tell which marker it belongs to. Name the resource of its marker, with " + string.Join(" or ", candidates.Select(each => Generic(argument.Class, each)))));
+                return;
+            }
+
+            for (var index = 0; index < _places.Count; index++)
+            {
+                var twice = _argumentsOf[index].GroupBy(static each => ArgumentNamed(each.Class), StringComparer.Ordinal).FirstOrDefault(static same => same.Count() > 1);
+                if (twice is not null)
+                {
+                    Report(DiagnosticDescriptors.PermissionMarkerOutOfPlace, twice.ElementAt(1).Location ?? _location, _name,
+                        "marks " + Listed(twice.Select(static each => "'" + each.Name + "'")) + " " + Bracketed(twice.First().Class) + ": the call takes it once");
+                    return;
+                }
+            }
+
+            if (Unreadable([.. _places, .. arguments], DiagnosticDescriptors.PermissionMarkerOutOfPlace))
+            {
+                return;
+            }
+
+            foreach (var place in _places)
+            {
+                if (place.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+                {
+                    Report(DiagnosticDescriptors.PermissionMarkerOnWrongType, place.Location ?? _location, _name, place.Name, Bracketed(place.Class).Trim('[', ']'),
+                        "which is '" + Written(place.Type) + "' and may be null: a requirement computed from whether it is given is written as RequiredAccess, answering one case or the other, "
+                        + nullable.TypeArguments[0].Name + " is { } given ? ... : ...");
+                    return;
+                }
+
+                if (place.Type.TypeKind != TypeKind.Error && place.IdOf is { } template && IdsFor(template, place.Argument, place.IdOfArgument, compilation, cancellationToken) is { } ids
+                    && !ids.Contains(place.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))
+                {
+                    var definition = template.OriginalDefinition;
+                    var plural = ids.Count > 1;
+                    var of = place.Argument > 0 && place.Argument < definition.TypeParameters.Length ? " of the " + definition.TypeParameters[place.Argument].Name : string.Empty;
+                    Report(DiagnosticDescriptors.PermissionMarkerOnWrongType, place.Location ?? _location, _name, place.Name, Bracketed(place.Class).Trim('[', ']'),
+                        "which is a '" + Written(place.Declared) + "': it marks " + (place.Each ? "a collection of " : string.Empty) + Listed(ids.OrderBy(static id => id, StringComparer.Ordinal).Select(static id => "'" + TemplateRegistrations.LastNameOf(id) + "'"))
+                        + ", the id" + (plural ? "s" : string.Empty) + of + " of the " + Bracketed(definition) + " class" + (plural ? "es" : string.Empty) + " this project sees");
+                    return;
+                }
+            }
+
+            for (var index = 0; index < _places.Count; index++)
+            {
+                var place = _places[index];
+                var bound = _argumentsOf[index];
+                for (var position = 0; position < bound.Count; position++)
+                {
+                    var argument = bound[position];
+                    var parameter = place.Factory!.GetMembers(place.Method).OfType<IMethodSymbol>()
+                        .Where(method => method.IsStatic && method.Parameters.Length >= 2 + bound.Count)
+                        .Select(method => method.Parameters[2 + position].Type)
+                        .FirstOrDefault(static parameterType => !TemplateRegistrations.MentionsATypeParameter(parameterType));
+                    if (parameter is not null && argument.Type.TypeKind != TypeKind.Error && !compilation.ClassifyConversion(argument.Type, parameter).IsImplicit)
+                    {
+                        Report(DiagnosticDescriptors.PermissionMarkerOnWrongType, argument.Location ?? _location, _name, argument.Name, Bracketed(argument.Class).Trim('[', ']'),
+                            "which is a '" + Written(argument.Type) + "': the call takes a '" + Written(parameter) + "' there");
+                        return;
+                    }
+                }
+            }
+        }
+
+        /// <summary>A marker with its permission, as a message advises it: <c>[AtUnit(permission)]</c>.</summary>
+        private static string WithPermission(INamedTypeSymbol marker)
+        {
+            var bracketed = Bracketed(marker);
+            return bracketed.Substring(0, bracketed.Length - 1) + "(permission)]";
+        }
+
+        /// <summary>
+        /// The generic form of a marker of one more argument, or of the caller's own, naming the resource whose id
+        /// <paramref name="place"/> marks: <c>[ExpectedVersion&lt;Board&gt;]</c>; <c>TResource</c> where the project cannot tell it.
+        /// </summary>
+        private string Generic(INamedTypeSymbol marker, Marker place)
+        {
+            var name = marker.Name.EndsWith("Attribute", StringComparison.Ordinal) && marker.Name.Length > "Attribute".Length
+                ? marker.Name.Substring(0, marker.Name.Length - "Attribute".Length)
+                : marker.Name;
+            return "[" + name + "<" + (ResourceOf(place)?.Name ?? "TResource") + ">]";
+        }
+
+        /// <summary>The aggregate root whose id the member of <paramref name="place"/> is, where the project sees exactly one.</summary>
+        private INamedTypeSymbol? ResourceOf(Marker place)
+            => place.Type.TypeKind != TypeKind.Error && OwnerDeclarations.AggregatesWithId(place.Type, compilation) is { Count: 1 } one ? one[0].Aggregate : null;
+
+        /// <summary>An argument marker's name whatever its type arguments, so the bare and the generic form are one argument.</summary>
+        private static string ArgumentNamed(INamedTypeSymbol marker) => marker.ContainingNamespace?.ToDisplayString() + "." + marker.Name;
+
+        /// <summary>
+        /// DDD00085 and DDD00086: <c>[OrOwn]</c> beside a permission it may pair with, <c>[Own]</c> with <c>[OwnOnly]</c>, one of
+        /// each at most, on a member the line can read, of a type something says the caller's own of.
+        /// </summary>
+        private void OwnMarkedRightly()
+        {
+            var considered = Considered;
+            var orOwn = considered.Where(static each => each.Kind == MarkerKind.OrOwn).ToList();
+            var own = considered.Where(static each => each.Kind == MarkerKind.Own).ToList();
+            var ownOnly = stated.FirstOrDefault(static each => each.Kind == StatedKind.OwnOnly);
+            var permissions = Parts().Where(static each => each.IsPermission).ToList();
+
+            if (ownOnly is not null && own.Count == 0)
+            {
+                Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, _location, _name,
+                    "carries [OwnOnly] and marks no member [Own]: [OwnOnly] says the request is about the caller's own, so mark the member that names it, [Own] SeatId Seat say");
+                return;
+            }
+
+            if (orOwn.Concat(own).GroupBy(static each => each.Name, StringComparer.Ordinal).FirstOrDefault(static same => same.Select(static each => each.Kind).Distinct().Count() > 1) is { } both)
+            {
+                Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, both.First().Location ?? _location, _name,
+                    "marks '" + both.Key + "' [Own] and [OrOwn]. [Own] means the caller's own alone, and [OrOwn] means the caller's own or the permission. Keep the one the request means");
+                return;
+            }
+
+            if (!type.IsAbstract)
+            {
+                var unread = orOwn.Where(marker => permissions.Count == 0 && !ReadWithABase(marker, StatedKind.Permission)).Select(marker => (marker, "requires no permission. [OrOwn] makes the caller's own an alternative to a permission. Put a permission on the request, on a permission marker such as [OnResource(permission)] or with [RequiresPermission(permission)]. For the caller's own alone, put [OwnOnly] on the request and mark the member [Own]"))
+                    .Concat(own.Where(marker => ownOnly is null && !ReadWithABase(marker, StatedKind.OwnOnly)).Select(marker => (marker, "is not [OwnOnly]. [Own] names the value of a request about the caller's own alone. Put [OwnOnly] on the request. For the caller's own or a permission, mark the member [OrOwn] beside the permission")))
+                    .ToList();
+                if (unread.Count > 0)
+                {
+                    var (marker, why) = unread[0];
+                    Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, DeclaredHere(marker) ? marker.Location ?? _location : _location, _name,
+                        (DeclaredHere(marker)
+                            ? "marks '" + marker.Name + "' " + Bracketed(marker.Class)
+                            : "inherits '" + marker.Name + "' " + Bracketed(marker.Class) + " from '" + marker.Property!.ContainingType.Name + "'")
+                        + ", and " + why);
+                    return;
+                }
+            }
+
+            foreach (var kind in new[] { orOwn, own })
+            {
+                if (kind.Count > 1)
+                {
+                    Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, kind[1].Location ?? _location, _name,
+                        "marks the caller's own more than once, " + Listed(kind.Select(static each => "'" + each.Name + "' " + Bracketed(each.Class)))
+                        + ": the caller's own is one value, which the check compares with the caller's; a request about one of two computes its requirement as RequiredAccess");
+                    return;
+                }
+            }
+
+            if (orOwn.Count == 1 && permissions.Count > 0 && PairOf(orOwn[0], permissions) is null)
+            {
+                return;
+            }
+
+            var marked = orOwn.Concat(own).ToList();
+            if (marked.Count == 0 || Unreadable(marked, DiagnosticDescriptors.OwnMarkerOutOfPlace))
+            {
+                return;
+            }
+
+            foreach (var marker in marked)
+            {
+                if (marker.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T })
+                {
+                    Report(DiagnosticDescriptors.OwnOnATypeWithoutOwn, marker.Location ?? _location, _name, marker.Name, Bracketed(marker.Class).Trim('[', ']'),
+                        "which is '" + Written(marker.Type) + "' and may be null: where it is left out the request names no value of the caller's, so compute the requirement from whether it is given, as RequiredAccess");
+                    return;
+                }
+
+                // Whatever the project sees: the case compares a value that equals itself, so a class, a string or an enum
+                // never has an own, and the line written for it would not compile.
+                if (CannotHaveOwn(marker.Type))
+                {
+                    var written = Written(marker.Type);
+                    Report(DiagnosticDescriptors.OwnOnATypeWithoutOwn, marker.Location ?? _location, _name, marker.Name, Bracketed(marker.Class).Trim('[', ']'),
+                        "which is a '" + written + "': the caller's own is a value compared with the caller's at the door, a struct that is IEquatable of itself, such as a Guid or an id declared with [EntityId], "
+                        + "so nothing can say the caller's own " + written + "; mark the member that names the caller's id");
+                    return;
+                }
+
+                var hasOwn = marker.Type.TypeKind == TypeKind.Error ? null : HasOwn(marker.Type, compilation, cancellationToken);
+                if (ReadAsAnOwner(marker, hasOwn) is { } read)
+                {
+                    if (!read)
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                if (hasOwn == false)
+                {
+                    var written = Written(marker.Type);
+                    var aggregate = DefinitionFactory.IsEntityId(marker.Type) ? OwnerDeclarations.AggregatesWithId(marker.Type, compilation).FirstOrDefault() : null;
+                    Report(DiagnosticDescriptors.OwnOnATypeWithoutOwn, marker.Location ?? _location, _name, marker.Name, Bracketed(marker.Class).Trim('[', ']'),
+                        "which is a '" + written + "': nothing says what the caller's own " + written + " is. A Guid is the caller's verified identity and Tenancy's seat id the caller's seat; for a kind of the application's own, "
+                        + "declare a small IOwnedByCurrentUser<" + written + "> beside the requests and register it with services.AddOwnedByCurrentUser<" + written + ", ...>()"
+                        + (aggregate is null ? string.Empty : "; for the id of '" + aggregate.Aggregate.Name + "', a request about its owner, mark the property of '" + aggregate.Aggregate.Name + "' that names its owner [Owner]"));
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The permission <paramref name="orOwn"/> pairs with: the one of the request, for the bare form, or the one of the
+        /// marker on the resource the generic form names. Null where it cannot be told, or where that marker marks the place a
+        /// permission is checked and not what the request acts on. Each of these is reported (DDD00085).
+        /// </summary>
+        private Part? PairOf(Marker orOwn, List<Part> permissions)
+        {
+            var marked = "marks " + orOwn.Named;
+            var at = orOwn.Location ?? _location;
+            Part paired;
+            if (orOwn.Resource is { } resource)
+            {
+                var id = IdOfResource(resource);
+                var on = permissions.Where(each => each.Place is { } place && id is not null && place.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == id).ToList();
+                if (on.Count != 1)
+                {
+                    Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, at, _name, on.Count == 0
+                        ? marked + ", and the request has no permission marker on the id of a '" + resource.Name + "'. " + Bracketed(orOwn.Class)
+                          + " pairs the caller's own with the permission of the marker on that resource. Put a permission marker on the id of the '" + resource.Name
+                          + "', or name the resource of a marker on the request"
+                        : marked + " beside " + Listed(on.Select(static each => each.Named)) + ", two markers on a '" + resource.Name
+                          + "'. The generator cannot tell which permission the caller's own replaces. Compute the requirement as RequiredAccess");
+                    return null;
+                }
+
+                paired = on[0];
+            }
+            else if (permissions.Count > 1)
+            {
+                var oneKind = permissions.Select(static each => each.Kind).Distinct(StringComparer.Ordinal).Count() == 1;
+                var alternatives = permissions.Where(static each => each.Place is { OwnAlternative: not null }).ToList();
+                Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, at, _name,
+                    marked + " beside " + Listed(permissions.Select(static each => each.Named)) + (oneKind
+                        ? ", two permissions of one kind. The generator cannot tell which permission the caller's own replaces. Compute the requirement as RequiredAccess"
+                        : alternatives.Count > 0
+                            ? ". [OrOwn] pairs with one permission. Name the resource whose permission the caller's own replaces, with "
+                              + string.Join(" or ", alternatives.Select(each => Generic(orOwn.Class, each.Place!)))
+                            : ". [OrOwn] pairs with one permission. Compute the requirement as RequiredAccess"));
+                return null;
+            }
+            else
+            {
+                paired = permissions[0];
+            }
+
+            if (paired.Place is { Each: true } collection)
+            {
+                Report(DiagnosticDescriptors.PermissionMarkerOnCollectionAlone, at, _name,
+                    marked + " beside " + collection.Named + ", a marker on a collection of ids. The caller's own is one value, and the collection names several resources. "
+                    + "Remove " + Bracketed(orOwn.Class) + ", or send one request for each resource");
+                return null;
+            }
+
+            if (paired.Place is { OwnAlternative: null } place)
+            {
+                Report(DiagnosticDescriptors.OwnMarkerOutOfPlace, at, _name,
+                    "marks '" + orOwn.Name + "' " + Bracketed(orOwn.Class) + " beside '" + place.Name + "' " + Bracketed(place.Class)
+                    + ", which marks the place where the permission is checked and not what the request acts on. A caller could send a place where it holds the permission together with somebody else's value. The permission held at that place would then act on any value. Compute the requirement as RequiredAccess where the request needs it");
+                return null;
+            }
+
+            _pairedWith = paired;
+            return paired;
+        }
+
+        /// <summary>
+        /// DDD00102 and DDD00081: a marker of one more argument of a requirement attribute's call, beside that attribute, once,
+        /// on a member the line can read, of the id it marks.
+        /// </summary>
+        private void RequirementArgumentsRight()
+        {
+            var arguments = markers.Where(static each => each.Kind == MarkerKind.RequirementArgument).ToList();
+            if (arguments.Count == 0)
+            {
+                return;
+            }
+
+            // An abstract request is a shape the requests that derive from it share: each of them carries the attribute, and
+            // is read on its own with the markers it inherits.
+            if (!type.IsAbstract)
+            {
+                foreach (var argument in arguments)
+                {
+                    if (stated.Any(each => each.Kind == StatedKind.Call && Same(each.Class, argument.GoesWith)) || ReadWithABaseCarrying(argument))
+                    {
+                        continue;
+                    }
+
+                    var with = argument.GoesWith is { } goesWith ? Bracketed(goesWith) : "another attribute";
+                    Report(DiagnosticDescriptors.RequirementArgumentOutOfPlace, DeclaredHere(argument) ? argument.Location ?? _location : _location, _name,
+                        (DeclaredHere(argument)
+                            ? "marks '" + argument.Name + "' " + Bracketed(argument.Class)
+                            : "inherits '" + argument.Name + "' " + Bracketed(argument.Class) + " from '" + argument.Property!.ContainingType.Name + "'")
+                        + ", which goes with " + with + ", and carries no " + with + ": the member is handed to the call of " + with
+                        + ", so put that on the request, or take the marker off");
+                    return;
+                }
+            }
+
+            var twice = arguments.GroupBy(static each => each.Class.OriginalDefinition, SymbolEqualityComparer.Default).FirstOrDefault(static same => same.Count() > 1);
+            if (twice is not null)
+            {
+                Report(DiagnosticDescriptors.RequirementArgumentOutOfPlace, twice.ElementAt(1).Location ?? _location, _name,
+                    "marks " + Listed(twice.Select(static each => "'" + each.Name + "'")) + " " + Bracketed(twice.First().Class) + ": the call takes it once, so mark one member");
+                return;
+            }
+
+            if (Unreadable(arguments, DiagnosticDescriptors.RequirementArgumentOutOfPlace))
+            {
+                return;
+            }
+
+            foreach (var argument in arguments)
+            {
+                if (argument.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T })
+                {
+                    Report(DiagnosticDescriptors.PermissionMarkerOnWrongType, argument.Location ?? _location, _name, argument.Name, Bracketed(argument.Class).Trim('[', ']'),
+                        "which is '" + Written(argument.Type) + "' and may be null: a requirement computed from whether it is given is written as RequiredAccess");
+                    return;
+                }
+
+                if (argument.Type.TypeKind != TypeKind.Error && argument.IdOf is { } template && IdsFor(template, 0, false, compilation, cancellationToken) is { } ids
+                    && !ids.Contains(argument.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))
+                {
+                    var plural = ids.Count > 1;
+                    Report(DiagnosticDescriptors.PermissionMarkerOnWrongType, argument.Location ?? _location, _name, argument.Name, Bracketed(argument.Class).Trim('[', ']'),
+                        "which is a '" + Written(argument.Type) + "': it marks " + Listed(ids.OrderBy(static id => id, StringComparer.Ordinal).Select(static id => "'" + TemplateRegistrations.LastNameOf(id) + "'"))
+                        + ", the id" + (plural ? "s" : string.Empty) + " of the " + Bracketed(template.OriginalDefinition) + " class" + (plural ? "es" : string.Empty) + " this project sees");
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether an inherited marker of a requirement's argument is read with the line of a class the request derives from:
+        /// one between the request and the class that declares the marker, that one included, carries the attribute it goes with.
+        /// </summary>
+        private bool ReadWithABaseCarrying(Marker marker)
+        {
+            if (DeclaredHere(marker) || marker.Property?.ContainingType is not { } declaring)
+            {
+                return false;
+            }
+
+            for (var current = type.BaseType; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+            {
+                if (StatedOn(current).Any(each => each.Kind == StatedKind.Call && Same(each.Class, marker.GoesWith)))
+                {
+                    return true;
+                }
+
+                if (SymbolEqualityComparer.Default.Equals(current, declaring))
+                {
+                    break;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Reads <paramref name="marker"/> as the id of an aggregate whose owner it marks <c>[Owner]</c>, where nothing says the
+        /// caller's own of the id itself: the line is then <c>AccessRequirement.OwnerOf</c> of the member, and the owner's own
+        /// is the caller's own the request is about. <see langword="null"/> where the member is no such id, so it is read as
+        /// a value of the caller's own; <see langword="true"/> where it is one and is read so; <see langword="false"/> where
+        /// it is one and is reported (DDD00087, DDD00088), and nothing is written.
+        /// </summary>
+        /// <remarks>
+        /// The caller's own of the id wins where something says it, an <c>IOwnedByCurrentUser</c> of the id's own, or a package's
+        /// template the aggregate is declared with, as Tenancy's seat: that one reads nothing, and is what the id says first.
+        /// </remarks>
+        /// <param name="marker">The member marked <c>[Own]</c> or <c>[OrOwn]</c>.</param>
+        /// <param name="hasOwn">Whether something says the caller's own of the member's type, where the project can tell.</param>
+        private bool? ReadAsAnOwner(Marker marker, bool? hasOwn)
+        {
+            if (hasOwn == true || marker.Type.TypeKind == TypeKind.Error || !DefinitionFactory.IsEntityId(marker.Type))
+            {
+                return null;
+            }
+
+            var owned = OwnerDeclarations.AggregatesWithId(marker.Type, compilation).Where(static each => each.Owner is not null).ToList();
+            var templates = OwnTypesIn(compilation, cancellationToken).Templates;
+            if (owned.Count == 0 || owned.Any(each => templates.Any(template => DeclaredWith(each.Aggregate, template.Template))))
+            {
+                return null;
+            }
+
+            var marked = "marks '" + marker.Name + "' " + Bracketed(marker.Class);
+            if (owned.Count > 1)
+            {
+                Report(DiagnosticDescriptors.OwnerOutOfPlace, marker.Location ?? _location, _name,
+                    marked + ", the id of " + Listed(owned.Select(static each => "'" + each.Aggregate.Name + "'")) + ", which each mark an [Owner]: which aggregate's owner the request is about cannot be told, so give each aggregate an id of its own");
+                return false;
+            }
+
+            var aggregate = owned[0];
+            var owner = aggregate.Owner!;
+            var ownerType = OwnerDeclarations.Unwrapped(owner.Type);
+            var written = Written(ownerType);
+            if (ownerType.TypeKind != TypeKind.Error && (CannotHaveOwn(ownerType) || HasOwn(ownerType, compilation, cancellationToken) == false))
+            {
+                Report(DiagnosticDescriptors.OwnerOfATypeWithoutOwn, marker.Location ?? _location, _name,
+                    marked + ", the id of '" + aggregate.Aggregate.Name + "', whose [Owner] '" + owner.Name + "' is a '" + written + "': " + (CannotHaveOwn(ownerType)
+                        ? "the owner is compared with the caller's own of its type, a struct that is IEquatable of itself, so nothing can say the caller's own " + written
+                        : "nothing says what the caller's own " + written + " is. A Guid is the caller's verified identity and Tenancy's seat id the caller's seat; for a kind of the application's own, "
+                          + "declare a small IOwnedByCurrentUser<" + written + "> beside the requests and register it with services.AddOwnedByCurrentUser<" + written + ", ...>()"));
+                return false;
+            }
+
+            _ownerOf[marker.Name] = aggregate;
+            return true;
+        }
+
+        /// <summary>Whether <paramref name="aggregate"/> is declared with the template attribute <paramref name="template"/>.</summary>
+        private static bool DeclaredWith(INamedTypeSymbol aggregate, INamedTypeSymbol template)
+            => aggregate.OriginalDefinition.GetAttributes().Any(attribute => attribute.AttributeClass is { } attributeClass
+                && SymbolEqualityComparer.Default.Equals(attributeClass.OriginalDefinition, template.OriginalDefinition));
+
+        /// <summary>
+        /// The type whose caller's own the member names: its own, or, for the id of an aggregate whose owner it marks, the
+        /// owner's (<see cref="ReadAsAnOwner"/>).
+        /// </summary>
+        private ITypeSymbol OwnTypeOf(Marker marker)
+            => _ownerOf.TryGetValue(marker.Name, out var aggregate) ? OwnerDeclarations.Unwrapped(aggregate.Owner!.Type) : marker.Type;
+
+        /// <summary>
+        /// Reports the first of <paramref name="marked"/> the line cannot read: a parameter of a class's primary
+        /// constructor, which is no property, and a property the module's interface cannot read.
+        /// </summary>
+        private bool Unreadable(List<Marker> marked, DiagnosticDescriptor descriptor)
+        {
+            foreach (var marker in marked)
+            {
+                if (marker.Property is null)
+                {
+                    Report(descriptor, marker.Location ?? _location, _name,
+                        "marks the parameter '" + marker.Name + "' of its constructor " + Bracketed(marker.Class) + ", which is no property the requirement can read: mark the property instead");
+                    return true;
+                }
+
+                if (modules.FirstOrDefault(module => SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly)) is { } module
+                    && (!compilation.IsSymbolAccessibleWithin(marker.Property, module) || marker.Property.GetMethod is not { } getter || !compilation.IsSymbolAccessibleWithin(getter, module)))
+                {
+                    Report(descriptor, marker.Location ?? _location, _name,
+                        "marks '" + marker.Name + "' " + Bracketed(marker.Class) + ", which '" + module.Name + "', where the requirement is written, cannot read: give it a public or internal getter");
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Whether the request declares <paramref name="marker"/> itself, on its constructor or a property of its own, and does not inherit it.</summary>
+        private bool DeclaredHere(Marker marker) => DeclaredOn(marker, type);
+
+        /// <summary>
+        /// Whether an inherited marker is read with the line of a class the request derives from: one between the
+        /// request and the class that declares the marker, that one included, carries the attribute that reads it, and
+        /// its line reads it.
+        /// </summary>
+        private bool ReadWithABase(Marker marker, StatedKind readBy)
+        {
+            if (DeclaredHere(marker) || marker.Property?.ContainingType is not { } declaring)
+            {
+                return false;
+            }
+
+            for (var current = type.BaseType; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+            {
+                if (StatedOn(current).Any(each => each.Kind == readBy))
+                {
+                    return true;
+                }
+
+                if (SymbolEqualityComparer.Default.Equals(current, declaring))
+                {
+                    break;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// DDD00084: a requirement attribute the request carries that another requirement beside it already requires, as the
+        /// other's package says with <c>Implies</c>, or that the request it derives from carries already. A permission marker
+        /// requires what its package says on <c>[PermissionMarker]</c>, a permission without a marker what it says on
+        /// <c>[PermissionWithoutMarker]</c>. The caller's own of <c>[OwnOnly]</c> requires what its package says the own of the
+        /// member's type requires, <c>[assembly: OwnedByCurrentUser(..., Implies = ...)]</c>: a sign-in for a <see cref="Guid"/>,
+        /// a seat in the tenant for Tenancy's seat id. The permission <c>[OrOwn]</c> pairs with lets either through, so only what
+        /// both the permission and the caller's own require is counted for it.
+        /// </summary>
+        private void Redundant()
+        {
+            var parts = Parts();
+            if (parts.Count < 2)
+            {
+                return;
+            }
+
+            var implied = new List<(INamedTypeSymbol Implied, string By)>();
+            foreach (var part in parts)
+            {
+                var byPart = new List<(INamedTypeSymbol Implied, string By)>();
+                if (part.Place is { } place)
+                {
+                    byPart.AddRange(place.Implies.Select(implies => (implies, place.Named)));
+                }
+                else
+                {
+                    var each = part.Stated!;
+                    switch (each.Kind)
+                    {
+                        case StatedKind.Call:
+                            byPart.AddRange(each.Implies.Select(implies => (implies, each.Named)));
+                            break;
+
+                        case StatedKind.OwnOnly when markers.FirstOrDefault(static marker => marker.Kind == MarkerKind.Own) is { } own:
+                            byPart.AddRange(ImpliedByOwn(OwnTypeOf(own), compilation, cancellationToken).Select(implies => (implies, each.Named + " with [Own] '" + own.Name + "'")));
+                            break;
+
+                        case StatedKind.Permission when PermissionWithoutMarkerIn(compilation) is { Count: 1 } defaults:
+                            byPart.AddRange(defaults[0].Implies.Select(implies => (implies, each.Named)));
+                            break;
+                    }
+                }
+
+                if (part == _pairedWith && Considered.FirstOrDefault(static marker => marker.Kind == MarkerKind.OrOwn) is { } orOwn)
+                {
+                    // Either way through lets the caller in, so only what both require is required.
+                    var byOwn = ImpliedByOwn(OwnTypeOf(orOwn), compilation, cancellationToken);
+                    byPart = byPart
+                        .Where(pair => byOwn.Any(implies => SymbolEqualityComparer.Default.Equals(implies.OriginalDefinition, pair.Implied.OriginalDefinition)))
+                        .Select(pair => (pair.Implied, pair.By + " and [OrOwn] '" + orOwn.Name + "'"))
+                        .ToList();
+                }
+
+                implied.AddRange(byPart);
+            }
+
+            foreach (var each in stated.Where(static each => each.InheritedFrom is null && each.Kind != StatedKind.Permission))
+            {
+                var by = implied.FirstOrDefault(pair => SymbolEqualityComparer.Default.Equals(pair.Implied.OriginalDefinition, each.Class.OriginalDefinition)).By;
+                if (by is null && stated.FirstOrDefault(other => other.InheritedFrom is not null && SymbolEqualityComparer.Default.Equals(other.Class.OriginalDefinition, each.Class.OriginalDefinition)) is { InheritedFrom: { } from })
+                {
+                    by = "'" + from.Name + "' it derives from";
+                }
+
+                if (by is not null)
+                {
+                    Report(DiagnosticDescriptors.RedundantRequirement, WhereWritten(each.Attribute, cancellationToken) ?? _location, _name, Bracketed(each.Class), by);
+                }
+            }
+        }
+
+        /// <summary>
+        /// DDD00082: a requirement its package declares for queries only, on a message of the Mediator library that is
+        /// no query: a command, or a plain request, which may change as much as a command does.
+        /// </summary>
+        private void QueriesOnly()
+        {
+            if (stated.All(static each => !each.QueriesOnly) || NoQuery() is not { } what)
+            {
+                return;
+            }
+
+            foreach (var only in stated.Where(static each => each.QueriesOnly))
+            {
+                Report(DiagnosticDescriptors.QueryRequirementOnCommand, _location, _name, Bracketed(only.Class).Trim('[', ']'), what);
+            }
+        }
+
+        /// <summary>
+        /// What the request is where it is a message of the Mediator library and no query of it, as a message says
+        /// it: "a command", or "a request of Mediator's that is no query". <see langword="null"/> for a query, and
+        /// where the project has no Mediator or the request is none of its messages: then nothing tells.
+        /// </summary>
+        private string? NoQuery()
+        {
+            var message = compilation.GetTypeByMetadataName(KnownTypes.MediatorMessage);
+            var streamMessage = compilation.GetTypeByMetadataName(KnownTypes.MediatorStreamMessage);
+            if (!Implements(message) && !Implements(streamMessage))
+            {
+                return null;
+            }
+
+            if (Implements(compilation.GetTypeByMetadataName(KnownTypes.MediatorBaseQuery)) || Implements(compilation.GetTypeByMetadataName(KnownTypes.MediatorBaseStreamQuery)))
+            {
+                return null;
+            }
+
+            return Implements(compilation.GetTypeByMetadataName(KnownTypes.MediatorBaseCommand)) || Implements(compilation.GetTypeByMetadataName(KnownTypes.MediatorBaseStreamCommand))
+                ? "a command"
+                : "a request of Mediator's that is no query";
+        }
+
+        private bool Implements(INamedTypeSymbol? interfaceType)
+            => interfaceType is not null && type.AllInterfaces.Contains(interfaceType, SymbolEqualityComparer.Default);
+
+        /// <summary>Whether a class it derives from states a requirement with attributes: that class's line matches this one too.</summary>
+        private bool InheritsAStatedRequirement()
+        {
+            for (var current = type.BaseType; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+            {
+                if (StatedOn(current).Count > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The requirements of the line, in their order: those of the class the request derives from furthest first, and in
+        /// each class the attributes on it as they are written, and then the markers on its members as they are written.
+        /// </summary>
+        private List<Part> Parts()
+        {
+            var parts = new List<(int Depth, int Group, int Index, Part Part)>();
+            for (var index = 0; index < stated.Count; index++)
+            {
+                parts.Add((DepthOf(stated[index].InheritedFrom ?? type), 0, index, new Part(stated[index], null)));
+            }
+
+            for (var index = 0; index < _places.Count; index++)
+            {
+                parts.Add((DepthOf(_places[index].Declaring ?? type), 1, index, new Part(null, _places[index])));
+            }
+
+            return parts
+                .OrderBy(static each => each.Depth)
+                .ThenBy(static each => each.Group)
+                .ThenBy(static each => each.Index)
+                .Select(static each => each.Part)
+                .ToList();
+        }
+
+        /// <summary>
+        /// The line: the pattern of the request's type, and the call that makes its requirement. Several requirements all
+        /// hold, so their calls go into <c>AccessRequirement.All</c>, in the order of <see cref="Parts"/>.
+        /// </summary>
+        private string Arm(out string requirement)
+        {
+            var pattern = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var reads = false;
+            var calls = new List<string>();
+            foreach (var part in Parts())
+            {
+                calls.Add(CallOf(part, ref reads));
+            }
+
+            requirement = calls.Count == 1 ? calls[0] : KnownTypes.AccessRequirementUsage + ".All(" + string.Join(", ", calls) + ")";
+            return pattern + (reads ? " " + Designation : string.Empty) + " => " + requirement;
+        }
+
+        /// <summary>The call that one requirement becomes. <paramref name="reads"/> is set where the call reads the request.</summary>
+        private string CallOf(Part part, ref bool reads)
+        {
+            string held;
+            string? there = null;
+            if (part.Place is { } place)
+            {
+                reads = true;
+                var arguments = new List<string> { place.Permission!, Designation + "." + Identifier(place.Property!.Name) };
+                arguments.AddRange(_argumentsOf[_places.IndexOf(place)].Select(static marker => Designation + "." + Identifier(marker.Property!.Name)));
+                var factory = place.Factory!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                held = factory + "." + Identifier(place.Each ? place.EachMethod! : place.Method) + "(" + string.Join(", ", arguments) + ")";
+
+                // What the caller's own way through still meets where the marker says, as its package names it: the
+                // resource seen, read and kept, on Membership's. A marker on a collection pairs with no caller's own.
+                there = !place.Each && place.OwnAlternative is { } alternative ? factory + "." + Identifier(alternative) + "(" + string.Join(", ", arguments) + ")" : null;
+            }
+            else
+            {
+                var each = part.Stated!;
+                switch (each.Kind)
+                {
+                    case StatedKind.OwnOnly:
+                        reads = true;
+                        return Own(markers.First(static marker => marker.Kind == MarkerKind.Own));
+
+                    case StatedKind.Permission:
+                        held = PermissionWithoutAMarker(each, compilation);
+                        break;
+
+                    default:
+                        var members = markers.Where(marker => marker.Kind == MarkerKind.RequirementArgument && Same(marker.GoesWith, each.Class))
+                            .Select(static marker => Designation + "." + Identifier(marker.Property!.Name))
+                            .ToList();
+                        reads |= members.Count > 0;
+                        return RequestRequirement.CallOf(each, members);
+                }
+            }
+
+            // The caller's own first, since it reads nothing; the permission only where it is not.
+            if (part == _pairedWith && Considered.FirstOrDefault(static marker => marker.Kind == MarkerKind.OrOwn) is { } orOwn)
+            {
+                reads = true;
+                var own = there is null ? Own(orOwn) : KnownTypes.AccessRequirementUsage + ".All(" + Own(orOwn) + ", " + there + ")";
+                return KnownTypes.AccessRequirementUsage + ".Any(" + own + ", " + held + ")";
+            }
+
+            return held;
+        }
+
+        /// <summary>
+        /// The core's case of the caller's own, of the member <paramref name="marker"/> marks: the value itself, or, for the id
+        /// of an aggregate whose owner it marks, the owner of that aggregate.
+        /// </summary>
+        private string Own(Marker marker)
+            => KnownTypes.AccessRequirementUsage + (_ownerOf.ContainsKey(marker.Name) ? ".OwnerOf(" : ".Own(") + Designation + "." + Identifier(marker.Property!.Name) + ")";
+
+        private void Report(DiagnosticDescriptor descriptor, LocationInfo? location, params string[] arguments)
+        {
+            if (descriptor.DefaultSeverity == DiagnosticSeverity.Error)
+            {
+                _errors++;
+            }
+
+            _diagnostics.Add(DiagnosticInfo.Create(descriptor, location, arguments));
+        }
+    }
+}

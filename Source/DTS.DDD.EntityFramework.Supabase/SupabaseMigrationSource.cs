@@ -1,0 +1,92 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace DTS.DDD.EntityFramework.Supabase;
+
+/// <summary>
+/// One context whose migrations Supabase applies: how to build it without a host, for the export, and
+/// how to find it in a running application, for the start-up check.
+/// <para>
+/// You rarely build one yourself. The build writes one per <c>[SupabaseMigrations]</c> context, or factory, into
+/// every application, for the export and for <c>services.AddSupabaseMigrations()</c>, which registers them for the
+/// start-up check. Build one by hand to export from a test or a tool of your own. The export needs nothing but the
+/// design-time factory <c>dotnet ef</c> already uses, the one the build writes beside a marked context or one of your
+/// own, so it runs without the host: no configuration, no Azure App Configuration, no hosted services.
+/// </para>
+/// <code>
+/// var ordering = SupabaseMigrationSource.For&lt;OrderingContext, OrderingContextDesignTimeFactory&gt;();
+/// SupabaseMigrations.EnsureInSync([ordering]);
+/// </code>
+/// <para>
+/// Both ways in are generic, so a source is built without reflection: the factory is created with
+/// <c>new TFactory()</c> and the context resolved as <c>TContext</c>.
+/// </para>
+/// </summary>
+public sealed class SupabaseMigrationSource
+{
+    private readonly Func<DbContext> _createDesignTime;
+    private readonly Func<IServiceProvider, DbContext?> _resolve;
+
+    private SupabaseMigrationSource(Type contextType, Type? factoryType, string? module, Func<DbContext> createDesignTime, Func<IServiceProvider, DbContext?> resolve)
+    {
+        ContextType = contextType;
+        FactoryType = factoryType;
+        Module = module is null ? SupabaseMigrations.ModuleNameOf(contextType) : SupabaseMigrations.NormalizeModuleName(module);
+        _createDesignTime = createDesignTime;
+        _resolve = resolve;
+    }
+
+    /// <summary>The context whose migrations this is.</summary>
+    public Type ContextType { get; }
+
+    /// <summary>
+    /// The design-time factory the context is built with for the export, or <see langword="null"/> for a source built
+    /// from a function. The start-up check names it where it shows how to register a context one by one.
+    /// </summary>
+    internal Type? FactoryType { get; }
+
+    /// <summary>
+    /// The module the files are named after, as in <c>20260922120000_AddOrders.ordering.ddd.sql</c>. The
+    /// one given, or else <see cref="SupabaseMigrations.ModuleNameOf"/> the context.
+    /// </summary>
+    public string Module { get; }
+
+    /// <summary>
+    /// The context <typeparamref name="TContext"/>, built for the export by <typeparamref name="TFactory"/>:
+    /// the same design-time factory <c>dotnet ef migrations add</c> uses, which configures Npgsql with a
+    /// connection string that points nowhere. For a context marked <c>[SupabaseMigrations]</c> that is the factory
+    /// the build wrote beside it, <c>OrderingContextDesignTimeFactory</c> for <c>OrderingContext</c>, unless the
+    /// application that lists it or the context's project has one of its own.
+    /// </summary>
+    /// <param name="module">The module the files are named after, or <see langword="null"/> to take it from the context's assembly.</param>
+    public static SupabaseMigrationSource For<TContext, TFactory>(string? module = null)
+        where TContext : DbContext
+        where TFactory : IDesignTimeDbContextFactory<TContext>, new()
+        => new(typeof(TContext), typeof(TFactory), module, static () => new TFactory().CreateDbContext([]), static services => services.GetService<TContext>());
+
+    /// <summary>
+    /// The context <typeparamref name="TContext"/>, built for the export by
+    /// <paramref name="createDesignTime"/>, for a context without a design-time factory.
+    /// </summary>
+    /// <param name="createDesignTime">Builds a context on Npgsql; it is never opened.</param>
+    /// <param name="module">The module the files are named after, or <see langword="null"/> to take it from the context's assembly.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="createDesignTime"/> is null.</exception>
+    public static SupabaseMigrationSource For<TContext>(Func<TContext> createDesignTime, string? module = null) where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(createDesignTime);
+        return new(typeof(TContext), null, module, createDesignTime, static services => services.GetService<TContext>());
+    }
+
+    /// <summary>A new context for the export. The caller disposes it; it is never opened.</summary>
+    public DbContext CreateDesignTimeContext() => _createDesignTime();
+
+    /// <summary>
+    /// The application's context from <paramref name="services"/>, for the start-up check, or <see langword="null"/>
+    /// where the application does not register it, which the check reports in its own words.
+    /// </summary>
+    internal DbContext? Resolve(IServiceProvider services) => _resolve(services);
+
+    /// <inheritdoc />
+    public override string ToString() => ContextType.Name;
+}

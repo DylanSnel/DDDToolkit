@@ -1,4 +1,4 @@
-using DDDToolkit.EntityFramework.Integration;
+using DTS.DDD.EntityFramework.Integration;
 using Examples.Webshop.Payments.Contracts;
 
 namespace Examples.Webshop.Payments.Application.Payments;

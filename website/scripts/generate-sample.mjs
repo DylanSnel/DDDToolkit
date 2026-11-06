@@ -19,9 +19,9 @@ rmSync(output, { recursive: true, force: true });
 execFileSync('dotnet', ['build', sample, '--no-incremental', '-nologo', '-v', 'q', '-p:TreatWarningsAsErrors=true'], { stdio: 'inherit' });
 
 const packages = {
-  'DDDToolkit.Analyzers': 'DDDToolkit',
-  'DDDToolkit.EntityFramework.Analyzers': 'DDDToolkit.EntityFramework',
-  'DDDToolkit.HotChocolate.Analyzers': 'DDDToolkit.HotChocolate',
+  'DTS.DDD.Analyzers': 'DylansTechStack.DDD',
+  'DTS.DDD.EntityFramework.Analyzers': 'DylansTechStack.DDD.EntityFramework',
+  'DTS.DDD.HotChocolate.Analyzers': 'DylansTechStack.DDD.HotChocolate',
 };
 
 // Fully qualified names are what keeps generated code compiling in any namespace, and all they do on

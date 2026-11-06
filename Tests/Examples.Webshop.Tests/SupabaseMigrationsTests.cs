@@ -1,4 +1,4 @@
-using DDDToolkit.EntityFramework.Supabase;
+using DTS.DDD.EntityFramework.Supabase;
 using Examples.Webshop.Catalog;
 using Examples.Webshop.Inventory;
 using Examples.Webshop.Ordering;
@@ -43,6 +43,12 @@ public sealed class SupabaseMigrationsTests
             if (File.Exists(Path.Combine(directory.FullName, "DDDToolkit.slnx")))
             {
                 return directory.FullName;
+            }
+
+            // A repository that has this one as its submodule core/ runs these tests from there.
+            if (File.Exists(Path.Combine(directory.FullName, "core", "DDDToolkit.slnx")))
+            {
+                return Path.Combine(directory.FullName, "core");
             }
         }
 

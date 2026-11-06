@@ -7,11 +7,11 @@ sidebar_label: Postgres
 
 # Tenancy API: Postgres
 
-The public API of `DDDToolkit.Supporting.Tenancy.Postgres`, by folder. Its registration, `AddTenancyPostgres`, is with the managers, under [Registration](managers.md#registration).
+The public API of `DTS.Tenancy.Postgres`, by folder. Its registration, `AddTenancyPostgres`, is with the managers, under [Registration](managers.md#registration).
 
 ## Policies
 
-Namespace `DDDToolkit.Supporting.Tenancy.Postgres`.
+Namespace `DTS.Tenancy.Postgres`.
 
 ### `TenancyRowAccessContribution`
 
@@ -193,7 +193,7 @@ It is the application's word, as every setting is: any statement on the applicat
 
 ## Start-up checks
 
-Namespace `DDDToolkit.Supporting.Tenancy.Postgres`.
+Namespace `DTS.Tenancy.Postgres`.
 
 ### `TenancyPostgresChecks`
 

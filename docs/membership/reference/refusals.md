@@ -11,7 +11,7 @@ Every rule Membership refuses with, in the members of `MembershipRefusals`; the 
 
 ## Refusal codes
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 ### `MembershipRefusals`
 
@@ -85,7 +85,7 @@ The English text of a rule, as a template: a placeholder such as `{Permission}` 
 
 ## A resource's codes
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 ### `MembershipCodes`
 
@@ -216,7 +216,7 @@ The refusal for the rule `code`, under this resource's code for it, with the rul
 
 ## Texts
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 ### `MembershipFailures`
 

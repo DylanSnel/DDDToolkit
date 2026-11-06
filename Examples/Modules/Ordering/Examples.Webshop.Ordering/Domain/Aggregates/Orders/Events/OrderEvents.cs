@@ -1,4 +1,4 @@
-using DDDToolkit.BaseTypes;
+using DTS.DDD.BaseTypes;
 using Examples.Webshop.Ordering.Contracts;
 using Examples.Webshop.SharedKernel;
 using Mediator;

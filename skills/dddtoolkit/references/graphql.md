@@ -1,6 +1,6 @@
 # GraphQL with HotChocolate
 
-Package `DDDToolkit.HotChocolate`, and `DDDToolkit.HotChocolate.Fusion.InMemory` for one schema over the
+Package `DTS.DDD.HotChocolate`, and `DTS.DDD.HotChocolate.Fusion.InMemory` for one schema over the
 modules of a monolith. Both ask for HotChocolate 16.6.9 or later, and every HotChocolate package of an
 application has the same version. Full page:
 `https://dylansnel.github.io/DDDToolkit/docs/graphql.md`. The rule: do not build what HotChocolate
@@ -10,7 +10,7 @@ HotChocolate's own.
 ## Registering
 
 ```csharp
-using DDDToolkit.HotChocolate;
+using DTS.DDD.HotChocolate;
 using Ordering.Domain.GraphQl;                       // generated: {AssemblyName}.GraphQl
 
 builder.Services
@@ -28,7 +28,7 @@ builder.Services
   toolkit's `[assembly: Module]`: the two have one name.
 - Do not put a sample or an application in a namespace that starts with `DDDToolkit.`: code HotChocolate
   generates for `[ObjectType<T>]` names `HotChocolate...` without `global::`, and binds to the toolkit's
-  `DDDToolkit.HotChocolate` there.
+  `DTS.DDD.HotChocolate` there.
 
 ## Operations
 
@@ -60,7 +60,7 @@ Two schemas that differ, a user's at `/graphql` and an administration's at `/adm
 fields that belongs to one of them, and leave the rest unmarked, which is in every schema.
 
 ```csharp
-[GraphQLSchema("admin", OperationType.Query)]       // DDDToolkit.HotChocolate.Attributes; HotChocolate.Language
+[GraphQLSchema("admin", OperationType.Query)]       // DTS.DDD.HotChocolate.Attributes; HotChocolate.Language
 internal static class SeatsAdminQueries
 {
     public static async Task<IReadOnlyList<SeatGrant>> GetSeatGrantsAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
@@ -85,7 +85,7 @@ app.MapGraphQL("/admin/graphql", "admin").RequireAuthorization("Administrators")
 - Only root fields can be marked. A field of one schema on a shared type is registered by hand in that schema.
 - A record only an administration field answers needs no `[ObjectType<T>]` class: a type class is in every schema.
 - The schema decides who is offered a field; the request's access check still decides who may read it.
-- With `DDDToolkit.HotChocolate.Fusion.InMemory`, make both schemas source schemas (`AddSourceSchemaDefaults()`) and
+- With `DTS.DDD.HotChocolate.Fusion.InMemory`, make both schemas source schemas (`AddSourceSchemaDefaults()`) and
   give each surface a gateway that lists its schemas: `AddInMemoryFusionGateway("user", ["tenants", "projects"])`,
   `AddInMemoryFusionGateway("admin", ["admin", "projects"])`. The attribute says which schema a class belongs to; a
   gateway which schemas form one endpoint. Mark a class of lookups for every schema a gateway composes with the

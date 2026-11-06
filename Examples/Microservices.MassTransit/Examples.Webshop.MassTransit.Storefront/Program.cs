@@ -1,8 +1,8 @@
-using DDDToolkit.EntityFramework;
-using DDDToolkit.HotChocolate;
-using DDDToolkit.HotChocolate.Subscriptions;
-using DDDToolkit.Mediator;
-using DDDToolkit.Messaging.MassTransit;
+using DTS.DDD.EntityFramework;
+using DTS.DDD.HotChocolate;
+using DTS.DDD.HotChocolate.Subscriptions;
+using DTS.DDD.Mediator;
+using DTS.DDD.Messaging.MassTransit;
 using Examples.Hosting;
 using Examples.Webshop.Catalog;
 using Examples.Webshop.Catalog.Api;
@@ -17,7 +17,7 @@ using Examples.Webshop.Ordering.Api.GraphQL;
 // door, as in the monolith; only what another service consumes leaves the process.
 //
 // On a SQL Server database of its own, as are the other two. MassTransit 8 is the last version under the
-// Apache 2.0 licence; see the README of DDDToolkit.Messaging.MassTransit before moving to 9.
+// Apache 2.0 licence; see the README of DTS.DDD.Messaging.MassTransit before moving to 9.
 
 var builder = WebApplication.CreateBuilder(args);
 

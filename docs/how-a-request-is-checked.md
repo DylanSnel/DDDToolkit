@@ -217,7 +217,7 @@ The two blocks below are the generator's output for this page's requests. The re
 `ITenantsRequest` here, so its line does not appear in the sample's own generated file.
 
 ```csharp title="TenantsAccessBehavior.g.cs for this page's requests, the interface's part, shortened"
-using DDDToolkit_Generated_IRequireAccess = global::DDDToolkit.Access.IRequireAccess;
+using DDDToolkit_Generated_IRequireAccess = global::DTS.DDD.Access.IRequireAccess;
 
 namespace Examples.Tenancy.Tenants.Application.Access;
 

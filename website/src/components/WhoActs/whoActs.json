@@ -1,5 +1,5 @@
 {
-  "$comment": "The situations of the chooser on docs/tenancy/keeping-tenants-apart.md, under Which call for which situation. Each one's title, use, holds, recordedAs and postgres are the cells of the page's table row, in the page's order. Tests/DDDToolkit.Analyzers.Tests/Docs/WhoActsDocsTests.cs holds them to the page, every call and attribute to the code, every recorded kind to TenancyActorKinds, every refusal code to the code, and every link to a page and heading of docs/.",
+  "$comment": "The situations of the chooser on docs/tenancy/keeping-tenants-apart.md, under Which call for which situation. Each one's title, use, holds, recordedAs and postgres are the cells of the page's table row, in the page's order. Tests/DTS.DDD.Analyzers.Tests/Docs/WhoActsDocsTests.cs holds them to the page, every call and attribute to the code, every recorded kind to TenancyActorKinds, every refusal code to the code, and every link to a page and heading of docs/.",
   "situations": [
     {
       "id": "sign-up",

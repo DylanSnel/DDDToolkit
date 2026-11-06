@@ -65,26 +65,26 @@
     <ProjectReference Include="..\..\Modules\Inventory\Examples.Webshop.Inventory\Examples.Webshop.Inventory.csproj" />
     <ProjectReference Include="..\..\Modules\Payments\Examples.Webshop.Payments\Examples.Webshop.Payments.csproj" />
     <ProjectReference Include="..\..\Modules\Shipping\Examples.Webshop.Shipping\Examples.Webshop.Shipping.csproj" />
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.Mediator\DTS.DDD.Mediator.csproj" />
     <!-- Supabase Queues, when the host runs with Messaging=pgmq. -->
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Messaging.Postgres\DDDToolkit.Messaging.Postgres.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.Messaging.Postgres\DTS.DDD.Messaging.Postgres.csproj" />
     <ProjectReference Include="..\..\Shared\Examples.Hosting\Examples.Hosting.csproj" />
     <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
     <!-- The shop's GraphQL schema: every module's part, and the fields that cross between them. -->
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.HotChocolate.Fusion.InMemory\DTS.DDD.HotChocolate.Fusion.InMemory.csproj" />
     <!-- Supabase: row level security, and the migrations' start-up check (supabase.migrations-applied, registered by AddSupabaseMigrations and run by RunStartupChecks in Program.cs). -->
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.EntityFramework.Supabase\DTS.DDD.EntityFramework.Supabase.csproj" />
     <!-- Supabase Auth's tokens, and the modules' queries run as the user who sent one. -->
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Auth.Supabase.AspNetCore\DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.Auth.Supabase.AspNetCore\DTS.DDD.Auth.Supabase.AspNetCore.csproj" />
   </ItemGroup>
 
   <!--
-    What the DDDToolkit.EntityFramework.Supabase package brings a consumer by itself, the generator and
+    What the DTS.DDD.EntityFramework.Supabase package brings a consumer by itself, the generator and
     the build step, spelled out because this repository references the package as a project.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.EntityFramework.Supabase.Analyzers\DTS.DDD.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
-  <Import Project="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\buildTransitive\DDDToolkit.EntityFramework.Supabase.targets" />
+  <Import Project="..\..\..\Source\DTS.DDD.EntityFramework.Supabase\buildTransitive\DTS.DDD.EntityFramework.Supabase.targets" />
 
 </Project>

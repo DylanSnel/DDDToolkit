@@ -3,7 +3,7 @@
  * situations, and see which call or attribute starts the work, why it fits, what the work holds, how Tenancy records
  * it, which database role it runs as on Postgres, what to watch out for, and a handler that does it.
  *
- * Everything it shows comes from whoActs.json, which a test of DDDToolkit.Analyzers.Tests holds to the page and the
+ * Everything it shows comes from whoActs.json, which a test of DTS.DDD.Analyzers.Tests holds to the page and the
  * code: the title, the call, what the work holds, how it is recorded and the database role are the cells of the page's
  * table, every call is a member of TenancyAccessManager, every recorded kind is one of TenancyActorKinds, and every link
  * goes to a heading that exists. The page keeps that table inside the marker, for GitHub and for the Markdown the site

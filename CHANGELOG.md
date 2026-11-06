@@ -3300,6 +3300,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **New package ids and namespaces: `DylansTechStack.DDD.*` and `DTS.DDD.*`, from 0.1.0.**
+  - The packages are published as `DylansTechStack.DDD`, `DylansTechStack.DDD.EntityFramework` and so on. They replace
+    `Temp.DDDToolkit.*`, whose last version is 3.2.0-preview.15.
+  - The namespaces and the assemblies are `DTS.DDD.*`. `using DDDToolkit;` becomes `using DTS.DDD;`, and
+    `DDDToolkit.EntityFramework` becomes `DTS.DDD.EntityFramework`.
+  - The version starts again at 0.1.0. Every `DylansTechStack.*` package has the same version.
+  - These names stay: the product name DDDToolkit, the API names that carry it (`UseDDDToolkit()`,
+    `AddDDDToolkitEntityFramework()`, `DDDToolkitException` and the others), the Entity Framework annotations
+    (`DDDToolkit:AppendOnly` and the others), the diagnostic ids `DDD00001` to `DDD00107`, and the MSBuild properties
+    `DDD_Module`, `DDD_DeclareModule` and `DDD_ModuleContracts`.
+  - Tenancy and Membership are `DylansTechStack.Tenancy` and `DylansTechStack.Membership`, with the namespaces
+    `DTS.Tenancy` and `DTS.Membership`. They are part of DTS Pro and are not published on nuget.org.
+  - The projects and folders of this repository follow the namespaces, such as `Source/DTS.DDD.EntityFramework`. The
+    solution file stays `DDDToolkit.slnx`.
+  - `Directory.Build.props` makes the id from the project name, `DylansTechStack.` and the name without `DTS.`. The
+    `DDDPackageIdPrefix` property is gone.
+
 - **The save interceptors call `DetectChanges` once and read only the changed entries.** Each interceptor used to
   call `DetectChanges()` and then `ChangeTracker.Entries()`. `Entries()` calls `DetectChanges` again and creates an
   `EntityEntry` for every tracked entity. One save called `DetectChanges` 7 times. Now each interceptor calls it once
