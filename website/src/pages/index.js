@@ -143,7 +143,6 @@ const packages = [
   ['DylansTechStack.DDD.Messaging.Postgres', 'pgmq: a queue in the database the outbox already writes to.'],
   ['DylansTechStack.DDD.Messaging.Wolverine', 'Wolverine as the transport between outbox and inbox.'],
   ['DylansTechStack.DDD.Messaging.MassTransit', 'MassTransit 8 as that transport.'],
-  ['DylansTechStack.DDD.Mediator', 'Domain events dispatched through Mediator.'],
   ['DylansTechStack.DDD.FluentValidation', 'A generated validator per value object.'],
   ['DylansTechStack.DDD.Localization', 'Failures phrased in the reader’s language.'],
   ['DylansTechStack.DDD.Testing', 'Given/when/then tests for the domain events an aggregate raises.'],

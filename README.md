@@ -157,7 +157,7 @@ NU1605, a package downgrade, or fails at run time with a `MissingMethodException
 
 | Package | Use it for |
 |---|---|
-| `DylansTechStack.DDD` | Base types and the core generators. Start here. |
+| `DylansTechStack.DDD` | Base types, the core generators, and the toolkit's mediator, which hands domain events to their handlers. Start here. |
 | `DylansTechStack.DDD.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DylansTechStack.DDD.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#the-module-name-in-generated-code) wants. |
 | `DylansTechStack.DDD.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
 | `DylansTechStack.DDD.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
@@ -168,7 +168,6 @@ NU1605, a package downgrade, or fails at run time with a `MissingMethodException
 | `DylansTechStack.DDD.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes or its JWT secret, and turned into the current user row level security runs your queries as. No Entity Framework needed. For server code, a client for Auth's admin API: invite an address, make a user under an id of your own, and find or delete one by id. |
 | `DylansTechStack.DDD.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the current user. |
 | `DylansTechStack.DDD.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the current user. |
-| `DylansTechStack.DDD.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DylansTechStack.DDD.FluentValidation` | A generated validator per value object. |
 | `DylansTechStack.DDD.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |
 | `DylansTechStack.DDD.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.9 or later. |
@@ -205,11 +204,11 @@ not published on nuget.org. Their docs are on this site.
 Requires .NET 10. The generators themselves target `netstandard2.0` and carry no runtime
 dependencies, so they load in any recent SDK.
 
-The core has no mediator dependency and does not need one: in-process event delivery is a delegate you
-write, and `DTS.DDD.Mediator` only saves you writing it. The examples publish through Mediator
-rather than MediatR because MediatR is commercially licensed from version 13, and this repository
-prefers dependencies its users can take for free. MediatR still works perfectly well with the toolkit;
-[Delivering domain events](docs/event-delivery.md#the-dispatch-delegate) shows the delegate to write for it.
+The core has a mediator of its own for domain events. Every domain event is its `INotification`, the events of the
+supporting packages included, and the generator registers each module's handlers. It depends on no mediator library.
+In-process event delivery is still a delegate, so another library works as well.
+[Delivering domain events](docs/event-delivery.md#why-the-toolkit-has-its-own-mediator) says why the toolkit has its
+own, and shows the delegate to write for another library.
 
 ## What the generators produce
 

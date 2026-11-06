@@ -62,6 +62,10 @@ public static class OrderingModule
             outbox.AlsoDispatchInProcess = true;
         }));
 
+        // The handlers of Ordering's own domain events, OrderLog among them, for the in-process delivery
+        // above. Generated when the module compiles: every INotificationHandler in it.
+        services.AddOrderingHandlers();
+
         // What Ordering reads from the others: the contracts its handlers take. The inbox needs them to
         // turn a delivered message back into the record a handler asked for.
         services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(contracts => contracts.AddOrderingIntegrationEvents()));

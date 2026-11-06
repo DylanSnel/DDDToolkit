@@ -17,7 +17,6 @@ using Examples.Webshop.Shipping.Api;
 using Examples.Webshop.Shipping;
 using DTS.DDD.HotChocolate.Fusion.InMemory;
 using DTS.DDD.HotChocolate.Subscriptions;
-using DTS.DDD.Mediator;
 using DTS.DDD.Messaging.Postgres;
 using DTS.DDD.Startup;
 using Npgsql;
@@ -31,13 +30,9 @@ var builder = WebApplication.CreateBuilder(args);
 // it runs on its own.
 builder.AddServiceDefaults();
 
-// Mediator is registered scoped, not with its singleton default: a handler that injects a DbContext
-// needs the scope's context, and a singleton cannot depend on a scoped service. The generator reads
-// this very call at compile time, so the lifetime has to be written here.
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
-
-// What is the host's to decide: domain events that stay inside a module are published through
-// Mediator. Everything else about storage and messaging is each module's own business.
+// What is the host's to decide: domain events that stay inside a module are published through the
+// toolkit's mediator. Each module registers its own handlers. Everything else about storage and messaging
+// is each module's own business.
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
 // Two ways to run. With no connection string, each module gets a SQLite file of its own: five databases

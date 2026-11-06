@@ -27,7 +27,7 @@ Three consequences for how you work:
 
 - Read the project files for which DDDToolkit packages are referenced, and use only their APIs. Each
   integration is a package of its own that brings its own generator: `DylansTechStack.DDD` (core, always),
-  `DylansTechStack.DDD.EntityFramework`, `.Mediator`, `.FluentValidation`, `.HotChocolate`, `.Localization`,
+  `DylansTechStack.DDD.EntityFramework`, `.FluentValidation`, `.HotChocolate`, `.Localization`,
   `.Testing`, `.Messaging.*`, `.EntityFramework.Postgres`, `.EntityFramework.Supabase`, `.Auth.Supabase.*`.
   The packages are `DylansTechStack.DDD.*` and their namespaces are `DTS.DDD.*`: the package
   `DylansTechStack.DDD.EntityFramework` holds `DTS.DDD.EntityFramework`. Add packages by their id.

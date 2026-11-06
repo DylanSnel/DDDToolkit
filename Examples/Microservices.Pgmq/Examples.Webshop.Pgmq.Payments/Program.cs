@@ -1,6 +1,5 @@
 using DTS.DDD.EntityFramework;
 using DTS.DDD.HotChocolate;
-using DTS.DDD.Mediator;
 using DTS.DDD.Messaging.Postgres;
 using DTS.DDD.Startup;
 using Examples.Hosting;
@@ -23,7 +22,6 @@ builder.AddServiceDefaults();
 var connectionString = builder.Configuration.GetConnectionString("shop")
     ?? throw new InvalidOperationException("ConnectionStrings:shop is not set. Run Examples.Webshop.Pgmq.AppHost.");
 
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
 // pgmq is an extension, installed once by whoever deploys the database: the AppHost here, Supabase on a

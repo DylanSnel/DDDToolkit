@@ -7,11 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Mediator generates into the composition root. -->
-    <PackageReference Include="Mediator.SourceGenerator">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="WolverineFx.RabbitMQ" />
     <!-- Wolverine generates and compiles its handler adapters at start-up. -->
     <PackageReference Include="WolverineFx.RuntimeCompilation" />
@@ -27,7 +22,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\Source\DTS.DDD.Mediator\DTS.DDD.Mediator.csproj" />
     <ProjectReference Include="..\..\..\Source\DTS.DDD.Messaging.Wolverine\DTS.DDD.Messaging.Wolverine.csproj" />
   </ItemGroup>
 

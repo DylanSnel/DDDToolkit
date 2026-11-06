@@ -7,6 +7,7 @@ using DTS.DDD.EntityFramework.Outbox;
 using DTS.DDD.EntityFramework.Owners;
 using DTS.DDD.EntityFramework.Storage;
 using DTS.DDD.Interfaces;
+using DTS.DDD.Mediator;
 using DTS.DDD.Startup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -21,14 +22,11 @@ namespace DTS.DDD.EntityFramework;
 /// <code>
 /// services.AddDDDToolkitEntityFramework(options =>
 /// {
-///     options.DispatchInProcess(async (sp, events, ct) =>
-///     {
-///         var publisher = sp.GetRequiredService&lt;IPublisher&gt;();
-///         foreach (var e in events) await publisher.Publish(e, ct);
-///     });
-///     // or, for transactional delivery:
+///     options.DispatchWithMediator();
+///     // and, for transactional delivery:
 ///     // options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining&lt;Program&gt;());
 /// });
+/// services.AddMyAppHandlers();   // generated: the module's notification handlers
 /// services.AddDbContext&lt;MyContext&gt;((sp, db) => db.UseSqlite(cs).UseDDDToolkit(sp));
 /// </code>
 /// </summary>
@@ -86,6 +84,10 @@ public static class DependencyInjection
             services.TryAddSingleton<InvariantInterceptor>();
             services.TryAddSingleton<DatabaseRefusalInterceptor>();
             services.AddCurrentUser();
+
+            // The toolkit's publisher, which DispatchWithMediator() resolves from the saving scope. Without a
+            // handler registered it publishes to nobody.
+            services.AddDDDToolkitMediator();
 
             // Who is acting, which an event log writes on every row: the toolkit's current user, unless a package
             // or the host registered an accessor that knows more. A singleton, asked once per save.

@@ -8,6 +8,7 @@ using CoreAccessBehaviorGenerator = DTS.DDD.Analyzers.AccessBehaviorGenerator;
 using CoreEntityGenerator = DTS.DDD.Analyzers.EntityGenerator;
 using CoreEntityIdGenerator = DTS.DDD.Analyzers.EntityIdGenerator;
 using CoreEventNamesGenerator = DTS.DDD.Analyzers.EventNamesGenerator;
+using CoreHandlersGenerator = DTS.DDD.Analyzers.HandlersGenerator;
 using CoreModuleContractsGenerator = DTS.DDD.Analyzers.ModuleContractsGenerator;
 using CoreModuleGenerator = DTS.DDD.Analyzers.ModuleGenerator;
 using CoreRowAccessGenerator = DTS.DDD.Analyzers.RowAccessGenerator;
@@ -122,6 +123,7 @@ public sealed partial class GeneratorTestHost
         new CoreAccessBehaviorGenerator(),
         new CoreModuleGenerator(),
         new CoreModuleContractsGenerator(),
+        new CoreHandlersGenerator(),
     ];
 
     /// <summary>The generators in DTS.DDD.EntityFramework.Analyzers.</summary>

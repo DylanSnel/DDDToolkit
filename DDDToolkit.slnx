@@ -32,7 +32,6 @@
     <Project Path="Source/DTS.DDD.HotChocolate.Fusion.InMemory/DTS.DDD.HotChocolate.Fusion.InMemory.csproj" />
     <Project Path="Source/DTS.DDD.HotChocolate.Analyzers/DTS.DDD.HotChocolate.Analyzers.csproj" />
     <Project Path="Source/DTS.DDD.Localization/DTS.DDD.Localization.csproj" />
-    <Project Path="Source/DTS.DDD.Mediator/DTS.DDD.Mediator.csproj" />
     <Project Path="Source/DTS.DDD.NewtonSoft.Json/DTS.DDD.NewtonSoft.Json.csproj" />
     <Project Path="Source/DTS.DDD.Testing/DTS.DDD.Testing.csproj" />
   </Folder>

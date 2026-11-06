@@ -1,10 +1,10 @@
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.Extensions.Logging;
 
 namespace Examples.Webshop.Ordering.Application.Orders;
 
 /// <summary>
-/// A handler inside the producing module, reached through Mediator.
+/// A handler inside the producing module, reached through the toolkit's mediator.
 /// </summary>
 /// <remarks>
 /// It is typed on the domain events, and that is allowed precisely because it lives in Ordering. A
@@ -12,9 +12,9 @@ namespace Examples.Webshop.Ordering.Application.Orders;
 /// other contracts through the module sink instead. <c>OrderingModule</c> turns both on at once with
 /// <c>outbox.AlsoDispatchInProcess = true</c>, which runs this first and the sinks afterwards.
 /// <para>
-/// Ordering is the only module that dispatches in process as well, and so the only one whose events
-/// implement Mediator's <c>INotification</c>. The events of Catalog, Inventory and Payments go to the
-/// other modules and nowhere else, so they are plain domain events.
+/// Ordering is the only module that dispatches in process as well. The events of Catalog, Inventory and
+/// Payments go to the other modules and nowhere else. <c>AddOrderingHandlers()</c>, which the toolkit's
+/// generator writes, registers this class for its three events.
 /// </para>
 /// </remarks>
 public sealed class OrderLog(ILogger<OrderLog> logger)

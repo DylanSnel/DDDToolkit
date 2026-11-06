@@ -124,11 +124,32 @@ builder.Services.AddDDDToolkitEntityFramework(options =>
     options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining<Program>());
 });
 builder.Services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+
+// either way: the module's handlers, which the toolkit's generator registers
+builder.Services.AddOrderingHandlers();
 ```
 
 [Delivering domain events](event-delivery.md) shows both ways step by step, with the rest of the setup.
 
 </details>
+
+Every domain event is a notification of the toolkit's mediator, because `IDomainEvent` derives from `INotification`.
+A handler implements `INotificationHandler<TEvent>` from `DTS.DDD.Mediator`:
+
+```csharp
+internal sealed class ReserveStock(InventoryContext db) : INotificationHandler<OrderPlaced>
+{
+    public ValueTask Handle(OrderPlaced notification, CancellationToken cancellationToken)
+    {
+        // react to the order
+        return default;
+    }
+}
+```
+
+The generator writes `Add{Module}Handlers()` into every project with a handler, so the class needs no registration of
+its own. The events of the supporting packages are notifications as well. See
+[Dispatching with the toolkit's mediator](event-delivery.md#dispatching-with-the-toolkits-mediator).
 
 **In-process dispatch** runs the handlers during `SaveChanges`, before the commit. Changes that a handler makes to the
 same `DbContext` are saved in the same transaction, and a handler that throws cancels the save. This is simple and

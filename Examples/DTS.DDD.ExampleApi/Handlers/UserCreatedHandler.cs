@@ -1,5 +1,5 @@
 using DTS.DDD.ExampleApi.Domain.UserAggregate.Events;
-using Mediator;
+using DTS.DDD.Mediator;
 
 namespace DTS.DDD.ExampleApi.Handlers;
 
@@ -9,8 +9,8 @@ namespace DTS.DDD.ExampleApi.Handlers;
 /// the same <see cref="UserCreated"/> instance shape, so handlers are written once. Keyed side effects
 /// should use <c>notification.EventId</c> to stay idempotent under outbox redelivery.
 /// <para>
-/// Mediator's handler interface returns <see cref="ValueTask"/>, so a handler with nothing to await
-/// returns <c>default</c> rather than allocating a task.
+/// The toolkit's handler interface returns <see cref="ValueTask"/>, so a handler with nothing to await
+/// returns <c>default</c> rather than allocating a task. The generated <c>AddApiHandlers()</c> registers it.
 /// </para>
 /// </summary>
 public sealed class UserCreatedHandler(ILogger<UserCreatedHandler> logger) : INotificationHandler<UserCreated>

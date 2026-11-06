@@ -70,7 +70,7 @@ flowchart LR
 // Ordering's own event, with Ordering's own types
 [DomainEventName("ordering.order-placed")]
 public sealed record OrderPlaced(OrderId OrderId, Address ShipTo, IReadOnlyList<OrderPlaced.Line> Lines, Money Total)
-    : DomainEvent, INotification
+    : DomainEvent
 {
     public sealed record Line(string Sku, int Quantity);
 }
@@ -362,9 +362,10 @@ module that wants `OrderPlacedV2` registers itself the same way, and nothing in 
 only calls `AddOrderingModule` and `AddBillingModule` ([the example](../Examples/ModularMonolith.Supabase)).
 
 Every module can call `AddDDDToolkitEntityFramework` like this, because each call configures the same options.
-Settings for the whole process, such as `DispatchWithMediator()`, stay in the host. A second call that sets the
-dispatch delegate throws an `InvalidOperationException`, so one module cannot replace the delegate of another module
-without notice.
+Settings for the whole process, such as a `DispatchInProcess` delegate of the host's own, stay in the host. A second
+call that sets another dispatch delegate throws an `InvalidOperationException`, so one module cannot replace the
+delegate of another module without notice. `DispatchWithMediator()` sets the same delegate every time, so every module
+may call it.
 
 ### The handler takes the contract
 

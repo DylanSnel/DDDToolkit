@@ -21,21 +21,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
 
-  <!--
-    Mediator writes its implementation, its handler registrations and AddMediator into the assembly
-    the generator runs in, so the generator goes in the composition root and nowhere else. Handlers in
-    other projects are still found, as long as those projects are referenced from here.
-  -->
-  <ItemGroup>
-    <PackageReference Include="Mediator.SourceGenerator">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\DTS.DDD.ExampleLibrary\DTS.DDD.ExampleLibrary.csproj" />
-    <ProjectReference Include="..\..\Source\DTS.DDD.Mediator\DTS.DDD.Mediator.csproj" />
   </ItemGroup>
 
   <ItemGroup>

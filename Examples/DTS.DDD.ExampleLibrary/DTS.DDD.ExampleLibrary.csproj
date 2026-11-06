@@ -6,8 +6,8 @@
     <IsPackable>false</IsPackable>
     <!--
       Name used for the generated Add<Module>Converters / Add<Module>GraphQlRuntimeBindings methods. The library
-      holds what the API project shares with it, value objects and the event interface, so it is no module of its
-      own: a shared kernel, which keeps the name and leaves the module out with DDD_DeclareModule set to false.
+      holds the value objects the API project shares with it, so it is no module of its own: a shared kernel,
+      which keeps the name and leaves the module out with DDD_DeclareModule set to false.
     -->
     <DDD_Module>Common</DDD_Module>
     <DDD_DeclareModule>false</DDD_DeclareModule>
@@ -15,8 +15,6 @@
 
   <ItemGroup>
     <PackageReference Include="FluentValidation" />
-    <!-- Abstractions only: the Mediator source generator belongs in the composition root, not here. -->
-    <PackageReference Include="Mediator.Abstractions" />
     <PackageReference Include="HotChocolate.Types.Scalars" />
   </ItemGroup>
 

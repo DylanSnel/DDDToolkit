@@ -12,7 +12,6 @@ using Examples.Webshop.Shipping.Api;
 using Examples.Webshop.Shipping;
 using DTS.DDD.HotChocolate.Fusion.InMemory;
 using DTS.DDD.HotChocolate.Subscriptions;
-using DTS.DDD.Mediator;
 
 // The same five modules as the Supabase host, the same endpoints and the same messages, on SQL Server.
 // Compare the two Program.cs files: what differs in substance is the database, and what follows from it.
@@ -26,7 +25,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
 var database = builder.Configuration.GetConnectionString("SqlServer") is { Length: > 0 } sqlServer
