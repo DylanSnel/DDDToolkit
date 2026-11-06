@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Basic.Reference.Assemblies.Net100" />
+    <!-- The library the core generator writes an access behavior against when a project can see it. Its abstractions only: no generator of its runs here. -->
+    <PackageReference Include="Mediator.Abstractions" />
+    <!-- UseNpgsql, which the design-time factory the Supabase package's generator writes for a marked context builds it on. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <!-- The generators under test, referenced as ordinary assemblies so tests can drive them with CSharpGeneratorDriver. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DTS.DDD.Analyzers\DTS.DDD.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.EntityFramework.Analyzers\DTS.DDD.EntityFramework.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.FluentValidation.Analyzers\DTS.DDD.FluentValidation.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.HotChocolate.Analyzers\DTS.DDD.HotChocolate.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.Analyzers.CodeFixes\DTS.DDD.Analyzers.CodeFixes.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.EntityFramework.Supabase.Analyzers\DTS.DDD.EntityFramework.Supabase.Analyzers.csproj" />
+  </ItemGroup>
+
+  <!-- Runtime assemblies the generated code compiles against inside the tests. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DTS.DDD\DTS.DDD.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.EntityFramework\DTS.DDD.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.FluentValidation\DTS.DDD.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.HotChocolate\DTS.DDD.HotChocolate.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.EntityFramework.Supabase\DTS.DDD.EntityFramework.Supabase.csproj" />
+  </ItemGroup>
+
+</Project>

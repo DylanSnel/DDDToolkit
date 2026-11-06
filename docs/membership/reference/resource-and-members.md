@@ -27,7 +27,7 @@ A role class, for a resource whose customers make its roles, is declared with `[
 
 ## Member
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 ### Member (`MemberEntity<TId, TMemberId, TRoleId>`)
 
@@ -189,7 +189,7 @@ It reports the package's own name for the rule, [`MembershipRefusals.RoleHeld`](
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(MemberEntity<TId, TMemberId, TRoleId>)`](#checkmemberentitytid-tmemberid-troleid) | Runs the rule. |
 
 #### `Check(MemberEntity<TId, TMemberId, TRoleId>)`
@@ -208,7 +208,7 @@ Not an `InvariantViolation` so that holding is free: this runs for every changed
 
 ## Member list
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 ### `MemberList<TMember, TId, TMemberId, TRoleId>`
 
@@ -612,7 +612,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Periods and roles held
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 ### `MemberPeriod`
 
@@ -673,7 +673,7 @@ Whether the period covers `moment`: it has started, and has not ended.
 ### `MemberRole<TMemberId, TRoleId>`
 
 ```csharp
-public sealed class MemberRole<TMemberId, TRoleId>
+public sealed class MemberRole<TMemberId, TRoleId> : IEntity
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
@@ -682,7 +682,7 @@ A role a member holds on a resource, for a period of its own. Within its member 
 
 Being a member and holding a role are two things, each with its own dates: a role can end while the membership goes on, and a member can hold two roles at once. A role counts only while its own period applies and the membership it is held in does.
 
-A plain class rather than a toolkit entity, and not extended by the application: a held role is a fact about a member, and only the member list changes it. It remembers which role it is, never what the role gives: that is asked where the role is used.
+An entity with no id of its own. Its member and its role identify it. Only the member list changes it, and the application does not extend it. It remembers which role it is, never what the role gives. That is asked where the role is used.
 
 **Type parameters**
 
@@ -857,7 +857,7 @@ public override void WriteAsPropertyName(
 
 ## The resource
 
-What the resource's own class says, or has written onto it: its name, its codes, its owner and where it hangs. `[At]` is Membership's, from `DDDToolkit.Supporting.Membership.Abstractions`. `[Owner]` is the toolkit's, from `DDDToolkit.Abstractions`, and says what it says for every package that reads it.
+What the resource's own class says, or has written onto it: its name, its codes, its owner and where it hangs. `[At]` is Membership's, from `DTS.Membership.Abstractions`. `[Owner]` is the toolkit's, from `DTS.DDD.Abstractions`, and says what it says for every package that reads it.
 
 ### `IMembershipResource`
 
@@ -865,7 +865,7 @@ What the resource's own class says, or has written onto it: its name, its codes,
 public interface IMembershipResource
 ```
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 A resource with members, as the package's generator writes it onto the aggregate root a member class names: its name, the codes it refuses under, and the scope of its module's own system work. The rules of the resource read all three through its type, `MembershipRules.For<Board>(...)`, so none of them is written twice.
 
@@ -891,7 +891,7 @@ An application declares nothing for it. The name follows from the class, `Board`
 public sealed class MembersAttribute : Attribute
 ```
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 Names a resource with members otherwise than after its class: what its codes and its functions in the database are named after.
 
@@ -935,7 +935,7 @@ Say it where the plural is not the class's (`[Members("People")]` on a class `Pe
 public sealed class OwnerAttribute : Attribute
 ```
 
-Namespace `DDDToolkit.Abstractions.Attributes`.
+Namespace `DTS.DDD.Abstractions.Attributes`.
 
 Marks the property of an aggregate root that names its owner. A fact about what the aggregate is, said in the domain, and no rule about who may do what with it:
 
@@ -962,7 +962,7 @@ The check reads that one column of that one row, as the caller, so row level sec
 public sealed class AtAttribute : Attribute
 ```
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 Marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs to, the bay a crate stands in. It is a fact about what the aggregate is, said in the domain beside its `[Owner]`. It is no rule about who may do what with it:
 
@@ -1004,7 +1004,7 @@ Membership's mapping then fixes the column once the row exists, as `IsFixedAfter
 
 ## Custom role
 
-Namespace `DDDToolkit.Supporting.Membership`.
+Namespace `DTS.Membership`.
 
 ### CustomRole (`CustomRoleAggregate<TRoleId>`)
 
@@ -1346,7 +1346,7 @@ It reports the package's own name for the rule, [`MembershipRefusals.RoleNameInv
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(CustomRoleAggregate<TRoleId>)`](#checkcustomroleaggregatetroleid) | Runs the rule. |
 
 #### `Check(CustomRoleAggregate<TRoleId>)`
@@ -1375,7 +1375,7 @@ Whether each permission is one a member's role can give is not asked here. That 
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(CustomRoleAggregate<TRoleId>)`](#checkcustomroleaggregatetroleid-1) | Runs the rule. |
 
 #### `Check(CustomRoleAggregate<TRoleId>)`

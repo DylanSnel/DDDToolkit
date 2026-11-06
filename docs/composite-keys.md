@@ -8,7 +8,7 @@ points at a parent in another region. Ledgers, periods and tenants use the same 
 the key. Your application decides what the key part means, where its value comes from, and who may see which rows.
 
 This page is about Entity Framework only. `KeyPartConvention` builds the key, and `AddDDDToolkitConventions()` from
-`DDDToolkit.EntityFramework` adds the convention to the model. Without that package, the attribute changes nothing
+`DTS.DDD.EntityFramework` adds the convention to the model. Without that package, the attribute changes nothing
 about how an entity behaves.
 
 ```csharp
@@ -184,5 +184,5 @@ is mapped as it would be without the convention. Tests compare the whole model w
 both cases.
 
 The generator adds nothing to a class without key parts. Only a class with key parts implements
-`DDDToolkit.Interfaces.IHasKeyParts`, which lists the parts in declaration order for the convention. You never
+`DTS.DDD.Interfaces.IHasKeyParts`, which lists the parts in declaration order for the convention. You never
 implement that interface yourself.

@@ -1,6 +1,6 @@
 # Entity Framework
 
-`DDDToolkit.EntityFramework` is the persistence package of the toolkit. It registers converters and conventions for
+`DTS.DDD.EntityFramework` is the persistence package of the toolkit. It registers converters and conventions for
 the types the generators write, so a domain model written as the other pages describe maps to tables without
 configuration by hand. It also adds the behaviours that run during a save: domain event delivery, the invariant check
 and optimistic concurrency.
@@ -17,14 +17,14 @@ The package does five things:
 
 The package has no repository abstraction and no message bus. `DbContext` is already the unit of work. You write the
 delegate that hands events to your publisher. If your publisher is
-[Mediator](https://github.com/martinothamar/Mediator), the companion package `DDDToolkit.Mediator` writes that
+[Mediator](https://github.com/martinothamar/Mediator), the companion package `DTS.DDD.Mediator` writes that
 delegate for you ([In-process dispatch](event-delivery.md#in-process-dispatch)). If the events must leave the
 process, the outbox delivers them to a sink you implement ([Integration events](integration-events.md)).
 
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit.EntityFramework --prerelease
+dotnet add package DylansTechStack.DDD.EntityFramework --prerelease
 ```
 
 The package brings its own source generator, so the package reference is all the configuration it needs. It targets
@@ -36,7 +36,7 @@ Setting up takes three calls: one in your service registration, one on the `DbCo
 in `ConfigureConventions`.
 
 ```csharp
-using DDDToolkit.EntityFramework;
+using DTS.DDD.EntityFramework;
 
 builder.Services.AddDDDToolkitEntityFramework();
 
@@ -46,7 +46,7 @@ builder.Services.AddDbContext<OrderingContext>((services, options) => options
 ```
 
 ```csharp
-using DDDToolkit.EntityFramework.Conventions;
+using DTS.DDD.EntityFramework.Conventions;
 using Ordering.Domain.Converters;
 
 public class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
@@ -71,11 +71,11 @@ The argument to `AddDDDToolkitEntityFramework` says how events are delivered. To
 Mediator itself:
 
 ```bash
-dotnet add package Temp.DDDToolkit.Mediator --prerelease
+dotnet add package DylansTechStack.DDD.Mediator --prerelease
 ```
 
 ```csharp
-using DDDToolkit.Mediator;
+using DTS.DDD.Mediator;
 
 builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
@@ -292,7 +292,7 @@ a part on a context by the interceptor that the part adds. Where nothing registe
 registration:
 
 ```text
-'ProjectsContext' cannot do without the part tenancy.save-check, which its model requires, and its options have no TenancySaveInterceptor, so its saves would go without it. No registration brought it. Register it with services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework, and options.UseDDDToolkit(serviceProvider) puts it on every context.
+'ProjectsContext' cannot do without the part tenancy.save-check, which its model requires, and its options have no TenancySaveInterceptor, so its saves would go without it. No registration brought it. Register it with services.AddTenancy<…, TContext>(…) of DTS.Tenancy.EntityFramework, and options.UseDDDToolkit(serviceProvider) puts it on every context.
 ```
 
 Where a registration brought the part, the message names `UseDDDToolkit`, and the part's own call after
@@ -373,7 +373,7 @@ context ([An outbox per context](event-delivery.md#an-outbox-per-context)).
 ## Mapping
 
 Everything in this section works without any code in `OnModelCreating`. The mapping tests in
-`Tests/DDDToolkit.EntityFramework.Tests/MappingTests.cs` cover each case against SQLite.
+`Tests/DTS.DDD.EntityFramework.Tests/MappingTests.cs` cover each case against SQLite.
 
 ### Identifiers
 
@@ -430,7 +430,7 @@ start. The database stores the id and makes none. This needs no configuration:
   the key of an `[EntityId<long>]` is a plain `bigint` on Postgres, and an `INTEGER` that SQLite does not number.
 - A new row whose id still has its default value is saved with that value. The database does not pick another.
 
-The tests in `Tests/DDDToolkit.EntityFramework.Tests/Conventions/EntityIdKeyTests.cs` check this on Postgres and
+The tests in `Tests/DTS.DDD.EntityFramework.Tests/Conventions/EntityIdKeyTests.cs` check this on Postgres and
 SQLite, so they fail if a provider ever starts to make ids.
 
 An id over a `long` or a `string` that a package makes, as Tenancy makes a tenant's id, says how with its own
@@ -779,7 +779,7 @@ Without that call, the factory's context keeps Entity Framework's default. Then 
 migrations script, a migration bundle and the exported files record every migration in a table the running
 application does not read. The application's `Migrate()` then tries to apply the first migration again, and fails on
 a table that already exists. So the build reports a factory that leaves the call out, in a project that references
-`DDDToolkit.EntityFramework` ([DDD00074](diagnostics.md#ddd00074)), and a code fix adds the call. On Supabase, the
+`DTS.DDD.EntityFramework` ([DDD00074](diagnostics.md#ddd00074)), and a code fix adds the call. On Supabase, the
 [start-up check](supabase.md#checking-at-start-up) also names this cause when it finds the migrations missing.
 
 Other cases:
@@ -981,7 +981,7 @@ For a context whose migrations Supabase applies, write none:
 - The export and the start-up check make the context the way `dotnet ef` does with the host as its startup project.
   So a factory in the host for a module's context is the one they use there too.
 - DDD00074 requires `UseDDDToolkitDesignTime()` in a factory written by hand. The factory that the build writes calls
-  it wherever the project references `DDDToolkit.EntityFramework`.
+  it wherever the project references `DTS.DDD.EntityFramework`.
 
 <details>
 <summary>Show the code: a context marked for Supabase, and the factory the build writes beside it</summary>
@@ -1217,7 +1217,7 @@ handles `SaveChangesFailed`. It unwraps the `ConcurrencyConflictException` and r
 going through `ThrowingConcurrencyException`.
 
 The synchronous and the asynchronous save behave the same.
-`Tests/DDDToolkit.EntityFramework.Tests/ConcurrencyTests.cs` covers the version arithmetic, changes to children only,
+`Tests/DTS.DDD.EntityFramework.Tests/ConcurrencyTests.cs` covers the version arithmetic, changes to children only,
 deletes, and both save paths.
 
 ## Contexts from a pool
@@ -1363,7 +1363,7 @@ succeeds as soon as a connection is free. Code that already holds a connection a
 waiting for itself, so do not nest them.
 
 `PooledContextSaveTests.cs`, `PooledContextRowLevelSecurityTests.cs` and `PooledContextBudgetTests.cs` in
-`Tests/DDDToolkit.EntityFramework.Tests` test each of these rows, on SQLite and against a real Postgres.
+`Tests/DTS.DDD.EntityFramework.Tests` test each of these rows, on SQLite and against a real Postgres.
 
 ## Providers
 
@@ -1452,7 +1452,7 @@ If a query like that must port, model the collection as a child entity with its 
 on every provider. You lose the single-column read and gain a join. Make that design decision only when you need the
 portability.
 
-`Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs` tests both cases against real
+`Tests/DTS.DDD.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs` tests both cases against real
 servers.
 
 ## Domain event delivery
@@ -1538,7 +1538,7 @@ services.AddSingleton<IEventLogFields, BranchOfTheEvent>();
 > [a pool](#contexts-from-a-pool), that provider is the application's root provider, which refuses a scoped service
 > with a message that says so.
 
-**The guard.** On Postgres, `DDDToolkit.EntityFramework.Postgres` writes the table's guard into every
+**The guard.** On Postgres, `DTS.DDD.EntityFramework.Postgres` writes the table's guard into every
 [script of policies](row-level-security.md#writing-the-policies) of the context, and into its Supabase access file,
 whether or not the context has a rule. The guard is a set of triggers that refuse:
 
@@ -1578,7 +1578,7 @@ than `keepFor`, whatever the window says. Keep the two clocks within one minute 
 ## Supabase
 
 The Supabase CLI applies migrations from SQL files in `supabase/migrations`, and does not run Entity Framework
-migrations. `DDDToolkit.EntityFramework.Supabase` writes one such file per Entity Framework migration as part of the
+migrations. `DTS.DDD.EntityFramework.Supabase` writes one such file per Entity Framework migration as part of the
 build, and can check at start-up that Supabase applied them ([Supabase](supabase.md)).
 
 ## Where to look next
@@ -1608,8 +1608,8 @@ The shop in [`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Su
 ## For contributors: running the provider tests
 
 ```bash
-dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests --filter "Provider=Postgres"
-dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests --filter "Provider=SqlServer"
+dotnet test Tests/DTS.DDD.EntityFramework.Providers.Tests --filter "Provider=Postgres"
+dotnet test Tests/DTS.DDD.EntityFramework.Providers.Tests --filter "Provider=SqlServer"
 ```
 
 The tests need Docker. Without Docker they skip themselves and name what could not start, because a machine without
@@ -1621,7 +1621,7 @@ Both workflows set it. The provider workflow also counts the tests that ran, so 
 pass either.
 
 The images are pinned to exact versions in
-`Tests/DDDToolkit.EntityFramework.Providers.Tests/Infrastructure/ContainerImages.cs`, with the reason for each next to
+`Tests/DTS.DDD.EntityFramework.Providers.Tests/Infrastructure/ContainerImages.cs`, with the reason for each next to
 it. No tag floats, so a red build always comes from a change of ours. PostgreSQL matches the major version of the
 pgmq image that the Postgres package is tested against. SQL Server is the older release still in mainstream support.
 That release is the weaker of the two, and so the one worth testing.

@@ -18,7 +18,7 @@ id and the timestamp, and the stable name an event needs once it is stored.
 An event is a record that derives from `DomainEvent`. Name it after what happened:
 
 ```csharp
-using DDDToolkit.BaseTypes;
+using DTS.DDD.BaseTypes;
 
 public sealed record OrderCancelled(OrderId OrderId, CancellationReason Reason) : DomainEvent;
 ```
@@ -90,7 +90,7 @@ drop the event for it. When events are your integration contract, that is a data
 
 ## Delivery
 
-Raising an event adds it to a list on the aggregate. `DDDToolkit.EntityFramework` delivers it to the handlers, in one
+Raising an event adds it to a list on the aggregate. `DTS.DDD.EntityFramework` delivers it to the handlers, in one
 of two ways. In the diagram, purple marks the save, where the two ways split:
 
 ```mermaid
@@ -309,7 +309,7 @@ that class, upcasts it if the class is an older shape, and publishes it under th
 ## Testing
 
 With events, you can test an aggregate without a database. Call a method, then check which events it raised.
-`DDDToolkit.Testing` does the checking, and reports only the events that the call under test raised:
+`DTS.DDD.Testing` does the checking, and reports only the events that the call under test raised:
 
 ```csharp
 AggregateScenario.Given(order)

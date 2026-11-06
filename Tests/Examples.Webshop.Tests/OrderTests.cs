@@ -1,9 +1,9 @@
-using DDDToolkit.BaseTypes;
-using DDDToolkit.Exceptions;
+using DTS.DDD.BaseTypes;
+using DTS.DDD.Exceptions;
 using Examples.Webshop.Ordering;
 using Examples.Webshop.Ordering.Contracts;
 using Examples.Webshop.SharedKernel;
-using DDDToolkit.Testing;
+using DTS.DDD.Testing;
 using FluentAssertions;
 
 namespace Examples.Webshop.Tests;

@@ -1,4 +1,4 @@
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 using Examples.Webshop.Ordering.Contracts;
 
 [assembly: Module("Payments")]

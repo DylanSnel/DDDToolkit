@@ -1,4 +1,4 @@
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 // One assembly, one module. Everything this project declares belongs to Ordering and is Ordering's own
 // business unless it is marked [ModuleContract] or is an integration event, both of which live next

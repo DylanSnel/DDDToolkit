@@ -1,6 +1,6 @@
-using DDDToolkit.Exceptions;
+using DTS.DDD.Exceptions;
 using Examples.Webshop.Ordering;
-using DDDToolkit.Validation;
+using DTS.DDD.Validation;
 using FluentAssertions;
 
 namespace Examples.Webshop.Tests;

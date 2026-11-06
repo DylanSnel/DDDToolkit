@@ -1,5 +1,5 @@
 {
-  "$comment": "The tenants, units, people and roles of docs/tenancy/tutorial.md at its end (What we build), drawn on docs/tenancy/overview.md under Reach. Tests/DDDToolkit.Analyzers.Tests/Docs/ReachExplorerDocsTests.cs holds every name here to the tutorial, the overview and the code.",
+  "$comment": "The tenants, units, people and roles of docs/tenancy/tutorial.md at its end (What we build), drawn on docs/tenancy/overview.md under Reach. Tests/DTS.DDD.Analyzers.Tests/Docs/ReachExplorerDocsTests.cs holds every name here to the tutorial, the overview and the code.",
   "tutorial": "/docs/tenancy/tutorial",
   "tenants": [
     {

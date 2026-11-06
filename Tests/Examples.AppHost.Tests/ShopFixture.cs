@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
-using DDDToolkit.EntityFramework.Tests.Infrastructure;
+using DTS.DDD.EntityFramework.Tests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

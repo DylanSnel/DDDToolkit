@@ -14,6 +14,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
+- **Three marks for the classes an API returns, in `DDDToolkit.Abstractions.Attributes`.** New in 3.2.0-preview.14.
+  - `[PersonalData]` marks a stored member that holds data about a person that no reader of the object needs, such as
+    an account id.
+  - `[Bookkeeping]` marks a stored member that a package keeps for its own work.
+  - `[DisplayName("Placement")]` gives a class the type name that every API layer uses. The name has no spaces.
+
+  Each API layer decides what it does with a mark. `DDDToolkit.HotChocolate` reads all three
+  ([Binding fields by convention](docs/graphql.md#binding-fields-by-convention)). `[Internal]` keeps its meaning. It
+  marks a member that is never stored or serialized. `DisplayNameAttribute` shares its simple name with
+  `System.ComponentModel.DisplayNameAttribute`, so a file that imports both namespaces needs an alias.
+
+  Preview.14 had a fourth mark, `[assembly: ToolkitPackage]`. Preview.15 removes it. The packages' plain classes with
+  methods are entities and implement `IEntity` instead.
+
 - **Several permission markers on one request.** The generator combines the calls of all permission markers on a
   request with `AccessRequirement.All`, in the order they are written. The calls of the request's own requirement
   attributes come first. Two markers of the same kind are allowed, such as two boards or two units.
@@ -1281,6 +1295,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### HotChocolate
 
+- **Defaults for the packages' classes in a type that binds by convention.** New in 3.2.0-preview.14.
+  `AddDDDToolkitTypes()` registers two more interceptors and extends one.
+  - Membership's `MemberRole` and Tenancy's `RoleGrant` implement `IEntity`, so `DomainBehaviourFieldsInterceptor`
+    removes their method fields. They no longer print `appliesAt(moment: DateTime!): Boolean!`. In preview.14 the
+    interceptor read `[assembly: ToolkitPackage]` instead.
+  - `PersonalDataAndBookkeepingFieldsInterceptor` removes the fields of members marked `[PersonalData]` or
+    `[Bookkeeping]` from object, interface and input object types that bind by convention. A type class shows such a
+    member with a resolver, or with `BindFieldsExplicitly()` that lists it.
+  - `DisplayNameTypesInterceptor` names an object type or an interface type after the `[DisplayName]` of its class.
+    `Placement<SeatId, OrganizationUnitId, RoleId>` is the type `Placement`. A name the application gives with
+    `descriptor.Name(...)` wins. A display name that is no GraphQL name fails the schema build and names the class.
+
+  The GraphQL docs gain a section on binding by convention. It also describes a trap in HotChocolate's generator. A
+  resolver bound with `[BindMember]` to a member of its own name, such as `GetAddedBy` to `AddedBy`, disappears from the
+  schema. See [Binding fields by convention](docs/graphql.md#binding-fields-by-convention).
+
 - **Typed errors in mutation payloads.** `AddDDDToolkitMutationConventions()` in `DDDToolkit.HotChocolate`
   turns on HotChocolate's mutation conventions for every mutation and gives every payload an `errors` list
   typed by the toolkit: `RefusalError` (code, kind, and `field` from the refusal's `Field` argument),
@@ -1391,6 +1421,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   See [Reading the schema from a tool](docs/graphql.md#reading-the-schema-from-a-tool).
 
 #### Tenancy
+
+- **Marks for the API layers on Tenancy's classes.** New in 3.2.0-preview.14.
+  - `[PersonalData]` on the seat's `Identity`. The invitation's `Address` is not marked, because whoever may read
+    invitations needs it.
+  - `[Bookkeeping]` on the role's `FromStarterRole` and `PermissionsFromStarterRole`.
+  - `[DisplayName]` on `Placement`, `RoleGrant`, `NamedUnit`, `SeatInTenant`, and on the managers' records
+    `SeatOverview`, `PermissionReach`, `UnitRef`, `UnitInTree`, `TenantListing`, `TenantPage`, `IssuedInvitation` and
+    `AcceptedInvitation`.
+  - `[Internal]` on the role's computed `Facts`. The managers still read it in code.
+
+  See [Tenancy's overview](docs/tenancy/overview.md) and [GraphQL](docs/graphql.md#binding-fields-by-convention).
+- **`Placement` and `RoleGrant` implement `IEntity`.** New in 3.2.0-preview.15. They are entities with no id of their
+  own. A seat and a unit identify a placement. A seat, a unit and a role identify a grant. Code that reads `IEntity`
+  now treats them as entities. `DDDToolkit.HotChocolate` leaves their methods out of a type that binds by convention.
+  `DDDToolkit.NewtonSoft.Json` fills their private setters. Preview.14 put `[assembly: ToolkitPackage]` on the package
+  instead.
 
 - **Tenancy**, the toolkit's first supporting domain: who somebody is in a tenant, and what they may do where in its
   organization. It comes in four packages:
@@ -2203,6 +2249,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Keeping tenants apart](docs/tenancy/keeping-tenants-apart.md).
 
 #### Membership
+
+- **Marks for the API layers on Membership's classes.** New in 3.2.0-preview.14. `[Bookkeeping]` is on the custom
+  role's `FromStarterRole` and `PermissionsFromStarterRole`. `MemberRole` has no `[DisplayName]`, because an
+  application with two resources closes it twice. A type class names it
+  ([Several kinds of resource](docs/membership/resources-and-members.md#several-kinds-of-resource)).
+- **`MemberRole` implements `IEntity`.** New in 3.2.0-preview.15. It is an entity with no id of its own. A member and
+  a role identify it. `DDDToolkit.HotChocolate` leaves its `AppliesAt` out of a type that binds by convention.
+  Preview.14 put `[assembly: ToolkitPackage]` on the package instead.
 
 - **Membership**, the toolkit's second supporting domain. `DDDToolkit.Supporting.Membership` is access to one
   resource through its members: a document shared with people, a folder with staff on it. An application
@@ -3186,16 +3240,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
-- **Docs: several requirements on one request.**
-  [Several requirements on one request](docs/performance.md#several-requirements-on-one-request) measures a request with
-  a marker on each of two resources against one marker on a list of both, on SQLite in memory and on Postgres in a
-  container. On Postgres every case that reads costs a statement, about 1 to 1.5 ms there, and one statement for both
-  resources costs as much as one for one resource. The benchmarks `MemberRoundTripBenchmarks` and
-  `TenancyRoundTripBenchmarks` start the Postgres container themselves.
-- **Docs: the access checks on Postgres.** [On Postgres](docs/performance.md#on-postgres) measures the access checks
-  before and after the compiled queries, on Postgres in a container. The median after is lower in each pair. The spread
-  of the round trip is larger than the difference. `OwnerCheckBenchmarks`, `MemberCheckBenchmarks` and
-  `TenancyCheckBenchmarks` take the database as a parameter, and show the minimum and the median.
+- **Docs: the access check of `[Own]`.** [Access checks](docs/performance.md#access-checks) measures the check before
+  and after its compiled query, on SQLite in memory and on Postgres in a container. `OwnerCheckBenchmarks` takes the
+  database as a parameter, shows the minimum and the median, and starts the Postgres container itself.
 - **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
@@ -3256,6 +3303,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **New package ids and namespaces: `DylansTechStack.DDD.*` and `DTS.DDD.*`, from 0.1.0.**
+  - The packages are published as `DylansTechStack.DDD`, `DylansTechStack.DDD.EntityFramework` and so on. They replace
+    `Temp.DDDToolkit.*`, whose last version is 3.2.0-preview.15.
+  - The namespaces and the assemblies are `DTS.DDD.*`. `using DDDToolkit;` becomes `using DTS.DDD;`, and
+    `DDDToolkit.EntityFramework` becomes `DTS.DDD.EntityFramework`.
+  - The version starts again at 0.1.0. Every `DylansTechStack.*` package has the same version.
+  - These names stay: the product name DDDToolkit, the API names that carry it (`UseDDDToolkit()`,
+    `AddDDDToolkitEntityFramework()`, `DDDToolkitException` and the others), the Entity Framework annotations
+    (`DDDToolkit:AppendOnly` and the others), the diagnostic ids `DDD00001` to `DDD00107`, and the MSBuild properties
+    `DDD_Module`, `DDD_DeclareModule` and `DDD_ModuleContracts`.
+  - Tenancy and Membership are `DylansTechStack.Tenancy` and `DylansTechStack.Membership`, with the namespaces
+    `DTS.Tenancy` and `DTS.Membership`. They are part of DTS Pro and are not published on nuget.org.
+  - The projects and folders of this repository follow the namespaces, such as `Source/DTS.DDD.EntityFramework`. The
+    solution file stays `DDDToolkit.slnx`.
+  - `Directory.Build.props` makes the id from the project name, `DylansTechStack.` and the name without `DTS.`. The
+    `DDDPackageIdPrefix` property is gone.
+
 - **The save interceptors call `DetectChanges` once and read only the changed entries.** Each interceptor used to
   call `DetectChanges()` and then `ChangeTracker.Entries()`. `Entries()` calls `DetectChanges` again and creates an
   `EntityEntry` for every tracked entity. One save called `DetectChanges` 7 times. Now each interceptor calls it once
@@ -3283,20 +3347,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
   A batch of 1,000 messages went from 2.8 s and 2.9 GB to 46 ms and 15 MB. See
   [Performance](docs/performance.md#delivering-a-batch-of-outbox-messages).
-- **The access checks of `[Own]`, Membership and Tenancy run compiled queries.** Each check built a LINQ query, and
-  Entity Framework walked it and looked it up in its query cache on every check. Now each check runs a query compiled
-  once with `EF.CompileAsyncQuery`, and sends its values as parameters. The query filters and row level security apply
-  as before.
-  - `[Own]` and `[OrOwn]` on an aggregate's id: the query is compiled when the owner's column is found.
-  - Membership: the statement of a check on one resource, or on a list of them, is compiled once for each shape that
-    the rules and the permission give it. The roles that the rules declare for the permission are constants of the
-    statement. A statement with roles kept as rows, or with a permission held from above, is composed for each check as
-    before.
-  - Tenancy: `ITenancyReadSource` has three new members, `HoldsAtTenantAsync`, `HoldsAtAsync` and `HasUnitAsync`. Each
-    returns `null` by default. The Entity Framework source answers them with queries compiled once per model. For
-    another source, the questions are worked out over its rows, as before.
+- **The access check of `[Own]` runs a compiled query.** The check built a LINQ query, and Entity Framework walked it
+  and looked it up in its query cache on every check. Now the query is compiled once with `EF.CompileAsyncQuery`, when
+  the owner's column is found, and a check sends the aggregate's id as its parameter. `[OrOwn]` on an aggregate's id
+  reads the owner in the same way. The query filters and row level security apply as before.
 
-  A Membership check went from 399 μs and 203 KB to 95 μs and 14.5 KB on SQLite in memory. See
+  A check went from 17.0 μs and 13.6 KB to 6.0 μs and 3.9 KB on SQLite in memory. See
   [Performance](docs/performance.md#access-checks).
 - **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
   `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
@@ -4572,6 +4628,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   for those the message writes out each call, `services.AddSupabaseMigrations<TenancyContext, TenancyContextDesignTimeFactory>();`,
   with the factory the generated list builds the context with. See
   [Checking at start-up](docs/supabase.md#checking-at-start-up).
+
+### Removed
+
+- **Tenancy and Membership leave this repository.** The supporting domains are developed in a separate, private
+  repository from the next release on.
+  - Their packages, `Temp.DDDToolkit.Supporting.Tenancy`, `Temp.DDDToolkit.Supporting.Membership` and their
+    Abstractions, Analyzers, EntityFramework and Postgres packages, get no new versions on nuget.org. The versions up to
+    3.2.0-preview.15 stay available.
+  - The Tenancy sample, `Examples/Tenancy`, moved with them, and so did its tests.
+  - The core's tests that compile against Tenancy or Membership moved with them. They run in the private repository's
+    CI, against the code of this repository. `GeneratorTestHost` and `ReferenceSets` are partial classes for that.
+  - `build/verify-docs-tutorials.sh` and `build/generate-api-reference.sh` moved with them. So did the part of
+    `build/verify-package-consumption.sh` that builds an application with both domains.
+  - The docs of Tenancy and Membership stay on the docs site. A link from the docs to a file of the sample is plain text
+    now.
+  - The Auth tests keep their own copies of `SupabaseImages` and `AuthSigningKeys`, which they took from the sample.
 
 ### Fixed
 

@@ -2,7 +2,7 @@
   <!--
     What the consumers in this folder share. build/verify-package-consumption.sh builds them from
     a copy outside the repository, so the repository's own Directory.Build.props and Directory.Build.targets,
-    which import the props and the targets of DDDToolkit.Analyzers for every project below them, never reach
+    which import the props and the targets of DTS.DDD.Analyzers for every project below them, never reach
     them: DDD_Module reaches their generators, and declares their module, through the packages or not at all.
   -->
   <PropertyGroup>
@@ -12,8 +12,7 @@
     <IsPackable>false</IsPackable>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
 
-    <!-- The version and the id prefix the packages were packed under. The script passes both. -->
+    <!-- The version the packages were packed under. The script passes it. -->
     <DDDToolkitPackageVersion Condition="'$(DDDToolkitPackageVersion)' == ''">0.0.0-ci</DDDToolkitPackageVersion>
-    <DDDPackageIdPrefix Condition="'$(DDDPackageIdPrefix)' == ''">Temp.</DDDPackageIdPrefix>
   </PropertyGroup>
 </Project>

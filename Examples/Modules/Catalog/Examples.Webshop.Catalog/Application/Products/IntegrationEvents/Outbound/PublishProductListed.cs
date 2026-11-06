@@ -1,4 +1,4 @@
-using DDDToolkit.EntityFramework.Integration;
+using DTS.DDD.EntityFramework.Integration;
 using Examples.Webshop.Catalog.Contracts;
 
 namespace Examples.Webshop.Catalog.Application.Products;

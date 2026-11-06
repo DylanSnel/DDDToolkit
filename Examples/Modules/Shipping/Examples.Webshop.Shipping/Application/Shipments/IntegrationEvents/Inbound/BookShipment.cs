@@ -1,5 +1,5 @@
-using DDDToolkit.BaseTypes;
-using DDDToolkit.EntityFramework.Integration;
+using DTS.DDD.BaseTypes;
+using DTS.DDD.EntityFramework.Integration;
 using Examples.Webshop.Ordering.Contracts;
 
 namespace Examples.Webshop.Shipping.Application.Shipments;

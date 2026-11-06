@@ -125,7 +125,7 @@ public readonly partial record struct TicketNumber
 
 Only a package that makes ids of a type requires that type's `Create()` ([DDD00067](diagnostics.md#ddd00067)). An id
 over a `long` that you create yourself, with the public constructor, needs no `Create()`. The interface is in the
-.NET 10 build of DDDToolkit.Abstractions.
+.NET 10 build of DTS.DDD.Abstractions.
 
 ## Prefixes
 
@@ -400,7 +400,7 @@ as much again as the struct form. See [Struct or record](#struct-or-record) abov
 
 ## Entity Framework
 
-Everything above works without a database. With `DDDToolkit.EntityFramework` referenced, its generator adds a value
+Everything above works without a database. With `DTS.DDD.EntityFramework` referenced, its generator adds a value
 converter to every identifier. The converter stores the identifier as its plain value, so an `OrderId` is a `Guid`
 column and not a serialized object:
 
@@ -448,7 +448,7 @@ references Entity Framework. A module split into projects by layer declares its 
 project without Entity Framework. The project with the context stores those identifiers instead.
 
 Every identifier, single value object and always-valid twin implements `ISingleValue<TSelf, TValue>` from
-`DDDToolkit.Interfaces`. This interface names the value type and the way back from a stored value:
+`DTS.DDD.Interfaces`. This interface names the value type and the way back from a stored value:
 
 **OrderId.g.cs, shortened**
 
@@ -461,7 +461,7 @@ readonly partial record struct OrderId : IEntityId<Guid>, ..., ISingleValue<Orde
 }
 ```
 
-`DDDToolkit.EntityFramework` has one converter for all of these types, `SingleValueConverter<T, TValue>`. The
+`DTS.DDD.EntityFramework` has one converter for all of these types, `SingleValueConverter<T, TValue>`. The
 generated `Add{Module}Converters()` of the project with the context registers that converter for two groups of
 identifiers:
 
@@ -500,7 +500,7 @@ back stored values. A generic constraint makes it callable by any code, and that
 public readonly partial record struct Sku;
 ```
 
-`ColumnLength` is for Entity Framework only. Without the `DDDToolkit.EntityFramework` package it does nothing. It
+`ColumnLength` is for Entity Framework only. Without the `DTS.DDD.EntityFramework` package it does nothing. It
 never validates. A maximum length that a value must respect is a rule you state yourself. With the package,
 `ColumnLength` becomes `HaveMaxLength` in the generated configuration, on the registration of the property and of the
 type mapping:
@@ -554,7 +554,7 @@ readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, 
 }
 ```
 
-With `DDDToolkit.HotChocolate` referenced, its generator nests two more classes in every identifier:
+With `DTS.DDD.HotChocolate` referenced, its generator nests two more classes in every identifier:
 
 - a `ChangeTypeProvider`, which converts between the identifier and the value it wraps;
 - a `NodeIdValueSerializer`, which lets the identifier be the key inside a Relay node id.

@@ -7,7 +7,7 @@ sidebar_label: Entity Framework
 
 # Tenancy API: Entity Framework
 
-The public API of `DDDToolkit.Supporting.Tenancy.EntityFramework`, by folder, with the marker `[OfTenant]` from `DDDToolkit.Supporting.Tenancy.Abstractions`. `db.Tenancy()` is with the queries, under [Queries](queries.md#queries). The services a host registers, `AddTenancy`, `AddTenancyInvitations` and `AddTenancyAccess`, are with the managers, under [Registration](managers.md#registration).
+The public API of `DTS.Tenancy.EntityFramework`, by folder, with the marker `[OfTenant]` from `DTS.Tenancy.Abstractions`. `db.Tenancy()` is with the queries, under [Queries](queries.md#queries). The services a host registers, `AddTenancy`, `AddTenancyInvitations` and `AddTenancyAccess`, are with the managers, under [Registration](managers.md#registration).
 
 ## Mapping
 
@@ -20,7 +20,7 @@ How a context maps Tenancy. A class marks the property that holds its tenant wit
 public sealed class OfTenantAttribute : Attribute
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 Marks the property of an aggregate root that says which tenant it belongs to. It is a fact about what the aggregate is, said in the domain beside its `[Owner]` and its `[At]`. It is no rule about who may do what with it:
 
@@ -48,7 +48,7 @@ The marker is in a package of its own, with no Entity Framework and nothing else
 public sealed class OfTenantConvention : IModelFinalizingConvention, IConvention
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 Keeps every class whose tenant is marked [`OfTenantAttribute`](#oftenantattribute) to the current Tenancy user's tenant, as [`TenancyModelBuilderExtensions.ScopeToTenant<TEntity, TTenantId>`](#scopetotenantentitytypebuildertentity-expressionfunctentity-ttenantid) keeps a class it is called on: the tenant filter on its reads, and Tenancy's save check on its writes. A context needs no line for it:
 
@@ -94,7 +94,7 @@ Called when a model is being finalized.
 public sealed class ModelConventionAttribute : Attribute
 ```
 
-Namespace `DDDToolkit.Abstractions.Attributes`.
+Namespace `DTS.DDD.Abstractions.Attributes`.
 
 Names the Entity Framework convention that maps what the attribute it marks says. A package declares a marker for domain classes, which reference no Entity Framework, and the convention that maps it in its package for Entity Framework. This attribute joins the two, so a context maps the marked classes without a line per class:
 
@@ -139,7 +139,7 @@ The convention is named by its assembly-qualified name, because the marker's ass
 public static class TenancyModelBuilderExtensions
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 Maps Tenancy into an Entity Framework model: its tables into the context the application keeps Tenancy in, its read model into every other context that asks Tenancy inside its own queries, as views over those tables or as Tenancy's read functions, and the tenant filter onto any entity of any module that belongs to a tenant.
 
@@ -148,7 +148,7 @@ Maps Tenancy into an Entity Framework model: its tables into the context the app
 | [`AddTenancy(ModelBuilder, TenancyTableNames?, DatabaseFacade?)`](#addtenancymodelbuilder-tenancytablenames-databasefacade) | Maps Tenancy's tables, closed over the application's classes and ids, into the context's default schema: the tenants, organizations with their units, seats with their placements and grants, roles, the stored rights, the closure of each organization's tree and the tenants' access revisions, plus the read model's views over them. |
 | [`AddTenancyInvitations(ModelBuilder, TenancyTableNames?)`](#addtenancyinvitationsmodelbuilder-tenancytablenames) | Maps invitations into the context that maps Tenancy's tables, for an application that invites people into a tenant: the invitations, closed over the application's invitation class, and next to them the digests of their tokens, in a table of its own. |
 | [`AddTenancyReadModel(ModelBuilder, string?, TenancyTableNames?)`](#addtenancyreadmodelmodelbuilder-string-tenancytablenames) | Maps Tenancy's read model into a context that is not Tenancy's own, so its queries can ask Tenancy inside them: `db.Tenancy().UnitsWhereIHold(permission)` becomes a subquery of the module's own query, one statement and one round trip. |
-| [`AddTenancyReadFunctions(ModelBuilder, string?)`](#addtenancyreadfunctionsmodelbuilder-string) | Maps Tenancy's read model into a context that is not Tenancy's own as Tenancy's read functions, which a package for one database writes into it (`DDDToolkit.Supporting.Tenancy.Postgres` does): the six rows the access questions read, each from the function of its name ([`TenancyFunctionNames`](#tenancyfunctionnames)) in `schema`, under the column names that function answers. |
+| [`AddTenancyReadFunctions(ModelBuilder, string?)`](#addtenancyreadfunctionsmodelbuilder-string) | Maps Tenancy's read model into a context that is not Tenancy's own as Tenancy's read functions, which a package for one database writes into it (`DTS.Tenancy.Postgres` does): the six rows the access questions read, each from the function of its name ([`TenancyFunctionNames`](#tenancyfunctionnames)) in `schema`, under the column names that function answers. |
 | [`ScopeToTenant(EntityTypeBuilder<TEntity>, Expression<Func<TEntity, TTenantId>>)`](#scopetotenantentitytypebuildertentity-expressionfunctentity-ttenantid) | Keeps an entity of any module to the current Tenancy user's tenant. |
 
 #### `AddTenancy(ModelBuilder, TenancyTableNames?, DatabaseFacade?)`
@@ -184,7 +184,7 @@ Every table that has a tenant gets the tenant filter ([`TenancyQueryFilter`](#te
 
 The views of the read model carry access facts only, here as in a module's model: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions. What a seat, a unit or a role is called is read from the tables themselves, by the managers' reads, which answer names by id.
 
-Pass the context's `Database` as well, `modelBuilder.AddTenancy(database: Database)`, and two rules the aggregates keep are kept by the database too, with filtered unique indexes in the provider's SQL: a tenant's organization has a single root, and a seat a single primary placement. They catch a write that goes past the aggregates, such as SQL of your own. Postgres, SQLite and SQL Server get them; another provider gets neither. Adding them to an existing database is a migration of your own, like any change to the model. A host that keeps Tenancy on Postgres under row level security (`DDDToolkit.Supporting.Tenancy.Postgres`) needs the first: its start-up check refuses a database without the unique index on a tenant's root.
+Pass the context's `Database` as well, `modelBuilder.AddTenancy(database: Database)`, and two rules the aggregates keep are kept by the database too, with filtered unique indexes in the provider's SQL: a tenant's organization has a single root, and a seat a single primary placement. They catch a write that goes past the aggregates, such as SQL of your own. Postgres, SQLite and SQL Server get them; another provider gets neither. Adding them to an existing database is a migration of your own, like any change to the model. A host that keeps Tenancy on Postgres under row level security (`DTS.Tenancy.Postgres`) needs the first: its start-up check refuses a database without the unique index on a tenant's root.
 
 Every column, key and other index is named as the context names everything else, by Entity Framework or by a naming convention on its options. The condition of each filtered index reads its column by the name the model has for it when this is called, which a convention has given by then; a column of Tenancy's that the application names by hand, it names before this call.
 
@@ -221,7 +221,7 @@ modelBuilder.AddTenancyInvitations<ShopInvitation, InvitationId>();
 
 That call is the one generated into the project that declares Tenancy's classes, closed over the tenant, unit, role and seat ids (`TemplateRegistrationAttribute`), or into a project of the same `[assembly: Module]` that declares none. The invitation class and its id are named in the call, since an application may have none: one that never calls it has no invitations and no tables for them.
 
-The digest of an invitation's token is kept apart from the invitation, so that listing invitations never reads it. On Postgres, `DDDToolkit.Supporting.Tenancy.Postgres` lets no caller read that table: a token is found through a function that answers which invitation a digest is for, and nothing else.
+The digest of an invitation's token is kept apart from the invitation, so that listing invitations never reads it. On Postgres, `DTS.Tenancy.Postgres` lets no caller read that table: a token is found through a function that answers which invitation a digest is for, and nothing else.
 
 Both tables get the tenant filter and the save check, as Tenancy's others do. The fields the application adds to its invitation class are mapped by the toolkit's conventions, as on any aggregate. Adding the tables to an existing database is a migration of your own.
 
@@ -269,7 +269,7 @@ It needs Tenancy's tables in the same database: one database with a schema per m
 
 A module that sees only the application's ids, as above, writes them: nothing it sees says which of its ids are Tenancy's. Where the classes are visible, in the project that declares them or a project of the same module, `modelBuilder.AddTenancyReadModel()` is generated, closed over their four ids (`TemplateRegistrationAttribute`).
 
-Where the database keeps the rights itself and shows a seat only its own ([`TenancyStoreOptions.DatabaseKeepsRights`](#tenancystoreoptions), as on Postgres with `DDDToolkit.Supporting.Tenancy.Postgres`), a module reads no table of Tenancy's: map [`AddTenancyReadFunctions<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancyreadfunctionsmodelbuilder-string) there instead. The questions refuse a context of a module that maps these views on such a database.
+Where the database keeps the rights itself and shows a seat only its own ([`TenancyStoreOptions.DatabaseKeepsRights`](#tenancystoreoptions), as on Postgres with `DTS.Tenancy.Postgres`), a module reads no table of Tenancy's: map [`AddTenancyReadFunctions<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancyreadfunctionsmodelbuilder-string) there instead. The questions refuse a context of a module that maps these views on such a database.
 
 **Parameters**
 
@@ -293,7 +293,7 @@ public static ModelBuilder AddTenancyReadFunctions<TTenantId, TSeatId, TUnitId, 
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Maps Tenancy's read model into a context that is not Tenancy's own as Tenancy's read functions, which a package for one database writes into it (`DDDToolkit.Supporting.Tenancy.Postgres` does): the six rows the access questions read, each from the function of its name ([`TenancyFunctionNames`](#tenancyfunctionnames)) in `schema`, under the column names that function answers. The module's model then names no table of Tenancy's, only functions, which are what Tenancy offers other modules; and `db.Tenancy()` works exactly as over the views of [`AddTenancyReadModel<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancyreadmodelmodelbuilder-string-tenancytablenames): a question is a subquery of the module's own query, one statement and one round trip.
+Maps Tenancy's read model into a context that is not Tenancy's own as Tenancy's read functions, which a package for one database writes into it (`DTS.Tenancy.Postgres` does): the six rows the access questions read, each from the function of its name ([`TenancyFunctionNames`](#tenancyfunctionnames)) in `schema`, under the column names that function answers. The module's model then names no table of Tenancy's, only functions, which are what Tenancy offers other modules; and `db.Tenancy()` works exactly as over the views of [`AddTenancyReadModel<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancyreadmodelmodelbuilder-string-tenancytablenames): a question is a subquery of the module's own query, one statement and one round trip.
 
 ```csharp
 if (Database.IsNpgsql())
@@ -375,7 +375,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 public sealed record TenancyTableNames
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 The names of Tenancy's tables. The tables live in the default schema of the context that maps them.
 
@@ -457,7 +457,7 @@ public sealed class TenancyAccessRevision<TTenantId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 One row per tenant that every change of rights in it reads and bumps, before it checks anything. Its [`Revision`](#tenancyaccessrevisionttenantid) is a concurrency token, so of two changes that each decided on what the other was about to change, the second to save fails instead of both being written. The seats, roles and units such a change touches are different rows, and their own versions could not see the conflict.
 
@@ -476,7 +476,7 @@ One row per tenant that every change of rights in it reads and bumps, before it 
 public static class TenancyModel
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 What a model built with `AddTenancy`, `AddTenancyReadModel`, `AddTenancyReadFunctions`, `ScopeToTenant` and `[OfTenant]` says about tenancy, for a package that works from the model, such as one that writes database policies: which entity types are Tenancy's own tables, which property holds the tenant of an entity type kept to one, whether the model reads Tenancy through its functions, whether a module's model reads more of Tenancy's than the access facts of its read model, which entity types keep who changed their rows, and where Tenancy's access history is.
 
@@ -585,7 +585,7 @@ The property that holds the tenant of `entityType`, as `ScopeToTenant`, `[OfTena
 public static class TenancyQueryFilter
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 The query filter that keeps every read of a tenant's rows to the current Tenancy user's tenant. It matches the rows of the tenant a seat or system work in a tenant acts in, and nothing for nobody and for system work outside any tenant.
 
@@ -623,7 +623,7 @@ It passes one array for every call. So Entity Framework finds the compiled query
 public enum TenancyTable
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 Tenancy's own tables, as [TenancyModel.TableOf](#tableofientitytype) names them.
 
@@ -644,7 +644,7 @@ Tenancy's own tables, as [TenancyModel.TableOf](#tableofientitytype) names them.
 
 ## Store
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 ### `ITenancySaveFailures`
 
@@ -685,11 +685,11 @@ What Tenancy's store leaves to the database. Nothing by default.
 
 | Member | Summary |
 |---|---|
-| `bool DatabaseKeepsRights { get; set; }` | The database writes each seat's rights itself, from its grants, its seat and its roles, and lets a seat read only its own. The save then writes no rights rows, and Tenancy's store asks the database's functions for what reaches past the calling seat's own rows: the tenant's administrators, the rights a move of a unit changes, and who holds a permission at a unit. Tenancy's reads across tenants, the tenants a sweep visits and the invitation a token is for, ask functions too, as scoped system work in no tenant, and nothing of Tenancy's then runs as the application itself. The functions are named by [`TenancyFunctionNames`](#tenancyfunctionnames), and a package for one database writes them, together with what keeps the rights: `DDDToolkit.Supporting.Tenancy.Postgres` does, and its `AddTenancyPostgres()` turns this on. Nothing else should: with it on and no such functions in the database, the rights are never written. |
+| `bool DatabaseKeepsRights { get; set; }` | The database writes each seat's rights itself, from its grants, its seat and its roles, and lets a seat read only its own. The save then writes no rights rows, and Tenancy's store asks the database's functions for what reaches past the calling seat's own rows: the tenant's administrators, the rights a move of a unit changes, and who holds a permission at a unit. Tenancy's reads across tenants, the tenants a sweep visits and the invitation a token is for, ask functions too, as scoped system work in no tenant, and nothing of Tenancy's then runs as the application itself. The functions are named by [`TenancyFunctionNames`](#tenancyfunctionnames), and a package for one database writes them, together with what keeps the rights: `DTS.Tenancy.Postgres` does, and its `AddTenancyPostgres()` turns this on. Nothing else should: with it on and no such functions in the database, the rights are never written. |
 
 ## Saving
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 ### `TenancySaveInterceptor`
 
@@ -762,7 +762,7 @@ Called at the start of `DbContext.SaveChangesAsync`.
 
 ## Read model
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 ### `EfQueryExecutor`
 
@@ -854,9 +854,6 @@ Where the database keeps the rights and shows a seat only its own ([`TenancyStor
 | `IQueryable<PlacementRow<TSeatId, TUnitId>> Placements { get; }` | Where seats are placed. |
 | `IQueryable<SeatRow<TTenantId, TSeatId>> Seats { get; }` | The seats. |
 | [`SeatsHoldingPermissionAt(string, TUnitId)`](#seatsholdingpermissionatstring-tunitid) | The seats that hold `permission` at `unit` now, as the storage itself answers the calling seat, or `null` when it has no answer of its own and the question is worked out over the rows above. |
-| [`HoldsAtTenantAsync(TTenantId, TSeatId, string, DateTimeOffset, CancellationToken)`](#holdsattenantasyncttenantid-tseatid-string-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at the root unit of `tenant` at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
-| [`HoldsAtAsync(TTenantId, TSeatId, string, TUnitId, DateTimeOffset, CancellationToken)`](#holdsatasyncttenantid-tseatid-string-tunitid-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at `unit` or at a unit above it at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
-| [`HasUnitAsync(TTenantId, TUnitId, CancellationToken)`](#hasunitasyncttenantid-tunitid-cancellationtoken) | Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over [`ITenancyReadSource.Units`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid). |
 
 #### `EfTenancyReadSource(DbContext)`
 
@@ -892,79 +889,9 @@ The seats that hold `permission` at `unit` now, as the storage itself answers th
 
 Answered by the database's function where it keeps the rights and the context's model maps the function's row, as `AddTenancy`, `AddTenancyReadModel` and `AddTenancyReadFunctions` do; `null` anywhere else.
 
-#### `HoldsAtTenantAsync(TTenantId, TSeatId, string, DateTimeOffset, CancellationToken)`
-
-```csharp
-public Task<bool>? HoldsAtTenantAsync(
-    TTenantId tenant,
-    TSeatId seat,
-    string permission,
-    DateTimeOffset moment,
-    CancellationToken cancellationToken)
-```
-
-Whether `seat` holds `permission` at the root unit of `tenant` at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. The answer is the one [`ITenancyQueries.HoldsAtTenantAsync`](queries.md#holdsattenantasyncstring-cancellationtoken) works out over [`ITenancyReadSource.SeatRights`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid) and [`ITenancyReadSource.Units`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid). A storage that compiles its queries answers here, so a check of a permission for the whole tenant builds no query.
-
-**Parameters**
-
-- `tenant`: The seat's tenant.
-- `seat`: The seat.
-- `permission`: A live permission of the catalogue.
-- `moment`: The moment a right must apply at.
-- `cancellationToken`: Stops the reading.
-
-**Remarks**
-
-Read with a query compiled once for the context's model, over the same untracked sets as the properties above.
-
-#### `HoldsAtAsync(TTenantId, TSeatId, string, TUnitId, DateTimeOffset, CancellationToken)`
-
-```csharp
-public Task<bool>? HoldsAtAsync(
-    TTenantId tenant,
-    TSeatId seat,
-    string permission,
-    TUnitId unit,
-    DateTimeOffset moment,
-    CancellationToken cancellationToken)
-```
-
-Whether `seat` holds `permission` at `unit` or at a unit above it at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. The answer is the one [`ITenancyQueries.HoldsAtAsync`](queries.md#holdsatasyncstring-tunitid-cancellationtoken) works out over [`ITenancyReadSource.SeatRights`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid) and [`ITenancyReadSource.UnitPaths`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid).
-
-**Parameters**
-
-- `tenant`: The seat's tenant.
-- `seat`: The seat.
-- `permission`: A live permission of the catalogue.
-- `unit`: The unit.
-- `moment`: The moment a right must apply at.
-- `cancellationToken`: Stops the reading.
-
-**Remarks**
-
-Read with a query compiled once for the context's model, over the same untracked sets as the properties above.
-
-#### `HasUnitAsync(TTenantId, TUnitId, CancellationToken)`
-
-```csharp
-public Task<bool>? HasUnitAsync(TTenantId tenant, TUnitId unit, CancellationToken cancellationToken)
-```
-
-Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over [`ITenancyReadSource.Units`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid). System work in a tenant holds every permission at every unit of that tenant, so this is its check of a permission at a unit.
-
-**Parameters**
-
-- `tenant`: The tenant.
-- `unit`: The unit.
-- `cancellationToken`: Stops the reading.
-
-**Remarks**
-
-Read with a query compiled once for the context's model, over the same untracked set as [`Units`](#eftenancyreadsourcettenantid-tseatid-tunitid-troleid).
-
 ## Read functions
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 ### `TenancyFunctionNames`
 
@@ -998,7 +925,7 @@ The next three answer a seat what it may learn of other seats' rights, the one a
 
 ## Attribution
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 ### `TenancyActedByAccessor`
 
@@ -1081,7 +1008,7 @@ Tenancy's save interceptor, which `UseDDDToolkit` adds, fills them from the Tena
 
 They are ids, never a name: what a seat is shown by is the application's, which Tenancy's managers answer by id. They are shadow properties, so the entity's class does not change; read one with `EF.Property<SeatId?>(row, TenancyAttribution.ChangedBySeat)`. Adding them to a table that exists is a migration of your own, as any change to the model is.
 
-On Postgres, `DDDToolkit.Supporting.Tenancy.Postgres` writes a trigger on the table that holds a signed-in user to its own seat in these columns, and the application's own work to a kind that is no seat, so a statement that goes around the model cannot write somebody else's name.
+On Postgres, `DTS.Tenancy.Postgres` writes a trigger on the table that holds a signed-in user to its own seat in these columns, and the application's own work to a kind that is no seat, so a statement that goes around the model cannot write somebody else's name.
 
 The call without the seat's id is generated into the project that declares the seat class, and into the projects of its module (`TemplateRegistrationAttribute`). A module of its own names the id: `project.RecordsWhoChanged<Project, SeatId>()`.
 
@@ -1100,7 +1027,7 @@ The call without the seat's id is generated into the project that declares the s
 
 ## History
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 ### `TenancyEventLogExtensions`
 
@@ -1201,7 +1128,7 @@ options.UseOutbox<TenancyContext>(outbox => outbox
 
 Every row says which tenant its event is about, taken from the event itself, which every event of Tenancy's carries, and who acted, from the Tenancy user of the save: a seat, an operator, the system or a token ([`TenancyActedByAccessor`](#tenancyactedbyaccessor)). An event of the application's own that names no tenant gets the tenant the save runs in. The payload is the event as the outbox stores it: ids, permissions and dates, who made the change, and never what a tenant, a unit, a seat or a role is called. [`TenancyEventLogExtensions.AddTenancyEventLog<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancyeventlogeventlogoptions) chooses the events that change access.
 
-The rows are not kept to the caller's tenant by a query filter, since the toolkit's retention reads the table whole: code that reads the history names the tenant itself, and asks `tenancy.history.view` for the whole tenant first. On Postgres, `DDDToolkit.Supporting.Tenancy.Postgres` writes the table's policies: a seat adds rows about itself in its tenant and reads its tenant's with that permission, and system work adds and reads its tenant's. It writes them with those of Tenancy's own tables, so the log belongs in the context that maps them: an export refuses it in any other, where it would be left without a policy.
+The rows are not kept to the caller's tenant by a query filter, since the toolkit's retention reads the table whole: code that reads the history names the tenant itself, and asks `tenancy.history.view` for the whole tenant first. On Postgres, `DTS.Tenancy.Postgres` writes the table's policies: a seat adds rows about itself in its tenant and reads its tenant's with that permission, and system work adds and reads its tenant's. It writes them with those of Tenancy's own tables, so the log belongs in the context that maps them: an export refuses it in any other, where it would be left without a policy.
 
 The call without type arguments is generated into the project that declares the tenant class, and into the projects of its module (`TemplateRegistrationAttribute`). Everything else is `AddEventLog`'s: the table only grows, and its name, its schema and how long it keeps a row are that method's to explain.
 
@@ -1226,7 +1153,7 @@ The call without type arguments is generated into the project that declares the 
 
 ## Invitations
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 ### `TenancyInvitationDigest<TInvitationId, TTenantId>`
 
@@ -1238,7 +1165,7 @@ public sealed class TenancyInvitationDigest<TInvitationId, TTenantId>
 
 The digest of an invitation's token, in a table of its own next to the invitations: one row per invitation, written with it and never changed.
 
-It is kept apart so that reading invitations never reads a digest. Whoever manages seats lists the invitations into their units; the digest is of no use to them, and a table nobody is let read gives it to nobody. On Postgres, `DDDToolkit.Supporting.Tenancy.Postgres` writes this table no policy that lets a caller read it: whoever issues an invitation adds its row, and the one question asked of it, which invitation a digest is for, is answered by a function.
+It is kept apart so that reading invitations never reads a digest. Whoever manages seats lists the invitations into their units; the digest is of no use to them, and a table nobody is let read gives it to nobody. On Postgres, `DTS.Tenancy.Postgres` writes this table no policy that lets a caller read it: whoever issues an invitation adds its row, and the one question asked of it, which invitation a digest is for, is answered by a function.
 
 **Type parameters**
 
@@ -1253,7 +1180,7 @@ It is kept apart so that reading invitations never reads a digest. Whoever manag
 
 ## Start-up checks
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 ### `TenancyChecks`
 

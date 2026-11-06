@@ -24,7 +24,7 @@ namespace Examples.Webshop.Payments.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("DDDToolkit.EntityFramework.Inbox.InboxMessage", b =>
+            modelBuilder.Entity("DTS.DDD.EntityFramework.Inbox.InboxMessage", b =>
                 {
                     b.Property<Guid>("MessageId")
                         .HasColumnType("uuid");
@@ -47,7 +47,7 @@ namespace Examples.Webshop.Payments.Migrations
                     b.ToTable("InboxMessages", "payments");
                 });
 
-            modelBuilder.Entity("DDDToolkit.EntityFramework.Outbox.OutboxMessage", b =>
+            modelBuilder.Entity("DTS.DDD.EntityFramework.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");

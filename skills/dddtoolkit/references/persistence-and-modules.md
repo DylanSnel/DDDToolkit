@@ -4,20 +4,20 @@ The wiring a DDDToolkit solution needs once aggregates are stored and modules ta
 section links the docs page with the full story; fetch it when a task goes further than this. A page
 named `x.md` below is `https://dylansnel.github.io/DDDToolkit/docs/x.md`.
 
-Namespaces: `AddDDDToolkitEntityFramework` and `UseDDDToolkit` are in `DDDToolkit.EntityFramework`;
-`AddDDDToolkitConventions` in `DDDToolkit.EntityFramework.Conventions`; `AddDomainEventOutbox` in
-`DDDToolkit.EntityFramework.Outbox` and `AddDomainEventInbox` in `DDDToolkit.EntityFramework.Inbox`;
+Namespaces: `AddDDDToolkitEntityFramework` and `UseDDDToolkit` are in `DTS.DDD.EntityFramework`;
+`AddDDDToolkitConventions` in `DTS.DDD.EntityFramework.Conventions`; `AddDomainEventOutbox` in
+`DTS.DDD.EntityFramework.Outbox` and `AddDomainEventInbox` in `DTS.DDD.EntityFramework.Inbox`;
 `IOutboundIntegrationEvent<,>`, `IIntegrationEventHandler<>` and `[IntegrationEventConsumer]` in
-`DDDToolkit.EntityFramework.Integration`; `IntegrationEventMessage` in `DDDToolkit.BaseTypes`;
-`IDomainEvent` in `DDDToolkit.Interfaces`; `DispatchWithMediator` in `DDDToolkit.Mediator`.
+`DTS.DDD.EntityFramework.Integration`; `IntegrationEventMessage` in `DTS.DDD.BaseTypes`;
+`IDomainEvent` in `DTS.DDD.Interfaces`; `DispatchWithMediator` in `DTS.DDD.Mediator`.
 
 ## Entity Framework Core
 
-Package `DDDToolkit.EntityFramework`. It brings its own generator, so referencing it is the only setup
+Package `DTS.DDD.EntityFramework`. It brings its own generator, so referencing it is the only setup
 for the generated parts. Full page: `https://dylansnel.github.io/DDDToolkit/docs/entity-framework.md`.
 
 ```csharp
-using DDDToolkit.EntityFramework;
+using DTS.DDD.EntityFramework;
 
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());   // delivery, below
 
@@ -47,7 +47,7 @@ the host's own in the host, as `dotnet ef` with the host as its startup project 
 context that needs more at design time than Npgsql and the toolkit (`MapEnum`, its own history table).
 
 ```csharp
-using DDDToolkit.EntityFramework.Conventions;
+using DTS.DDD.EntityFramework.Conventions;
 using Ordering.Converters;                   // generated: {AssemblyName}.Converters
 
 public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
@@ -92,7 +92,7 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 - `DDD_Module` names the generated code and declares the project's module: the build writes
   `[assembly: Module("Ordering")]` from it, below. In a test project, and in one that sets
   `<DDD_DeclareModule>false</DDD_DeclareModule>` beside it (rare: a shared kernel, a package of templates), it only
-  names the code. The `DDDToolkit.Analyzers` package declares the property to the compiler and brings the build
+  names the code. The `DTS.DDD.Analyzers` package declares the property to the compiler and brings the build
   step; a build that warns DDD00014 is ignoring both, see `diagnostics.md`.
 - Mapped with no configuration: identifiers and single value objects as their raw value (generated
   converters), `[Entity<T>]` children as owned types, `[ValueObject]` records inline as complex types,
@@ -119,8 +119,8 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   request or scope. A context rented from the factory dispatches in process only after
   `context.BindToScope(scope.ServiceProvider)`; the outbox needs no scope.
 - A primary key made of more than the id: `[KeyPart]`, see `composite-keys.md`. Migrations as Supabase
-  SQL files: `DDDToolkit.EntityFramework.Supabase`, see `supabase.md`. Queries run as the current user, and
-  `[RowAccess]` rules as Postgres policies: `DDDToolkit.EntityFramework.Postgres`, see `row-level-security.md`.
+  SQL files: `DTS.DDD.EntityFramework.Supabase`, see `supabase.md`. Queries run as the current user, and
+  `[RowAccess]` rules as Postgres policies: `DTS.DDD.EntityFramework.Postgres`, see `row-level-security.md`.
 - A property that never changes once its row is saved: `builder.Property(order => order.CustomerId).IsFixedAfterInsert()`.
   Entity Framework throws when a save would change it, and a policy script written with
   `RowAccessExport.WriteGrants` leaves its column out of the `UPDATE` privilege. Write the tables'
@@ -146,10 +146,10 @@ them. Full page: `https://dylansnel.github.io/DDDToolkit/docs/event-delivery.md`
 | Handlers must be idempotent | no | yes, keyed on `EventId` |
 | Use for | side effects in the same database | anything that leaves the module or the process |
 
-In-process, through [Mediator](https://github.com/martinothamar/Mediator) with `DDDToolkit.Mediator`:
+In-process, through [Mediator](https://github.com/martinothamar/Mediator) with `DTS.DDD.Mediator`:
 
 ```csharp
-using DDDToolkit.Mediator;
+using DTS.DDD.Mediator;
 
 builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);  // scoped: handlers use the DbContext
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());

@@ -17,7 +17,7 @@ Tenancy's queries for the current caller, which a module composes into its own q
 public static class TenancyEntityFrameworkExtensions
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 Asks Tenancy inside a module's own queries.
 
@@ -74,7 +74,7 @@ public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 What the current caller may do, asked over one read source. Made by `db.Tenancy()` over a context, or by [`TenancyAccessManager.In`](access.md#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor) over another read source. Either fixes the caller and the moment "now" once, so every answer of one set of queries agrees with the others.
 
@@ -441,7 +441,7 @@ public readonly record struct UnitPermission<TUnitId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 A unit and a permission the caller holds there now: one answer of [`ITenancyQueries.UnitsWhereIHold`](#unitswhereiholdireadonlycollectionstring), which answers such a pair for every unit a permission reaches, the units it is held at and every unit below them.
 
@@ -471,7 +471,7 @@ public readonly record struct RoleWithPermission<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 One of the tenant's active roles and a permission it grants: one answer of [`ITenancyQueries.RolesWithPermission`](#roleswithpermissionireadonlycollectionstring).
 
@@ -501,7 +501,7 @@ public sealed record MoveReach<TUnitId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 A right a move of a unit would change: where it is held, the permission, until when, which of the two parents it reaches, the one the unit hangs under or the one it would, and whether it is the moving seat's own. What a move's check reads of the rights of every seat, and no more of them: no seat, and no role.
 
@@ -542,7 +542,7 @@ public sealed record NamedUnit<TUnitId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 What a unit is called, and nothing more: its name, its path from the root and how deep it is. What `OrganizationManager.UnitsByIdAsync` answers about the units a caller works on, whether or not it reads the rest of the organization: a seat on a project at a unit it is not placed under, or one an application's restrictive rule keeps out of the organization, still reads what that unit is called.
 
@@ -571,7 +571,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Read model
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 ### `ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>`
 
@@ -608,9 +608,6 @@ A source may already keep every set to the current tenant. The queries keep to t
 | `IQueryable<PlacementRow<TSeatId, TUnitId>> Placements { get; }` | Where seats are placed. |
 | `IQueryable<SeatRow<TTenantId, TSeatId>> Seats { get; }` | The seats. |
 | [`SeatsHoldingPermissionAt(string, TUnitId)`](#seatsholdingpermissionatstring-tunitid-1) | The seats that hold `permission` at `unit` now, as the storage itself answers the calling seat, or `null` when it has no answer of its own and the question is worked out over the rows above. |
-| [`HoldsAtTenantAsync(TTenantId, TSeatId, string, DateTimeOffset, CancellationToken)`](#holdsattenantasyncttenantid-tseatid-string-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at the root unit of `tenant` at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
-| [`HoldsAtAsync(TTenantId, TSeatId, string, TUnitId, DateTimeOffset, CancellationToken)`](#holdsatasyncttenantid-tseatid-string-tunitid-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at `unit` or at a unit above it at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
-| [`HasUnitAsync(TTenantId, TUnitId, CancellationToken)`](#hasunitasyncttenantid-tunitid-cancellationtoken) | Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over [`Units`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). |
 
 #### `SeatsHoldingPermissionAt(string, TUnitId)`
 
@@ -624,64 +621,6 @@ The seats that hold `permission` at `unit` now, as the storage itself answers th
 
 - `permission`: A live permission of the catalogue.
 - `unit`: The unit.
-
-#### `HoldsAtTenantAsync(TTenantId, TSeatId, string, DateTimeOffset, CancellationToken)`
-
-```csharp
-Task<bool>? HoldsAtTenantAsync(
-    TTenantId tenant,
-    TSeatId seat,
-    string permission,
-    DateTimeOffset moment,
-    CancellationToken cancellationToken)
-```
-
-Whether `seat` holds `permission` at the root unit of `tenant` at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. The answer is the one [`ITenancyQueries.HoldsAtTenantAsync`](#holdsattenantasyncstring-cancellationtoken) works out over [`SeatRights`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid) and [`Units`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). A storage that compiles its queries answers here, so a check of a permission for the whole tenant builds no query.
-
-**Parameters**
-
-- `tenant`: The seat's tenant.
-- `seat`: The seat.
-- `permission`: A live permission of the catalogue.
-- `moment`: The moment a right must apply at.
-- `cancellationToken`: Stops the reading.
-
-#### `HoldsAtAsync(TTenantId, TSeatId, string, TUnitId, DateTimeOffset, CancellationToken)`
-
-```csharp
-Task<bool>? HoldsAtAsync(
-    TTenantId tenant,
-    TSeatId seat,
-    string permission,
-    TUnitId unit,
-    DateTimeOffset moment,
-    CancellationToken cancellationToken)
-```
-
-Whether `seat` holds `permission` at `unit` or at a unit above it at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. The answer is the one [`ITenancyQueries.HoldsAtAsync`](#holdsatasyncstring-tunitid-cancellationtoken) works out over [`SeatRights`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid) and [`UnitPaths`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid).
-
-**Parameters**
-
-- `tenant`: The seat's tenant.
-- `seat`: The seat.
-- `permission`: A live permission of the catalogue.
-- `unit`: The unit.
-- `moment`: The moment a right must apply at.
-- `cancellationToken`: Stops the reading.
-
-#### `HasUnitAsync(TTenantId, TUnitId, CancellationToken)`
-
-```csharp
-Task<bool>? HasUnitAsync(TTenantId tenant, TUnitId unit, CancellationToken cancellationToken)
-```
-
-Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over [`Units`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). System work in a tenant holds every permission at every unit of that tenant, so this is its check of a permission at a unit.
-
-**Parameters**
-
-- `tenant`: The tenant.
-- `unit`: The unit.
-- `cancellationToken`: Stops the reading.
 
 ### `IQueryExecutor`
 
@@ -856,7 +795,7 @@ A tenant's seat, as a row to read: whether it counts, never its identity, nor a 
 
 ## Projection
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 ### `TenancyProjection`
 
@@ -975,7 +914,7 @@ The primary constructor: the type's summary says what it makes.
 public static class TenancyFunctions
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 Tenancy's functions in a database that answers the questions itself, as another package names them: the rules of a resource with members, say, whose own functions ask Tenancy's.
 
@@ -983,7 +922,7 @@ Tenancy's functions in a database that answers the questions itself, as another 
 MembershipRules.For<Board>(roles, above: new ReachFromAbove(TenancyFunctions.UnitsWhereIHold))
 ```
 
-Each is named by its owner, [`TenancyRowAccess.Owner`](#tenancyrowaccess), and its name, whatever schema the application gives Tenancy's tables: the script that writes a function that asks one finds it where it is defined. `DDDToolkit.Supporting.Tenancy.Postgres` defines them.
+Each is named by its owner, [`TenancyRowAccess.Owner`](#tenancyrowaccess), and its name, whatever schema the application gives Tenancy's tables: the script that writes a function that asks one finds it where it is defined. `DTS.Tenancy.Postgres` defines them.
 
 | Member | Summary |
 |---|---|
@@ -997,7 +936,7 @@ Each is named by its owner, [`TenancyRowAccess.Owner`](#tenancyrowaccess), and i
 public static class TenancyRowAccess
 ```
 
-Namespace `DDDToolkit.Abstractions.Access`.
+Namespace `DTS.DDD.Abstractions.Access`.
 
 Tenancy's questions as a row access rule asks them, of its user, so a module writes its rules on the seats, units and roles Tenancy keeps without referencing anything of a database:
 
@@ -1012,7 +951,7 @@ public static partial class ReportsAreReadWhereThePermissionIsHeld
 
 The class is in the namespace of `IRowUser`, so the `using` a rule has for its user is the only one it needs. Each question is generic over the application's ids, and a question whose type parameters are all ids has a wrapper without type arguments in every project of a module that declares Tenancy's classes, or says which of its ids are Tenancy's with `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`. The generic form keeps working: `user.UnitsWhereIHold<OrganizationUnitId>(permission)`.
 
-Only the database answers them: the SQL functions of the same names, which `DDDToolkit.Supporting.Tenancy.Postgres` writes into the schema of the context that maps Tenancy's tables, for the caller whose identity and tenant the connection carries. Called in C#, each throws. In C#, ask [`ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>`](#itenancyqueriesttenantid-tseatid-tunitid-troleid), which gives the same answers to a seat.
+Only the database answers them: the SQL functions of the same names, which `DTS.Tenancy.Postgres` writes into the schema of the context that maps Tenancy's tables, for the caller whose identity and tenant the connection carries. Called in C#, each throws. In C#, ask [`ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>`](#itenancyqueriesttenantid-tseatid-tunitid-troleid), which gives the same answers to a seat.
 
 The functions answer for a seat: a signed-in user's, found from the verified identity and the tenant. A suspended or deactivated seat holds nothing, and neither does any seat of a suspended or closed tenant; a question about the caller answers `NULL` for someone without an active seat there, which no comparison passes. A rule for anonymous callers that asks one is refused when the policies are written. System work in a tenant has no seat, so every question answers nothing for it, where the C# questions answer the whole tenant: the policies Tenancy writes keep system work to its tenant themselves, so a rule for it asks none of these.
 
@@ -1236,7 +1175,7 @@ Answered by the SQL function `tenancy/roles_with_permission_in_tenant`, a set a 
 public static class TenancySaveCheck
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 The rule every write of a tenant's row passes, whatever wrote it: a seat and system work in a tenant only write their own tenant's rows, and nobody writes any. The storage applies it to every changed row that belongs to a tenant, before anything is written, so a handler that loaded the wrong row cannot save it.
 

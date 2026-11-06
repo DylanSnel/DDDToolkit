@@ -1,8 +1,8 @@
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Access;
-using DDDToolkit.EntityFramework;
-using DDDToolkit.Exceptions;
-using DDDToolkit.Startup;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Access;
+using DTS.DDD.EntityFramework;
+using DTS.DDD.Exceptions;
+using DTS.DDD.Startup;
 using Examples.Hosting;
 using Examples.Webshop.Ordering;
 using Examples.Webshop.Ordering.Application.Orders;

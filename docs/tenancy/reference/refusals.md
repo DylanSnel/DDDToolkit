@@ -11,7 +11,7 @@ Every refusal code of Tenancy, in the members of `TenancyRefusals`, and the reso
 
 ## Refusal codes
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### `TenancyRefusals`
 
@@ -25,7 +25,7 @@ An argument a message shows is a value, such as a permission or an id, never a w
 
 The Dutch texts have no word for the reader. Dutch makes a writer choose between a familiar and a formal word for "you", and that choice is the application's, so a Dutch sentence says what is the case or what is needed and leaves the word out. An application that wants another tone, or other words, registers a resx of its own in front of this one.
 
-Each code is also the code of the nested invariant that states the same rule after the fact, where a rule has both: the method refuses before anything changes, and the invariant is the net under code that got round the method. `TenancyFailures.resx` holds the same English text, and its Dutch sibling a translation, for `DDDToolkit.Localization` to phrase a refusal in the reader's language:
+Each code is also the code of the nested invariant that states the same rule after the fact, where a rule has both: the method refuses before anything changes, and the invariant is the net under code that got round the method. `TenancyFailures.resx` holds the same English text, and its Dutch sibling a translation, for `DTS.DDD.Localization` to phrase a refusal in the reader's language:
 
 ```csharp
 services.AddLocalization();
@@ -149,7 +149,7 @@ The refusal for `code`, with its kind, its English message filled from `argument
 
 ## Texts
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### `TenancyFailures`
 
