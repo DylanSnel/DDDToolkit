@@ -3240,6 +3240,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
+- **Docs: design principles.** New in 3.2.0-preview.16. [Design principles](docs/design-principles.md) lists the rules
+  that the toolkit's packages follow, each with its reason and a link to the page that shows it. It covers what the
+  application writes, how a package plugs in, the domain, access, and names. It sits under Supporting domains, and
+  [Writing your own supporting domain](docs/writing-a-supporting-domain.md) links to it.
 - **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
