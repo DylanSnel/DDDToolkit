@@ -265,7 +265,7 @@ var via = answer is null ? null : edit.Via(answer.AsMember, answer.FromAbove);
 [fail closed](../access-requirements.md#what-answers-it):
 
 - `[SeenWith]` refuses nobody for lacking the permission. `WhereIHold` in the query is the filter. So `[SeenWith]`
-  goes on queries only. On a Mediator command or a plain `IRequest` it is [DDD00082](../diagnostics.md#ddd00082).
+  goes on queries only. On a command or a plain `IRequest` it is [DDD00082](../diagnostics.md#ddd00082).
   With another dispatcher, a [test](../access-requirements.md#testing-the-requirements) checks it.
 - A caller who did not sign in reaches nothing. The check refuses that caller with `documents.not-permitted`, and no
   statement is sent.
@@ -345,12 +345,12 @@ A save that changes a resource with members, or one of its members or roles, the
 - **The hold follows the flow of work.** One scope can handle several requests, such as GraphQL mutations, or a query
   before a command. A hold that a query's check kept lets no directly called handler save.
 - **Run the checks and the handler in one `async` method.** The generated behavior does this, and so does
-  [a dispatcher of your own](../access-requirements.md#asking-the-checks-without-mediator) that awaits both. A helper
+  [a dispatcher of your own](../access-requirements.md#asking-the-checks-yourself) that awaits both. A helper
   that only runs the checks has the request in hand inside the helper alone, so every later save is refused. A
   dispatcher without `async` that returns the chained task leaves the request in hand for its caller.
-- **Save inside the access behavior.** Register a unit of work after `Add{Module}AccessBehavior()`. Do not register
-  it in `MediatorOptions.PipelineBehaviors`, because those behaviors run first. An endpoint does not save after
-  `Send`.
+- **Save inside the access behavior.** Register a unit of work with `AddPipelineBehavior` after
+  `Add{Module}AccessBehavior()`, so it runs inside it. A behavior registered before it runs first. An endpoint does
+  not save after `Send`.
 - **A second save** is tied to the version the first save left. A failed save counts for nothing. Retried with the
   values as loaded, it is a 409 again.
 - **`Version` must be a concurrency token.** Otherwise the first held save is refused. `UseMemberHolds` goes after

@@ -757,6 +757,98 @@ applications and in ASP.NET Core, which have no synchronization context. Under a
 synchronization context, the block can deadlock. Otherwise the two methods behave the same. Both dispatch the events
 before the write.
 
+## Sending requests
+
+The same mediator sends requests, commands and queries. Each has exactly one handler. The interfaces carry the names
+and signatures of [Mediator](https://github.com/martinothamar/Mediator), so code written for Mediator changes only
+its `using` to `using DTS.DDD.Mediator;`.
+
+| Message | Handler | Sent with |
+|---|---|---|
+| `ICommand<TResponse>`, or `ICommand` for one that answers nothing | `ICommandHandler<TCommand, TResponse>` | `ISender.Send` |
+| `IQuery<TResponse>` | `IQueryHandler<TQuery, TResponse>` | `ISender.Send` |
+| `IRequest<TResponse>`, or `IRequest` | `IRequestHandler<TRequest, TResponse>` | `ISender.Send` |
+| `IStreamCommand<T>`, `IStreamQuery<T>`, `IStreamRequest<T>` | `IStreamCommandHandler<,>` and the like | `ISender.CreateStream` |
+
+A command, a query and its handler:
+
+```csharp
+public sealed record CloseInvoiceCommand(InvoiceId Invoice) : ICommand<Invoice>;
+
+internal sealed class CloseInvoice(IInvoiceRepository invoices) : ICommandHandler<CloseInvoiceCommand, Invoice>
+{
+    public async ValueTask<Invoice> Handle(CloseInvoiceCommand command, CancellationToken cancellationToken)
+    {
+        var invoice = await invoices.GetAsync(command.Invoice, cancellationToken);
+        invoice.Close();
+        await invoices.SaveAsync(cancellationToken);
+        return invoice;
+    }
+}
+```
+
+```csharp
+app.MapPost("/invoices/{id}/close", (InvoiceId id, ISender sender, CancellationToken cancellationToken)
+    => sender.Send(new CloseInvoiceCommand(id), cancellationToken));
+```
+
+- **The generator registers the handlers.** `Add{Module}Handlers()` registers the request handlers of a project beside
+  its notification handlers, each scoped. A handler may be internal.
+- **A request has one handler.** A second handler of one request in a project is
+  [DDD00110](diagnostics.md#ddd00110). A second registration at run time throws, and names both handlers.
+- **The handler is found by the request's runtime type.** A handler declared for a base type handles what derives from
+  it, unless the derived type has a handler of its own.
+- **A request without a handler throws.** `MissingMessageHandlerException` names the request's type.
+- **`IMediator` sends and publishes.** It is the same scoped object as `ISender`. `IPublisher` is resolved beside it.
+
+### Pipeline behaviors
+
+A pipeline behavior runs around the handler of a request, a command or a query:
+
+```csharp
+internal sealed class TimeTheHandler<TMessage, TResponse>(ILogger<TMessage> logger)
+    : IPipelineBehavior<TMessage, TResponse>
+    where TMessage : IMessage
+{
+    public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var response = await next(message, cancellationToken);
+        logger.LogDebug("{Message} was handled in {Elapsed}", typeof(TMessage).Name, Stopwatch.GetElapsedTime(started));
+        return response;
+    }
+}
+```
+
+```csharp
+builder.Services.AddPipelineBehavior(typeof(TimeTheHandler<,>));
+```
+
+- An open generic behavior runs around every message that satisfies its constraints. One constrained to
+  `IBaseCommand` runs around commands only.
+- A closed behavior, such as one that implements `IPipelineBehavior<CloseInvoiceCommand, Invoice>`, runs around that
+  message alone.
+- The behavior registered first is the outermost.
+- An open behavior takes the message as its first type parameter and the response as its second.
+  `AddPipelineBehavior` refuses one declared the other way round.
+- A message answered with a stream passes the behaviors of `IStreamPipelineBehavior<TMessage, TResponse>` instead,
+  registered with `AddStreamPipelineBehavior`.
+- A behavior is scoped by default, so it can take the scope's services. With no behavior registered, the sender calls
+  the handler directly.
+
+The access behavior that the generator writes for a request interface is a pipeline behavior of this kind
+([The generated behavior](access-requirements.md#the-generated-behavior)).
+
+### What differs from Mediator
+
+- Mediator generates a mediator class into each project that runs its generator. The toolkit's mediator is one class
+  in the core package, and each project's generated registration adds its handlers to it.
+- Mediator's handlers are singletons by default. The toolkit's handlers are scoped, so a handler can take the scope's
+  `DbContext`.
+- The toolkit has no `MessagePreProcessor`, `MessagePostProcessor` or `MessageExceptionHandler`. Write a pipeline
+  behavior for each of them.
+- Notifications run one after another. There is no `INotificationPublisher` to choose another order.
+
 ## Why the toolkit has its own mediator
 
 MediatR did this job for the first two major versions of the toolkit. From version 13, MediatR has a commercial
@@ -777,10 +869,12 @@ The toolkit's mediator takes the design ideas it needs:
   through reflection.
 - A notification is dispatched on its runtime type, so an event that arrives as `IDomainEvent`, from a save or from
   an outbox row, reaches the handlers of its own type.
-- The publisher is public and scoped, so every project of a module and the host can use it.
+- The publisher and the sender are public and scoped, so every project of a module and the host can use them.
+- Requests, commands and queries run on the same mediator, with the same names
+  ([Sending requests](#sending-requests)).
 
 You can still use another library for the events. Write [the dispatch delegate](#the-dispatch-delegate) and publish
-through its publisher. The requests of the examples run on Mediator for now.
+through its publisher.
 
 ## Where to look next
 

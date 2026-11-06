@@ -16,16 +16,16 @@ namespace DTS.DDD.Analyzers.Analyzers;
 /// missing.
 /// <para>
 /// The message names one of two causes. The registration is declared in the namespace of the interface, so code outside
-/// that namespace needs a using directive. Or the project of the interface does not reference the Mediator library, so
-/// the generator wrote no registration.
+/// that namespace needs a using directive. Or the project of the interface was built where the toolkit's mediator is not,
+/// for netstandard2.0 say, so the generator wrote no behavior.
 /// </para>
 /// <para>
-/// The diagnostic is on the call and not on the interface. A project without the library may ask
+/// The diagnostic is on the call and not on the interface. A project without a behavior may ask
 /// <c>AccessChecks&lt;TRequests&gt;.RequireAsync</c> itself. Such a project writes no call, so nothing is reported there.
 /// </para>
 /// <para>
-/// In a project that references the library, an interface without a behavior is DDD00056 or DDD00057. Both name the cause
-/// on the interface, so this analyzer adds nothing to them. It looks through the referenced assemblies only after a call
+/// In a project that sees the mediator, an interface without a behavior is DDD00056 or DDD00057. Both name the cause on
+/// the interface, so this analyzer adds nothing to them. It looks through the referenced assemblies only after a call
 /// failed to bind, so a build that compiles does not pay for the search.
 /// </para>
 /// </summary>
@@ -83,8 +83,8 @@ public sealed class AccessBehaviorCallAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// What the call misses of <paramref name="requests"/>, or <see langword="null"/> where another diagnostic says it.
-    /// A referenced project compiled, so it has neither DDD00056 nor DDD00057, and only the missing library leaves it
-    /// without a behavior.
+    /// A referenced project compiled, so it has neither DDD00056 nor DDD00057, and only a build without the mediator
+    /// leaves it without a behavior.
     /// </summary>
     private static string? WhyNotFound(INamedTypeSymbol requests, string behavior, Compilation compilation)
     {
@@ -102,7 +102,7 @@ public sealed class AccessBehaviorCallAnalyzer : DiagnosticAnalyzer
         }
 
         var project = requests.ContainingAssembly.Name;
-        return "The generator writes it only in a project that references the Mediator library, and '" + project + "' does not. Add the package Mediator.Abstractions to '" + project + "', or remove this call and ask AccessChecks<" + requests.Name + ">.RequireAsync yourself";
+        return "The generator writes it only in a project that sees the toolkit's mediator, which DylansTechStack.DDD.Abstractions declares for .NET 10, and '" + project + "' has no behavior. Build '" + project + "' for .NET 10 with DylansTechStack.DDD, or remove this call and ask AccessChecks<" + requests.Name + ">.RequireAsync yourself";
     }
 
     private static bool IsServiceCollection(ITypeSymbol type, INamedTypeSymbol services)

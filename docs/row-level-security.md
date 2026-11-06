@@ -2956,7 +2956,7 @@ where the database named one or the save wrote one.
 You write nothing for this. `AccessChecks<TRequests>.RequireAsync` puts every request that it lets through in hand,
 with its access check, in the flow of the method that awaited it. That method is the behavior that the generator
 writes, or a dispatcher of yours written with `async` and `await`
-([asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)).
+([asking the checks yourself](access-requirements.md#asking-the-checks-yourself)).
 
 - The lines are written through the context's logger factory, under the category of `DatabaseRefusalInterceptor`.
 - They name the request and its requirement by their types, never by their values.

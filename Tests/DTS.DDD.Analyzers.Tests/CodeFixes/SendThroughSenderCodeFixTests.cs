@@ -24,7 +24,7 @@ public class SendThroughSenderCodeFixTests
         using System.Threading.Tasks;
         using DTS.DDD.Abstractions.Attributes;
         using DTS.DDD.Access;
-        using Mediator;
+        using DTS.DDD.Mediator;
 
         namespace Shop.Billing;
 

@@ -186,23 +186,23 @@ internal static class KnownTypes
     /// <summary>The core's requirement, whose static methods combine cases and make the caller's own.</summary>
     public const string AccessRequirementUsage = "global::DTS.DDD.Access.AccessRequirement";
 
-    /// <summary>What every command of the Mediator library implements: a requirement for queries only is not stated on one.</summary>
-    public const string MediatorBaseCommand = "Mediator.IBaseCommand";
+    /// <summary>What every command of the toolkit's mediator implements: a requirement for queries only is not stated on one.</summary>
+    public const string MediatorBaseCommand = "DTS.DDD.Mediator.IBaseCommand";
 
-    /// <summary>What every command of the Mediator library answered with a stream implements.</summary>
-    public const string MediatorBaseStreamCommand = "Mediator.IBaseStreamCommand";
+    /// <summary>What every command of the toolkit's mediator answered with a stream implements.</summary>
+    public const string MediatorBaseStreamCommand = "DTS.DDD.Mediator.IBaseStreamCommand";
 
-    /// <summary>What every query of the Mediator library implements: the one kind of its messages a requirement for queries only is stated on.</summary>
-    public const string MediatorBaseQuery = "Mediator.IBaseQuery";
+    /// <summary>What every query of the toolkit's mediator implements: the one kind of its messages a requirement for queries only is stated on.</summary>
+    public const string MediatorBaseQuery = "DTS.DDD.Mediator.IBaseQuery";
 
-    /// <summary>What every query of the Mediator library answered with a stream implements.</summary>
-    public const string MediatorBaseStreamQuery = "Mediator.IBaseStreamQuery";
+    /// <summary>What every query of the toolkit's mediator answered with a stream implements.</summary>
+    public const string MediatorBaseStreamQuery = "DTS.DDD.Mediator.IBaseStreamQuery";
 
-    /// <summary>What every message of the Mediator library answered once implements: a command, a query, a plain request.</summary>
-    public const string MediatorMessage = "Mediator.IMessage";
+    /// <summary>What every message of the toolkit's mediator answered once implements: a command, a query, a plain request, a notification.</summary>
+    public const string MediatorMessage = "DTS.DDD.Mediator.IMessage";
 
-    /// <summary>What every message of the Mediator library answered with a stream implements.</summary>
-    public const string MediatorStreamMessage = "Mediator.IStreamMessage";
+    /// <summary>What every message of the toolkit's mediator answered with a stream implements.</summary>
+    public const string MediatorStreamMessage = "DTS.DDD.Mediator.IStreamMessage";
 
     /// <summary>Where the set of a module's access checks is registered, which a generated behavior's registration calls.</summary>
     public const string AccessCheckRegistration = "DTS.DDD.Access.AccessCheckServiceCollectionExtensions";
@@ -220,29 +220,29 @@ internal static class KnownTypes
     public const string AccessRequirement = "DTS.DDD.Access.AccessRequirement";
 
     /// <summary>
-    /// The pipeline behavior of the Mediator library (assembly Mediator.Abstractions). A project that can see it
-    /// uses the library, and gets a behavior written for each of its <c>[AccessRequests]</c> interfaces.
+    /// The pipeline behavior of the toolkit's mediator (assembly DTS.DDD.Abstractions, on .NET 10). A project that
+    /// can see it gets a behavior written for each of its <c>[AccessRequests]</c> interfaces.
     /// </summary>
-    public const string MediatorPipelineBehavior = "Mediator.IPipelineBehavior`2";
+    public const string MediatorPipelineBehavior = "DTS.DDD.Mediator.IPipelineBehavior`2";
 
     /// <summary>
-    /// The Mediator library's pipeline behavior for the messages that are answered with a stream, which pass no
-    /// <see cref="MediatorPipelineBehavior"/>. Where the library has it, an <c>[AccessRequests]</c> interface
-    /// gets a second behavior, so a stream query of the module is held to what it declares as well.
+    /// The mediator's pipeline behavior for the messages that are answered with a stream, which pass no
+    /// <see cref="MediatorPipelineBehavior"/>. An <c>[AccessRequests]</c> interface gets a second behavior for it,
+    /// so a stream query of the module is held to what it declares as well.
     /// </summary>
-    public const string MediatorStreamPipelineBehavior = "Mediator.IStreamPipelineBehavior`2";
+    public const string MediatorStreamPipelineBehavior = "DTS.DDD.Mediator.IStreamPipelineBehavior`2";
 
     /// <summary>
-    /// The Mediator library's notification, which is published to its handlers through neither pipeline: a
-    /// notification that implements an <c>[AccessRequests]</c> interface is asked about by nothing.
+    /// The mediator's notification, which is published to its handlers through neither pipeline: a notification
+    /// that implements an <c>[AccessRequests]</c> interface is asked about by nothing.
     /// </summary>
-    public const string MediatorNotification = "Mediator.INotification";
+    public const string MediatorNotification = "DTS.DDD.Mediator.INotification";
 
     /// <summary>
-    /// The Mediator library's sender, through which a command or a query passes the pipeline on its way to its handler.
-    /// A project that can see it uses the library, and a handler of its called directly is DDD00061.
+    /// The mediator's sender, through which a command or a query passes the pipeline on its way to its handler. In a
+    /// project that can see it, a handler called directly is DDD00061.
     /// </summary>
-    public const string MediatorSender = "Mediator.ISender";
+    public const string MediatorSender = "DTS.DDD.Mediator.ISender";
 
     /// <summary>The service collection a generated registration extends (assembly Microsoft.Extensions.DependencyInjection.Abstractions).</summary>
     public const string ServiceCollection = "Microsoft.Extensions.DependencyInjection.IServiceCollection";

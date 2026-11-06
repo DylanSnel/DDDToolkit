@@ -28,7 +28,7 @@ public sealed class AccessBehaviorAttribute(Type requests, Type behavior) : Attr
     public Type Behavior { get; } = behavior;
 
     /// <summary>
-    /// The behavior in the pipeline of the messages answered with a stream, where the library has that pipeline, or
+    /// The behavior in the pipeline of the messages answered with a stream, where the mediator has that pipeline, or
     /// null where it has none.
     /// </summary>
     public Type? StreamBehavior { get; set; }

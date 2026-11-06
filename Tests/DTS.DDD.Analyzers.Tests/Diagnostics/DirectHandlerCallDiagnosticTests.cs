@@ -20,7 +20,7 @@ public class DirectHandlerCallDiagnosticTests
         using System.Threading.Tasks;
         using DTS.DDD.Abstractions.Attributes;
         using DTS.DDD.Access;
-        using Mediator;
+        using DTS.DDD.Mediator;
 
         namespace Shop.Billing;
 
@@ -233,7 +233,7 @@ public class DirectHandlerCallDiagnosticTests
     {
         var result = Run(
             """
-            public sealed class LoggedCloseInvoiceHandler : CloseInvoiceHandler
+            file sealed class LoggedCloseInvoiceHandler : CloseInvoiceHandler
             {
                 public override async ValueTask<Unit> Handle(CloseInvoice command, CancellationToken cancellationToken)
                     => await base.Handle(command, cancellationToken);
@@ -247,16 +247,17 @@ public class DirectHandlerCallDiagnosticTests
     [Fact]
     public void A_handler_derived_from_another_that_overrides_Handle_is_reported_where_it_is_called()
     {
-        // The derived class implements the interface through its base's Handle, which its own overrides.
+        // The derived class implements the interface through its base's Handle, which its own overrides. It is
+        // file-local, so the handler registration leaves it out and it is no second handler (DDD00110).
         var result = Run(
             """
-            public sealed class LoggedCloseInvoiceHandler : CloseInvoiceHandler
+            file sealed class LoggedCloseInvoiceHandler : CloseInvoiceHandler
             {
                 public override async ValueTask<Unit> Handle(CloseInvoice command, CancellationToken cancellationToken)
                     => await base.Handle(command, cancellationToken);
             }
 
-            public sealed class Closing(LoggedCloseInvoiceHandler handler)
+            file sealed class Closing(LoggedCloseInvoiceHandler handler)
             {
                 public async Task CloseAsync(CancellationToken cancellationToken) => await handler.Handle(new CloseInvoice(7), cancellationToken);
             }
@@ -270,16 +271,17 @@ public class DirectHandlerCallDiagnosticTests
     [Fact]
     public void A_handler_that_wraps_another_and_hands_it_the_message_it_was_given_is_left_alone()
     {
-        // A decorator: the library dispatches the message to it after the pipeline, as to any handler, and sending
-        // it again would come back round to the decorator. A message of its own making is another matter.
+        // A decorator: it stands in front of the handler as another handler would, and sending the message again
+        // would come back round to the decorator. A message of its own making is another matter. The classes are
+        // file-local, so the handler registration leaves them out and they are no second handler (DDD00110).
         var result = Run(
             """
-            public sealed class LoggingCloseInvoice(ICommandHandler<CloseInvoice> inner) : ICommandHandler<CloseInvoice>
+            file sealed class LoggingCloseInvoice(ICommandHandler<CloseInvoice> inner) : ICommandHandler<CloseInvoice>
             {
                 public ValueTask<Unit> Handle(CloseInvoice command, CancellationToken cancellationToken) => inner.Handle(command, cancellationToken);
             }
 
-            public sealed class ReopeningCloseInvoice(ICommandHandler<CloseInvoice> inner) : ICommandHandler<CloseInvoice>
+            file sealed class ReopeningCloseInvoice(ICommandHandler<CloseInvoice> inner) : ICommandHandler<CloseInvoice>
             {
                 public ValueTask<Unit> Handle(CloseInvoice command, CancellationToken cancellationToken) => inner.Handle(command with { Invoice = 8 }, cancellationToken);
             }

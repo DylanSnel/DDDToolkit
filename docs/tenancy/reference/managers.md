@@ -3297,7 +3297,7 @@ services.AddTenancyAccess<IBillingRequest, BillingContext>();
 
 A module calls it for its own request interface and its own context, once, next to the checks for the cases only it has. The check asks a permission for the whole tenant over `TContext`, so that is Tenancy's own context or one that maps Tenancy's read model (`AddTenancyReadModel`, or `AddTenancyReadFunctions` where the database keeps the rights), and so is a permission at a unit ([`TenancyRequirement.AtUnit<TUnitId>`](access.md#tenancyrequirementatunittunitid), closed over `TUnitId`); a module whose requests declare neither is never read for, whatever its context maps. The statement runs on a context of its own where the application registered a factory for the context (`IDbContextFactory<TContext>`), a pooled one say, and on the scope's own context otherwise.
 
-The check is free of any dispatcher, as the package is: whatever calls `AccessChecks.RequireAsync` in front of the module's handlers holds the requests to it. In an application that uses the Mediator library that is the pipeline behavior the generator writes for an interface marked `[AccessRequests]`.
+The check is free of any dispatcher, as the package is: whatever calls `AccessChecks.RequireAsync` in front of the module's handlers holds the requests to it. On the toolkit's mediator that is the pipeline behavior the generator writes for an interface marked `[AccessRequests]`.
 
 The operator cases, `[Operator]`, are decided by the check `AddTenancyOperatorAccess` adds, which this adds as well. That check reads nothing, and begins the operator work a command an operator sends runs in, through `AccessChecks.BeginWork`.
 

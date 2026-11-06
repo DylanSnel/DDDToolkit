@@ -1,13 +1,12 @@
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DTS.DDD.Analyzers.Tests.Generation;
 
 /// <summary>
-/// The pipeline behavior the core generator writes for an interface marked <c>[AccessRequests]</c>: only in a
-/// project that uses the Mediator library, named after the interface and declared beside it, implemented the way
-/// the referenced version of the library declares its behavior, and registered with the set of checks it asks.
-/// The library sends a message that is answered with a stream through a pipeline of its own, so the interface
+/// The pipeline behavior the core generator writes for an interface marked <c>[AccessRequests]</c>: a behavior of the
+/// toolkit's mediator, named after the interface and declared beside it, and registered with the set of checks it
+/// asks. The mediator sends a message that is answered with a stream through a pipeline of its own, so the interface
 /// gets a second behavior for that one, or a stream query of the module would reach its handler unasked.
 /// The last tests compile a module and run what was written, because a behavior that compiles and never asks
 /// the checks would pass every test that only reads its text.
@@ -37,7 +36,7 @@ public class AccessBehaviorGenerationTests
         using System.Threading.Tasks;
         using DTS.DDD.Access;
         using DTS.DDD.Exceptions;
-        using Mediator;
+        using DTS.DDD.Mediator;
 
         namespace Shop.Billing;
 
@@ -102,7 +101,7 @@ public class AccessBehaviorGenerationTests
         using System.Threading;
         using System.Threading.Tasks;
         using DTS.DDD.Access;
-        using Mediator;
+        using DTS.DDD.Mediator;
 
         namespace Shop.Billing;
 
@@ -199,7 +198,7 @@ public class AccessBehaviorGenerationTests
         using System.Threading.Tasks;
         using DTS.DDD.Access;
         using DTS.DDD.Exceptions;
-        using Mediator;
+        using DTS.DDD.Mediator;
 
         namespace Shop.Billing;
 
@@ -266,73 +265,7 @@ public class AccessBehaviorGenerationTests
         }
         """;
 
-    /// <summary>
-    /// What the stand-in library declares when it has a pipeline for the messages answered with a stream, as the
-    /// Mediator library has: appended to <see cref="LibraryDeclaring"/>.
-    /// </summary>
-    /// <param name="handle">The members of the stream behavior's interface.</param>
-    /// <param name="answers">What the next step answers.</param>
-    /// <param name="message">What a stream message is constrained to.</param>
-    public static string StreamsDeclaring(
-        string handle = "IAsyncEnumerable<TResponse> Handle(TMessage message, StreamHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-        string answers = "IAsyncEnumerable<TResponse>",
-        string message = "notnull, IStreamMessage")
-        => $$"""
-
-            public interface IStreamMessage;
-
-            public delegate {{answers}} StreamHandlerDelegate<TMessage, TResponse>(TMessage message, CancellationToken cancellationToken)
-                where TMessage : {{message}};
-
-            public interface IStreamPipelineBehavior<TMessage, TResponse>
-                where TMessage : {{message}}
-            {
-                {{handle}}
-            }
-            """;
-
-    /// <summary>
-    /// A library under the Mediator library's names, declared the way the caller says: what another version of the
-    /// library looks like to the generator, which reads the behavior's shape and assumes none of it.
-    /// </summary>
-    /// <param name="handle">The members of the behavior interface.</param>
-    /// <param name="next">What the delegate that runs the next step takes.</param>
-    /// <param name="answers">What the next step answers.</param>
-    /// <param name="message">What a message is constrained to.</param>
-    /// <param name="response">The constraint clause on the response, if any.</param>
-    public static string LibraryDeclaring(
-        string handle = "ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-        string next = "TMessage message, CancellationToken cancellationToken",
-        string answers = "ValueTask<TResponse>",
-        string message = "notnull, IMessage",
-        string response = "")
-        => $$"""
-            using System.Collections.Generic;
-            using System.Threading;
-            using System.Threading.Tasks;
-
-            namespace Mediator;
-
-            public interface IMessage;
-
-            public abstract class Envelope;
-
-            public delegate {{answers}} MessageHandlerDelegate<TMessage, TResponse>({{next}})
-                where TMessage : {{message}}
-                {{response}};
-
-            public interface IPipelineBehavior<TMessage, TResponse>
-                where TMessage : {{message}}
-                {{response}}
-            {
-                {{handle}}
-            }
-            """;
-
-    private static GeneratorTestHost WithLibrary(string library)
-        => GeneratorTestHost.Create(Billing).WithDependencyInjection().WithReferencedAssembly(library, "Mediator.Abstractions");
-
-    // ------------------------------------------------------------------ with and without the library
+    // ------------------------------------------------------------------ the behavior
 
     [Fact]
     public void A_request_interface_gets_its_behavior_in_a_project_that_uses_the_library()
@@ -345,20 +278,20 @@ public class AccessBehaviorGenerationTests
         result.ShouldContain(
             Hint,
             """
-            public sealed class BillingAccessBehavior<TMessage, TResponse> : global::Mediator.IPipelineBehavior<TMessage, TResponse>
-                where TMessage : notnull, global::Shop.Billing.IBillingRequest, global::Mediator.IMessage
+            public sealed class BillingAccessBehavior<TMessage, TResponse> : global::DTS.DDD.Mediator.IPipelineBehavior<TMessage, TResponse>
+                where TMessage : notnull, global::Shop.Billing.IBillingRequest, global::DTS.DDD.Mediator.IMessage
             {
             """,
             "for a message of the library's that implements the interface, and for no other");
         result.ShouldContain(Hint, "private readonly global::DTS.DDD.Access.AccessChecks<global::Shop.Billing.IBillingRequest> _checks;");
         result.ShouldContain(
             Hint,
-            "public async global::System.Threading.Tasks.ValueTask<TResponse> Handle(TMessage message, global::Mediator.MessageHandlerDelegate<TMessage, TResponse> next, global::System.Threading.CancellationToken cancellationToken)");
+            "public async global::System.Threading.Tasks.ValueTask<TResponse> Handle(TMessage message, global::DTS.DDD.Mediator.MessageHandlerDelegate<TMessage, TResponse> next, global::System.Threading.CancellationToken cancellationToken)");
         result.ShouldContain(
             Hint,
             """
                     await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
-                    using (_checks.BeginWork(message, isQuery: message is global::Mediator.IBaseQuery))
+                    using (_checks.BeginWork(message, isQuery: message is global::DTS.DDD.Mediator.IBaseQuery))
                     {
                         return await next(message, cancellationToken).ConfigureAwait(false);
                     }
@@ -367,29 +300,46 @@ public class AccessBehaviorGenerationTests
     }
 
     [Fact]
-    public void Nothing_is_generated_in_a_project_that_does_not_use_the_library()
+    public void A_request_interface_gets_its_behavior_without_a_reference_of_its_own()
     {
+        // The toolkit's mediator is in DTS.DDD.Abstractions, which every module references for the attribute, so
+        // the service collection is all the registration needs beside it.
         var result = GeneratorTestHost.Create(Billing).WithDependencyInjection().RunCore();
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
-        result.ShouldNotHaveGeneratedFor("IBillingRequest");
-        result.GeneratedSources.Should().BeEmpty("the attribute alone changes nothing: the application asks the checks itself");
+        result.ShouldContain(Hint, ": global::DTS.DDD.Mediator.IPipelineBehavior<TMessage, TResponse>");
     }
 
     [Fact]
     public void Another_library_s_behavior_of_the_same_name_is_not_the_one()
     {
-        // MediatR declares IPipelineBehavior<,> too, in its own namespace. The generator looks for the Mediator
-        // library's, by its full name.
+        // MediatR declares IPipelineBehavior<,> too, in its own namespace. The generator writes the behavior for the
+        // toolkit's mediator, found by its full name.
         var result = GeneratorTestHost.Create(Billing)
             .WithDependencyInjection()
-            .WithReferencedAssembly(LibraryDeclaring().Replace("namespace Mediator;", "namespace MediatR;", StringComparison.Ordinal), "MediatR")
+            .WithReferencedAssembly(
+                """
+                using System.Threading;
+                using System.Threading.Tasks;
+
+                namespace MediatR;
+
+                public delegate Task<TResponse> RequestHandlerDelegate<TResponse>(CancellationToken cancellationToken = default);
+
+                public interface IPipelineBehavior<in TRequest, TResponse>
+                    where TRequest : notnull
+                {
+                    Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken);
+                }
+                """,
+                "MediatR")
             .RunCore();
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
-        result.GeneratedSources.Should().BeEmpty();
+        result.ShouldContain(Hint, ": global::DTS.DDD.Mediator.IPipelineBehavior<TMessage, TResponse>");
+        result.ShouldNotContain(Hint, "MediatR");
     }
 
     // ------------------------------------------------------------------ the name, the place, the visibility
@@ -432,7 +382,7 @@ public class AccessBehaviorGenerationTests
 
         result.ShouldCompile();
         result.ShouldNotContain(Hint, "namespace ");
-        result.ShouldContain(Hint, "where TMessage : notnull, global::IBillingRequest, global::Mediator.IMessage");
+        result.ShouldContain(Hint, "where TMessage : notnull, global::IBillingRequest, global::DTS.DDD.Mediator.IMessage");
         result.ShouldContain(Hint, "typeof(global::BillingAccessBehavior<,>)");
     }
 
@@ -493,7 +443,7 @@ public class AccessBehaviorGenerationTests
                     global::DTS.DDD.Access.AccessCheckServiceCollectionExtensions.AddAccessChecks<global::Shop.Billing.IBillingRequest>(services);
                     global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(
                         services,
-                        global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof(global::Mediator.IPipelineBehavior<,>), typeof(global::Shop.Billing.BillingAccessBehavior<,>)));
+                        global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof(global::DTS.DDD.Mediator.IPipelineBehavior<,>), typeof(global::Shop.Billing.BillingAccessBehavior<,>)));
             """);
     }
 
@@ -552,107 +502,6 @@ public class AccessBehaviorGenerationTests
         result.ShouldContain("ShippingAccessBehavior.", "typeof(global::Shop.Shipping.IShippingRequest), typeof(global::Shop.Shipping.ShippingAccessBehavior<,>)");
     }
 
-    // ------------------------------------------------------------------ the library's shape is read, not assumed
-
-    [Fact]
-    public void The_order_of_Handle_s_parameters_is_the_library_s()
-    {
-        // An earlier version of the library took the token before the next step.
-        var result = WithLibrary(LibraryDeclaring(handle: "ValueTask<TResponse> Handle(TMessage message, CancellationToken cancellationToken, MessageHandlerDelegate<TMessage, TResponse> next);"))
-            .RunCore();
-
-        result.ShouldCompile();
-        result.ShouldContain(
-            Hint,
-            "public async global::System.Threading.Tasks.ValueTask<TResponse> Handle(TMessage message, global::System.Threading.CancellationToken cancellationToken, global::Mediator.MessageHandlerDelegate<TMessage, TResponse> next)");
-        result.ShouldContain(Hint, "return await next(message, cancellationToken).ConfigureAwait(false);", "the next step is called the way its delegate is declared, not the way Handle is");
-    }
-
-    [Fact]
-    public void The_next_step_is_called_with_its_arguments_in_the_order_its_delegate_declares()
-    {
-        var result = WithLibrary(LibraryDeclaring(next: "CancellationToken cancellationToken, TMessage message")).RunCore();
-
-        result.ShouldCompile();
-        result.ShouldContain(Hint, "return await next(cancellationToken, message).ConfigureAwait(false);");
-    }
-
-    [Fact]
-    public void The_names_of_Handle_s_parameters_are_the_library_s()
-    {
-        var result = WithLibrary(LibraryDeclaring(handle: "ValueTask<TResponse> Handle(TMessage @event, MessageHandlerDelegate<TMessage, TResponse> @continue, CancellationToken stop);"))
-            .RunCore();
-
-        result.ShouldCompile();
-        result.ShouldContain(Hint, "Handle(TMessage @event, global::Mediator.MessageHandlerDelegate<TMessage, TResponse> @continue, global::System.Threading.CancellationToken stop)");
-        result.ShouldContain(Hint, "await _checks.RequireAsync(@event, stop).ConfigureAwait(false);");
-        result.ShouldContain(Hint, "return await @continue(@event, stop).ConfigureAwait(false);");
-    }
-
-    [Fact]
-    public void A_library_that_answers_a_task_gets_a_behavior_that_answers_one()
-    {
-        var result = WithLibrary(LibraryDeclaring(
-                handle: "Task<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-                answers: "Task<TResponse>"))
-            .RunCore();
-
-        result.ShouldCompile();
-        result.ShouldContain(Hint, "public async global::System.Threading.Tasks.Task<TResponse> Handle(");
-    }
-
-    [Fact]
-    public void What_the_library_asks_of_a_message_and_a_response_the_behavior_asks_too()
-    {
-        var result = WithLibrary(LibraryDeclaring(message: "Envelope, IMessage, new()", response: "where TResponse : class, IEnumerable<string>")).RunCore();
-
-        result.ShouldCompile();
-        result.ShouldContain(
-            Hint,
-            """
-            public sealed class BillingAccessBehavior<TMessage, TResponse> : global::Mediator.IPipelineBehavior<TMessage, TResponse>
-                where TMessage : global::Mediator.Envelope, global::Shop.Billing.IBillingRequest, global::Mediator.IMessage, new()
-                where TResponse : class, global::System.Collections.Generic.IEnumerable<string>
-            {
-            """,
-            "a base class first, then the interfaces, the module's among them, then the constructor");
-    }
-
-    [Fact]
-    public void A_library_that_asks_nothing_of_a_message_gets_a_behavior_constrained_to_the_interface_alone()
-    {
-        var result = WithLibrary(
-            """
-            using System.Threading;
-            using System.Threading.Tasks;
-
-            namespace Mediator;
-
-            public delegate ValueTask<TResponse> MessageHandlerDelegate<TMessage, TResponse>(TMessage message, CancellationToken cancellationToken);
-
-            public interface IPipelineBehavior<TMessage, TResponse>
-            {
-                ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);
-            }
-            """).RunCore();
-
-        result.ShouldCompile();
-        result.ShouldContain(Hint, "    where TMessage : global::Shop.Billing.IBillingRequest\n{");
-    }
-
-    [Fact]
-    public void A_message_that_is_a_value_is_not_asked_whether_it_is_null()
-    {
-        // The compiler does not take "is null" of a type parameter that is a value. A library that sent values
-        // would otherwise get a behavior that does not compile, which is what reading the shape is there to avoid.
-        var result = WithLibrary(LibraryDeclaring(message: "struct, IMessage")).RunCore();
-
-        result.ShouldCompile();
-        result.ShouldContain(Hint, "    where TMessage : struct, global::Shop.Billing.IBillingRequest, global::Mediator.IMessage\n{");
-        result.ShouldNotContain(Hint, "if (message is null)");
-        result.ShouldContain(Hint, "if (next is null)", "the next step is still held to being there");
-    }
-
     // ------------------------------------------------------------------ messages answered with a stream
 
     [Fact]
@@ -666,14 +515,14 @@ public class AccessBehaviorGenerationTests
         result.ShouldContain(
             Hint,
             """
-            public sealed class BillingAccessStreamBehavior<TMessage, TResponse> : global::Mediator.IStreamPipelineBehavior<TMessage, TResponse>
-                where TMessage : global::Shop.Billing.IBillingRequest, global::Mediator.IStreamMessage
+            public sealed class BillingAccessStreamBehavior<TMessage, TResponse> : global::DTS.DDD.Mediator.IStreamPipelineBehavior<TMessage, TResponse>
+                where TMessage : global::Shop.Billing.IBillingRequest, global::DTS.DDD.Mediator.IStreamMessage
             {
             """,
             "a stream message passes no IPipelineBehavior, so without this one it would reach its handler unasked");
         result.ShouldContain(
             Hint,
-            "public async global::System.Collections.Generic.IAsyncEnumerable<TResponse> Handle(TMessage message, global::Mediator.StreamHandlerDelegate<TMessage, TResponse> next, [global::System.Runtime.CompilerServices.EnumeratorCancellation] global::System.Threading.CancellationToken cancellationToken)");
+            "public async global::System.Collections.Generic.IAsyncEnumerable<TResponse> Handle(TMessage message, global::DTS.DDD.Mediator.StreamHandlerDelegate<TMessage, TResponse> next, [global::System.Runtime.CompilerServices.EnumeratorCancellation] global::System.Threading.CancellationToken cancellationToken)");
         result.ShouldContain(
             Hint,
             """
@@ -689,69 +538,9 @@ public class AccessBehaviorGenerationTests
             """
                     global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(
                         services,
-                        global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof(global::Mediator.IStreamPipelineBehavior<,>), typeof(global::Shop.Billing.BillingAccessStreamBehavior<,>)));
+                        global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped(typeof(global::DTS.DDD.Mediator.IStreamPipelineBehavior<,>), typeof(global::Shop.Billing.BillingAccessStreamBehavior<,>)));
             """,
             "the one registration puts it in the pipeline of the streams");
-    }
-
-    [Fact]
-    public void A_library_without_a_pipeline_for_streams_gets_the_one_behavior()
-    {
-        var result = WithLibrary(LibraryDeclaring()).RunCore();
-
-        result.ShouldCompile();
-        result.ShouldHaveExactlyDiagnostics();
-        result.ShouldContain(Hint, "public sealed class BillingAccessBehavior<TMessage, TResponse>");
-        result.ShouldNotContain(Hint, "AccessStreamBehavior");
-        result.ShouldNotContain(Hint, "IStreamPipelineBehavior");
-    }
-
-    [Fact]
-    public void The_stream_behavior_is_written_the_way_the_library_declares_its_own()
-    {
-        // The order and the names are the library's here too, and the name for one response of the stream is
-        // one no parameter has.
-        var result = WithLibrary(LibraryDeclaring() + StreamsDeclaring(
-                handle: "IAsyncEnumerable<TResponse> Handle(TMessage item, CancellationToken stop, StreamHandlerDelegate<TMessage, TResponse> @continue);",
-                message: "class, IStreamMessage"))
-            .RunCore();
-
-        result.ShouldCompile();
-        result.ShouldContain(
-            Hint,
-            """
-            public sealed class BillingAccessStreamBehavior<TMessage, TResponse> : global::Mediator.IStreamPipelineBehavior<TMessage, TResponse>
-                where TMessage : class, global::Shop.Billing.IBillingRequest, global::Mediator.IStreamMessage
-            {
-            """);
-        result.ShouldContain(
-            Hint,
-            "Handle(TMessage item, [global::System.Runtime.CompilerServices.EnumeratorCancellation] global::System.Threading.CancellationToken stop, global::Mediator.StreamHandlerDelegate<TMessage, TResponse> @continue)");
-        result.ShouldContain(Hint, "await _checks.RequireAsync(item, stop).ConfigureAwait(false);");
-        result.ShouldContain(Hint, "await foreach (var streamed in global::System.Threading.Tasks.TaskAsyncEnumerableExtensions.ConfigureAwait(@continue(item, stop), false))");
-        result.ShouldContain(Hint, "yield return streamed;");
-    }
-
-    [Fact]
-    public void A_stream_pipeline_alone_is_not_the_library()
-    {
-        // The library is noticed by IPipelineBehavior<,>. Something else that only has a type of the stream
-        // behavior's name is not it, and gets nothing written.
-        var result = GeneratorTestHost.Create(Billing)
-            .WithDependencyInjection()
-            .WithReferencedAssembly(
-                """
-                using System.Collections.Generic;
-                using System.Threading;
-
-                namespace Mediator;
-                """ + StreamsDeclaring(),
-                "Mediator.Abstractions")
-            .RunCore();
-
-        result.ShouldCompile();
-        result.ShouldHaveExactlyDiagnostics();
-        result.GeneratedSources.Should().BeEmpty();
     }
 
     // ------------------------------------------------------------------ what was written, run

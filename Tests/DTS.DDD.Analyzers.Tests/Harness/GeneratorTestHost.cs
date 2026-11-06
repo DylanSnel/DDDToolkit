@@ -404,9 +404,9 @@ public sealed partial class GeneratorTestHost
     }
 
     /// <summary>
-    /// Adds the Mediator library's abstractions and the service collection, which is what a project that
-    /// references the toolkit and the library sees: the generator writes a behavior for every
-    /// <c>[AccessRequests]</c> interface, and its registration.
+    /// Adds the service collection beside the toolkit's mediator, which the core brings: what a project that
+    /// references the toolkit sees. The generator writes a behavior for every <c>[AccessRequests]</c> interface, and
+    /// its registration.
     /// </summary>
     public GeneratorTestHost WithMediator()
     {
@@ -414,17 +414,13 @@ public sealed partial class GeneratorTestHost
         return this;
     }
 
-    /// <summary>Adds the Mediator library's abstractions and nothing else: a project that cannot see the service collection.</summary>
-    public GeneratorTestHost WithMediatorAlone()
-    {
-        _extraReferences.Add(ReferenceSets.MediatorAlone);
-        return this;
-    }
-
     /// <summary>
-    /// Adds the service collection without the Mediator library, for a snippet that brings a library of its
-    /// own under that name.
+    /// Adds nothing: the toolkit's mediator, which the core brings, without the service collection. A project that
+    /// cannot see the service collection.
     /// </summary>
+    public GeneratorTestHost WithMediatorAlone() => this;
+
+    /// <summary>Adds the service collection.</summary>
     public GeneratorTestHost WithDependencyInjection()
     {
         _extraReferences.Add(ReferenceSets.DependencyInjection);

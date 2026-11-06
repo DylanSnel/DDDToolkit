@@ -168,7 +168,7 @@ public sealed class MediatorDispatchTests
             return context;
         });
 
-        host.Log.ContextSeenByHandler.Should().BeSameAs(saving, "Mediator is registered scoped, so the handler resolves the scope's own context");
+        host.Log.ContextSeenByHandler.Should().BeSameAs(saving, "the publisher is scoped, so the handler resolves the scope's own context");
     }
 
     [Fact]
@@ -192,7 +192,7 @@ public sealed class MediatorDispatchTests
     }
 
     [Fact]
-    public async Task Outbox_delivers_through_the_same_Mediator_dispatch()
+    public async Task Outbox_delivers_through_the_same_mediator_dispatch()
     {
         using var host = new TestHost(options => options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining<Basket>()));
         var basket = NewBasket();

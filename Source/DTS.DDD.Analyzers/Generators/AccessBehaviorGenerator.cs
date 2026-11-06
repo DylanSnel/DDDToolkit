@@ -14,7 +14,7 @@ namespace DTS.DDD.Analyzers;
 
 /// <summary>
 /// Writes the pipeline behavior that holds a module's commands and queries to the access they declare, for
-/// every interface marked <c>[AccessRequests]</c>, in a project that uses the Mediator library. A module writes
+/// every interface marked <c>[AccessRequests]</c>, in the pipeline of the toolkit's mediator. A module writes
 /// <code>
 /// [AccessRequests]
 /// public interface IBillingRequest : IRequireAccess;
@@ -38,9 +38,9 @@ namespace DTS.DDD.Analyzers;
 /// to the pipeline and registers the set of checks it asks. The handler runs inside the work a check begins for the
 /// request, such as operator work for a command an operator sends; a query begins no work that changes anything.
 /// <para>
-/// The library sends a message that is answered with a stream through a pipeline of its own,
+/// The mediator sends a message that is answered with a stream through a pipeline of its own,
 /// <c>IStreamPipelineBehavior&lt;TMessage, TResponse&gt;</c>, which the behavior above is never part of. So
-/// where the library has that pipeline a second class is written in the same file,
+/// a second class is written in the same file,
 /// <c>BillingAccessStreamBehavior&lt;TMessage, TResponse&gt;</c>, which asks the same checks before the
 /// handler streams anything, and the one registration adds both. Otherwise a stream query that implements
 /// the interface would reach its handler with nothing having asked what it requires. It begins no work around the
@@ -48,12 +48,11 @@ namespace DTS.DDD.Analyzers;
 /// first item.
 /// </para>
 /// <para>
-/// The library is noticed by its type, <c>Mediator.IPipelineBehavior&lt;TMessage, TResponse&gt;</c>, as
-/// System.Text.Json and HotChocolate are: the toolkit references none of them, and a project that cannot see
-/// the type gets nothing written. How a behavior is implemented is read from that type, not assumed: the
-/// constraints on a message, the order of <c>Handle</c>'s parameters, which differs between versions of the
-/// library, and what it answers. A shape the generator does not know, of either pipeline, is DDD00057, and
-/// nothing is written.
+/// The mediator is noticed by its type, <c>DTS.DDD.Mediator.IPipelineBehavior&lt;TMessage, TResponse&gt;</c>, which
+/// DTS.DDD.Abstractions declares for .NET 10. A project that cannot see the type, one for netstandard2.0 say, gets
+/// nothing written. How a behavior is implemented is read from that type: the constraints on a message, the order of
+/// <c>Handle</c>'s parameters, and what it answers. A shape the generator does not know, of either pipeline, comes
+/// from a DTS.DDD.Abstractions of another version. It is DDD00057, and nothing is written.
 /// </para>
 /// <para>
 /// The behavior is named after the interface, <c>IBillingRequest</c> giving <c>BillingAccessBehavior</c>, is
@@ -85,7 +84,7 @@ namespace DTS.DDD.Analyzers;
 /// </code>
 /// A request that answers the property itself answers with its own, which C# takes over the interface's, so the line
 /// is read wherever the property is read: by the behavior below, by a handler that asks the checks again, by a test. It
-/// is written whether or not the project uses the library. What each attribute stands for is its package's to say
+/// is written whether or not the project sees the mediator. What each attribute stands for is its package's to say
 /// (<c>[StatesRequirement]</c>, <c>[PermissionMarker]</c>, <c>[PermissionWithoutMarker]</c>, <c>[OwnedByCurrentUser]</c>), and what is wrong
 /// with a request's attributes is DDD00077 to DDD00086 (<see cref="RequestRequirement"/>).
 /// </para>
@@ -249,7 +248,7 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
                 DiagnosticInfo.Create(DiagnosticDescriptors.PipelineBehaviorShapeUnknown, requests.Location, requests.Name, unknownStream, "IStreamPipelineBehavior<,>").Report(context);
             }
 
-            // A project that does not use the library, or one whose library the generator does not know: the
+            // A project that does not use the mediator, or one whose mediator the generator does not know: the
             // interface says which checks a request is held to, and the application asks them itself. What its
             // requests' attributes say is written all the same, since it is read by whatever asks.
             var pipeline = requests.PipelineProblem is null && requests.StreamPipelineProblem is null ? requests.Pipeline : null;
@@ -526,7 +525,7 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
                 else
                 {
                     // The handler runs inside the work a check begins for the request, begun here and not in a method
-                    // of its own, so it reaches the next step; a query of the library begins no work that changes anything.
+                    // of its own, so it reaches the next step; a query begins no work that changes anything.
                     var isQuery = pipeline.QueryInterface.Length > 0 ? pipeline.Message + " is " + pipeline.QueryInterface : "false";
                     using (writer.Block("using (_checks.BeginWork(" + pipeline.Message + ", isQuery: " + isQuery + "))"))
                     {
@@ -552,7 +551,7 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
         => behavior + "{" + pipeline.MessageParameter + ", " + pipeline.ResponseParameter + "}";
 
     /// <summary>
-    /// What the behavior asks of a message: what the library asks, and the module's interface. In the order a
+    /// What the behavior asks of a message: what the mediator asks, and the module's interface. In the order a
     /// constraint clause takes them: the kind of type, a base class, the interfaces, a constructor.
     /// </summary>
     private static string MessageConstraints(AccessRequestsInterface requests, PipelineShape pipeline)
@@ -583,10 +582,10 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
 /// <param name="BehaviorName">The name of its behavior.</param>
 /// <param name="StreamBehaviorName">The name of its behavior for the messages that are answered with a stream.</param>
 /// <param name="Problem">Why no behavior can be written for it (DDD00056), or <see langword="null"/>.</param>
-/// <param name="Pipeline">How the library's behavior is implemented, or <see langword="null"/> when the project does not use the library.</param>
-/// <param name="PipelineProblem">How the library's behavior differs from what the generator knows (DDD00057), or <see langword="null"/>.</param>
-/// <param name="StreamPipeline">How the library's behavior for streams is implemented, or <see langword="null"/> when the library has none.</param>
-/// <param name="StreamPipelineProblem">How the library's behavior for streams differs from what the generator knows (DDD00057), or <see langword="null"/>.</param>
+/// <param name="Pipeline">How the mediator's behavior is implemented, or <see langword="null"/> when the project does not use the mediator.</param>
+/// <param name="PipelineProblem">How the mediator's behavior differs from what the generator knows (DDD00057), or <see langword="null"/>.</param>
+/// <param name="StreamPipeline">How the mediator's behavior for streams is implemented, or <see langword="null"/> when the mediator has none.</param>
+/// <param name="StreamPipelineProblem">How the mediator's behavior for streams differs from what the generator knows (DDD00057), or <see langword="null"/>.</param>
 /// <param name="CanRegister">Whether the project can see what the registration is written with.</param>
 /// <param name="CanDescribe">Whether the project can see the attribute that says what was written for the interface.</param>
 /// <param name="IsPartial">Whether the interface is declared <c>partial</c>, so its requests' attributes can be written into it.</param>
@@ -625,7 +624,7 @@ internal sealed record AccessRequestsInterface(
         var (pipeline, pipelineProblem) = PipelineShape.Read(compilation, KnownTypes.MediatorPipelineBehavior, streams: false);
 
         // The pipeline of the messages answered with a stream belongs to the same library: without the first
-        // the project does not use the library, whatever else is called the same.
+        // the project does not use the mediator, whatever else is called the same.
         var (streamPipeline, streamPipelineProblem) = pipeline is null && pipelineProblem is null
             ? (null, null)
             : PipelineShape.Read(compilation, KnownTypes.MediatorStreamPipelineBehavior, streams: true);
@@ -710,21 +709,21 @@ internal sealed record AccessRequestsInterface(
 }
 
 /// <summary>
-/// How one of the Mediator library's behaviors is implemented, read from the version the project references:
+/// How one of the mediator's behaviors is implemented, read from the DTS.DDD.Abstractions the project references:
 /// <c>IPipelineBehavior&lt;TMessage, TResponse&gt;</c>, or <c>IStreamPipelineBehavior&lt;TMessage, TResponse&gt;</c>
 /// for the messages that are answered with a stream.
 /// </summary>
 /// <param name="Interface">The interface's name from <c>global::</c> on, without its type parameters.</param>
-/// <param name="MessageParameter">What the library calls the message's type.</param>
-/// <param name="ResponseParameter">What the library calls the response's type.</param>
+/// <param name="MessageParameter">What the mediator calls the message's type.</param>
+/// <param name="ResponseParameter">What the mediator calls the response's type.</param>
 /// <param name="MessageKind">The kind of type a message is to be (<c>notnull</c>, <c>class</c>, <c>struct</c>), or empty.</param>
-/// <param name="MessageBaseTypes">The class a message derives from, where the library asks for one.</param>
-/// <param name="MessageInterfaces">The interfaces a message implements: the library's message type.</param>
+/// <param name="MessageBaseTypes">The class a message derives from, where the mediator asks for one.</param>
+/// <param name="MessageInterfaces">The interfaces a message implements: the mediator's message type.</param>
 /// <param name="MessageIsAValue">Whether a message is constrained to a value type, which is never null.</param>
 /// <param name="MessageHasConstructor">Whether a message is to have a public parameterless constructor.</param>
-/// <param name="ResponseConstraints">What the library asks of a response, as the entries of a constraint clause; empty for nothing.</param>
+/// <param name="ResponseConstraints">What the mediator asks of a response, as the entries of a constraint clause; empty for nothing.</param>
 /// <param name="ReturnType">What <c>Handle</c> answers.</param>
-/// <param name="Parameters">The parameters of <c>Handle</c>, each with its type, in the library's order.</param>
+/// <param name="Parameters">The parameters of <c>Handle</c>, each with its type, in the mediator's order.</param>
 /// <param name="Message">The name of the message parameter.</param>
 /// <param name="Next">The name of the parameter that runs the next step.</param>
 /// <param name="CancellationToken">The name of the cancellation token parameter.</param>
@@ -732,7 +731,7 @@ internal sealed record AccessRequestsInterface(
 /// <param name="Streams">Whether <c>Handle</c> answers a stream of responses, and not a task of one.</param>
 /// <param name="StreamItem">A name for one response of the stream that no parameter of <c>Handle</c> has.</param>
 /// <param name="QueryInterface">
-/// What every query of the library implements, from <c>global::</c> on, or empty where the library has no such type: what
+/// What every query of the mediator implements, from <c>global::</c> on, or empty where the mediator has no such type: what
 /// the behavior tells a query by, for the work a check begins.
 /// </param>
 internal sealed record PipelineShape(
@@ -759,9 +758,9 @@ internal sealed record PipelineShape(
         SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
     /// <summary>
-    /// The shape of the library's behavior named <paramref name="metadataName"/> in
+    /// The shape of the mediator's behavior named <paramref name="metadataName"/> in
     /// <paramref name="compilation"/>: none and no problem when the project cannot see it, and a problem when
-    /// the library declares the interface otherwise than the generator knows it.
+    /// the mediator declares the interface otherwise than the generator knows it.
     /// </summary>
     /// <param name="compilation">The project.</param>
     /// <param name="metadataName">The behavior's interface, by its metadata name.</param>

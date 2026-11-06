@@ -11,7 +11,7 @@ namespace DTS.DDD.Analyzers.Analyzers;
 
 /// <summary>
 /// Reports a request that says what it requires of its caller handed to its handler directly, past the pipeline
-/// whose access behavior asks the checks: DDD00061, on a call to <c>Handle</c> of one of the Mediator library's
+/// whose access behavior asks the checks: DDD00061, on a call to <c>Handle</c> of one of the toolkit's mediator's
 /// handlers (<c>ICommandHandler</c>, <c>IQueryHandler</c>, <c>IRequestHandler</c> and their stream kinds, or a class
 /// that implements one) whose message implements an interface marked <c>[AccessRequests]</c>, and on a reference to
 /// such a <c>Handle</c> that makes a delegate of it.
@@ -21,12 +21,12 @@ namespace DTS.DDD.Analyzers.Analyzers;
 /// </para>
 /// <para>
 /// What it leaves alone, and why. Constructing a handler and injecting one: the call is where the check is skipped,
-/// and is reported there, also through the interface a handler was injected as. Generated code: the library's own
-/// dispatch calls every handler, after the pipeline. <c>base.Handle</c> in a handler that overrides it, and a handler
+/// and is reported there, also through the interface a handler was injected as. Generated code, which calls a handler
+/// only after the pipeline. <c>base.Handle</c> in a handler that overrides it, and a handler
 /// that wraps another of the same message and hands it the message it was given, unchanged: both hand on the request
 /// that passed the pipeline on its way in. And a test project, one with <c>IsTestProject</c> or
 /// <c>IsTestingPlatformApplication</c> set, which the toolkit's props make visible: a test that calls a handler on
-/// purpose tests the handler alone, and says so by being a test. Silent where the library or the attribute cannot be
+/// purpose tests the handler alone, and says so by being a test. Silent where the mediator or the attribute cannot be
 /// seen, as the generator writes no behavior there.
 /// </para>
 /// <para>
@@ -43,6 +43,9 @@ public sealed class DirectHandlerCallAnalyzer : DiagnosticAnalyzer
     /// <c>CreateStream</c> for a query answered with a stream. The code fix reads it.
     /// </summary>
     public const string SendWithProperty = "SendWith";
+
+    /// <summary>The namespace of the mediator's handler interfaces.</summary>
+    private const string MediatorNamespace = "DTS.DDD.Mediator";
 
     /// <summary>What Microsoft.NET.Test.Sdk sets in a test project, and what a project may set to say it is one.</summary>
     private const string TestProjectProperty = "build_property.IsTestProject";
@@ -181,15 +184,17 @@ public sealed class DirectHandlerCallAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// Whether <paramref name="type"/> is one of the library's handlers: an interface of its assembly, in its
-    /// namespace, named for a handler. Read by its shape, so a handler a later version adds is one too; its pipeline
-    /// behaviors are not handlers, and a call to one of those hands the message on to the next step.
+    /// Whether <paramref name="type"/> is one of the mediator's handlers of a request, a command or a query: an
+    /// interface of its assembly, in its namespace, named for a handler. A notification handler is none, because a
+    /// notification passes no pipeline. The pipeline behaviors are not handlers, and a call to one of those hands the
+    /// message on to the next step.
     /// </summary>
     private static bool IsHandler(INamedTypeSymbol type, IAssemblySymbol library)
         => type.TypeKind == TypeKind.Interface
            && type.Name.EndsWith("Handler", StringComparison.Ordinal)
+           && !type.Name.StartsWith("INotification", StringComparison.Ordinal)
            && SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, library)
-           && type.ContainingNamespace is { Name: "Mediator", ContainingNamespace.IsGlobalNamespace: true };
+           && type.ContainingNamespace?.ToDisplayString() == MediatorNamespace;
 
     /// <summary>
     /// The interface marked <c>[AccessRequests]</c> that <paramref name="message"/> is or implements, or that a type
