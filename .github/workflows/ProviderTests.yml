@@ -54,10 +54,10 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj
+        run: dotnet restore Tests/DTS.DDD.EntityFramework.Providers.Tests/DTS.DDD.EntityFramework.Providers.Tests.csproj
 
       - name: Build
-        run: dotnet build Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj --no-restore --configuration Release
+        run: dotnet build Tests/DTS.DDD.EntityFramework.Providers.Tests/DTS.DDD.EntityFramework.Providers.Tests.csproj --no-restore --configuration Release
 
       # ubuntu-latest ships with Docker running, which is the whole reason these tests can be real
       # here. If that ever stops being true this step says so in one line, rather than leaving the
@@ -70,7 +70,7 @@ jobs:
       # one database.
       - name: Test
         run: >
-          dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj
+          dotnet test Tests/DTS.DDD.EntityFramework.Providers.Tests/DTS.DDD.EntityFramework.Providers.Tests.csproj
           --no-build --configuration Release --verbosity normal
           --filter "${{ matrix.filter }}"
           --logger "trx;LogFileName=provider-tests.trx"

@@ -13,7 +13,7 @@ side.
 
 - `/graphql` serves the routes' commands and queries as one schema. The host composes it in the process from the
   schema of each module, with
-  [`DDDToolkit.HotChocolate.Fusion.InMemory`](../../graphql.md#one-schema-over-a-modular-monolith). Each feature has a
+  [`DTS.DDD.HotChocolate.Fusion.InMemory`](../../graphql.md#one-schema-over-a-modular-monolith). Each feature has a
   `GraphQL` folder beside its `Rest` folder.
 - A module refers to another module's entity by id only. The gateway asks the owning module for the other fields. So
   Projects returns no names from Tenancy, and a client still gets a crew with names in one request.

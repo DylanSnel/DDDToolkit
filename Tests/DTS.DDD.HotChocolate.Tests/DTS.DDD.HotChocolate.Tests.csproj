@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <DDD_Module>GraphQlTests</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <!-- The execution engine: HotChocolate.Execution before 16, the HotChocolate package since. -->
+    <PackageReference Include="HotChocolate" />
+    <PackageReference Include="HotChocolate.Subscriptions.InMemory" />
+    <PackageReference Include="HotChocolate.Types.Scalars" />
+    <!--
+      ToPageAsync over an Entity Framework query, for the tests that page by an id: HotChocolate's paging arrives
+      with this package, and SQLite is the database it runs against. DTS.DDD.HotChocolate itself needs neither.
+    -->
+    <PackageReference Include="HotChocolate.Data.EntityFramework" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Examples\DTS.DDD.ExampleLibrary\DTS.DDD.ExampleLibrary.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.HotChocolate\DTS.DDD.HotChocolate.csproj" />
+    <!--
+      A module in two projects: ids in a domain project without HotChocolate, bound by the API project next to it.
+      Referencing the API project brings both.
+    -->
+    <ProjectReference Include="..\DTS.DDD.HotChocolate.Tests.Harbor.Api\DTS.DDD.HotChocolate.Tests.Harbor.Api.csproj" />
+    <!--
+      A module's API project written with HotChocolate's own generator: type classes over the application's records,
+      [Query] methods and a data loader. What the conventions do to a generated type class is checked against it.
+    -->
+    <ProjectReference Include="..\DTS.DDD.HotChocolate.Tests.Gallery.Api\DTS.DDD.HotChocolate.Tests.Gallery.Api.csproj" />
+    <!--
+      A module's API project with a schema for its members and one for its staff: classes marked [GraphQLSchema] beside
+      what HotChocolate's generator registers. Which class reaches which schema is checked against it.
+    -->
+    <ProjectReference Include="..\DTS.DDD.HotChocolate.Tests.Library.Api\DTS.DDD.HotChocolate.Tests.Library.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DTS.DDD.Analyzers\DTS.DDD.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.HotChocolate.Analyzers\DTS.DDD.HotChocolate.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

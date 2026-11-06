@@ -1,9 +1,9 @@
-using DDDToolkit.BaseTypes;
-using DDDToolkit.EntityFramework;
-using DDDToolkit.HotChocolate;
-using DDDToolkit.HotChocolate.Subscriptions;
-using DDDToolkit.Mediator;
-using DDDToolkit.Messaging.Wolverine;
+using DTS.DDD.BaseTypes;
+using DTS.DDD.EntityFramework;
+using DTS.DDD.HotChocolate;
+using DTS.DDD.HotChocolate.Subscriptions;
+using DTS.DDD.Mediator;
+using DTS.DDD.Messaging.Wolverine;
 using Examples.Hosting;
 using Examples.Webshop.Catalog;
 using Examples.Webshop.Catalog.Api;

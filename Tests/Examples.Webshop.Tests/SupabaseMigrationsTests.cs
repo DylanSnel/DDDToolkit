@@ -1,4 +1,4 @@
-using DDDToolkit.EntityFramework.Supabase;
+using DTS.DDD.EntityFramework.Supabase;
 using Examples.Webshop.Catalog;
 using Examples.Webshop.Inventory;
 using Examples.Webshop.Ordering;

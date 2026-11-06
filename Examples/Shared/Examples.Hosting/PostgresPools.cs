@@ -1,6 +1,6 @@
 using System.Data.Common;
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.EntityFramework;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;

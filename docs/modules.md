@@ -340,7 +340,7 @@ The generators write these registrations:
   project of the module above it, such as the API project, gets none. That project calls the infrastructure project's
   public registration
   ([Writing your own supporting domain](writing-a-supporting-domain.md#a-registration-closed-over-your-classes)).
-- **GraphQL bindings.** An API project that references `DDDToolkit.HotChocolate` holds the module's GraphQL source
+- **GraphQL bindings.** An API project that references `DTS.DDD.HotChocolate` holds the module's GraphQL source
   schema. It gets `Add{Module}GraphQlRuntimeBindings()`, which binds the ids of the module's other projects, and the
   published ids of the modules it names, as scalars and node ids
   ([Bound by a project that does not declare it](graphql.md#binding-ids-from-other-projects)).
@@ -439,10 +439,10 @@ flowchart LR
 [assembly: global::System.Reflection.AssemblyMetadata("DDD_Module", "Ordering")]
 
 // Module.g.cs, written by the toolkit's generator, in a project that declares no module itself
-[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleAttribute("Ordering")]
+[assembly: global::DTS.DDD.Abstractions.Attributes.ModuleAttribute("Ordering")]
 ```
 
-The build step is in the `DDDToolkit.Analyzers` package, as `build/` and `buildTransitive/` targets next to its props
+The build step is in the `DTS.DDD.Analyzers` package, as `build/` and `buildTransitive/` targets next to its props
 file. So it arrives wherever the generators arrive. A project that references the generators as a bare analyzer
 assembly, or as a project with `OutputItemType="Analyzer"`, gets no build step. Import the targets file the way you
 import the props file, or declare the module with the attribute. [DDD00064](diagnostics.md#ddd00064) reports a
@@ -483,7 +483,7 @@ For them the property only names their generated code:
 
 If such a project were a module, every module that names one of its unpublished types would get
 [DDD00022](diagnostics.md#ddd00022), and its domain events would be stored under its name.
-[`DDDToolkit.ExampleLibrary`](../Examples/DDDToolkit.ExampleLibrary/DDDToolkit.ExampleLibrary.csproj), whose
+[`DTS.DDD.ExampleLibrary`](../Examples/DTS.DDD.ExampleLibrary/DTS.DDD.ExampleLibrary.csproj), whose
 `AddCommonConverters` the example API calls, is such a project. So are Tenancy's and Membership's packages.
 
 Three related cases:
@@ -603,17 +603,17 @@ public interface IOrderLookup
 }
 
 // ModuleContracts.g.cs, written by the toolkit's generator, in a project that declares no [assembly: ModuleContracts]
-[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleContractsAttribute]
+[assembly: global::DTS.DDD.Abstractions.Attributes.ModuleContractsAttribute]
 ```
 
 Only `true` counts, in any letter case and with or without spaces around it, as MSBuild compares it. `false`, an empty
 value and any other value make no contracts project. The property reaches the generator through the props file of the
-`DDDToolkit.Analyzers` package, as `DDD_Module` does
+`DTS.DDD.Analyzers` package, as `DDD_Module` does
 ([How the property reaches the generators](#how-the-property-reaches-the-generators)). A project whose generators
 arrive without that file, as a bare analyzer assembly, gets nothing from the property. Such a project declares the
 attribute in its source instead.
 
-A project that sets the property and references no `DDDToolkit.Abstractions`, or a version older than the attribute,
+A project that sets the property and references no `DTS.DDD.Abstractions`, or a version older than the attribute,
 cannot write the attribute. It gets [DDD00068](diagnostics.md#ddd00068) at its project file. Without that warning, the
 problem would show up only as DDD00022 in the other modules.
 
@@ -803,7 +803,7 @@ The modules join those types on a name and a key they agree on:
 
 No module references the classes of another module, and a client sees one `Product`.
 
-`DDDToolkit.HotChocolate.Fusion.InMemory` composes these schemas inside the monolith with HotChocolate Fusion, and
+`DTS.DDD.HotChocolate.Fusion.InMemory` composes these schemas inside the monolith with HotChocolate Fusion, and
 calls the modules in memory. The same schemas compose across processes when a module becomes a service, so the
 module's GraphQL does not change at that point either. See
 [One schema over a modular monolith](graphql.md#one-schema-over-a-modular-monolith), and `Examples/ModularMonolith.*`
@@ -865,7 +865,7 @@ as an ordinary static method.
 ### How the property reaches the generators
 
 A generator can read an MSBuild property only when the project declares the property visible to the compiler. **The
-`DDDToolkit.Analyzers` package declares `DDD_Module`**, and `DDD_ModuleContracts` next to it
+`DTS.DDD.Analyzers` package declares `DDD_Module`**, and `DDD_ModuleContracts` next to it
 ([A contracts project](#a-contracts-project)). The package holds the generators and a props file that declares the
 properties they read. NuGet imports that file into each project the generators run in:
 
@@ -882,22 +882,22 @@ So there are two supported ways to reference the toolkit. A module with a
 | Project | References | Gets |
 |---|---|---|
 | The module | `DDDToolkit`, and the integrations it uses | The base types, and through them the attributes and the generators |
-| Its contracts | `DDDToolkit.Abstractions` and `DDDToolkit.Analyzers`, without `DDDToolkit` | The attributes and the generators, and no runtime code |
+| Its contracts | `DTS.DDD.Abstractions` and `DTS.DDD.Analyzers`, without `DDDToolkit` | The attributes and the generators, and no runtime code |
 
 The second row is for a project without runtime code. A record struct id, a read model and an integration event
 compile against the attributes alone. Entities, aggregate roots, value objects and domain events derive from base
 types in `DDDToolkit`, so the project that declares them references `DDDToolkit`.
 
-In the diagram, purple marks what the `DDDToolkit.Analyzers` package brings:
+In the diagram, purple marks what the `DTS.DDD.Analyzers` package brings:
 
 ```mermaid
 flowchart LR
     host["<b>A project</b><br/><small>that references the module</small>"] --> module["<b>The module's project</b>"]
-    module --> core["<b>DDDToolkit</b>"]
+    module --> core["<b>DTS.DDD</b>"]
     core --> analyzers
-    contracts["<b>Its contracts project</b>"] --> abstractions["<b>DDDToolkit.Abstractions</b>"]
+    contracts["<b>Its contracts project</b>"] --> abstractions["<b>DTS.DDD.Abstractions</b>"]
     contracts --> analyzers
-    subgraph analyzers ["DDDToolkit.Analyzers"]
+    subgraph analyzers ["DTS.DDD.Analyzers"]
         direction TB
         generators["<b>The generators</b>"] ~~~ props["<b>props file</b><br/><small>declares DDD_Module<br/>and DDD_ModuleContracts</small>"] ~~~ targets["<b>targets file</b><br/><small>declares the module</small>"]
     end
@@ -916,9 +916,9 @@ flowchart LR
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- the version of every other Temp.DDDToolkit.* package: the attribute, the property and the step are 3.2.0's -->
-    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.2.0-preview.13" />
-    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.2.0-preview.13" PrivateAssets="all" />
+    <!-- the version of every other DylansTechStack.DDD.* package: the attribute, the property and the step are 3.2.0's -->
+    <PackageReference Include="DylansTechStack.DDD.Abstractions" Version="3.2.0-preview.13" />
+    <PackageReference Include="DylansTechStack.DDD.Analyzers" Version="3.2.0-preview.13" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

@@ -12,8 +12,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Abstractions" Version="$(DDDToolkitPackageVersion)" />
-    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Analyzers" Version="$(DDDToolkitPackageVersion)" PrivateAssets="all" />
+    <PackageReference Include="DylansTechStack.DDD.Abstractions" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="DylansTechStack.DDD.Analyzers" Version="$(DDDToolkitPackageVersion)" PrivateAssets="all" />
   </ItemGroup>
 
   <!--
@@ -21,7 +21,7 @@
     ends up with DDD_Module ignored. The script builds this once to see DDD00014 say so.
   -->
   <ItemGroup Condition="'$(WithoutToolkitBuildAssets)' == 'true'">
-    <PackageReference Update="$(DDDPackageIdPrefix)DDDToolkit.Analyzers" ExcludeAssets="build;buildTransitive" />
+    <PackageReference Update="DylansTechStack.DDD.Analyzers" ExcludeAssets="build;buildTransitive" />
   </ItemGroup>
 
   <!--

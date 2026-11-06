@@ -72,9 +72,9 @@ jobs:
           done
 
       # A consumer gets the generators from analyzers/dotnet/cs and DDD_Module from the props file in
-      # the DDDToolkit.Analyzers package. Neither path is used inside this repository, where everything
+      # the DTS.DDD.Analyzers package. Neither path is used inside this repository, where everything
       # is a ProjectReference and Directory.Build.props imports that props file from Source, so the
-      # packaging contract is untested by everything above. This builds Examples/DDDToolkit.NugetApi
+      # packaging contract is untested by everything above. This builds Examples/DTS.DDD.NugetApi
       # and the projects in build/package-consumers against the packages that were just packed, which
       # is the only thing here that exercises it.
       - name: Verify package consumption

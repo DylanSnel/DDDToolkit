@@ -1,20 +1,20 @@
 # Supabase
 
 The Supabase CLI runs the SQL files in `supabase/migrations`, and so do `supabase db reset` and Supabase branching.
-The CLI does not run Entity Framework migrations. `DDDToolkit.EntityFramework.Supabase` writes one SQL file into
+The CLI does not run Entity Framework migrations. `DTS.DDD.EntityFramework.Supabase` writes one SQL file into
 `supabase/migrations` for each Entity Framework migration. You keep writing migrations with
 `dotnet ef migrations add`, and Supabase applies them.
 
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit.EntityFramework.Supabase --prerelease
+dotnet add package DylansTechStack.DDD.EntityFramework.Supabase --prerelease
 ```
 
 Reference the package from the module that holds the context. The package depends on Entity Framework's relational
-layer, the dependency injection abstractions and `DDDToolkit.EntityFramework.Postgres`, which brings the core
+layer, the dependency injection abstractions and `DTS.DDD.EntityFramework.Postgres`, which brings the core
 `DDDToolkit` package. It also brings its own source generator. It does not depend on Npgsql, which your application
-already brings, or on `DDDToolkit.EntityFramework`. So it works for any context that has migrations.
+already brings, or on `DTS.DDD.EntityFramework`. So it works for any context that has migrations.
 
 The diagram shows the steps from a changed model to a database that has the change. Purple: the files the build
 writes. Green: the host starts.
@@ -102,11 +102,11 @@ flowchart LR
 ```
 
 The export always runs on Postgres, so the generated factory is always the same. It uses Npgsql with a connection
-string that points nowhere, and it calls `UseDDDToolkitDesignTime()` from `DDDToolkit.EntityFramework`. That call
+string that points nowhere, and it calls `UseDDDToolkitDesignTime()` from `DTS.DDD.EntityFramework`. That call
 puts the migration history in the context's default schema, where a host that wires the context with
 `UseDDDToolkit` also keeps it. So the exported files record each migration in the table the application reads
 ([The migration history](entity-framework.md#the-migration-history)). In a project that does not reference
-`DDDToolkit.EntityFramework`, the toolkit does not wire the context, and the factory leaves the call out. The history
+`DTS.DDD.EntityFramework`, the toolkit does not wire the context, and the factory leaves the call out. The history
 then stays where Entity Framework keeps it.
 
 `dotnet ef` finds the generated factory the same way it finds one written by hand. It looks in the startup project
@@ -208,10 +208,10 @@ You keep no list of modules, because the generator writes it. In the project tha
 package's generator finds every marked context in the referenced assemblies, each with its factory, and writes them
 as ordinary code:
 
-**`DDDToolkit.SupabaseMigrationSources.g.cs`**
+**`DTS.DDD.SupabaseMigrationSources.g.cs`**
 
 ```csharp
-namespace DDDToolkit.EntityFramework.Supabase.Generated
+namespace DTS.DDD.EntityFramework.Supabase.Generated
 {
     internal static class SupabaseMigrationSources
     {
@@ -484,7 +484,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
-A context that the host does not wire with `DDDToolkit.EntityFramework` names the history table itself, in the
+A context that the host does not wire with `DTS.DDD.EntityFramework` names the history table itself, in the
 host's options and in the factory's options:
 `UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema))`.
 The factory the build writes names no table. So when such a context is marked, write its factory yourself, and name
@@ -544,15 +544,15 @@ Supabase's policies to apply to the application as well as to supabase-js, run e
 sent the request, as PostgREST does.
 
 RLS is a Postgres feature. The package that runs queries as the caller is
-`DDDToolkit.EntityFramework.Postgres`, which this package brings. [Row level security](row-level-security.md)
+`DTS.DDD.EntityFramework.Postgres`, which this package brings. [Row level security](row-level-security.md)
 describes it in full. This section covers the parts that belong to Supabase: the token, the roles and `auth.uid()`.
 
 ```bash
-dotnet add package Temp.DDDToolkit.Auth.Supabase.AspNetCore --prerelease       # an ASP.NET Core application
-dotnet add package Temp.DDDToolkit.Auth.Supabase.AzureFunctions --prerelease   # Azure Functions on the isolated worker
+dotnet add package DylansTechStack.DDD.Auth.Supabase.AspNetCore --prerelease       # an ASP.NET Core application
+dotnet add package DylansTechStack.DDD.Auth.Supabase.AzureFunctions --prerelease   # Azure Functions on the isolated worker
 ```
 
-Both packages bring `DDDToolkit.Auth.Supabase`, which validates Supabase Auth's tokens without a web framework.
+Both packages bring `DTS.DDD.Auth.Supabase`, which validates Supabase Auth's tokens without a web framework.
 
 The diagram follows one request, from the token that supabase-js sends to the rows a module's query returns. The
 purple band is where the context sets the caller's role and claims on the connection, and Postgres applies the
@@ -581,7 +581,7 @@ sequenceDiagram
 
 ```csharp
 builder.Services.AddAuthentication().AddSupabaseJwtBearer("https://<ref>.supabase.co");
-builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());   // the toolkit, Temp.DDDToolkit.EntityFramework
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());   // the toolkit, DylansTechStack.DDD.EntityFramework
 builder.Services.AddSupabaseRowLevelSecurity();
 
 builder.Services.AddDbContext<OrderingContext>((provider, options) => options
@@ -606,7 +606,7 @@ project still on the legacy JWT secret publishes no key. For that project, and f
 itself, also pass the secret ([Signing keys and the JWT secret](#signing-keys-and-the-jwt-secret)).
 
 `AddSupabaseRowLevelSecurity` registers Postgres's RLS with the roles every Supabase project has. Once
-it is registered, `UseDDDToolkit` (the toolkit's call on a context's options, from `Temp.DDDToolkit.EntityFramework`)
+it is registered, `UseDDDToolkit` (the toolkit's call on a context's options, from `DylansTechStack.DDD.EntityFramework`)
 adds it to every context on Postgres. A context needs no extra call.
 
 - A context without the toolkit calls `UseSupabaseRowLevelSecurity` instead. This package also works without the
@@ -1540,7 +1540,7 @@ nothing for it, and the bookkeeping role then fails on the outbox when the first
 ### In Azure Functions
 
 The isolated worker runs no ASP.NET Core pipeline, also not with its ASP.NET Core integration. So there is no
-`UseAuthentication()` for a bearer scheme. `DDDToolkit.Auth.Supabase.AzureFunctions` is a worker middleware instead.
+`UseAuthentication()` for a bearer scheme. `DTS.DDD.Auth.Supabase.AzureFunctions` is a worker middleware instead.
 For each HTTP-triggered invocation, it validates the token in the request's `Authorization` header and runs the
 function inside `AccessManager.BeginAs`: as that user, or as `anon` without a valid token.
 
@@ -1568,7 +1568,7 @@ builder.Services.AddDbContext<OrderingContext>((provider, options) => options
 
 A worker service or a tool of yours needs no host package:
 
-- `SupabaseTokenValidator`, from `DDDToolkit.Auth.Supabase`, checks a token against the keys the project publishes,
+- `SupabaseTokenValidator`, from `DTS.DDD.Auth.Supabase`, checks a token against the keys the project publishes,
   or against its secret when it was given one ([Signing keys and the JWT secret](#signing-keys-and-the-jwt-secret)).
   `UserOfAsync(authorization)` returns the token's user, a `CurrentUserSnapshot`.
 - `access.BeginAs(snapshot)`, on the `AccessManager` your code takes, makes that user current.
@@ -1581,7 +1581,7 @@ Pass `CurrentUserSnapshot.FromClaims(claims)` only the claims of a token that wa
 
 An application that gives access by a Supabase user's id sometimes needs that id before the person has ever signed
 in. For example, an administrator adds a colleague, an import brings in people, or a seeding makes the demo users.
-`SupabaseAuthAdmin`, in `DDDToolkit.Auth.Supabase`, is a client for the admin API of Supabase Auth that does these
+`SupabaseAuthAdmin`, in `DTS.DDD.Auth.Supabase`, is a client for the admin API of Supabase Auth that does these
 few tasks. It is for server code only, because every call sends the project's secret key.
 
 ```csharp
@@ -1639,7 +1639,7 @@ Auth invite that user's address, and checks that the user Auth mailed is the one
 
 ### Inviting through IIdentityAccounts
 
-Application code does not need to know about Supabase. `IIdentityAccounts`, in the core's `DDDToolkit.Identity`, is
+Application code does not need to know about Supabase. `IIdentityAccounts`, in the core's `DTS.DDD.Identity`, is
 the port for these tasks, and `AddSupabaseAuthAdmin` registers `SupabaseIdentityAccounts` for it. A host on another
 identity provider, or a development host without one, registers its own adapter. It does that after
 `AddSupabaseAuthAdmin`, if it calls that at all.
@@ -1795,7 +1795,7 @@ The generated code also passes the row access contributions to the export:
 
 - First, those of every referenced package that declares itself a contributor with
   `[assembly: RowAccessContribution]`. The generator makes each one in a class that it writes into a separate file,
-  `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, from the members the application marks. A project leaves one out
+  `DTS.DDD.RowAccessContributionsOfPackages.g.cs`, from the members the application marks. A project leaves one out
   with `[assembly: LeaveOutRowAccessContribution]`.
 - Then, the ones the project lists with `[assembly: UseRowAccessContribution(typeof(X))]`, each as `new X()`. An
   assembly that declares a module offers its contribution, and the project that runs the export lists it.

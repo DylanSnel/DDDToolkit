@@ -1,5 +1,5 @@
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Examples.Webshop.Ordering.Domain.Orders;
 

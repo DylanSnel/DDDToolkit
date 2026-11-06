@@ -1,5 +1,5 @@
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Invariants;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.DDD.Invariants;
 
 namespace Shop;
 

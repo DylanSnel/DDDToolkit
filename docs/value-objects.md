@@ -217,7 +217,7 @@ public partial record EmailAddress
 
 A run that adds no failure passes. Both overloads run. The value is valid only when `Validate()` returned `true` and
 `Validate(ValidationErrorBuilder)` added no failure. Override the overload that suits the rule. Most types override
-one of the two. With `DDDToolkit.FluentValidation` referenced, the generator writes both overloads and you write rules
+one of the two. With `DTS.DDD.FluentValidation` referenced, the generator writes both overloads and you write rules
 instead. See [With FluentValidation](#with-fluentvalidation).
 
 ## The always-valid twin
@@ -499,7 +499,7 @@ code and translates the message by `Code`. A `Result<T>` can wrap a refusal with
 - Validation is synchronous. `Validate` cannot call a database.
 - Failures have no severity. There are no warnings.
 - `Message` is the text your rule wrote. To show it in the reader's language, branch on `Code`, or let
-  [`DDDToolkit.Localization`](localization.md) phrase the message from `Code` and `Arguments`.
+  [`DTS.DDD.Localization`](localization.md) phrase the message from `Code` and `Arguments`.
 - A rule sees one value object. No rule sees the request around it. A validator for the whole request checks across
   value objects, and [`MustBeValid()`](fluent-validation.md#a-value-object-in-a-request-validator) adds a value
   object's rules to such a validator.
@@ -567,7 +567,7 @@ Discount(valid);   // throws: the discounted twin would not be valid
 
 Details:
 
-- The parameters are `Optional<T>`, a small struct in `DDDToolkit.BaseTypes`. It tells "not given" apart from "given
+- The parameters are `Optional<T>`, a small struct in `DTS.DDD.BaseTypes`. It tells "not given" apart from "given
   as `null`". An ordinary optional parameter cannot tell the two apart, and a nullable property needs both. A value
   converts to `Optional<T>` implicitly, so you never write the type.
 - `With` has a parameter for each property that has a setter and is not `[Internal]`. Computed properties have no
@@ -749,7 +749,7 @@ stays visible and stored, and only equality ignores it.
 
 ## Entity Framework
 
-Everything above works without a database. To store value objects, reference `DDDToolkit.EntityFramework`. Its
+Everything above works without a database. To store value objects, reference `DTS.DDD.EntityFramework`. Its
 generator adds the mapping:
 
 - `[SingleValueObject<T>]` and identifiers get a generated `ValueConverter`, so an `EmailAddress` is stored as a plain
@@ -816,7 +816,7 @@ partial record ValidPersonName
 
 ## With FluentValidation
 
-If you write rules with FluentValidation, reference `DDDToolkit.FluentValidation`. Write a value object's rules as a
+If you write rules with FluentValidation, reference `DTS.DDD.FluentValidation`. Write a value object's rules as a
 validator instead of a `Validate()` override:
 
 ```csharp

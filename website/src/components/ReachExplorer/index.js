@@ -3,7 +3,7 @@
  * tenants of the Tenancy tutorial show where the person holds the permission. Pick a unit, and one of the tutorial's
  * requests goes there, with the answer the access check gives.
  *
- * Everything it shows comes from reach.json, which a test of DDDToolkit.Analyzers.Tests holds to the tutorial, the
+ * Everything it shows comes from reach.json, which a test of DTS.DDD.Analyzers.Tests holds to the tutorial, the
  * overview and the code: the component is a way through the tutorial's world, never a second source. The page keeps
  * its static diagram inside the marker, for GitHub and for the Markdown the site writes for language models, where
  * this component is not drawn.

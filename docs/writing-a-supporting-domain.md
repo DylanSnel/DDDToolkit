@@ -3,7 +3,7 @@
 Your core domain is what your application is for. You write it with the
 [building blocks](entities-and-aggregates.md). Next to it are domains that many applications need and that make no
 application different: subscriptions, tenants, audit. A **supporting domain** is such a domain, written once as a
-package and used by many applications. The toolkit ships its own under `DDDToolkit.Supporting.*`,
+package and used by many applications. The toolkit ships its own under `DTS.*`,
 [Tenancy](tenancy/overview.md) and [Membership](membership/overview.md), and you can write one the same way.
 
 A supporting domain is written with the building blocks, like your own modules. When an application references it, it
@@ -101,11 +101,11 @@ flowchart TB
 **`SubscriptionAggregate.g.cs`** and **`ShopSubscription.g.cs`**, shortened:
 
 ```csharp
-partial class SubscriptionAggregate<TSubscriptionId> : global::DDDToolkit.BaseTypes.AggregateRoot<TSubscriptionId>
+partial class SubscriptionAggregate<TSubscriptionId> : global::DTS.DDD.BaseTypes.AggregateRoot<TSubscriptionId>
 {
     protected void CollectBaseInvariantViolations(
-        ref global::System.Collections.Generic.List<global::DDDToolkit.Invariants.InvariantViolation>? violations,
-        ref global::DDDToolkit.Exceptions.InvariantViolationException? seamFailure,
+        ref global::System.Collections.Generic.List<global::DTS.DDD.Invariants.InvariantViolation>? violations,
+        ref global::DTS.DDD.Exceptions.InvariantViolationException? seamFailure,
         global::System.Type entityType)
     {
         foreach (var invariant in __invariants)
@@ -120,8 +120,8 @@ partial class SubscriptionAggregate<TSubscriptionId> : global::DDDToolkit.BaseTy
 partial class ShopSubscription : global::Acme.Subscriptions.SubscriptionAggregate<global::Shop.Contracts.SubscriptionId>
 {
     private void CollectInvariantViolations(
-        ref global::System.Collections.Generic.List<global::DDDToolkit.Invariants.InvariantViolation>? violations,
-        out global::DDDToolkit.Exceptions.InvariantViolationException? seamFailure)
+        ref global::System.Collections.Generic.List<global::DTS.DDD.Invariants.InvariantViolation>? violations,
+        out global::DTS.DDD.Exceptions.InvariantViolationException? seamFailure)
     {
         seamFailure = null;
         CollectBaseInvariantViolations(ref violations, ref seamFailure, typeof(global::Shop.Billing.ShopSubscription));
@@ -417,7 +417,7 @@ A domain project of another module often needs a package's marker and nothing el
 its subscription, and a project names its tenant. Put the markers in a small package of their own,
 `<Package>.Abstractions`:
 
-- It references `DDDToolkit.Abstractions` alone, and no Entity Framework.
+- It references `DTS.DDD.Abstractions` alone, and no Entity Framework.
 - It declares no classes, ids or value objects, so no generator runs on it.
 - It uses the package's own namespace, so an application names the markers beside the package's other types.
 - The package's main package references it, so a project with the package has the markers as well.
@@ -433,10 +433,10 @@ The toolkit's markers are split this way:
 
 | Markers' package | Namespace | Marker | Read by |
 |---|---|---|---|
-| `Temp.DDDToolkit.Supporting.Tenancy.Abstractions` | `DDDToolkit.Supporting.Tenancy` | `[OfTenant]`: the tenant an aggregate root belongs to | `OfTenantConvention`, in `Temp.DDDToolkit.Supporting.Tenancy.EntityFramework` |
-| `Temp.DDDToolkit.Supporting.Membership.Abstractions` | `DDDToolkit.Supporting.Membership` | `[At]`: where an aggregate root hangs | the rules of a resource with members. Membership's generator, in `Temp.DDDToolkit.Supporting.Membership`, reports [DDD00097](diagnostics.md#ddd00097) |
+| `DylansTechStack.Tenancy.Abstractions` | `DTS.Tenancy` | `[OfTenant]`: the tenant an aggregate root belongs to | `OfTenantConvention`, in `DylansTechStack.Tenancy.EntityFramework` |
+| `DylansTechStack.Membership.Abstractions` | `DTS.Membership` | `[At]`: where an aggregate root hangs | the rules of a resource with members. Membership's generator, in `DylansTechStack.Membership`, reports [DDD00097](diagnostics.md#ddd00097) |
 
-`[Owner]` stays in the core, in `DDDToolkit.Abstractions`, because the core's checks of the owner read it.
+`[Owner]` stays in the core, in `DTS.DDD.Abstractions`, because the core's checks of the owner read it.
 
 ### Row level security from a package
 
@@ -462,7 +462,7 @@ flowchart TB
     ctor["<b>Its constructor</b><br/><small>[FromApplication(typeof(SubscriptionPlans))]</small>"]
     application["<b>The application</b><br/><small>[SubscriptionPlans] on its plans</small>"]
     build["<b>The build</b><br/><small>in the project that runs the export</small>"]
-    written["<b>A generated class</b><br/><small>in DDDToolkit.RowAccessContributionsOfPackages.g.cs</small>"]
+    written["<b>A generated class</b><br/><small>in DTS.DDD.RowAccessContributionsOfPackages.g.cs</small>"]
     package --> ctor
     ctor --> build
     application --> build
@@ -720,7 +720,7 @@ exception is a project of the same module as the projects that declare the class
 `[assembly: Module]` ([In a module split by layer](#in-a-module-split-by-layer)). A project that declares some of the
 classes and misses one gets [DDD00049](diagnostics.md#ddd00049), which names the missing one, and a code fix declares
 it. That is why the registrations belong in a package of their own, as Tenancy keeps them in
-`DDDToolkit.Supporting.Tenancy.EntityFramework`. A domain module that declares one of the classes and does not
+`DTS.Tenancy.EntityFramework`. A domain module that declares one of the classes and does not
 reference the storage package is never asked for the rest.
 
 ### A template with more than one type argument

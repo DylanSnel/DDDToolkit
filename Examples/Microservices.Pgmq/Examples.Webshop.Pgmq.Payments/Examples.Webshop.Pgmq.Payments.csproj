@@ -25,8 +25,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Messaging.Postgres\DDDToolkit.Messaging.Postgres.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.Mediator\DTS.DDD.Mediator.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.Messaging.Postgres\DTS.DDD.Messaging.Postgres.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 // Same module name as Examples.Webshop.Ordering, so the two assemblies are one module. That is how
 // you split a module into a domain half and a published half without inventing a boundary between them.

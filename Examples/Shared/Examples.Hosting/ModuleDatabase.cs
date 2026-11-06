@@ -1,6 +1,6 @@
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Access;
-using DDDToolkit.EntityFramework;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Access;
+using DTS.DDD.EntityFramework;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;

@@ -27,7 +27,7 @@ namespace Examples.Webshop.Catalog.Migrations.SqlServer
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("DDDToolkit.EntityFramework.Outbox.OutboxMessage", b =>
+            modelBuilder.Entity("DTS.DDD.EntityFramework.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");

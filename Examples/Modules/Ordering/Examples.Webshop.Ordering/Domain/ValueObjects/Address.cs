@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Validation;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.DDD.Validation;
 
 namespace Examples.Webshop.Ordering.Domain.ValueObjects;
 

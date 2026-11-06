@@ -1,6 +1,6 @@
-using DDDToolkit.Exceptions;
+using DTS.DDD.Exceptions;
 using Examples.Webshop.SharedKernel;
-using DDDToolkit.Validation;
+using DTS.DDD.Validation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;

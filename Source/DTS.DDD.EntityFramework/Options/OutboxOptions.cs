@@ -1,0 +1,289 @@
+using System.Reflection;
+using System.Text.Json;
+using DTS.DDD.EntityFramework.EventLog;
+using DTS.DDD.EntityFramework.Integration;
+using DTS.DDD.EntityFramework.Outbox;
+using DTS.DDD.Interfaces;
+using Microsoft.EntityFrameworkCore;
+
+namespace DTS.DDD.EntityFramework.Options;
+
+/// <summary>
+/// Settings for the transactional outbox (see <see cref="DDDEntityFrameworkOptions.UseOutbox"/>).
+/// <para>
+/// The outbox needs an exit. Without one, <see cref="OutboxProcessor{TContext}"/> hands messages back
+/// to the same in-process delegate that would have run at save time, which buys durability but never
+/// leaves the process. <see cref="SendTo{TSink}()"/> is the exit: register a sink and the processor
+/// publishes an <c>IntegrationEventMessage</c> to it instead of calling the delegate.
+/// </para>
+/// </summary>
+public sealed class OutboxOptions
+{
+    /// <summary>
+    /// Serializer options for event payloads. The defaults are case-insensitive and include the
+    /// toolkit's <see cref="DTS.DDD.Serialization.Converters.SingleValueObjectConverterFactory"/>, so class ids and single value objects
+    /// are stored as their raw value. Replace or extend as needed; the same options are used to read
+    /// the payload back, so change them with care once messages exist.
+    /// </summary>
+    public JsonSerializerOptions JsonOptions { get; set; } = IntegrationJson.CreateDefault();
+
+    /// <summary>
+    /// Messages whose <see cref="OutboxMessage.Attempts"/> reached this value are no longer picked up
+    /// by the processor. They stay in the table with their <see cref="OutboxMessage.LastError"/> for
+    /// inspection; reset <c>Attempts</c> to retry them. Defaults to 10.
+    /// </summary>
+    public int MaxAttempts { get; set; } = 10;
+
+    /// <summary>
+    /// How long a message waits after a failed attempt before it is tried again, given the number of
+    /// attempts made so far (1 after the first failure). The processor writes the moment to
+    /// <see cref="OutboxMessage.NextAttemptAt"/> and does not load the row before it, so a failing
+    /// message neither holds back the ones behind it nor uses up its <see cref="MaxAttempts"/> in one
+    /// busy drain.
+    /// <para>
+    /// Defaults to <see cref="DefaultRetryDelay"/>: 5 seconds, then five times longer after every
+    /// failure, up to 10 minutes. With the default <see cref="MaxAttempts"/>, a message that keeps
+    /// failing is given up on about an hour after its first attempt. <see cref="TimeSpan.Zero"/>
+    /// retries on the next poll.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is null.</exception>
+    public Func<int, TimeSpan> RetryDelay
+    {
+        get => _retryDelay;
+        set => _retryDelay = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>
+    /// The default <see cref="RetryDelay"/>: 5 seconds after the first failed attempt, 25 after the
+    /// second, a little over 2 minutes after the third and 10 minutes after every later one.
+    /// </summary>
+    /// <param name="attempts">The attempts made so far, 1 after the first failure.</param>
+    public static TimeSpan DefaultRetryDelay(int attempts)
+        // In double, so a MaxAttempts in the thousands reaches infinity and the cap rather than overflowing.
+        => TimeSpan.FromSeconds(Math.Min(5 * Math.Pow(5, Math.Max(attempts, 1) - 1), 600));
+
+    /// <summary>The event types the processor can deserialize, keyed by their stable name.</summary>
+    public DomainEventTypeRegistry EventTypes { get; } = new();
+
+    /// <summary>Registers every concrete <see cref="IDomainEvent"/> type in <paramref name="assembly"/>.</summary>
+    public OutboxOptions RegisterEventsFromAssembly(Assembly assembly)
+    {
+        EventTypes.RegisterFromAssembly(assembly);
+        return this;
+    }
+
+    /// <summary>Registers every concrete <see cref="IDomainEvent"/> type in the assembly that declares <typeparamref name="TMarker"/>.</summary>
+    public OutboxOptions RegisterEventsFromAssemblyContaining<TMarker>() => RegisterEventsFromAssembly(typeof(TMarker).Assembly);
+
+    /// <summary>Registers a single event type, reading its name and version off its attributes.</summary>
+    public OutboxOptions RegisterEvent<TEvent>() where TEvent : IDomainEvent
+    {
+        EventTypes.Register<TEvent>();
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a single event type under the name and version given, without reading its attributes.
+    /// The generated <c>outbox.Add{Module}IntegrationEvents()</c> calls this for every domain event in the
+    /// module.
+    /// </summary>
+    public OutboxOptions RegisterEvent<TEvent>(string name, int version) where TEvent : IDomainEvent
+    {
+        EventTypes.Register<TEvent>(name, version);
+        return this;
+    }
+
+    /// <summary>
+    /// The configured sinks, in the order they were registered. Empty means the processor falls back
+    /// to the in-process dispatch delegate, which is the 2.x and early 3.0 behaviour.
+    /// </summary>
+    public IReadOnlyList<IntegrationEventSinkRegistration> Sinks => _sinks;
+
+    /// <summary>True when at least one sink is configured.</summary>
+    public bool HasSinks => _sinks.Count > 0;
+
+    /// <summary>
+    /// Which domain events leave the process, and as what. Leave it empty to publish domain events
+    /// directly; see <see cref="IntegrationEventMap"/>.
+    /// </summary>
+    public IntegrationEventMap IntegrationEvents { get; } = new();
+
+    /// <summary>
+    /// Also invoke the in-process dispatch delegate for every message, on top of the sinks. Off by
+    /// default: configuring a sink replaces the delegate. Turn it on when local handlers and a
+    /// transport both need the event. The delegate runs first and receives the domain event itself,
+    /// never the published contract.
+    /// </summary>
+    public bool AlsoDispatchInProcess { get; set; }
+
+    /// <summary>
+    /// Delivers published messages to <typeparamref name="TSink"/>. The sink is taken from the scope
+    /// the processor runs in when it is registered there, and otherwise constructed with its
+    /// constructor services injected. The processor does this once per batch, so a transient sink
+    /// serves every message of the batch.
+    /// </summary>
+    public OutboxOptions SendTo<TSink>() where TSink : IIntegrationEventSink
+    {
+        _sinks.Add(new IntegrationEventSinkRegistration(typeof(TSink)));
+        return this;
+    }
+
+    /// <summary>
+    /// Delivers published messages to the <typeparamref name="TSink"/> that <paramref name="create"/> builds
+    /// from the scope the processor runs in, once per batch. The way to add a sink that is not registered in
+    /// the container without having it constructed by reflection.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> is null.</exception>
+    public OutboxOptions SendTo<TSink>(Func<IServiceProvider, TSink> create) where TSink : IIntegrationEventSink
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        _sinks.Add(new IntegrationEventSinkRegistration(typeof(TSink).Name, services => create(services)));
+        return this;
+    }
+
+    /// <summary>Delivers published messages to <paramref name="sink"/>, an instance you already own.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is null.</exception>
+    public OutboxOptions SendTo(IIntegrationEventSink sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+        _sinks.Add(new IntegrationEventSinkRegistration(sink));
+        return this;
+    }
+
+    /// <summary>
+    /// Delivers published messages to the other modules in this process:
+    /// <see cref="ModuleIntegrationEventSink"/> offers each message to every module that registered
+    /// itself with <c>services.AddModuleIntegrationEvents&lt;TContext&gt;(...)</c>, and each runs its own
+    /// handlers for the published contract under its own inbox.
+    /// <para>
+    /// This is the common case in a modular monolith, and it is the sink that earns the outbox: the
+    /// producing module's transaction has already committed, so a consumer that fails cannot take it
+    /// down with it. The producing module does not name its consumers; see
+    /// <c>docs/integration-events.md</c>.
+    /// </para>
+    /// </summary>
+    public OutboxOptions SendToModules() => SendTo<ModuleIntegrationEventSink>();
+
+    /// <summary>
+    /// Runs each message's delivery and its "processed" mark inside one database transaction, so a
+    /// crash between the two cannot leave a message delivered but unmarked. Off by default.
+    /// <para>
+    /// It only buys anything for a sink that writes to the same database as the outbox. The pgmq sink in
+    /// <c>DTS.DDD.Messaging.Postgres</c> is the case it exists for: the queue is a table, so
+    /// the enqueue and the mark commit together and the handoff from the outbox to the queue happens
+    /// exactly once. A sink that talks to a broker, an HTTP endpoint or anything else outside the
+    /// database is unaffected: that send cannot be rolled back, so turning this on only widens the
+    /// transaction for no gain.
+    /// </para>
+    /// <para>
+    /// It also changes what <see cref="SendToModules"/> guarantees. The inbox joins the
+    /// caller's transaction, so with one transaction around the whole message a failing consumer rolls
+    /// back the consumers that already succeeded, and they run again on the retry. Leave this off when
+    /// you want per-consumer progress.
+    /// </para>
+    /// <para>
+    /// Where the host requires an explicit current user and the outbox's context has row level security, the
+    /// transaction is begun as <c>CurrentUserSnapshot.System</c>, the processor's bookkeeping, and runs as that one
+    /// caller: an in-process handler that begins a user of its own works on a context of its own, since a
+    /// caller that changes inside the transaction is refused. A transaction the host began on the context
+    /// before it called the processor is joined, so it has to be begun as the system too.
+    /// </para>
+    /// </summary>
+    public bool DeliverInTransaction { get; set; }
+
+    /// <summary>
+    /// Which events this outbox's contexts also keep in their event log, or <see langword="null"/> when they
+    /// keep none; see <see cref="KeepEventLog"/>.
+    /// </summary>
+    public EventLogOptions? EventLog { get; private set; }
+
+    /// <summary>
+    /// Keeps the events a context saves in its event log as well: one <see cref="EventLogEntry"/> per kept
+    /// event, added to the saving context next to the event's outbox row, so the aggregate, the outbox row and
+    /// the log row are written by one transaction: all three, or none of them.
+    /// <code>
+    /// options.UseOutbox&lt;OrderingContext&gt;(outbox =&gt; outbox
+    ///     .RegisterEventsFromAssemblyContaining&lt;Order&gt;()
+    ///     .KeepEventLog(log =&gt; log.Keep&lt;OrderPlaced&gt;().Keep&lt;OrderCancelled&gt;()));
+    /// </code>
+    /// <para>
+    /// Without <paramref name="configure"/>, or with one that chooses nothing, every event is kept. The
+    /// context's model must include the table: call <c>modelBuilder.AddEventLog(Database)</c> in
+    /// <c>OnModelCreating</c>. Calling this again configures the same log further.
+    /// </para>
+    /// <para>
+    /// Each row says who acted, from the <c>IActedByAccessor</c> the application registered, and carries the
+    /// columns every registered <see cref="IEventLogFields"/> fills. Both are singletons asked once per save,
+    /// so the log is written from every context, one rented from a pool without a scope included.
+    /// </para>
+    /// <para>
+    /// The outbox and the log part ways after the save. The processor marks and retries outbox rows and
+    /// retention deletes them once delivered; nothing ever updates a log row, and retention only deletes one
+    /// under a window of its own, <c>DomainEventRetentionOptions.KeepEventLogFor</c>.
+    /// </para>
+    /// </summary>
+    /// <param name="configure">Chooses the events to keep; every event when left out.</param>
+    public OutboxOptions KeepEventLog(Action<EventLogOptions>? configure = null)
+    {
+        EventLog ??= new EventLogOptions();
+        configure?.Invoke(EventLog);
+        return this;
+    }
+
+    /// <summary>
+    /// Publishes <typeparamref name="TDomainEvent"/> as <typeparamref name="TContract"/>. Shorthand for
+    /// <see cref="IntegrationEventMap.PublishAs{TDomainEvent, TContract}"/>.
+    /// </summary>
+    public OutboxOptions PublishAs<TDomainEvent, TContract>(Func<TDomainEvent, TContract?> convert)
+        where TDomainEvent : IDomainEvent
+        where TContract : class
+    {
+        IntegrationEvents.PublishAs(convert);
+        return this;
+    }
+
+    /// <summary>
+    /// Publishes <typeparamref name="TDomainEvent"/> through the outbound class <paramref name="create"/>
+    /// builds. Shorthand for <see cref="IntegrationEventMap.PublishWith{TDomainEvent, TContract}"/>, which
+    /// the generated <c>outbox.Add{Module}IntegrationEvents()</c> calls for you.
+    /// </summary>
+    public OutboxOptions PublishWith<TDomainEvent, TContract>(
+        string contractName,
+        int contractVersion,
+        Func<IServiceProvider, IOutboundIntegrationEvent<TDomainEvent, TContract>> create)
+        where TDomainEvent : IDomainEvent
+        where TContract : class
+    {
+        IntegrationEvents.PublishWith(contractName, contractVersion, create);
+        return this;
+    }
+
+    /// <summary>
+    /// Keeps <typeparamref name="TDomainEvent"/> off the sinks. Shorthand for
+    /// <see cref="IntegrationEventMap.DoNotPublish{TDomainEvent}"/>.
+    /// </summary>
+    public OutboxOptions DoNotPublish<TDomainEvent>() where TDomainEvent : IDomainEvent
+    {
+        IntegrationEvents.DoNotPublish<TDomainEvent>();
+        return this;
+    }
+
+    /// <summary>
+    /// The names this outbox sends out: every contract an entry names, and every registered event that
+    /// leaves as it stands. Nothing when it has no sink, because then nothing leaves the process.
+    /// </summary>
+    internal IEnumerable<string> PublishedNames()
+    {
+        if (!HasSinks)
+        {
+            return [];
+        }
+
+        return IntegrationEvents.ContractNames.Concat(
+            EventTypes.Described.Where(described => !IntegrationEvents.IsMapped(described.Type)).Select(static described => described.Name));
+    }
+
+    private readonly List<IntegrationEventSinkRegistration> _sinks = [];
+    private Func<int, TimeSpan> _retryDelay = DefaultRetryDelay;
+}

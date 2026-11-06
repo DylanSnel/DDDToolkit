@@ -184,7 +184,7 @@ Turn a check off by its constant, so a typo is a compile error. The method behin
 lists the checks that passed, in the order they ran:
 
 ```text
-info: DDDToolkit.Startup.StartupCheckRunner
+info: DTS.DDD.Startup.StartupCheckRunner
       The start-up checks passed in 412 ms: postgres.row-level-security-wired, ...
 ```
 

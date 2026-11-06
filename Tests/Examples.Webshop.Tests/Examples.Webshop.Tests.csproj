@@ -34,9 +34,9 @@
     <ProjectReference Include="..\..\Examples\Modules\Payments\Examples.Webshop.Payments\Examples.Webshop.Payments.csproj" />
     <ProjectReference Include="..\..\Examples\Modules\SharedKernel\Examples.Webshop.SharedKernel\Examples.Webshop.SharedKernel.csproj" />
     <ProjectReference Include="..\..\Examples\Modules\Shipping\Examples.Webshop.Shipping\Examples.Webshop.Shipping.csproj" />
-    <ProjectReference Include="..\..\Source\DDDToolkit.Testing\DDDToolkit.Testing.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.Testing\DTS.DDD.Testing.csproj" />
     <!-- SupabaseMigrations, to hold the example's supabase/migrations to its Entity Framework migrations. -->
-    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.EntityFramework.Supabase\DTS.DDD.EntityFramework.Supabase.csproj" />
   </ItemGroup>
 
 </Project>

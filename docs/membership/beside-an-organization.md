@@ -41,8 +41,8 @@ each resource. It also keeps a resource reachable after its owner has left, so s
 - **Members come first.** For a caller who holds the permission both as a member and from above, `Via` is
   `Members`.
 - **`[At]`** marks the one property that says where the aggregate root hangs. The marker comes from the package
-  `DDDToolkit.Supporting.Membership.Abstractions`, which the Membership package references. Its namespace is
-  `DDDToolkit.Supporting.Membership`. The property is never nullable ([DDD00097](../diagnostics.md#ddd00097)). Reach
+  `DTS.Membership.Abstractions`, which the Membership package references. Its namespace is
+  `DTS.Membership`. The property is never nullable ([DDD00097](../diagnostics.md#ddd00097)). Reach
   from above on a class without `[At]` is [DDD00098](../diagnostics.md#ddd00098).
 - **`[At(Fixed = true)]`** fixes the place once the row exists. Entity Framework throws on a save that changes it.
   The privileges a Postgres export writes leave the column out of `UPDATE`. `Fixed` is false by default, so a resource
