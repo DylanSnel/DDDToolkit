@@ -38,7 +38,7 @@ internal static class DesignTimeFactories
     /// <summary>
     /// The attribute on every class this package's generators write, which tells code the build wrote from code a
     /// developer wrote: to a reader, to coverage, and to an architecture test that holds a project's own code to a
-    /// rule the generated code is exempt from, as such a test tells the Mediator's generated code by the same attribute.
+    /// rule the generated code is exempt from, as such a test tells any generated code by the same attribute.
     /// </summary>
     public static readonly string GeneratedCode =
         "[global::System.CodeDom.Compiler.GeneratedCode(\"DTS.DDD.EntityFramework.Supabase.Analyzers\", \""

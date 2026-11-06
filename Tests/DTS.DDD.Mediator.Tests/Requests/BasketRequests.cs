@@ -3,15 +3,13 @@ using DTS.DDD.Abstractions.Attributes;
 using DTS.DDD.Access;
 using DTS.DDD.Exceptions;
 using DTS.DDD.Mediator.Tests.Domain;
-using Mediator;
 
 namespace DTS.DDD.Mediator.Tests.Requests;
 
 /// <summary>
-/// What every request about a basket implements, to say what it requires of its caller. This project runs the
-/// toolkit's generator and Mediator's own, so the behavior the toolkit writes for this interface,
-/// <c>BasketAccessBehavior&lt;TMessage, TResponse&gt;</c>, is written into the very compilation Mediator's
-/// generator writes its mediator into: the single-project case.
+/// What every request about a basket implements, to say what it requires of its caller. The toolkit's generator
+/// writes the behavior for this interface, <c>BasketAccessBehavior&lt;TMessage, TResponse&gt;</c>, into this project,
+/// beside the handler registration it writes: the single-project case.
 /// </summary>
 [AccessRequests]
 public interface IBasketRequest : IRequireAccess;
@@ -123,7 +121,7 @@ public sealed class BasketKindsHandler(StepLog steps) : IQueryHandler<BasketKind
 
 /// <summary>
 /// What is in a basket of the caller's own, one line at a time: a query of the module that is answered with a
-/// stream. Mediator sends it through a pipeline of its own, which no <c>IPipelineBehavior</c> is part of, so the
+/// stream. The mediator sends it through a pipeline of its own, which no <c>IPipelineBehavior</c> is part of, so the
 /// toolkit writes a second behavior for the interface, <c>BasketAccessStreamBehavior&lt;TMessage, TResponse&gt;</c>.
 /// </summary>
 public sealed record BasketLines(BasketId Basket) : IStreamQuery<string>, IBasketRequest
@@ -179,9 +177,8 @@ public sealed class PingHandler(StepLog steps) : ICommandHandler<Ping>
 }
 
 /// <summary>
-/// A behavior of the host's own, which the host names in <c>MediatorOptions.PipelineBehaviors</c> for Mediator's
-/// generator to register. That generator sees it because somebody wrote it: it cannot see the behavior the
-/// toolkit's generator writes, so that one is added to the container with its own registration instead.
+/// A behavior of the host's own, which the host registers with <c>services.AddPipelineBehavior(typeof(Listed&lt;,&gt;))</c>
+/// in front of every request, command and query.
 /// </summary>
 public sealed class Listed<TMessage, TResponse>(StepLog steps) : IPipelineBehavior<TMessage, TResponse>
     where TMessage : IMessage
@@ -194,7 +191,7 @@ public sealed class Listed<TMessage, TResponse>(StepLog steps) : IPipelineBehavi
 }
 
 /// <summary>
-/// What every request of a second module implements, whose behaviors the host lists for Mediator's generator, as a
+/// What every request of a second module implements, whose behaviors the host registers itself, as a
 /// host may for a module in a class library. It is not marked <c>[AccessRequests]</c>: its behaviors are written here
 /// by hand, constrained as the generated ones are, and the test assembly describes them as the toolkit's generator
 /// describes the ones it writes. The module has no query answered with a stream.
@@ -217,7 +214,7 @@ public sealed class TakeStockHandler(StepLog steps) : ICommandHandler<TakeStock>
     }
 }
 
-/// <summary>The second module's behavior, listed for Mediator's generator, which closes it over each message of the module.</summary>
+/// <summary>The second module's behavior, which the host registers closed over each message of the module.</summary>
 public sealed class StockAccess<TMessage, TResponse>(StepLog steps) : IPipelineBehavior<TMessage, TResponse>
     where TMessage : notnull, IStockRequest, IMessage
 {
@@ -229,8 +226,8 @@ public sealed class StockAccess<TMessage, TResponse>(StepLog steps) : IPipelineB
 }
 
 /// <summary>
-/// The second module's behavior for streams, listed for Mediator's generator as well, which closes it over nothing:
-/// the module has no query answered with a stream.
+/// The second module's behavior for streams, which the host registers over nothing: the module has no query answered
+/// with a stream.
 /// </summary>
 public sealed class StockStreamAccess<TMessage, TResponse>(StepLog steps) : IStreamPipelineBehavior<TMessage, TResponse>
     where TMessage : IStockRequest, IStreamMessage

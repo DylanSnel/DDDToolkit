@@ -6,24 +6,21 @@ using DTS.DDD.Mediator.Tests.Infrastructure;
 using DTS.DDD.Mediator.Tests.Requests;
 using FluentAssertions;
 using DTS.DDD.Startup;
-using Mediator;
 using Microsoft.Extensions.DependencyInjection;
 
-// The second module's behaviors, which the host lists for Mediator's generator, described as the toolkit's generator
-// describes the ones it writes, for the tests that the start-up check reads what that generator registered.
+// The second module's behaviors, which the host registers itself, described as the toolkit's generator describes the
+// ones it writes, for the tests that the start-up check reads what the host registered.
 [assembly: AccessBehavior(typeof(IStockRequest), typeof(StockAccess<,>), StreamBehavior = typeof(StockStreamAccess<,>))]
 
 namespace DTS.DDD.Mediator.Tests;
 
 /// <summary>
 /// The access behavior the toolkit writes for an <c>[AccessRequests]</c> interface, in a project that is its own
-/// composition root: the toolkit's generator and Mediator's run in one compilation here, and neither sees what the
-/// other writes. So the host does not name the generated behavior in the options Mediator's generator reads; it
-/// adds it to the container with the registration written beside it, <c>services.AddBasketAccessBehavior()</c>,
-/// and the mediator Mediator's generator wrote takes it from there like any other. Behaviors the host does list
-/// for Mediator's generator run as well, in the order of registration. A query answered with a stream passes
-/// Mediator's other pipeline, and is held there by the second behavior the same registration adds. And the module's
-/// check brings the start-up check that the behavior is there: a host that forgot the line does not start.
+/// composition root. The host adds it to the container with the registration written beside it,
+/// <c>services.AddBasketAccessBehavior()</c>, and the toolkit's mediator resolves it like any other behavior.
+/// Behaviors the host registers itself run as well, in the order of registration. A query answered with a stream
+/// passes the mediator's other pipeline, and is held there by the second behavior the same registration adds. And the
+/// module's check brings the start-up check that the behavior is there: a host that forgot the line does not start.
 /// </summary>
 public sealed class AccessBehaviorTests
 {
@@ -172,13 +169,12 @@ public sealed class AccessBehaviorTests
     }
 
     [Fact]
-    public void The_generated_behavior_is_in_the_container_after_the_ones_the_mediator_generator_registered()
+    public void The_generated_behavior_is_in_the_container_after_the_one_the_host_registered_first()
     {
         using var host = new TestHost();
         using var scope = host.CreateScope();
 
-        // What Mediator's generator registered from the options it read when this project compiled, then what the
-        // toolkit's generated registration added: the order they run in.
+        // What the host registered first, then what the toolkit's generated registration added: the order they run in.
         scope.ServiceProvider.GetServices<IPipelineBehavior<RenameBasket, BasketId>>().Select(step => step.GetType().GetGenericTypeDefinition())
             .Should().Equal(typeof(Listed<,>), typeof(BasketAccessBehavior<,>));
 
@@ -233,11 +229,11 @@ public sealed class AccessBehaviorTests
     }
 
     [Fact]
-    public void A_module_whose_behaviors_are_listed_for_Mediator_s_generator_passes_without_a_stream_query()
+    public void A_module_whose_behaviors_are_registered_closed_passes_without_a_stream_query()
     {
-        // Mediator's generator registers a listed behavior closed over each message that meets its constraints: the
-        // second module's over its one command, and the one for streams over nothing, since the module has no query
-        // answered with a stream. Nothing of the module is missing from a pipeline a message of it passes.
+        // The host registers the second module's behavior closed over its one command, and the one for streams over
+        // nothing, since the module has no query answered with a stream. Nothing of the module is missing from a
+        // pipeline a message of it passes.
         using var host = new TestHost();
         var registered = Copy(host.Registrations).AddAccessChecks<IStockRequest>();
 
@@ -256,7 +252,7 @@ public sealed class AccessBehaviorTests
     [Fact]
     public void A_module_whose_registration_was_forgotten_altogether_is_refused_from_its_handlers()
     {
-        // Neither the module's checks nor its behavior: what is left of it is the handlers Mediator's generator
+        // Neither the module's checks nor its behavior: what is left of it is the handlers the toolkit's generator
         // registered, and those are what the check reads.
         using var host = new TestHost(accessBehavior: false);
         var registered = Copy(host.Registrations);

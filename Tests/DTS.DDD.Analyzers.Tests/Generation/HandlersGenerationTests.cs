@@ -2,8 +2,9 @@ namespace DTS.DDD.Analyzers.Tests.Generation;
 
 /// <summary>
 /// <c>Add{Module}Handlers()</c>, which the core generator writes for the toolkit's mediator: one
-/// <c>AddNotificationHandler&lt;TNotification, THandler&gt;</c> per handler and notification type, closed when the
-/// project compiles.
+/// <c>AddNotificationHandler&lt;TNotification, THandler&gt;</c> per handler and notification type, and one registration
+/// of its kind per request handler, such as <c>AddCommandHandler&lt;TCommand, TResponse, THandler&gt;</c>, closed when
+/// the project compiles. A second handler of one request is DDD00110.
 /// </summary>
 public class HandlersGenerationTests
 {
@@ -254,5 +255,167 @@ public class HandlersGenerationTests
         var result = GeneratorTestHost.Create(source).WithoutTheToolkitAssemblies().RunCore();
 
         result.ShouldNotHaveGeneratedFor(Hint);
+    }
+
+    /// <summary>A module with a handler of each kind of message that is answered once or with a stream.</summary>
+    private const string Billing =
+        """
+        using DTS.DDD.Abstractions.Attributes;
+        using DTS.DDD.Mediator;
+        using System.Collections.Generic;
+        using System.Runtime.CompilerServices;
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        [assembly: Module("Billing")]
+
+        namespace Billing;
+
+        public sealed record CloseInvoice(int Invoice) : ICommand;
+
+        public sealed record InvoiceTotal(int Invoice) : IQuery<decimal>;
+
+        public sealed record Ping : IRequest<string>;
+
+        public sealed record InvoiceLines(int Invoice) : IStreamQuery<string>;
+
+        public sealed record Reissue(int Invoice) : IStreamCommand<int>;
+
+        public sealed record Watch : IStreamRequest<int>;
+
+        internal sealed class CloseInvoiceHandler : ICommandHandler<CloseInvoice>
+        {
+            public ValueTask<Unit> Handle(CloseInvoice command, CancellationToken cancellationToken) => Unit.ValueTask;
+        }
+
+        internal sealed class InvoiceTotalHandler : IQueryHandler<InvoiceTotal, decimal>
+        {
+            public ValueTask<decimal> Handle(InvoiceTotal query, CancellationToken cancellationToken) => new(12m);
+        }
+
+        internal sealed class PingHandler : IRequestHandler<Ping, string>
+        {
+            public ValueTask<string> Handle(Ping request, CancellationToken cancellationToken) => new("pong");
+        }
+
+        internal sealed class InvoiceLinesHandler : IStreamQueryHandler<InvoiceLines, string>
+        {
+            public async IAsyncEnumerable<string> Handle(InvoiceLines query, [EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                await Task.Yield();
+                yield return "bread";
+            }
+        }
+
+        internal sealed class ReissueHandler : IStreamCommandHandler<Reissue, int>
+        {
+            public async IAsyncEnumerable<int> Handle(Reissue command, [EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                await Task.Yield();
+                yield return command.Invoice;
+            }
+        }
+
+        internal sealed class WatchHandler : IStreamRequestHandler<Watch, int>
+        {
+            public async IAsyncEnumerable<int> Handle(Watch request, [EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                await Task.Yield();
+                yield return 1;
+            }
+        }
+
+        """;
+
+    [Fact]
+    public void Each_request_handler_gets_the_registration_of_its_kind_with_its_response()
+    {
+        var result = GeneratorTestHost.Create(Billing).WithDependencyInjection().RunCore();
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain(Hint, "AddCommandHandler<global::Billing.CloseInvoice, global::DTS.DDD.Mediator.Unit, global::Billing.CloseInvoiceHandler>(services);", "a command answered with nothing answers Unit");
+        result.ShouldContain(Hint, "AddQueryHandler<global::Billing.InvoiceTotal, decimal, global::Billing.InvoiceTotalHandler>(services);");
+        result.ShouldContain(Hint, "AddRequestHandler<global::Billing.Ping, string, global::Billing.PingHandler>(services);");
+        result.ShouldContain(Hint, "AddStreamQueryHandler<global::Billing.InvoiceLines, string, global::Billing.InvoiceLinesHandler>(services);");
+        result.ShouldContain(Hint, "AddStreamCommandHandler<global::Billing.Reissue, int, global::Billing.ReissueHandler>(services);");
+        result.ShouldContain(Hint, "AddStreamRequestHandler<global::Billing.Watch, int, global::Billing.WatchHandler>(services);");
+        result.ShouldNotContain(Hint, "AddCommandHandler<global::Billing.CloseInvoice, global::Billing.CloseInvoiceHandler>", "the handler interface without a response is registered through the one it derives from");
+    }
+
+    [Fact]
+    public void A_second_handler_of_one_command_reports_DDD00110_at_the_second_and_the_registration_keeps_the_first()
+    {
+        var result = GeneratorTestHost.Create(Billing, "Billing.cs")
+            .WithSource(
+                """
+                using DTS.DDD.Mediator;
+                using System.Threading;
+                using System.Threading.Tasks;
+
+                namespace Billing;
+
+                internal sealed class CloseInvoiceAgain : ICommandHandler<CloseInvoice>
+                {
+                    public ValueTask<Unit> Handle(CloseInvoice command, CancellationToken cancellationToken) => Unit.ValueTask;
+                }
+                """,
+                "Second.cs")
+            .WithDependencyInjection()
+            .RunCore();
+
+        result.ShouldHaveExactlyDiagnostics("DDD00110");
+        result.ShouldHaveDiagnostic("DDD00110", at: "CloseInvoiceAgain").GetMessage().Should()
+            .Be("'Billing.CloseInvoiceAgain' is a second handler of 'Billing.CloseInvoice'. 'Billing.CloseInvoiceHandler' handles it already, and a message has one handler.");
+        result.ShouldContain(Hint, "AddCommandHandler<global::Billing.CloseInvoice, global::DTS.DDD.Mediator.Unit, global::Billing.CloseInvoiceHandler>(services);");
+        result.ShouldNotContain(Hint, "CloseInvoiceAgain", "the registration keeps the first handler, by file and position");
+    }
+
+    [Fact]
+    public void Two_handlers_of_one_notification_are_no_second_handler()
+    {
+        var result = GeneratorTestHost.Create(Shop).WithDependencyInjection().RunCore();
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+    }
+
+    [Fact]
+    public void A_partial_handler_declared_in_two_files_is_one_handler()
+    {
+        var result = GeneratorTestHost.Create(
+                """
+                using DTS.DDD.Mediator;
+                using System.Threading;
+                using System.Threading.Tasks;
+
+                namespace Billing;
+
+                public sealed record CloseInvoice(int Invoice) : ICommand;
+
+                internal sealed partial class CloseInvoiceHandler : ICommandHandler<CloseInvoice>
+                {
+                    public ValueTask<Unit> Handle(CloseInvoice command, CancellationToken cancellationToken) => Unit.ValueTask;
+                }
+                """,
+                "Handler.cs")
+            .WithSource(
+                """
+                namespace Billing;
+
+                internal sealed partial class CloseInvoiceHandler : System.IDisposable
+                {
+                    public void Dispose()
+                    {
+                    }
+                }
+                """,
+                "Handler.Dispose.cs")
+            .WithDependencyInjection()
+            .RunCore();
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain(Hint, "AddCommandHandler<global::Billing.CloseInvoice, global::DTS.DDD.Mediator.Unit, global::Billing.CloseInvoiceHandler>(services);");
     }
 }

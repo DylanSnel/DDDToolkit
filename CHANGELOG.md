@@ -36,6 +36,32 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   See [Dispatching with the toolkit's mediator](docs/event-delivery.md#dispatching-with-the-toolkits-mediator) and
   [Notification behaviors](docs/event-delivery.md#notification-behaviors).
 
+- **Requests, commands and queries on the toolkit's mediator.** New in 0.1.0. The Mediator library leaves the
+  repository, and no package or sample references it.
+  - `DylansTechStack.DDD.Abstractions` declares the messages, the handlers and the pipeline in `DTS.DDD.Mediator`, for
+    .NET 10, with Mediator 3.0's names and signatures: `IMessage`, `IRequest<T>`, `ICommand<T>`, `IQuery<T>`, the stream
+    kinds `IStreamRequest<T>`, `IStreamCommand<T>` and `IStreamQuery<T>`, a handler interface for each, `ISender`,
+    `IMediator`, `IPipelineBehavior<TMessage, TResponse>`, `IStreamPipelineBehavior<TMessage, TResponse>`, their
+    delegates, `Unit`, `MissingMessageHandlerException` and `InvalidMessageException`. Code written for Mediator changes
+    only its `using`. `INotification` derives from `IMessage`, as in Mediator.
+  - The core package implements them. `ISender` and `IMediator` are one scoped object. A message is sent to the one
+    handler of its exact runtime type, as in Mediator. A handler of a base type or an interface does not handle it. A
+    message without a handler throws `MissingMessageHandlerException`, which names its type.
+  - `services.AddCommandHandler<TCommand, TResponse, THandler>()` and its siblings for requests, queries and the stream
+    kinds register a handler, scoped. A second handler of one message throws and names both handlers.
+  - `services.AddPipelineBehavior(type)` and `services.AddStreamPipelineBehavior(type)` register a behavior. An open
+    behavior runs around every message that meets its constraints, and a closed one around its own message. The
+    behavior registered first is the outermost.
+  - The generated `Add{Module}Handlers()` registers a project's request handlers beside its notification handlers.
+  - Left out from Mediator: `MessagePreProcessor`, `MessagePostProcessor`, `MessageExceptionHandler` and
+    `INotificationPublisher`. A pipeline behavior does the work of the first three.
+
+  See [Sending requests](docs/event-delivery.md#sending-requests).
+
+- **DDD00110: a request, a command or a query has one handler.** New in 0.1.0. The generator reports the second handler
+  of one message in a project, by file and position, and the registration keeps the first. See
+  [DDD00110](docs/diagnostics.md#ddd00110).
+
 - **Three marks for the classes an API returns, in `DDDToolkit.Abstractions.Attributes`.** New in 3.2.0-preview.14.
   - `[PersonalData]` marks a stored member that holds data about a person that no reader of the object needs, such as
     an account id.
@@ -3356,6 +3382,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     solution file stays `DDDToolkit.slnx`.
   - `Directory.Build.props` makes the id from the project name, `DylansTechStack.` and the name without `DTS.`. The
     `DDDPackageIdPrefix` property is gone.
+
+- **The access behavior is written for the toolkit's mediator.** New in 0.1.0. An `[AccessRequests]` interface gets
+  its behaviors in every project for .NET 10, without a package of Mediator. The analyzers read the toolkit's
+  `ISender`, handlers and pipeline in place of Mediator's.
+  - A project for netstandard2.0 cannot see the mediator and gets no behavior. [DDD00107](docs/diagnostics.md#ddd00107)
+    names that cause at a call of the missing registration.
+  - [DDD00057](docs/diagnostics.md#ddd00057) now reports a `DTS.DDD.Abstractions` of another version, whose pipeline
+    the generator does not know.
+  - The start-up check `access.behaviors-registered` reads the handlers that `Add{Module}Handlers()` registered. A
+    host that registers a behavior closed over its messages is told the open `AddPipelineBehavior` call.
+  - Docs: [The generated behavior](docs/access-requirements.md#the-generated-behavior) and
+    [Asking the checks yourself](docs/access-requirements.md#asking-the-checks-yourself) replace the sections that
+    named Mediator.
 
 - **The outbox processor claims its rows with a lease.** Before, every host that polled one outbox table read the
   same due rows, so with more than one replica a message could be delivered twice. Now `ProcessPendingAsync` starts

@@ -335,7 +335,7 @@ services.AddTenancyAccess<IBillingRequest, BillingContext>();
   `IDbContextFactory<TContext>`, the check uses a separate context from that factory.
 - A request of a module without the check is stopped. The error message names `AddTenancyAccess`.
 - The packages reference no dispatcher. Call `AccessChecks<IBillingRequest>.RequireAsync` before the handlers, or use
-  the [behavior generated for Mediator](../access-requirements.md#the-generated-behavior-with-mediator).
+  the [generated behavior](../access-requirements.md#the-generated-behavior).
 
 ## What a module reads of Tenancy
 
