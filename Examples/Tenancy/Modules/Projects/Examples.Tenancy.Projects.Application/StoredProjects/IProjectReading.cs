@@ -140,6 +140,15 @@ public interface IProjectReading : IAsyncDisposable
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The open projects of the caller's tenant whose crew <paramref name="seat"/> is on and that it does not own, by
+    /// number, in one statement. These are the crews a seat that leaves the tenant is taken off. The owner stays on its
+    /// crew until somebody else is named owner, and a closed project changes no more, so neither is in the answer.
+    /// </summary>
+    /// <param name="seat">The seat.</param>
+    /// <param name="cancellationToken">Cancels the query.</param>
+    Task<IReadOnlyList<ProjectId>> CrewsToLeaveAsync(SeatId seat, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Every project of <paramref name="tenant"/>, by number, whoever is calling: for the application's operators,
     /// who work in no tenant. The one read here that looks past the caller's tenant, so it names the tenant itself
     /// and takes no reach; whoever calls it has decided first that the caller is an operator. One statement.

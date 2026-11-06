@@ -7,11 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Mediator generates into the composition root. -->
-    <PackageReference Include="Mediator.SourceGenerator">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="MassTransit.RabbitMQ" />
   </ItemGroup>
 
@@ -28,7 +23,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Messaging.MassTransit\DDDToolkit.Messaging.MassTransit.csproj" />
   </ItemGroup>
 

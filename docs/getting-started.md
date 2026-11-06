@@ -435,9 +435,10 @@ invariants and raise the version. Packages you register later bring more parts f
 `UseDDDToolkit` call adds those parts too, each in its place, so the context's options do not change.
 [`UseDDDToolkit`](entity-framework.md#usedddtoolkit) has the details.
 
-The argument of `AddDDDToolkitEntityFramework` says how domain events are delivered. The example hands them to
-[Mediator](https://github.com/martinothamar/Mediator) handlers in the same process, with `DispatchWithMediator()`
-from `DDDToolkit.Mediator`. The other way is the outbox, later on this page. An aggregate that raised events cannot
+The argument of `AddDDDToolkitEntityFramework` says how domain events are delivered. The example hands them to the
+handlers of the toolkit's own mediator in the same process, with `DispatchWithMediator()`. A handler implements
+`INotificationHandler<TEvent>`, and the generated `AddOrderingHandlers()` registers it. The other way is the outbox,
+later on this page. An aggregate that raised events cannot
 be saved until one of the two is configured, so no event is dropped. See [Domain event delivery](event-delivery.md).
 
 Pass `UseDDDToolkit` the service provider that the `AddDbContext` callback gives you. Do not pass a provider you

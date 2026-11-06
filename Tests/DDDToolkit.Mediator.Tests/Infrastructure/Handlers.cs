@@ -1,7 +1,8 @@
 using DDDToolkit.Mediator.Tests.Domain;
-using Mediator;
 
 namespace DDDToolkit.Mediator.Tests.Infrastructure;
+
+// The toolkit's INotificationHandler: the generator registers each of these in AddMediatorTestsHandlers().
 
 /// <summary>Records every <see cref="BasketCreated"/>.</summary>
 public sealed class BasketCreatedHandler(EventLog log) : INotificationHandler<BasketCreated>
@@ -13,8 +14,11 @@ public sealed class BasketCreatedHandler(EventLog log) : INotificationHandler<Ba
     }
 }
 
-/// <summary>A second handler for the same event, to show that fan-out runs each handler once.</summary>
-public sealed class BasketCreatedAuditHandler(EventLog log) : INotificationHandler<BasketCreated>
+/// <summary>
+/// A second handler for the same event, to show that fan-out runs each handler once. It is internal, as a module's
+/// handler usually is.
+/// </summary>
+internal sealed class BasketCreatedAuditHandler(EventLog log) : INotificationHandler<BasketCreated>
 {
     public ValueTask Handle(BasketCreated notification, CancellationToken cancellationToken)
     {
@@ -34,9 +38,8 @@ public sealed class ItemAddedHandler(EventLog log) : INotificationHandler<ItemAd
 }
 
 /// <summary>
-/// Injects the <see cref="BasketContext"/>, which only works because Mediator is registered with
-/// <c>ServiceLifetime.Scoped</c>. It hands the context it was given to the log so a test can compare
-/// it with the one that is saving.
+/// Injects the <see cref="BasketContext"/>, which works because the handler is resolved from the scope that saves.
+/// It hands the context it was given to the log, so a test can compare it with the one that is saving.
 /// </summary>
 public sealed class BasketEmptiedHandler(EventLog log, BasketContext context) : INotificationHandler<BasketEmptied>
 {

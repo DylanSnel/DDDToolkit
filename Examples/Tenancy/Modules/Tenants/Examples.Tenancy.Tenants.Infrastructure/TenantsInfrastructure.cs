@@ -110,10 +110,10 @@ public static class TenantsInfrastructure
 
         // Tenancy's domain events are stored with the change that raised them, and none of them leaves: they are
         // the package's, not a contract, so each is kept off the sinks. An integration event mapped before
-        // AddTenancyDomainEvents would leave; the sample publishes none. A module that reacted to one would say
-        // where it registers its handlers what they run as, with Around: system work in the tenant the message
-        // names, since the host requires every flow of work to say who it runs as.
-        services.AddDDDToolkitEntityFramework(options => options.UseOutbox<TenantsContext>(outbox =>
+        // AddTenancyDomainEvents would leave; the sample publishes none. A module that reacts to one handles it in
+        // this process, through the toolkit's mediator, and does not tell this module so. Its handler begins the
+        // caller it works as, since the host requires every flow of work to say who it runs as.
+        services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator().UseOutbox<TenantsContext>(outbox =>
         {
             // What changes who may do what is kept in the access history as well, by the save that stores it in
             // the outbox, and each row says who made the change. A rename changes nobody's access, and is left out.
@@ -127,6 +127,11 @@ public static class TenantsInfrastructure
                 .AddTenancyInvitationEvents<InvitationId>()
                 .KeepEventLog(log => log.AddTenancyEventLog());
             host.Publish(outbox);
+
+            // Sinks normally replace the in-process delivery. This asks for both, so the poller hands every event to
+            // the handlers of the toolkit's mediator, through DispatchWithMediator() above, as well as to the sinks.
+            // An event without a handler goes to nobody.
+            outbox.AlsoDispatchInProcess = true;
         }));
 
         // The poller marks each stored event handled. It needs no Tenancy user: the outbox is not kept to a tenant.

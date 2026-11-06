@@ -27,7 +27,7 @@ Three consequences for how you work:
 
 - Read the project files for which DDDToolkit packages are referenced, and use only their APIs. Each
   integration is a package of its own that brings its own generator: `DDDToolkit` (core, always),
-  `DDDToolkit.EntityFramework`, `DDDToolkit.Mediator`, `DDDToolkit.FluentValidation`,
+  `DDDToolkit.EntityFramework`, `DDDToolkit.FluentValidation`,
   `DDDToolkit.HotChocolate`, `DDDToolkit.Localization`, `DDDToolkit.Testing`, `DDDToolkit.Messaging.*`,
   `DDDToolkit.EntityFramework.Postgres`, `DDDToolkit.EntityFramework.Supabase`, `DDDToolkit.Auth.Supabase.*`.
   For now 3.x is published under the same names with `Temp.` in front (`Temp.DDDToolkit`,

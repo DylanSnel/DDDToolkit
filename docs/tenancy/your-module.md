@@ -528,9 +528,9 @@ always runs, and your code adds to it. You can add four things:
 - **Rules.** A nested `IInvariant<T>` runs after the package's rules on every save. It refuses the save in the same
   way as the package's rules.
 - **Handlers for the package's domain events.** Every change raises an event (`tenancy.seat-suspended` and the
-  others). Each event records [who made the change](operators-and-history.md#access-history). Handle an event in
-  process with `AlsoDispatchInProcess`, or [publish](#publishing-an-event) it. An event without a mapping is stored
-  and reaches no other module.
+  others). Each event records [who made the change](operators-and-history.md#access-history).
+  [Handle an event in process](#handling-an-event-in-process), or [publish](#publishing-an-event) it. An event
+  without a handler or a mapping is stored and reaches no other module.
 
 The sample's unit adds a cost centre and a rule for its format.
 
@@ -589,6 +589,56 @@ await tenants.ProvisionAsync(
   `InvitationManager.AcceptAsync`
   ([How a seat is shown](names-and-languages.md#how-a-seat-is-shown)).
 
+### Handling an event in process
+
+Every domain event of Tenancy is a notification of the toolkit's mediator, closed over your ids. A module handles one
+like an event of its own, with `INotificationHandler<TEvent>`. The sample's Projects module takes a deactivated seat
+off its crews:
+
+**[`Projects.Application/Crew/DeactivatedSeatLeavesItsCrews.cs`](../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/DeactivatedSeatLeavesItsCrews.cs)**
+
+```csharp
+internal sealed class DeactivatedSeatLeavesItsCrews(CrewMemberManager crew, IProjectReads reads, TenancyAccessManager tenancy)
+    : INotificationHandler<SeatDeactivated<TenantId, SeatId>>
+{
+    public async ValueTask Handle(SeatDeactivated<TenantId, SeatId> notification, CancellationToken cancellationToken)
+    {
+        using (tenancy.BeginSystemIn(notification.TenantId, scope: ProjectMembership.Scope))
+        {
+            IReadOnlyList<ProjectId> crews;
+            await using (var reading = reads.Open())
+            {
+                crews = await reading.CrewsToLeaveAsync(notification.SeatId, cancellationToken);
+            }
+
+            foreach (var project in crews)
+            {
+                await crew.RemoveAsync(project, notification.SeatId, cancellationToken);
+            }
+        }
+    }
+}
+```
+
+The outbox of your Tenancy context delivers the event in process, beside its sinks:
+
+```csharp
+services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator().UseOutbox<ShopTenancyContext>(outbox =>
+{
+    outbox.AddTenancyDomainEvents();
+    outbox.AlsoDispatchInProcess = true;
+}));
+```
+
+- The generator registers the handler in `Add{Module}Handlers()` of the project that declares it. The module calls
+  that method where it registers its services.
+- The outbox's processor delivers the event after the change committed. A handler that throws fails the delivery, and
+  the processor delivers the event again. Write the handler so that a second delivery finds nothing left to do.
+- The processor hands the event over with nobody begun. On a host that requires an explicit current user, the
+  handler begins the caller it works as, such as system work in the event's tenant. A module with several such
+  handlers begins it once, in an `INotificationBehavior`
+  ([Notification behaviors](../event-delivery.md#notification-behaviors)).
+- The handler saves its own work. The processor saves only its own bookkeeping.
 ### Publishing an event
 
 To let another module receive one of Tenancy's events, map the event in the outbox of your Tenancy context, before

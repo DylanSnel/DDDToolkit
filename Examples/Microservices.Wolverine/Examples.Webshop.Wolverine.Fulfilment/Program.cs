@@ -1,7 +1,6 @@
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.HotChocolate;
-using DDDToolkit.Mediator;
 using DDDToolkit.Messaging.Wolverine;
 using Examples.Hosting;
 using Examples.Webshop.Inventory;
@@ -22,7 +21,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
 var host = new ModuleHost(

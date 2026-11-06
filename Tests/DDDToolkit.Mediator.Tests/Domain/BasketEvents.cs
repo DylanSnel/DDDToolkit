@@ -1,15 +1,18 @@
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.Interfaces;
-using Mediator;
 
 namespace DDDToolkit.Mediator.Tests.Domain;
 
 /// <summary>
-/// The marker every publishable event in this test domain carries. Deriving from both interfaces in
-/// one place is the pattern <c>DispatchWithMediator</c> expects, and the same one the example uses.
+/// The interface every event of the basket carries besides <see cref="IDomainEvent"/>. A handler declared for it
+/// runs for each of them, because the publisher finds handlers by the runtime type and its interfaces.
 /// </summary>
-public interface IBasketEvent : IDomainEvent, INotification;
+public interface IBasketEvent : IDomainEvent
+{
+    /// <summary>The basket the event is about.</summary>
+    BasketId BasketId { get; }
+}
 
 [DomainEventName("basket.created")]
 public sealed record BasketCreated(BasketId BasketId, string Name) : DomainEvent, IBasketEvent;
@@ -20,9 +23,6 @@ public sealed record ItemAdded(BasketId BasketId, string Item) : DomainEvent, IB
 [DomainEventName("basket.emptied")]
 public sealed record BasketEmptied(BasketId BasketId) : DomainEvent, IBasketEvent;
 
-/// <summary>
-/// Deliberately not an <see cref="INotification"/>: Mediator has no way to publish it, which is the
-/// case <c>DispatchWithMediator</c> turns into an exception naming this type.
-/// </summary>
+/// <summary>An event without a handler of its own, and no <see cref="IBasketEvent"/>: it is published to nobody.</summary>
 [DomainEventName("basket.archived")]
 public sealed record BasketArchived(BasketId BasketId) : DomainEvent;

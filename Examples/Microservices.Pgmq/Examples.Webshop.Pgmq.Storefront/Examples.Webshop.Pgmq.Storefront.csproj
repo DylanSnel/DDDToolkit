@@ -6,15 +6,6 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- Mediator generates into the composition root. -->
-    <PackageReference Include="Mediator.SourceGenerator">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-
-  </ItemGroup>
-
   <!--
     Catalog and Ordering, and no other module: this service cannot call into a module it does not run, because it does
     not reference it. What it knows of the others is their contracts, through the modules it runs.
@@ -26,7 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Messaging.Postgres\DDDToolkit.Messaging.Postgres.csproj" />
   </ItemGroup>
 

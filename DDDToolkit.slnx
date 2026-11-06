@@ -32,7 +32,6 @@
     <Project Path="Source/DDDToolkit.HotChocolate.Fusion.InMemory/DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
     <Project Path="Source/DDDToolkit.HotChocolate.Analyzers/DDDToolkit.HotChocolate.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.Localization/DDDToolkit.Localization.csproj" />
-    <Project Path="Source/DDDToolkit.Mediator/DDDToolkit.Mediator.csproj" />
     <Project Path="Source/DDDToolkit.NewtonSoft.Json/DDDToolkit.NewtonSoft.Json.csproj" />
     <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Tenancy/DDDToolkit.Supporting.Tenancy.csproj" />

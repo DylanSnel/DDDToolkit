@@ -244,6 +244,17 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         }
 
         /// <inheritdoc />
+        /// <remarks>Under the tenant filter: a project of another tenant is not there to be read.</remarks>
+        public async Task<IReadOnlyList<ProjectId>> CrewsToLeaveAsync(SeatId seat, CancellationToken cancellationToken)
+            => await Projects
+                .Where(project => project.State == ProjectState.Open
+                    && project.OwnerSeatId != seat
+                    && project.Crew.Any(member => member.MemberId == seat))
+                .OrderBy(project => project.Number)
+                .Select(project => project.Id)
+                .ToListAsync(cancellationToken);
+
+        /// <inheritdoc />
         /// <remarks>
         /// Past the tenant filter, which answers an operator nothing since it works in no tenant, and kept to the
         /// one tenant asked about by the statement itself.

@@ -1,4 +1,6 @@
+using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework;
+using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Mediator.Tests.Domain;
 using DDDToolkit.Mediator.Tests.Infrastructure;
@@ -10,8 +12,8 @@ namespace DDDToolkit.Mediator.Tests;
 
 /// <summary>
 /// <c>DispatchWithMediator()</c> end to end: an aggregate raises events, <c>SaveChangesAsync</c>
-/// dispatches them, and Mediator's generated implementation routes them to the handlers in this
-/// assembly. Everything runs against a real in-memory SQLite database.
+/// dispatches them, and the toolkit's publisher hands them to the handlers that the generated
+/// <c>AddMediatorTestsHandlers()</c> registered. Everything runs against a real in-memory SQLite database.
 /// </summary>
 public sealed class MediatorDispatchTests
 {
@@ -45,9 +47,10 @@ public sealed class MediatorDispatchTests
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
 
+        // The generated registration lists a project's handlers by their full name, and they run in that order.
         host.Log.Handled.Should().Equal(
-            $"{nameof(BasketCreatedHandler)}:basket.created",
-            $"{nameof(BasketCreatedAuditHandler)}:basket.created");
+            $"{nameof(BasketCreatedAuditHandler)}:basket.created",
+            $"{nameof(BasketCreatedHandler)}:basket.created");
     }
 
     [Fact]
@@ -100,26 +103,55 @@ public sealed class MediatorDispatchTests
     }
 
     [Fact]
-    public async Task Event_that_is_not_a_Mediator_notification_fails_naming_the_event_type()
+    public async Task An_event_without_a_handler_is_published_to_nobody_and_the_save_goes_on()
     {
         using var host = new TestHost();
         var basket = NewBasket();
         basket.Archive();
 
-        var act = () => host.InScopeAsync(async context =>
+        await host.InScopeAsync(async context =>
         {
             context.Baskets.Add(basket);
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
 
-        var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
-        thrown.Which.Message.Should()
-            .Contain(typeof(BasketArchived).FullName)
-            .And.Contain("Mediator.INotification")
-            .And.Contain(nameof(MediatorDispatchExtensions.DispatchWithMediator));
+        host.Log.CountOf<BasketArchived>().Should().Be(0);
+        host.Log.CountOf<BasketCreated>().Should().Be(2, "the event before it was handled");
+        host.CountRows("Baskets").Should().Be(1);
+    }
 
-        host.CountRows("Baskets").Should().Be(0, "a domain event that cannot be published is not quietly dropped");
-        host.Log.CountOf<BasketCreated>().Should().Be(2, "events raised before the unpublishable one were already handled");
+    [Fact]
+    public async Task A_handler_declared_for_an_interface_runs_for_every_event_that_implements_it()
+    {
+        using var host = new TestHost(register: services => services.AddNotificationHandler<IBasketEvent, EveryBasketEventHandler>());
+        var basket = NewBasket();
+        basket.AddItem("Milk");
+        basket.Archive();
+
+        await host.InScopeAsync(async context =>
+        {
+            context.Baskets.Add(basket);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        });
+
+        host.Log.Entries
+            .Where(entry => entry.Handler == nameof(EveryBasketEventHandler))
+            .Select(entry => DomainEventName.For(entry.Event))
+            .Should().Equal(["basket.created", "basket.item-added"], "BasketArchived is no IBasketEvent");
+    }
+
+    [Fact]
+    public async Task The_generated_registration_leaves_out_a_private_handler()
+    {
+        using var host = new TestHost();
+
+        await host.InScopeAsync(async context =>
+        {
+            context.Baskets.Add(NewBasket());
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        });
+
+        host.Log.Entries.Should().NotContain(entry => entry.Handler == nameof(EveryBasketEventHandler), "the registration cannot name a private nested class");
     }
 
     [Fact]
@@ -184,5 +216,32 @@ public sealed class MediatorDispatchTests
         // The outbox loads oldest first but makes no ordering promise, so this only checks that every
         // handler ran; ordering is the in-process test above.
         host.Log.Names.Should().BeEquivalentTo(["basket.created", "basket.created", "basket.item-added"]);
+    }
+
+    [Fact]
+    public void DispatchWithMediator_called_again_changes_nothing_and_beside_another_delegate_is_refused()
+    {
+        var modules = new DDDEntityFrameworkOptions();
+        modules.DispatchWithMediator().DispatchWithMediator();
+        modules.Dispatcher.Should().NotBeNull("each module whose outbox delivers in process may ask for the mediator");
+
+        var host = new DDDEntityFrameworkOptions();
+        host.DispatchInProcess((_, _, _) => Task.CompletedTask);
+        var act = () => host.DispatchWithMediator();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*already configured*");
+    }
+
+    /// <summary>
+    /// Declared for the interface every basket event implements. Private, so the generated registration leaves it
+    /// out, and a test that wants it registers it.
+    /// </summary>
+    private sealed class EveryBasketEventHandler(EventLog log) : INotificationHandler<IBasketEvent>
+    {
+        public ValueTask Handle(IBasketEvent notification, CancellationToken cancellationToken)
+        {
+            log.Record(nameof(EveryBasketEventHandler), notification);
+            return default;
+        }
     }
 }

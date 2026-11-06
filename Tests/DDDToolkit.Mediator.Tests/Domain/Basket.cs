@@ -32,7 +32,7 @@ public partial class Basket
         RaiseDomainEvent(new BasketEmptied(Id));
     }
 
-    /// <summary>Raises the event that does not implement <c>INotification</c>.</summary>
+    /// <summary>Raises the event that has no handler.</summary>
     public void Archive() => RaiseDomainEvent(new BasketArchived(Id));
 
     public void Rename(string name) => Name = name;

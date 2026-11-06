@@ -14,6 +14,28 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
+- **The toolkit's own mediator for notifications.** New in 3.2.0-preview.16. It replaces the `DDDToolkit.Mediator`
+  package and depends on no mediator library.
+  - The interfaces are in `DDDToolkit.Abstractions`, in the namespace `DDDToolkit.Mediator`, for .NET 10:
+    `INotification`, `INotificationHandler<TNotification>`, `IPublisher`, `INotificationBehavior<TNotification>` and
+    `NotificationHandlerDelegate<TNotification>`. Their names and signatures are Mediator's.
+  - The core package implements them. `IPublisher` is scoped and resolves every handler and behavior from its scope.
+    `services.AddNotificationHandler<TNotification, THandler>()` registers a handler, `services.AddNotificationBehavior(type)`
+    a behavior, and `services.AddDDDToolkitMediator()` the publisher alone.
+  - A notification is published by its runtime type. The handlers of that type, of its base classes and of its
+    interfaces run once each, one after another, in registration order. The first exception propagates. A
+    notification without a handler is published to nobody.
+  - A behavior runs around each handler call and is resolved for the type the handler is declared for. An open
+    generic behavior with a constraint applies to the types that meet it. The behavior registered first is the
+    outermost.
+  - The core generator writes `Add{Module}Handlers()` into every project with a handler, internal handlers and closed
+    generic events of a package included, such as `INotificationHandler<SeatDeactivated<TenantId, SeatId>>`. The
+    generics are closed when the project compiles, so a dispatch calls no handler through reflection. The method calls
+    the registrations of the module's other projects that the project references.
+
+  See [Dispatching with the toolkit's mediator](docs/event-delivery.md#dispatching-with-the-toolkits-mediator) and
+  [Notification behaviors](docs/event-delivery.md#notification-behaviors).
+
 - **Three marks for the classes an API returns, in `DDDToolkit.Abstractions.Attributes`.** New in 3.2.0-preview.14.
   - `[PersonalData]` marks a stored member that holds data about a person that no reader of the object needs, such as
     an account id.
@@ -2627,6 +2649,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Samples
 
+- **The Tenancy sample reacts to one of Tenancy's events.** New in 3.2.0-preview.16. The Projects module handles
+  `SeatDeactivated<TenantId, SeatId>` with `DeactivatedSeatLeavesItsCrews`. The handler takes the seat off every open
+  crew it does not own, as the module's system work in the event's tenant. The Tenants module's outbox delivers its
+  events in process beside its sinks, with `AlsoDispatchInProcess` and `DispatchWithMediator()`. The port
+  `IProjectReading` has `CrewsToLeaveAsync`, and `DeactivatedSeatScenarios` checks the reaction on Supabase.
+- **The webshop and the example API publish their events through the toolkit's mediator.** New in
+  3.2.0-preview.16. Their hosts no longer reference Mediator. `OrderLog` and the example API's handlers implement the
+  toolkit's `INotificationHandler`, and `AddOrderingHandlers()` and `AddApiHandlers()` register them. The events drop
+  their `INotification` and `IBaseDomainEvent` markers. The Tenancy sample keeps Mediator for its requests.
 - **The webshop's order is its customer's, in the access check too.** `Order.PlacedBy` is marked `[Owner]`, and
   `POST /orders/{id}/ship-to` sends an order elsewhere with `ShipElsewhere`, `[OwnOnly]` with `[Own]` on the order's
   id: Ordering's first request with an access requirement, whose endpoint asks the checks itself, with Ordering's
@@ -3300,6 +3331,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **`IDomainEvent` derives from `INotification`.** New in 3.2.0-preview.16. Every domain event is a notification of
+  the toolkit's mediator, the events of Tenancy and Membership included, so an event needs no marker of its own.
+- **`DispatchWithMediator()` publishes through the toolkit's mediator.** New in 3.2.0-preview.16. It is a method of
+  `DDDEntityFrameworkOptions` and needs no using. Calling it again changes nothing, so every module whose outbox
+  delivers in process may call it. It is refused beside a `DispatchInProcess` delegate of the host's own.
+  `AddDDDToolkitEntityFramework` registers the publisher.
 - **The save interceptors call `DetectChanges` once and read only the changed entries.** Each interceptor used to
   call `DetectChanges()` and then `ChangeTracker.Entries()`. `Entries()` calls `DetectChanges` again and creates an
   `EntityEntry` for every tracked entity. One save called `DetectChanges` 7 times. Now each interceptor calls it once
@@ -4601,6 +4638,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   for those the message writes out each call, `services.AddSupabaseMigrations<TenancyContext, TenancyContextDesignTimeFactory>();`,
   with the factory the generated list builds the context with. See
   [Checking at start-up](docs/supabase.md#checking-at-start-up).
+
+### Removed
+
+- **The `DDDToolkit.Mediator` package.** Removed in 3.2.0-preview.16. Its `DispatchWithMediator()` published through
+  Mediator's `IPublisher` and required every event to implement Mediator's `INotification`. The core package now has
+  its own mediator, and `DispatchWithMediator()` is on `DDDEntityFrameworkOptions`. A host that keeps Mediator for its
+  events writes a `DispatchInProcess` delegate
+  ([The dispatch delegate](docs/event-delivery.md#the-dispatch-delegate)). Mediator's handlers of domain events become
+  `DDDToolkit.Mediator.INotificationHandler<TEvent>`, registered by the generated `Add{Module}Handlers()`.
 
 ### Fixed
 

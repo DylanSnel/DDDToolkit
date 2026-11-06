@@ -217,10 +217,11 @@ public sealed record OrderPlaced(OrderId OrderId) : DomainEvent;           // 3.
 `EventId` is a version 7 `Guid`, so it is unique and sorts by time. `OccurredAt` is the UTC time when the event was
 made. Both are `init` properties, so a replay can set recorded values.
 
-If you have your own marker interface, list `DomainEvent` before it:
+If you have your own marker interface, list `DomainEvent` before it. From 3.2 every domain event is a notification of
+the toolkit's mediator, so the marker no longer needs a mediator's `INotification`:
 
 ```csharp
-public interface IBaseDomainEvent : IDomainEvent, INotification;
+public interface IBaseDomainEvent : IDomainEvent;
 
 public sealed record OrderPlaced(OrderId OrderId) : DomainEvent, IBaseDomainEvent;
 ```
@@ -550,19 +551,20 @@ at completion. So the types that they referenced no longer appear in the schema.
 FluentValidation's `ValidationFailure` or the always-valid twins, those types are gone. That fixes a bug, but check
 your persisted queries before you deploy ([GraphQL](graphql.md)).
 
-## 13. MediatR is replaced by Mediator in the examples
+## 13. MediatR is replaced in the examples
 
-MediatR has a commercial license from version 13, so the repository stayed on 12.x. The examples now publish
-through [Mediator](https://github.com/martinothamar/Mediator), which is MIT licensed and source generated. The
-`DDDToolkit.Mediator` package writes the dispatch delegate for you:
+MediatR has a commercial license from version 13, so the repository stayed on 12.x. In 3.0 the examples published
+through [Mediator](https://github.com/martinothamar/Mediator), which is MIT licensed and source generated, with the
+`DDDToolkit.Mediator` package. From 3.2 the core package has a mediator of its own for domain events, and that package
+is gone. `DispatchWithMediator()` now publishes to the handlers of the toolkit's mediator:
 
 ```csharp
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+builder.Services.AddOrderingHandlers();   // generated: every INotificationHandler of the module
 ```
 
-**Moving is optional.** The core package has no mediator dependency. In-process delivery is a delegate, and both
-libraries fit it. To stay on MediatR, keep your delegate and change only its signature:
+**Moving is optional.** The core package depends on no mediator library. In-process delivery is a delegate, and every
+library fits it. To stay on MediatR, keep your delegate and change only its signature:
 
 ```csharp
 options.DispatchInProcess(async (sp, events, cancellationToken) =>
@@ -572,16 +574,13 @@ options.DispatchInProcess(async (sp, events, cancellationToken) =>
 });
 ```
 
-If you move, two differences matter:
+If you move, three differences matter:
 
-- Mediator is source generated, so call `AddMediator` in the assembly that references `Mediator.SourceGenerator`.
-- Its default service lifetime is singleton. A handler that injects your `DbContext` needs
-  `ServiceLifetime.Scoped`. The generator reads the lifetime from the `AddMediator` call at compile time, so set it
-  there.
-
-`DispatchWithMediator()` throws for an event that does not implement Mediator's `INotification`, and names the
-event type. It does not skip the event, because the interceptor has already dequeued it. A skipped event would be
-lost, with no row, no log and nothing to retry.
+- A handler implements `INotificationHandler<TEvent>` from `DDDToolkit.Mediator`, and returns a `ValueTask`.
+- The generator registers every handler of a project in `Add{Module}Handlers()`, scoped, so a handler can inject your
+  `DbContext`. Call that method where the module registers its services.
+- Every domain event is a notification, and an event without a handler is published to nobody. See
+  [Dispatching with the toolkit's mediator](event-delivery.md#dispatching-with-the-toolkits-mediator).
 
 ## 14. Optional: make your identifiers structs
 

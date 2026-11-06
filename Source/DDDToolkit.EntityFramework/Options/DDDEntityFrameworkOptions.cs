@@ -1,6 +1,8 @@
 using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.Interfaces;
+using DDDToolkit.Mediator;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.EntityFramework.Options;
 
@@ -133,8 +135,8 @@ public sealed class DDDEntityFrameworkOptions
     /// <para>
     /// Without <see cref="UseOutbox"/> this runs inside <c>SaveChanges</c>, before the database write.
     /// With the outbox it is the delegate the processor delivers through. A typical implementation
-    /// resolves the publisher of a mediator library and publishes each event; the DDDToolkit.Mediator
-    /// package ships that delegate ready made as <c>options.DispatchWithMediator()</c>.
+    /// resolves the publisher of a mediator and publishes each event. <see cref="DispatchWithMediator"/>
+    /// is that delegate for the toolkit's own mediator.
     /// </para>
     /// <para>
     /// There is one delegate per process, so this can be called once. A second call throws rather than
@@ -152,11 +154,50 @@ public sealed class DDDEntityFrameworkOptions
         {
             throw new InvalidOperationException(
                 "An in-process dispatch delegate is already configured, and there is one per process. " +
-                "Call DispatchInProcess (or DispatchWithMediator) once, in the host, and let the modules configure their outboxes and contracts.");
+                "Call DispatchInProcess once, in the host, and let the modules configure their outboxes and contracts. " +
+                "DispatchWithMediator() may be called by every module, but not beside a delegate of the host's own.");
         }
 
         Dispatcher = dispatcher;
         return this;
+    }
+
+    /// <summary>
+    /// Delivers events through the toolkit's mediator. The delegate resolves <see cref="IPublisher"/> from the scope
+    /// that owns the saving <c>DbContext</c> and publishes each event, in the order it was raised. It awaits one
+    /// event's handlers before it publishes the next event.
+    /// <code>
+    /// services.AddDDDToolkitEntityFramework(options =&gt; options.DispatchWithMediator());
+    /// services.AddOrderingHandlers();   // generated: every INotificationHandler of the module
+    /// </code>
+    /// <para>
+    /// This is a <see cref="DispatchInProcess"/> delegate, so it serves both delivery modes. On its own the handlers
+    /// run inside <c>SaveChanges</c>. With <see cref="UseOutbox"/> the processor delivers through it. Every domain
+    /// event is an <see cref="INotification"/>, the events of the supporting packages included, so no event needs a
+    /// marker of its own. An event without a handler is published to nobody.
+    /// </para>
+    /// <para>
+    /// Calling it again changes nothing, so each module whose outbox delivers in process may call it beside its
+    /// <see cref="UseOutbox{TContext}"/>. A host that configured a delegate of its own with
+    /// <see cref="DispatchInProcess"/> cannot also call this.
+    /// </para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Another dispatch delegate is already configured.</exception>
+    public DDDEntityFrameworkOptions DispatchWithMediator()
+    {
+        Func<IServiceProvider, IReadOnlyList<IDomainEvent>, CancellationToken, Task> mediator = PublishThroughMediatorAsync;
+
+        return Equals(Dispatcher, mediator) ? this : DispatchInProcess(mediator);
+    }
+
+    private static async Task PublishThroughMediatorAsync(IServiceProvider services, IReadOnlyList<IDomainEvent> events, CancellationToken cancellationToken)
+    {
+        var publisher = services.GetRequiredService<IPublisher>();
+
+        foreach (var domainEvent in events)
+        {
+            await publisher.Publish(domainEvent, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>

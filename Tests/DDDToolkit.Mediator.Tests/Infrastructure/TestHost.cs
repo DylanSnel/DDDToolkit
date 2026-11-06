@@ -9,10 +9,10 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Mediator.Tests.Infrastructure;
 
 /// <summary>
-/// A minimal application container on one in-memory SQLite database: Mediator with scoped handlers,
-/// the DDDToolkit Entity Framework integration dispatching through <c>DispatchWithMediator</c>, and
-/// <see cref="BasketContext"/> registered with <c>UseDDDToolkit</c>. This is what a real host does in
-/// Program.cs, minus the web server.
+/// A minimal application container on one in-memory SQLite database: the toolkit's mediator with the handlers
+/// <c>AddMediatorTestsHandlers()</c> registers, Mediator with scoped request handlers, the DDDToolkit Entity
+/// Framework integration dispatching through <c>DispatchWithMediator</c>, and <see cref="BasketContext"/> registered
+/// with <c>UseDDDToolkit</c>. This is what a real host does in Program.cs, minus the web server.
 /// <para>
 /// The SQLite connection stays open for the lifetime of the host, because closing it drops the
 /// in-memory database, and every scope gets a fresh context so read-backs come from the database
@@ -30,13 +30,21 @@ namespace DDDToolkit.Mediator.Tests.Infrastructure;
 /// Without <c>accessBehavior</c> the module's check is registered and the behavior that asks it is not: the host a
 /// developer composes who forgot the line, which the start-up check of the behaviors refuses.
 /// </para>
+/// <para>
+/// <c>register</c> adds what one test needs after the generated registration, such as a handler of its own or a
+/// notification behavior.
+/// </para>
 /// </summary>
 public sealed class TestHost : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly ServiceProvider _provider;
 
-    public TestHost(Action<DDDEntityFrameworkOptions>? configure = null, bool pooled = false, bool accessBehavior = true)
+    public TestHost(
+        Action<DDDEntityFrameworkOptions>? configure = null,
+        bool pooled = false,
+        bool accessBehavior = true,
+        Action<IServiceCollection>? register = null)
     {
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
@@ -45,9 +53,13 @@ public sealed class TestHost : IDisposable
         services.AddSingleton(Log);
         services.AddSingleton(StepLog);
 
-        // Scoped, not the Singleton default: BasketEmptiedHandler injects the BasketContext, and a
-        // singleton handler cannot take a scoped dependency. The source generator reads this call at
-        // compile time, so the lifetime has to be written here rather than configured later.
+        // Every INotificationHandler of this project, written by the toolkit's generator.
+        services.AddMediatorTestsHandlers();
+        register?.Invoke(services);
+
+        // Mediator runs the requests. Scoped, not the Singleton default, so a request handler can take the scope's
+        // services, as a module's handlers do. Mediator's source generator reads this call at compile time, so the
+        // lifetime has to be written here rather than configured later.
         //
         // The behaviors listed here are the ones Mediator's generator registers. It reads the list when this
         // project compiles, from the code as its author wrote it, so only a behavior somebody wrote can be on

@@ -8,6 +8,7 @@ using CoreAccessBehaviorGenerator = DDDToolkit.Analyzers.AccessBehaviorGenerator
 using CoreEntityGenerator = DDDToolkit.Analyzers.EntityGenerator;
 using CoreEntityIdGenerator = DDDToolkit.Analyzers.EntityIdGenerator;
 using CoreEventNamesGenerator = DDDToolkit.Analyzers.EventNamesGenerator;
+using CoreHandlersGenerator = DDDToolkit.Analyzers.HandlersGenerator;
 using CoreModuleContractsGenerator = DDDToolkit.Analyzers.ModuleContractsGenerator;
 using CoreModuleGenerator = DDDToolkit.Analyzers.ModuleGenerator;
 using CoreRowAccessGenerator = DDDToolkit.Analyzers.RowAccessGenerator;
@@ -126,6 +127,7 @@ public sealed class GeneratorTestHost
         new CoreAccessBehaviorGenerator(),
         new CoreModuleGenerator(),
         new CoreModuleContractsGenerator(),
+        new CoreHandlersGenerator(),
     ];
 
     /// <summary>The generators in DDDToolkit.EntityFramework.Analyzers.</summary>

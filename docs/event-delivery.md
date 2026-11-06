@@ -50,25 +50,26 @@ sequenceDiagram
 <details>
 <summary>Show the code: dispatching in process</summary>
 
-Register the toolkit with Mediator as the dispatcher, and add the toolkit to the context:
+Register the toolkit's mediator as the dispatcher, register the module's handlers, and add the toolkit to the context:
 
 ```csharp
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+builder.Services.AddOrderingHandlers();   // generated: every INotificationHandler of the module
 
 builder.Services.AddDbContext<OrderingContext>((services, options) => options
     .UseNpgsql(connectionString)
     .UseDDDToolkit(services));
 ```
 
-The event is a Mediator notification, and a handler is an ordinary Mediator handler. The handler runs in the scope of
-the saving context, so its changes on that context are saved with the order:
+Every domain event is a notification of the toolkit's mediator, and a handler implements
+`INotificationHandler<TEvent>` from `DDDToolkit.Mediator`. The handler runs in the scope of the saving context, so its
+changes on that context are saved with the order:
 
 **[`Ordering/Application/Orders/DomainEvents/OrderLog.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/DomainEvents/OrderLog.cs)**
 
 ```csharp
 [DomainEventName("ordering.order-cancelled")]
-public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEvent, INotification;
+public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEvent;
 
 public sealed class OrderLog(ILogger<OrderLog> logger) : INotificationHandler<OrderCancelled>
 {
@@ -187,59 +188,87 @@ pooled context without a scope is refused before any event is taken off the aggr
 a save that only writes outbox rows works from any pooled context. See
 [Contexts from a pool](entity-framework.md#contexts-from-a-pool).
 
-The events reach your handlers through a delegate. `DDDToolkit.Mediator` writes the delegate for you, or you can
-write it yourself.
+The events reach your handlers through a delegate. `DispatchWithMediator()` is that delegate for the toolkit's own
+mediator, and you can write another one yourself.
 
-### Dispatching with Mediator
+### Dispatching with the toolkit's mediator
 
-`DDDToolkit.Mediator` writes the delegate against [Mediator](https://github.com/martinothamar/Mediator):
-
-```bash
-dotnet add package Temp.DDDToolkit.Mediator --prerelease
-```
+The toolkit has a mediator of its own for notifications. Its interfaces are in `DDDToolkit.Abstractions`, in the
+namespace `DDDToolkit.Mediator`, and the implementation is in the core package. No other package is needed:
 
 ```csharp
-using DDDToolkit.Mediator;
-
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+builder.Services.AddOrderingHandlers();   // generated: every INotificationHandler of the module
 ```
 
 `DispatchWithMediator()` resolves `IPublisher` from the scope that owns the saving `DbContext`. It publishes each
-event in the order raised, and awaits each event before it starts the next one. That is the delegate below, plus a
-check that each event can be published. The call serves both delivery modes. Add `UseOutbox`, and the processor
-delivers through the same call.
+event in the order raised, and awaits the handlers of each event before it starts the next one. The call serves both
+delivery modes. Add `UseOutbox`, and the processor delivers through the same call.
 
-Three rules apply:
+`AddDDDToolkitEntityFramework` registers the publisher. Calling `DispatchWithMediator()` again changes nothing, so each
+module whose outbox delivers in process may call it beside its `UseOutbox<TContext>`. It cannot be called beside a
+`DispatchInProcess` delegate of the host's own.
 
-**Your events must implement `Mediator.INotification`.** Mediator cannot publish anything else. One marker interface
-for the whole solution is the usual way to add it once:
+Four rules apply:
+
+**Every domain event is a notification.** `IDomainEvent` derives from `INotification`, so an event needs no marker of
+its own. The events of the supporting packages are notifications too. A handler of
+`SeatDeactivated<TenantId, SeatId>`, a closed generic event of the Tenancy package, is written like a handler of an
+event of your own.
+
+**The generator registers the handlers.** It writes `Add{Module}Handlers()` into every project that has a class that
+implements `INotificationHandler<T>`, with one registration per handler and event type. A handler may be internal.
+The generator closes the generics when the project compiles, so the mediator calls each handler without reflection.
+It leaves out a class that its registration cannot name: a private or protected nested class, a class nested in a
+generic type, a file-local class and an open generic class. Register such a class yourself with
+`services.AddNotificationHandler<TEvent, THandler>()`.
+
+**The handlers of a type and of its base types run.** A handler declared for an interface, such as
+`INotificationHandler<IOrderingEvent>`, runs for every event that implements the interface. The handlers run one
+after another, in the order they were registered. The generated registration lists a project's handlers by their
+full name. The first exception stops the rest and propagates.
+
+**An event without a handler is published to nobody.** That is not an error. The handlers are scoped, so a handler
+that injects the `DbContext` gets the context that is saving.
+
+### Notification behaviors
+
+A notification behavior runs around each handler call, as a pipeline behavior runs around a request handler:
 
 ```csharp
-public interface IOrderingEvent : IDomainEvent, INotification;
+internal sealed class TimeTheHandler<TNotification>(ILogger<TNotification> logger)
+    : INotificationBehavior<TNotification>
+    where TNotification : INotification
+{
+    public async ValueTask Handle(TNotification notification, NotificationHandlerDelegate<TNotification> next, CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        await next(notification, cancellationToken);
+        logger.LogDebug("{Notification} was handled in {Elapsed}", typeof(TNotification).Name, Stopwatch.GetElapsedTime(started));
+    }
+}
 ```
 
-An event that does not implement `INotification` makes the dispatch throw, and the message names the event type.
-The dispatch does not skip the event. When the delegate runs, the interceptor has already taken the event off the
-aggregate. Skipping the event would destroy it, with no row, no log and nothing to retry.
+```csharp
+builder.Services.AddNotificationBehavior(typeof(TimeTheHandler<>));
+```
 
-**Register Mediator as scoped when handlers use the `DbContext`.** By default Mediator registers every handler as a
-singleton, and a singleton cannot depend on a scoped service. Mediator reads the lifetime from your `AddMediator`
-call at compile time, so set the lifetime there. Setting it in any other way throws at start-up.
+- A behavior is resolved for the type the handler is declared for. A handler of `IOrderingEvent` runs inside the
+  behaviors of `IOrderingEvent`, whatever the event's own type is.
+- An open generic behavior runs around the handlers of every type that satisfies its constraints. A closed behavior,
+  such as one that implements `INotificationBehavior<OrderCancelled>`, runs around the handlers of that type alone.
+- The behavior registered first is the outermost.
+- A behavior that calls `next` twice, such as a retry, runs everything inside it twice.
+- A behavior is scoped by default, so it can take the scope's services. With no behavior registered, a handler call
+  allocates nothing in the mediator itself.
 
-**Reference `Mediator.SourceGenerator` from your composition root only.** Mediator generates its implementation and
-`AddMediator` into the assembly that runs the generator. Reference the generator from the project that builds the
-container, and from no other project. Handlers in other projects are still found, as long as the composition root
-references those projects. `DDDToolkit.Mediator` references only `Mediator.Abstractions`, so it adds no generator to
-your domain projects.
-
-Mediator also reports `MSG0005` at build time for a notification without a handler. That warning usually points to a
-real mistake. For an event that you leave unhandled on purpose, suppress the warning.
+A behavior suits work that every handler of a kind needs. One example is the caller a handler of another module's
+events runs as, on a host that requires an explicit current user.
 
 ### The dispatch delegate
 
-`DispatchWithMediator()` is a convenience. The toolkit's core has no mediator dependency and will not get one.
-In-process delivery is a delegate, and you can write it against any library, or none.
+`DispatchWithMediator()` is one delegate. In-process delivery is a delegate, and you can write it against any library,
+or none.
 
 Both modes deliver through the same delegate, so you write the handlers once:
 
@@ -248,14 +277,14 @@ Func<IServiceProvider, IReadOnlyList<IDomainEvent>, CancellationToken, Task>
 ```
 
 The provider is the scope that owns the saving `DbContext`. The events arrive in the order raised. Written against
-Mediator's `IPublisher`, the delegate looks like this:
+the publisher of another library, such as MediatR's `IPublisher`, the delegate looks like this:
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options =>
 {
     options.DispatchInProcess(async (services, events, cancellationToken) =>
     {
-        var publisher = services.GetRequiredService<IPublisher>();
+        var publisher = services.GetRequiredService<MediatR.IPublisher>();
         foreach (var domainEvent in events)
         {
             await publisher.Publish(domainEvent, cancellationToken);
@@ -264,9 +293,7 @@ builder.Services.AddDDDToolkitEntityFramework(options =>
 });
 ```
 
-A process has one delegate. A second `DispatchInProcess` or `DispatchWithMediator()` call throws, and does not
-replace the first delegate.
-
+A process has one delegate. A second `DispatchInProcess` call throws, and does not replace the first delegate.
 ## The outbox
 
 With `UseOutbox`, nothing is dispatched at save time. The save adds one row per event to the saving context, so the
@@ -577,8 +604,10 @@ therefore registers its part next to its context:
 - its outbox, with `options.UseOutbox<TContext>(...)`,
 - the contracts it reads, with `options.MapIntegrationEvents(...)`.
 
-The host keeps the settings for the whole process, such as `DispatchWithMediator()`. The dispatch delegate can be
-set only once. A second call throws, so one module's events cannot reach another module's publisher by accident.
+The host keeps the settings for the whole process, such as a `DispatchInProcess` delegate of its own. That delegate
+can be set only once. A second call throws, so one module's events cannot reach another module's publisher by
+accident. `DispatchWithMediator()` is the exception. Every module may call it, because it sets the same delegate each
+time.
 [Integration events](integration-events.md#delivering-to-a-module-in-the-same-process) shows the module
 registration from start to end.
 
@@ -640,13 +669,30 @@ applications and in ASP.NET Core, which have no synchronization context. Under a
 synchronization context, the block can deadlock. Otherwise the two methods behave the same. Both dispatch the events
 before the write.
 
-## Why the toolkit uses Mediator
+## Why the toolkit has its own mediator
 
 MediatR did this job for the first two major versions of the toolkit. From version 13, MediatR has a commercial
-licence. This repository prefers dependencies without a licence fee. The examples and
-`DDDToolkit.Mediator` therefore target Mediator, which is MIT-licensed and uses a source generator instead of
-reflection. You can still use MediatR. Write [the dispatch delegate](#the-dispatch-delegate) and publish through
-MediatR's `IPublisher`.
+licence, and this repository prefers dependencies without a licence fee. Version 3.0 moved to
+[Mediator](https://github.com/martinothamar/Mediator), which is MIT-licensed and uses a source generator.
+
+Both libraries publish only types that implement their own `INotification`. A package of the toolkit cannot implement
+an application's mediator interface, and the toolkit keeps every mediator library out of its packages. So the events
+of Tenancy and Membership could reach no handler. [ZeroAlloc.Mediator](https://github.com/ZeroAlloc-Net/ZeroAlloc.Mediator)
+was considered as well. Its generator also recognises only its own interfaces, and it writes an internal mediator into
+each assembly, which a modular monolith cannot share between its projects.
+
+The toolkit's mediator takes the design ideas it needs:
+
+- The interfaces are the toolkit's own, in `DDDToolkit.Abstractions`, and `IDomainEvent` derives from `INotification`.
+  Every event of every package is a notification without depending on a mediator library.
+- A source generator in each module writes the registration, with the generics closed. A dispatch makes no call
+  through reflection.
+- A notification is dispatched on its runtime type, so an event that arrives as `IDomainEvent`, from a save or from
+  an outbox row, reaches the handlers of its own type.
+- The publisher is public and scoped, so every project of a module and the host can use it.
+
+You can still use another library for the events. Write [the dispatch delegate](#the-dispatch-delegate) and publish
+through its publisher. The requests of the examples run on Mediator for now.
 
 ## Where to look next
 

@@ -1,13 +1,11 @@
 using DDDToolkit.ExampleApi.Domain.UserAggregate.Events;
-using Mediator;
+using DDDToolkit.Mediator;
 
 namespace DDDToolkit.ExampleApi.Handlers;
 
 /// <summary>
-/// The second handler in the example, for <see cref="OrderPlaced"/>. Every notification wants one:
-/// Mediator's generator reports <c>MSG0005</c> at build time for a notification nobody handles, which
-/// is a useful nudge but also means an event you deliberately leave unhandled needs that warning
-/// suppressed.
+/// The second handler in the example, for <see cref="OrderPlaced"/>. An event needs no handler: the toolkit's
+/// publisher hands an event without one to nobody, and the save goes on.
 /// </summary>
 public sealed class OrderPlacedHandler(ILogger<OrderPlacedHandler> logger) : INotificationHandler<OrderPlaced>
 {

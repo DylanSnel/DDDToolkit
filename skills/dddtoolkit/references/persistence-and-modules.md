@@ -9,7 +9,8 @@ Namespaces: `AddDDDToolkitEntityFramework` and `UseDDDToolkit` are in `DDDToolki
 `DDDToolkit.EntityFramework.Outbox` and `AddDomainEventInbox` in `DDDToolkit.EntityFramework.Inbox`;
 `IOutboundIntegrationEvent<,>`, `IIntegrationEventHandler<>` and `[IntegrationEventConsumer]` in
 `DDDToolkit.EntityFramework.Integration`; `IntegrationEventMessage` in `DDDToolkit.BaseTypes`;
-`IDomainEvent` in `DDDToolkit.Interfaces`; `DispatchWithMediator` in `DDDToolkit.Mediator`.
+`IDomainEvent` in `DDDToolkit.Interfaces`; `DispatchWithMediator()` on the options; `INotificationHandler<>`,
+`IPublisher`, `INotificationBehavior<>` and `AddNotificationBehavior` in `DDDToolkit.Mediator`.
 
 ## Entity Framework Core
 
@@ -146,25 +147,29 @@ them. Full page: `https://dylansnel.github.io/DDDToolkit/docs/event-delivery.md`
 | Handlers must be idempotent | no | yes, keyed on `EventId` |
 | Use for | side effects in the same database | anything that leaves the module or the process |
 
-In-process, through [Mediator](https://github.com/martinothamar/Mediator) with `DDDToolkit.Mediator`:
+In-process, through the toolkit's own mediator, which is in the core package:
 
 ```csharp
-using DDDToolkit.Mediator;
-
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);  // scoped: handlers use the DbContext
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+builder.Services.AddOrderingHandlers();   // generated: every INotificationHandler of the project, scoped
 
-public interface IOrderingEvent : IDomainEvent, Mediator.INotification;   // every dispatched event must be an INotification
-public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEvent, IOrderingEvent;
+public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEvent;   // every IDomainEvent is an INotification
+
+internal sealed class OrderLog(ILogger<OrderLog> logger) : DDDToolkit.Mediator.INotificationHandler<OrderCancelled>
+{
+    public ValueTask Handle(OrderCancelled notification, CancellationToken cancellationToken) => default;
+}
 ```
 
-- Handlers are Mediator `INotificationHandler<OrderCancelled>`. They must not call `SaveChanges`: the
-  save is already running and picks up their changes.
+- Handlers implement `DDDToolkit.Mediator.INotificationHandler<TEvent>`. The generator registers each one in
+  `Add{Module}Handlers()`. A handler of an interface runs for every event that implements it. The events of Tenancy and
+  Membership are notifications too: `INotificationHandler<SeatDeactivated<TenantId, SeatId>>` works. They must not call
+  `SaveChanges` in process. The save is already running and picks up their changes.
+- `services.AddNotificationBehavior(typeof(MyBehavior<>))` wraps each handler call. The first registered is the outermost.
 - In-process handlers run before the save checks invariants, so they also run for a save that is then
   refused. Their database changes roll back with it; an email sent or an HTTP call made does not. Keep
   in-process handlers to changes in the same database, and send anything else through the outbox.
-- `Mediator.SourceGenerator` is referenced by the composition root (the host) only.
-- Without Mediator, `options.DispatchInProcess((services, events, cancellationToken) => ...)` takes a
+- With another library, `options.DispatchInProcess((services, events, cancellationToken) => ...)` takes a
   delegate returning a `Task`, handed the scope of the saving context and the events in the order they
   were raised. One delegate per process.
 

@@ -1,6 +1,6 @@
 using DDDToolkit.EntityFramework;
+using DDDToolkit.ExampleApi;
 using DDDToolkit.ExampleApi.Context;
-using DDDToolkit.Mediator;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,22 +9,16 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Mediator (github.com/martinothamar/Mediator) is source generated, so AddMediator and the handler
-// registrations are written into THIS assembly at compile time. That is why the generator package
-// belongs here and not in DDDToolkit.ExampleLibrary: handlers anywhere in the reference graph are
-// found, but the registration code is emitted only where the generator runs.
-//
-// Scoped, not the Singleton default. A handler that injects ExampleContext needs the scope's context,
-// and a singleton cannot depend on a scoped service. The generator reads this very call, so the
-// lifetime has to be written here; setting it anywhere else throws at start-up.
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+// The toolkit's generator writes AddApiHandlers() into this project: every INotificationHandler in it,
+// registered scoped, so a handler that injects ExampleContext gets the context of the scope that saves.
+builder.Services.AddApiHandlers();
 
-// --- Domain events, variant 1: in-process dispatch through Mediator ------------------------------
+// --- Domain events, variant 1: in-process dispatch through the toolkit's mediator ---------------
 // Handlers run inside SaveChanges, before the database write: whatever they change on the scoped
 // ExampleContext is saved in the same transaction and a throwing handler aborts the save. Delivery is
 // best-effort (nothing is persisted about the event itself). Handlers must not call SaveChanges.
 //
-// DispatchWithMediator() comes from DDDToolkit.Mediator and is the delegate below, written out:
+// DispatchWithMediator() is the delegate below, written out:
 //     options.DispatchInProcess(async (services, events, cancellationToken) =>
 //     {
 //         var publisher = services.GetRequiredService<IPublisher>();
@@ -33,14 +27,14 @@ builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetim
 //             await publisher.Publish(domainEvent, cancellationToken);
 //         }
 //     });
-// The example events implement Mediator's INotification through IBaseDomainEvent, which is what makes
-// them publishable; an event that does not throws with its type name instead of being dropped.
+// Every domain event is a notification, so no event needs a marker. An event without a handler is
+// published to nobody.
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
 // --- Domain events, variant 2: transactional outbox ---------------------------------------------
 // Replace the line above with this block for at-least-once delivery. SaveChanges then writes one
 // OutboxMessages row per event in the aggregate's transaction (ExampleContext already maps the table)
-// and the background service delivers the rows through the same Mediator dispatch. Handlers must be
+// and the background service delivers the rows through the same dispatch. Handlers must be
 // idempotent, keyed by IDomainEvent.EventId.
 //
 // builder.Services.AddDDDToolkitEntityFramework(options =>

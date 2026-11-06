@@ -145,7 +145,6 @@ const packages = [
   ['DDDToolkit.Messaging.Postgres', 'pgmq: a queue in the database the outbox already writes to.'],
   ['DDDToolkit.Messaging.Wolverine', 'Wolverine as the transport between outbox and inbox.'],
   ['DDDToolkit.Messaging.MassTransit', 'MassTransit 8 as that transport.'],
-  ['DDDToolkit.Mediator', 'Domain events dispatched through Mediator.'],
   ['DDDToolkit.FluentValidation', 'A generated validator per value object.'],
   ['DDDToolkit.Localization', 'Failures phrased in the reader’s language.'],
   ['DDDToolkit.Testing', 'Given/when/then tests for the domain events an aggregate raises.'],

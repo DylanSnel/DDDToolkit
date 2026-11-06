@@ -15,10 +15,9 @@ The package does five things:
 | Invariants at the save | Every entity that a save adds or changes is checked for its invariants first ([Invariants](invariants.md#at-the-save)) |
 | Optimistic concurrency | `Version` raised by one per save, and a stale write turned into `ConcurrencyConflictException` |
 
-The package has no repository abstraction and no message bus. `DbContext` is already the unit of work. You write the
-delegate that hands events to your publisher. If your publisher is
-[Mediator](https://github.com/martinothamar/Mediator), the companion package `DDDToolkit.Mediator` writes that
-delegate for you ([In-process dispatch](event-delivery.md#in-process-dispatch)). If the events must leave the
+The package has no repository abstraction and no message bus. `DbContext` is already the unit of work. A delegate hands
+the events to their handlers. `DispatchWithMediator()` is that delegate for the toolkit's own mediator, and you can write
+one for another library ([In-process dispatch](event-delivery.md#in-process-dispatch)). If the events must leave the
 process, the outbox delivers them to a sink you implement ([Integration events](integration-events.md)).
 
 ## Install
@@ -66,23 +65,16 @@ With events pending, `SaveChanges` throws an `InvalidOperationException`. The me
 no delivery mode is configured, and names the two calls that configure one. The toolkit does not drop the events,
 because each event stands for something that must still happen.
 
-The argument to `AddDDDToolkitEntityFramework` says how events are delivered. To hand them to
-[Mediator](https://github.com/martinothamar/Mediator) handlers in the same process, add a second package, next to
-Mediator itself:
-
-```bash
-dotnet add package Temp.DDDToolkit.Mediator --prerelease
-```
+The argument to `AddDDDToolkitEntityFramework` says how events are delivered. To hand them to the handlers of the
+toolkit's mediator in the same process, which is in the core package, ask for it and register the module's handlers:
 
 ```csharp
-using DDDToolkit.Mediator;
-
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+builder.Services.AddOrderingHandlers();   // generated: every INotificationHandler of the module
 ```
 
-That package is optional. Delivery is a delegate that you can write yourself, against any library or none, and the
-outbox is the other way to deliver. [Delivering domain events](event-delivery.md) explains both, and when to use
+The toolkit's mediator is optional. Delivery is a delegate that you can write yourself, against any library or none,
+and the outbox is the other way to deliver. [Delivering domain events](event-delivery.md) explains both, and when to use
 which.
 
 ### `UseDDDToolkit`

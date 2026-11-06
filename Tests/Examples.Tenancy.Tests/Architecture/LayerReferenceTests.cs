@@ -502,8 +502,13 @@ public sealed class LayerReferenceTests
     [MemberData(nameof(ModulesOnTheMediator))]
     public void A_port_is_named_only_where_it_is_used_or_implemented(string module)
     {
-        var handlers = HostRegistrations.Requests.Select(request => request.Handler).ToHashSet();
         var project = SampleLayout.Project(module, Layer.Application);
+
+        // The request handlers, and the handlers of domain events, which the toolkit's mediator reaches.
+        var handlers = HostRegistrations.Requests.Select(request => request.Handler)
+            .Concat(TypeScan.TypesOf(project.Anchor.Assembly).Where(type => type.GetInterfaces().Any(implemented =>
+                implemented.IsGenericType && implemented.GetGenericTypeDefinition() == typeof(DDDToolkit.Mediator.INotificationHandler<>))))
+            .ToHashSet();
         var application = ScanOf(project.Anchor.Assembly).Uses.Where(use => SampleLayout.IsPort(use.Type)).ToList();
         var infrastructure = ScanOf(SampleLayout.Project(module, Layer.Infrastructure).Anchor.Assembly).Uses.Where(use => SampleLayout.IsPort(use.Type)).ToList();
 

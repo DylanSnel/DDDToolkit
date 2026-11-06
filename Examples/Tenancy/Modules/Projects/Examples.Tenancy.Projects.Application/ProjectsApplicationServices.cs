@@ -31,9 +31,10 @@ public static class ProjectsApplicationServices
     /// project adds with the projects' registration; and the Tenancy package's for the cases that are Tenancy's,
     /// which the infrastructure project adds over the module's context with <c>AddTenancyAccess</c>.
     /// <para>
-    /// The handlers themselves are not registered here. The host's mediator finds them in this assembly when the
+    /// The request handlers are not registered here. The host's mediator finds them in this assembly when the
     /// host compiles and registers them itself, so a request without a handler is a build error there, not a
-    /// missing line here. The ports they read and save through are the infrastructure project's to register;
+    /// missing line here. The handlers of domain events are the toolkit's mediator's, and
+    /// <c>AddProjectsHandlers()</c>, which the toolkit's generator writes into this project, registers them. The ports they read and save through are the infrastructure project's to register;
     /// the catalogue comes from Tenancy's own registration, which comes first, and the module's access manager from
     /// <c>AddTenancyAccess</c>.
     /// </para>
@@ -73,6 +74,10 @@ public static class ProjectsApplicationServices
         // what was checked, and the database checks the write again as the caller.
         services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>();
         services.AddProjectsAccessBehavior();
+
+        // What the module does when something happened elsewhere: the handlers of domain events, written into this
+        // project by the toolkit's generator. A seat deactivated in Tenancy leaves its crews here.
+        services.AddProjectsHandlers();
 
         // What Projects refuses with, in English and Dutch, for the edge to phrase in its reader's language. The
         // codes a crew's rules refuse under are among them, in the module's own words. Beside them, what each of

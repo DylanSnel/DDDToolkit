@@ -491,6 +491,15 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
                 || implemented.GetGenericTypeDefinition() == typeof(IStreamQueryHandler<,>))))
             .Should().BeEmpty("and every handler handles a command or a query");
 
+        // A domain event is published as well, but by the toolkit's mediator and not by the requests' one. Its
+        // handlers handle domain events and nothing else, and none of them is a request handler.
+        types.SelectMany(type => type.GetInterfaces()
+                .Where(implemented => implemented.IsGenericType && implemented.GetGenericTypeDefinition() == typeof(DDDToolkit.Mediator.INotificationHandler<>))
+                .Select(implemented => (Handler: type, Handled: implemented.GetGenericArguments()[0])))
+            .Where(pair => !typeof(DDDToolkit.Interfaces.IDomainEvent).IsAssignableFrom(pair.Handled))
+            .Select(pair => $"{pair.Handler.Name} handles {pair.Handled.Name}")
+            .Should().BeEmpty("the toolkit's mediator publishes domain events");
+
         // The pipeline of the streams holds what the toolkit wrote into it and nothing else: each module's access
         // behavior for streams, beside the one for its commands and queries, over the same checks. So neither
         // pipeline is one the access checks are not part of.
