@@ -20,7 +20,7 @@ Your code takes `TenancyAccessManager` with no type arguments. The generator wri
 
 ## Access manager
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 ### `TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`
 
@@ -51,7 +51,7 @@ It keeps no state of its own. `AccessManager.CurrentUser` and [`CurrentTenant`](
 
 `BeginSystem()`, `BeginSystem(scope)`, [`BeginSystemIn`](#beginsysteminttenantid-tseatid-string) and [`BeginTokenIn`](#begintokeninttenantid-tseatid-string) each start work that is not the caller's own, for one `using`. Each begins the tenant the work acts in, or none, and the kind of work together: the kind decides how the work is recorded, and which database role it runs as. The row access rules hold each of them. When the result is disposed, the user before it is current again. Begin as narrow as possible: around the one call that needs it. `AccessManager.BeginAs`, with a user's id or a snapshot, `AccessManager.BeginSystemBypassingRowAccess` and `AccessManager.BeginNone` are the core's, and leave the tenant as it is.
 
-Tenancy's queries for the current caller come from the context you query: `db.Tenancy()`, which `DDDToolkit.Supporting.Tenancy.EntityFramework` writes for your ids. A read source that is not Entity Framework asks [`In`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor).
+Tenancy's queries for the current caller come from the context you query: `db.Tenancy()`, which `DTS.Tenancy.EntityFramework` writes for your ids. A read source that is not Entity Framework asks [`In`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor).
 
 **Type parameters**
 
@@ -263,7 +263,7 @@ The ids of the tenants a round of system work visits: the active and the suspend
 **Exceptions**
 
 - `ArgumentException`: `scope` is not a scope. Nothing is read then.
-- `InvalidOperationException`: No storage package registered the read: Tenancy is not registered with `AddTenancy` of `DDDToolkit.Supporting.Tenancy.EntityFramework`, or of another storage package that reads the tenants.
+- `InvalidOperationException`: No storage package registered the read: Tenancy is not registered with `AddTenancy` of `DTS.Tenancy.EntityFramework`, or of another storage package that reads the tenants.
 
 **Example**
 
@@ -287,7 +287,7 @@ public ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In(
     IQueryExecutor executor)
 ```
 
-The access queries for the current caller over a read source that is not Entity Framework, at this moment. Over a context, ask `db.Tenancy()` instead, which `DDDToolkit.Supporting.Tenancy.EntityFramework` writes for your ids.
+The access queries for the current caller over a read source that is not Entity Framework, at this moment. Over a context, ask `db.Tenancy()` instead, which `DTS.Tenancy.EntityFramework` writes for your ids.
 
 **Parameters**
 
@@ -525,7 +525,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Users
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 ### `TenancyUser<TTenantId, TSeatId>`
 
@@ -744,7 +744,7 @@ Every method is generic over the application's tenant and seat ids. C# infers bo
 
 Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system work here itself, in trusted code, whatever its request requires: `[AllowAnonymous]` for a registration form anyone may fill in, `[SignedIn]` for a signed-in user who registers an organization. A tool only the application runs is trusted code itself: it begins the work here and calls the manager, or sends its request inside it. The requirement decides who gets as far as the handler; what the work may then do is what is begun here, and nothing of the caller's. System work is no requirement a request declares: it is this scope, and once its result is disposed the user before it is current again.
 
-Each method begins two things, and ends both when its result is disposed. The Tenancy user says in which tenant the work acts. The toolkit's scoped system work, the core's `AccessManager.BeginSystem(scope)`, says what kind of work it is. Keeping them in one scope keeps them from drifting apart. None of them begins the system work that no row access rule holds, the core's `BeginSystemBypassingRowAccess()`. System work in a tenant must stay inside that tenant. On Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to it. Tenancy's own policies come with `DDDToolkit.Supporting.Tenancy.Postgres`.
+Each method begins two things, and ends both when its result is disposed. The Tenancy user says in which tenant the work acts. The toolkit's scoped system work, the core's `AccessManager.BeginSystem(scope)`, says what kind of work it is. Keeping them in one scope keeps them from drifting apart. None of them begins the system work that no row access rule holds, the core's `BeginSystemBypassingRowAccess()`. System work in a tenant must stay inside that tenant. On Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to it. Tenancy's own policies come with `DTS.Tenancy.Postgres`.
 
 They are not the only way. [`TenancyUsers.Begin`](#beginitenancyuser) with a user made by [`TenancyUser.System`](#tenancyuserttenantid-tseatid), `SystemIn` or `SystemBy` begins Tenancy's user alone, a handle for tests and for code that begins the toolkit's current user itself. It leaves the toolkit's current user, and so the role the database runs as, as it is.
 
@@ -754,7 +754,7 @@ An operator's work is begun by none of them. A command marked [`OperatorAttribut
 
 | Member | Summary |
 |---|---|
-| `SystemScope = "tenancy"` | The scope of Tenancy's own system work. Under the policies of `DDDToolkit.Supporting.Tenancy.Postgres`, only work in this scope writes Tenancy's tables; work in another scope may read them. |
+| `SystemScope = "tenancy"` | The scope of Tenancy's own system work. Under the policies of `DTS.Tenancy.Postgres`, only work in this scope writes Tenancy's tables; work in another scope may read them. |
 | [`BeginSystem(string)`](#beginsystemstring-1) | Begins system work outside any tenant, for provisioning a tenant. |
 | [`BeginSystemIn(TTenantId, TSeatId?, string)`](#beginsysteminttenantid-tseatid-string-1) | Begins system work inside one tenant, such as an import or seeding: it holds every permission there, and nothing in any other tenant. |
 | [`BeginSystemIn(TTenantId, TSeatId, string)`](#beginsysteminttenantid-tseatid-string-2) | Begins system work inside one tenant for a seat: [`BeginSystemIn<TTenantId, TSeatId>`](#beginsysteminttenantid-tseatid-string-1) with the seat given, so C# infers both ids from the arguments and the call names neither, `TenancyWork.BeginSystemIn(tenant, seat, "projects")`, in a module that sees only the ids as much as in one that sees the classes. |
@@ -768,7 +768,7 @@ public static IDisposable BeginSystem<TTenantId, TSeatId>(string scope = "tenanc
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Begins system work outside any tenant, for provisioning a tenant. It reads nothing inside one: every tenant filter matches nothing for it. The toolkit's current user is scoped system work in `scope`, [`SystemScope`](#tenancywork) by default, which under the policies of `DDDToolkit.Supporting.Tenancy.Postgres` reads and writes nothing until provisioning narrows it to the tenant it makes. The work is recorded as the system in that scope.
+Begins system work outside any tenant, for provisioning a tenant. It reads nothing inside one: every tenant filter matches nothing for it. The toolkit's current user is scoped system work in `scope`, [`SystemScope`](#tenancywork) by default, which under the policies of `DTS.Tenancy.Postgres` reads and writes nothing until provisioning narrows it to the tenant it makes. The work is recorded as the system in that scope.
 
 **Parameters**
 
@@ -791,7 +791,7 @@ public static IDisposable BeginSystemIn<TTenantId, TSeatId>(
 
 Begins system work inside one tenant, such as an import or seeding: it holds every permission there, and nothing in any other tenant. The last-administrator rule still applies to it.
 
-Work that calls Tenancy's managers keeps the default scope. A module's own system work in a tenant, that only reads Tenancy's rows next to its own, passes the module's name instead, and then cannot write Tenancy's tables under the policies of `DDDToolkit.Supporting.Tenancy.Postgres`.
+Work that calls Tenancy's managers keeps the default scope. A module's own system work in a tenant, that only reads Tenancy's rows next to its own, passes the module's name instead, and then cannot write Tenancy's tables under the policies of `DTS.Tenancy.Postgres`.
 
 **Parameters**
 
@@ -895,7 +895,7 @@ Who is asking Tenancy, as Tenancy sees it.
 
 ## Actors
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 ### `ITenancyActor`
 
@@ -1137,7 +1137,7 @@ What kind of actor made a change Tenancy records. As JSON it is the word of [`Te
 
 ## Tenant selection
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 ### `ISeatDirectory<TTenantId, TSeatId>`
 
@@ -1441,7 +1441,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Requirements
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+Namespace `DTS.Tenancy.Access`.
 
 ### `InTenantAttribute`
 

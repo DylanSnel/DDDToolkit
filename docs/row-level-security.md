@@ -4,7 +4,7 @@ Postgres row level security (RLS) filters every query through policies on the ta
 a caller may read and change. Postgres does not apply a table's policies to the table's owner. An application usually
 connects as the owner. So by default the policies hold back other clients, and never the application's queries.
 
-`DDDToolkit.EntityFramework.Postgres` changes this. Every connection that a context opens runs as the current caller,
+`DTS.DDD.EntityFramework.Postgres` changes this. Every connection that a context opens runs as the current caller,
 so the policies also apply to the application's queries. You can write the policies in C#, as rules next to the
 aggregate they guard. The generator turns each rule into SQL when the code compiles.
 
@@ -18,12 +18,12 @@ same way with Supabase's roles and `auth` functions, and its build writes the po
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit.EntityFramework.Postgres --prerelease
-dotnet add package Temp.DDDToolkit.EntityFramework --prerelease            # contains UseDDDToolkit
+dotnet add package DylansTechStack.DDD.EntityFramework.Postgres --prerelease
+dotnet add package DylansTechStack.DDD.EntityFramework --prerelease            # contains UseDDDToolkit
 ```
 
 The package works alone, for any context, and with the rest of the toolkit. The examples on this page use the
-toolkit's `DDDToolkit.EntityFramework`, as an application built on the toolkit does.
+toolkit's `DTS.DDD.EntityFramework`, as an application built on the toolkit does.
 
 ## Running queries as the caller
 
@@ -85,9 +85,9 @@ and `BeginNone` begin a user for the flow of work, and its `CurrentUser` is the 
 both, as singletons. The toolkit's implementation of `ICurrentUser`, `CurrentUser`, answers in this order:
 
 1. A user that code began for the flow of work, with a `Begin` method of `AccessManager`. A begun user always
-   wins. `DDDToolkit.Auth.Supabase.AzureFunctions` begins the user of each HTTP-triggered invocation this way.
+   wins. `DTS.DDD.Auth.Supabase.AzureFunctions` begins the user of each HTTP-triggered invocation this way.
 2. The host's `ICurrentUserSource`, which answers the request's user. `AddSupabaseJwtBearer` from
-   `DDDToolkit.Auth.Supabase.AspNetCore` registers one that reads the user from the request. A host with another way
+   `DTS.DDD.Auth.Supabase.AspNetCore` registers one that reads the user from the request. A host with another way
    to know its users registers its own with `AddPostgresRowLevelSecurity<TSource>()`.
 3. Otherwise, system work that no row access rule holds, as `access.BeginSystemBypassingRowAccess()` begins. A worker
    service or a test needs this.
@@ -793,7 +793,7 @@ When the class compiles, the generator translates `Allows` into SQL and writes t
 `RowAccessSql`. The rule is still an ordinary method. So a test runs the same rule in C#:
 `ACustomerSeesTheirOrders.Allows(order, RowUser.From(CurrentUserSnapshot.User(alice)))`.
 
-A rule's second parameter is an `IRowUser`, from `DDDToolkit.Abstractions.Access`. It is not the `ICurrentUser` that a
+A rule's second parameter is an `IRowUser`, from `DTS.DDD.Abstractions.Access`. It is not the `ICurrentUser` that a
 handler takes, and neither interface derives from the other. `IRowUser` holds what the generator translates: `Id`,
 `IsAuthenticated`, `Role` and `FindClaim`. A question that only the database answers is an extension method on
 `IRowUser`. So such a question does not compile where there is no rule. `user.RequireId()`, `user.IsSystem` and
@@ -1719,7 +1719,7 @@ flowchart LR
     class policy good
 ```
 
-The questions are extension methods on `IRowUser`, in `DDDToolkit.Abstractions.Access`. They name the resource's id and
+The questions are extension methods on `IRowUser`, in `DTS.DDD.Abstractions.Access`. They name the resource's id and
 the set, and no function:
 
 | A rule asks | Returns |
@@ -2106,7 +2106,7 @@ flowchart TB
     declared["<b>[assembly: RowAccessContribution]</b><br/><small>in the package</small>"]
     constructor["<b>The constructor</b><br/><small>[FromApplication(typeof(PlansAttribute))]</small>"]
     marked["<b>Your member</b><br/><small>marked [Plans]</small>"]
-    written["<b>A generated class</b><br/><small>in DDDToolkit.RowAccessContributionsOfPackages.g.cs</small>"]
+    written["<b>A generated class</b><br/><small>in DTS.DDD.RowAccessContributionsOfPackages.g.cs</small>"]
     export["<b>The export</b><br/><small>calls the class for every context</small>"]
     reference --> declared
     declared --> constructor
@@ -2164,10 +2164,10 @@ public static class ShopPlans
 }
 ```
 
-**DDDToolkit.RowAccessContributionsOfPackages.g.cs**, in the project that runs the export
+**DTS.DDD.RowAccessContributionsOfPackages.g.cs**, in the project that runs the export
 
 ```csharp
-namespace DDDToolkit.EntityFramework.Supabase.Generated
+namespace DTS.DDD.EntityFramework.Supabase.Generated
 {
     /// The row access contribution Shop.Plans.PlanRowAccess, which Shop.Plans writes into the migrations of
     /// every application that references it, made with what this application marks:
@@ -2189,7 +2189,7 @@ namespace DDDToolkit.EntityFramework.Supabase.Generated
 
 </details>
 
-The build writes the class into a file of its own, `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, among the
+The build writes the class into a file of its own, `DTS.DDD.RowAccessContributionsOfPackages.g.cs`, among the
 exporting project's generated files. A comment in the file names every member that the class was made from. The class
 passes the package's class to the export through `IPackageRowAccessContribution`. So the comment above the SQL in the
 access file names the package's class and the package's assembly, without a version:
@@ -2656,7 +2656,7 @@ builder.Property(order => order.CustomerId).IsFixedAfterInsert();
 
 Entity Framework then throws when a save would change the column. The script leaves the column out of the `UPDATE`
 grant, so a statement that bypasses Entity Framework is refused too, with SQLSTATE `42501`. `IsFixedAfterInsert()` is
-in `DDDToolkit.EntityFramework`, and means the same on every provider. Only Postgres has the matching privilege.
+in `DTS.DDD.EntityFramework`, and means the same on every provider. Only Postgres has the matching privilege.
 
 The toolkit's tables have no policies, and get the privileges that their use needs:
 
@@ -3008,16 +3008,16 @@ flowchart TB
 <summary>Show the code: the three log lines, and a rename in the Tenancy sample that loses its permission before the save</summary>
 
 ```text
-info: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
+info: DTS.DDD.EntityFramework.Interceptors.DatabaseRefusalInterceptor
       The database refused a save to projects.Projects after the access check of ChangeProjectName
       (MemberAccess<ProjectId>.On) let the caller through. Asked again, the check refuses as well: the caller's
       rights changed between the check and the save, and the caller is refused.
 
-warn: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
+warn: DTS.DDD.EntityFramework.Interceptors.DatabaseRefusalInterceptor
       The database refused a save the application allowed: projects.Projects. C# and the policies disagree: asked
       again, the access check of ChangeProjectName (MemberAccess<ProjectId>.On) still lets the caller through.
 
-warn: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
+warn: DTS.DDD.EntityFramework.Interceptors.DatabaseRefusalInterceptor
       The database refused a save the application allowed: projects.Projects. C# and the policies disagree.
 ```
 

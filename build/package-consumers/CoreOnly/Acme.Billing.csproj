@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="DylansTechStack.DDD" Version="$(DDDToolkitPackageVersion)" />
   </ItemGroup>
 
 </Project>

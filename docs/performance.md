@@ -9,12 +9,12 @@ supporting domain. Five sections measure code beside the identifiers:
 [a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates) and
 [a batch of outbox messages](#delivering-a-batch-of-outbox-messages).
 
-The benchmarks are in `Benchmarks/DDDToolkit.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
+The benchmarks are in `Benchmarks/DTS.DDD.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
 Run them with:
 
 ```
-dotnet build Benchmarks/DDDToolkit.Benchmarks/DDDToolkit.Benchmarks.csproj -c Release
-Benchmarks/DDDToolkit.Benchmarks/bin/Release/net10.0/DDDToolkit.Benchmarks.exe --filter *
+dotnet build Benchmarks/DTS.DDD.Benchmarks/DTS.DDD.Benchmarks.csproj -c Release
+Benchmarks/DTS.DDD.Benchmarks/bin/Release/net10.0/DTS.DDD.Benchmarks.exe --filter *
 ```
 
 Both identifiers wrap a `Guid` and have the same prefix. Only the form differs:
@@ -247,8 +247,8 @@ is a different number, and it depends on the order of the properties.
 
 The benchmark creates a single value object with two FluentValidation rules, `NotEmpty().EmailAddress()`, and reads
 `IsValid`. Each call creates a new value, so the validation runs on every call. The benchmarks are in their own
-project, `Benchmarks/DDDToolkit.Benchmarks.FluentValidation`. The FluentValidation generator adds a validator to every
-value object and record id of a project. In `DDDToolkit.Benchmarks` that would change the identifiers measured
+project, `Benchmarks/DTS.DDD.Benchmarks.FluentValidation`. The FluentValidation generator adds a validator to every
+value object and record id of a project. In `DTS.DDD.Benchmarks` that would change the identifiers measured
 above.
 
 | | Before | After |
@@ -335,7 +335,7 @@ nobody had measured. That is why the benchmarks stay in the repository.
 ## Provider coverage
 
 The benchmarks above run on SQLite only. A separate test suite checks the mapping on other providers.
-`Tests/DDDToolkit.EntityFramework.Providers.Tests` runs the mapping, concurrency, outbox and inbox tests against
+`Tests/DTS.DDD.EntityFramework.Providers.Tests` runs the mapping, concurrency, outbox and inbox tests against
 PostgreSQL 17 and SQL Server 2022 in [Testcontainers](https://dotnet.testcontainers.org).
 
 - Without Docker, every test in the suite skips with a message that names the reason.

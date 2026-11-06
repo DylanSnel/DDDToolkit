@@ -72,7 +72,7 @@ flowchart LR
         projects["<b>Projects</b><br/><small>projects, teams, roles on a project</small>"]
         inspections["<b>Inspections</b><br/><small>work under a project</small>"]
     end
-    package["<b>DDDToolkit.Supporting.Tenancy</b><br/><small>rules, managers, queries</small>"]
+    package["<b>DTS.Tenancy</b><br/><small>rules, managers, queries</small>"]
     tenants -- "generated base classes" --> package
     projects -- "UnitsWhereIHold,<br/>RolesWithPermission" --> package
     inspections -- "may I open this project?" --> projects
@@ -105,7 +105,7 @@ line for it ([Keeping tenants apart](keeping-tenants-apart.md#the-tenant-filter-
 - The module's database must contain Tenancy's tables. Use one database with a schema per module, or one SQLite
   file. When the databases are separate, query Tenancy's context first and pass the result into the module's query
   as a list.
-- On Postgres with `DDDToolkit.Supporting.Tenancy.Postgres`, map the functions
+- On Postgres with `DTS.Tenancy.Postgres`, map the functions
   ([modules read through functions](postgres.md#read-functions-for-modules)). On that database, `db.Tenancy()`
   throws for a module context that maps the views.
 - The generator writes `AddTenancyReadFunctions(schema)` without ids, for the `TenancyIds` line.

@@ -1,5 +1,5 @@
 {
-  "$comment": "Harbor Works at the end of docs/membership/tutorial.md, as docs/membership/overview.md draws it, for the explorer under Who holds a permission on a board. Tests/DDDToolkit.Analyzers.Tests/Docs/BoardAccessExplorerDocsTests.cs holds every name here to the overview, the tutorial and the code.",
+  "$comment": "Harbor Works at the end of docs/membership/tutorial.md, as docs/membership/overview.md draws it, for the explorer under Who holds a permission on a board. Tests/DTS.DDD.Analyzers.Tests/Docs/BoardAccessExplorerDocsTests.cs holds every name here to the overview, the tutorial and the code.",
   "tutorial": "/docs/membership/tutorial",
   "units": [
     { "id": "harbor-works", "name": "Harbor Works", "parent": null },

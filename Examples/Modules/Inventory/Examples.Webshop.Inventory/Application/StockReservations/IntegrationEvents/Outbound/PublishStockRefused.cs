@@ -1,4 +1,4 @@
-using DDDToolkit.EntityFramework.Integration;
+using DTS.DDD.EntityFramework.Integration;
 using Examples.Webshop.Inventory.Contracts;
 
 namespace Examples.Webshop.Inventory.Application.StockReservations;

@@ -1,4 +1,4 @@
-using DDDToolkit.Invariants;
+using DTS.DDD.Invariants;
 
 namespace Examples.Webshop.Inventory.Domain.StockItems;
 

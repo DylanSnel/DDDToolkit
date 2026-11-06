@@ -23,7 +23,7 @@ namespace Examples.Webshop.Inventory.Migrations.SqlServer
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("DDDToolkit.EntityFramework.Inbox.InboxMessage", b =>
+            modelBuilder.Entity("DTS.DDD.EntityFramework.Inbox.InboxMessage", b =>
                 {
                     b.Property<Guid>("MessageId")
                         .HasColumnType("uniqueidentifier");
@@ -46,7 +46,7 @@ namespace Examples.Webshop.Inventory.Migrations.SqlServer
                     b.ToTable("InboxMessages", "inventory");
                 });
 
-            modelBuilder.Entity("DDDToolkit.EntityFramework.Outbox.OutboxMessage", b =>
+            modelBuilder.Entity("DTS.DDD.EntityFramework.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");

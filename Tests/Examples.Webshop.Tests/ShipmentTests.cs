@@ -1,4 +1,4 @@
-using DDDToolkit.Testing;
+using DTS.DDD.Testing;
 using Examples.Webshop.Ordering.Contracts;
 using Examples.Webshop.Shipping;
 using FluentAssertions;

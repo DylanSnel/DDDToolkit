@@ -14,7 +14,7 @@ Usually the module that reacts runs in the same process. This page is written fo
 one. When a module moves to a process of its own, only the way the message travels changes
 ([Transports](transports.md)).
 
-`DDDToolkit.EntityFramework` gives you four things:
+`DTS.DDD.EntityFramework` gives you four things:
 
 - **A mapping** between the event you raise and the message you publish, so the two can change at different times.
 - **A sink interface**, so the outbox has somewhere to deliver to. A sink for the modules in the same process is
@@ -507,7 +507,7 @@ The module sink does not order messages ([Delivery guarantees](#delivery-guarant
 
 ## The generated registration
 
-`DDDToolkit.EntityFramework.Analyzers` writes a module's integration event registration as code. It writes one
+`DTS.DDD.EntityFramework.Analyzers` writes a module's integration event registration as code. It writes one
 `Add{Module}IntegrationEvents()` for each of the three places that need one, in the namespace
 `{assembly}.IntegrationEvents`. `{Module}` is the module the assembly declares, with `<DDD_Module>` or
 `[assembly: Module]`. A project that is no module takes the name from its `<DDD_Module>`, or else from its assembly
@@ -1195,14 +1195,14 @@ and weeks for the inbox.
   [how an event is named](domain-events.md#stable-names).
 - [Delivering domain events](event-delivery.md): the outbox itself, the processor, retries and `MaxAttempts`.
 - [GraphQL](graphql.md#pushing-integration-events-to-subscribers): the subscription sink.
-- `Tests/DDDToolkit.EntityFramework.Tests/ModuleIntegrationEventTests.cs`: the module sink, and retries per consumer.
-- `Tests/DDDToolkit.EntityFramework.Tests/OutboundIntegrationEventTests.cs`: the outbound classes.
-- `Tests/DDDToolkit.Analyzers.Tests/Integrations/IntegrationEventsGeneratorTests.cs`: the generated registration and
+- `Tests/DTS.DDD.EntityFramework.Tests/ModuleIntegrationEventTests.cs`: the module sink, and retries per consumer.
+- `Tests/DTS.DDD.EntityFramework.Tests/OutboundIntegrationEventTests.cs`: the outbound classes.
+- `Tests/DTS.DDD.Analyzers.Tests/Integrations/IntegrationEventsGeneratorTests.cs`: the generated registration and
   DDD00033.
-- `Tests/DDDToolkit.EntityFramework.Tests/EventVersioningTests.cs`: upcasting on both read paths.
-- `Tests/DDDToolkit.EntityFramework.Tests/IntegrationEventTests.cs`: the sink contract, and the behaviour when one of
+- `Tests/DTS.DDD.EntityFramework.Tests/EventVersioningTests.cs`: upcasting on both read paths.
+- `Tests/DTS.DDD.EntityFramework.Tests/IntegrationEventTests.cs`: the sink contract, and the behaviour when one of
   several sinks fails.
-- `Tests/DDDToolkit.EntityFramework.Tests/InboxTests.cs`: a crash between handling and marking, a copy that loses the
+- `Tests/DTS.DDD.EntityFramework.Tests/InboxTests.cs`: a crash between handling and marking, a copy that loses the
   race to another copy, and the outbox and inbox together.
-- `Tests/DDDToolkit.EntityFramework.Tests/RetentionTests.cs`: what retention deletes and what it keeps.
-- `Tests/DDDToolkit.EntityFramework.Tests/MessagingSchemaTests.cs`: the schema override and the migration helpers.
+- `Tests/DTS.DDD.EntityFramework.Tests/RetentionTests.cs`: what retention deletes and what it keeps.
+- `Tests/DTS.DDD.EntityFramework.Tests/MessagingSchemaTests.cs`: the schema override and the migration helpers.

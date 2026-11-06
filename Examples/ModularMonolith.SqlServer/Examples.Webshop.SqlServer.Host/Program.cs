@@ -1,4 +1,4 @@
-using DDDToolkit.EntityFramework;
+using DTS.DDD.EntityFramework;
 using Examples.Webshop.Catalog.Api;
 using Examples.Webshop.Catalog;
 using Examples.Hosting;
@@ -10,9 +10,9 @@ using Examples.Webshop.Payments.Api;
 using Examples.Webshop.Payments;
 using Examples.Webshop.Shipping.Api;
 using Examples.Webshop.Shipping;
-using DDDToolkit.HotChocolate.Fusion.InMemory;
-using DDDToolkit.HotChocolate.Subscriptions;
-using DDDToolkit.Mediator;
+using DTS.DDD.HotChocolate.Fusion.InMemory;
+using DTS.DDD.HotChocolate.Subscriptions;
+using DTS.DDD.Mediator;
 
 // The same five modules as the Supabase host, the same endpoints and the same messages, on SQL Server.
 // Compare the two Program.cs files: what differs in substance is the database, and what follows from it.

@@ -77,7 +77,7 @@ registration for one way, and `Examples/` runs each of them.
 
 ## Postgres queues: pgmq
 
-`DDDToolkit.Messaging.Postgres` sends published messages to a [pgmq](https://github.com/pgmq/pgmq) queue.
+`DTS.DDD.Messaging.Postgres` sends published messages to a [pgmq](https://github.com/pgmq/pgmq) queue.
 
 pgmq is a Postgres extension. Its queues are ordinary tables, and `pgmq.send` is an ordinary insert. A send is
 therefore part of the transaction that it runs in. A broker cannot join a database transaction, which is why every
@@ -86,7 +86,7 @@ broker needs an outbox in front of it. On Postgres, the queue itself gives the o
 Supabase Queues is this extension with a UI. A Supabase project has the extension once Queues is turned on in the
 dashboard, or once a migration runs `create extension if not exists pgmq;`. The sink does not depend on Supabase. It
 talks to Postgres through Npgsql and SQL. To let the Supabase CLI apply your migrations, see
-`DDDToolkit.EntityFramework.Supabase` on [Supabase](supabase.md).
+`DTS.DDD.EntityFramework.Supabase` on [Supabase](supabase.md).
 
 The pgmq version of a database decides which features you can use, and Supabase does not ship the newest version. A
 Supabase project gets the pgmq that goes with its Postgres version: 1.5.1 on Postgres 17 at the time of writing.
@@ -107,7 +107,7 @@ installed version when the application starts, and refuse topics on a pgmq witho
 [Queues, creation and the extension check](#queues-creation-and-the-extension-check).
 
 ```bash
-dotnet add package Temp.DDDToolkit.Messaging.Postgres --prerelease
+dotnet add package DylansTechStack.DDD.Messaging.Postgres --prerelease
 ```
 
 ```csharp
@@ -424,7 +424,7 @@ is in another database.
 
 ## Through a broker: Wolverine
 
-`DDDToolkit.Messaging.Wolverine` makes Wolverine the transport between the outbox of one process and the inbox of
+`DTS.DDD.Messaging.Wolverine` makes Wolverine the transport between the outbox of one process and the inbox of
 another. Wolverine carries the message. The toolkit keeps the outbox, which writes the message in the aggregate's
 transaction, and the inbox, which applies the message once. The integration does not use Wolverine's own outbox,
 inbox and sagas, so the process has one outbox and one inbox.
@@ -490,7 +490,7 @@ Wolverine's names.
 
 ## Through a broker: MassTransit
 
-`DDDToolkit.Messaging.MassTransit` works in the same way with MassTransit:
+`DTS.DDD.Messaging.MassTransit` works in the same way with MassTransit:
 
 - Each contract is a separate message type, published and consumed like any MassTransit message.
 - The same receiver delivers the message to the modules.
@@ -545,7 +545,7 @@ lifetime. Configure MassTransit in a separate file, as `Examples/Microservices.M
 
 ## The GraphQL subscription sink
 
-`DDDToolkit.HotChocolate` has one more sink, `GraphQlSubscriptionSink`, and it has a different purpose. The module
+`DTS.DDD.HotChocolate` has one more sink, `GraphQlSubscriptionSink`, and it has a different purpose. The module
 sink, pgmq and the brokers are integration. The message is durable and retried, and the receiver gets the message
 even if the receiver was not running at the time. A GraphQL subscription stores nothing, and reaches only the
 clients that hold a socket at that moment. Use it to keep a browser in step with the server. Do not use it to tell
@@ -566,8 +566,8 @@ public interface IIntegrationEventSink
 ```
 
 ```csharp
-using DDDToolkit.BaseTypes;
-using DDDToolkit.Interfaces;
+using DTS.DDD.BaseTypes;
+using DTS.DDD.Interfaces;
 
 public sealed class WebhookSink(HttpClient client) : IIntegrationEventSink
 {
@@ -626,7 +626,7 @@ row:
 - **The `OutboxMessage` row.** The row carries `Attempts`, `NextAttemptAt`, `ProcessedAt`, `LastError`, `LockedBy`
   and `LockedUntil`. These fields are this process's bookkeeping, and a transport does not need them. The row would
   also put Entity Framework into the sink's signature. A sink project would then have to reference
-  `DDDToolkit.EntityFramework` to send an HTTP request.
+  `DTS.DDD.EntityFramework` to send an HTTP request.
 
 The envelope is in the core `DDDToolkit` package. It has no Entity Framework types, and it carries what a transport
 routes on:
@@ -652,8 +652,8 @@ One id runs through the whole path: `EventId` on the event, `Id` on the outbox r
 - [Integration events](integration-events.md) for the contract, the module sink, the inbox and versioning.
 - `Examples/Microservices.Pgmq`, `Examples/Microservices.Wolverine` and `Examples/Microservices.MassTransit` for the
   example shop run as three services over each transport.
-- `Tests/DDDToolkit.EntityFramework.Tests/PgmqSinkTests.cs` for the transactional send, against a real Postgres, and
+- `Tests/DTS.DDD.EntityFramework.Tests/PgmqSinkTests.cs` for the transactional send, against a real Postgres, and
   `PgmqConsumerTests.cs` next to it for reading the queue.
-- `Tests/DDDToolkit.EntityFramework.Tests/OutboxTransactionTests.cs` for `DeliverInTransaction`.
-- `Tests/DDDToolkit.Messaging.Tests/WolverineTests.cs` and `MassTransitTests.cs` for the two brokers.
-- `Tests/DDDToolkit.EntityFramework.Tests/IntegrationEventTests.cs` for the sink contract.
+- `Tests/DTS.DDD.EntityFramework.Tests/OutboxTransactionTests.cs` for `DeliverInTransaction`.
+- `Tests/DTS.DDD.Messaging.Tests/WolverineTests.cs` and `MassTransitTests.cs` for the two brokers.
+- `Tests/DTS.DDD.EntityFramework.Tests/IntegrationEventTests.cs` for the sink contract.

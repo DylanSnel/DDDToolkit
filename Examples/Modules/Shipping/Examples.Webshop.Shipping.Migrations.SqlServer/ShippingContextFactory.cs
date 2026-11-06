@@ -1,4 +1,4 @@
-using DDDToolkit.EntityFramework;
+using DTS.DDD.EntityFramework;
 using Examples.Webshop.Shipping.Infrastructure.Persistence;
 using Examples.Hosting;
 using Microsoft.EntityFrameworkCore;

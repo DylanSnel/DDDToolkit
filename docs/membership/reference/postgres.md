@@ -7,11 +7,11 @@ sidebar_label: Postgres
 
 # Membership API: Postgres
 
-The public API of `DDDToolkit.Supporting.Membership.Postgres`, by folder: its registration, the row access contribution the Supabase export writes for each kind of resource, and the start-up check that the database has the functions the rules say.
+The public API of `DTS.Membership.Postgres`, by folder: its registration, the row access contribution the Supabase export writes for each kind of resource, and the start-up check that the database has the functions the rules say.
 
 ## Registration
 
-Namespace `DDDToolkit.Supporting.Membership.Postgres`.
+Namespace `DTS.Membership.Postgres`.
 
 ### `MembershipPostgresServiceCollectionExtensions`
 
@@ -50,7 +50,7 @@ What the database holds comes with the access files the export writes, which mak
 
 ## Row access contribution
 
-Namespace `DDDToolkit.Supporting.Membership.Postgres`.
+Namespace `DTS.Membership.Postgres`.
 
 ### `MembershipRowAccessContribution<TMember>`
 
@@ -159,7 +159,7 @@ What this contribution writes for `context`, or `null` when the context is none 
 
 ## Start-up checks
 
-Namespace `DDDToolkit.Supporting.Membership.Postgres`.
+Namespace `DTS.Membership.Postgres`.
 
 ### `MembershipPostgresChecks`
 

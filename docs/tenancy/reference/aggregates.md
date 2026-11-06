@@ -11,7 +11,7 @@ The templates the application's own classes derive from, in the order of the tre
 
 ## Declaring the classes
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### `GenerateTenancyClassesAttribute`
 
@@ -67,7 +67,7 @@ public sealed class TenancyIdsAttribute<TTenantId, TSeatId, TUnitId, TRoleId> : 
 Says which of a project's ids are Tenancy's, for a module that sees Tenancy's ids and none of its classes. Write it once, in the module's application project:
 
 ```csharp
-using DDDToolkit.Supporting.Tenancy;
+using DTS.Tenancy;
 
 [assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]
 ```
@@ -302,7 +302,7 @@ A new open invitation, with [`InvitationIssued<TTenantId, TInvitationId, TUnitId
 
 ## Tenant
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### Tenant (`TenantAggregate<TTenantId>`)
 
@@ -566,7 +566,7 @@ protected override void Validate(ValidationErrorBuilder errors)
 
 The rules, as a list of reasons. Override this instead of `ValueObject.Validate` when a caller needs to know *why* a value was refused. A run that adds nothing to `errors` is a pass.
 
-Both overloads run, and both must be happy: the value is valid when `ValueObject.Validate` returned `true` and no failure was added here. Overriding only one is the normal case. With DDDToolkit.FluentValidation referenced this overload is generated for you, so override neither and write rules instead.
+Both overloads run, and both must be happy: the value is valid when `ValueObject.Validate` returned `true` and no failure was added here. Overriding only one is the normal case. With DTS.DDD.FluentValidation referenced this overload is generated for you, so override neither and write rules instead.
 
 **Parameters**
 
@@ -647,7 +647,7 @@ A suspended or closed tenant says why.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(TenantAggregate<TTenantId>)`](#checktenantaggregatettenantid) | Runs the rule. |
 
 #### `Check(TenantAggregate<TTenantId>)`
@@ -674,7 +674,7 @@ The slug follows the pattern. A slug is only ever set from a valid one, so this 
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(TenantAggregate<TTenantId>)`](#checktenantaggregatettenantid-1) | Runs the rule. |
 
 #### `Check(TenantAggregate<TTenantId>)`
@@ -887,7 +887,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Organization
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### Organization (`OrganizationAggregate<TTenantId, TUnit, TUnitId>`)
 
@@ -920,7 +920,7 @@ Every method that changes the organization takes who makes the change, `by`, and
 | `MaxNameLength = 200` | The longest name an organization, which is the tenant's name, may have. |
 | [`OrganizationAggregate()`](#organizationaggregate) | Parameterless constructor for persistence frameworks and serializers. |
 | `string Name { get; }` | The tenant's name. |
-| `IReadOnlyList<TUnit> Units { get; }` | Read-only view over ``DDDToolkit.Supporting.Tenancy.OrganizationAggregate`3._units``. Mutate the collection through the field. |
+| `IReadOnlyList<TUnit> Units { get; }` | Read-only view over ``DTS.Tenancy.OrganizationAggregate`3._units``. Mutate the collection through the field. |
 | [`Root`](#root) | The one unit with no parent. |
 | [`Rename(string, TenancyActor<TSeatId>?)`](#renamestring-tenancyactortseatid) | Renames the organization. |
 | [`AddUnit(TUnitId, TUnitId, string, TenantShape, TenancyActor<TSeatId>?, Action<TUnit>?)`](#addunittunitid-tunitid-string-tenantshape-tenancyactortseatid-actiontunit) | Adds a unit below an active one, in a hierarchical tenant. |
@@ -1310,7 +1310,7 @@ No unit is deeper than [`OrganizationAggregate.MaxDepth`](#organization-organiza
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`](#checkorganizationaggregatettenantid-tunit-tunitid) | Runs the rule. |
 
 #### `Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`
@@ -1337,7 +1337,7 @@ An organization has exactly one root.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`](#checkorganizationaggregatettenantid-tunit-tunitid-1) | Runs the rule. |
 
 #### `Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`
@@ -1364,7 +1364,7 @@ The organization has a name of 1 to [`OrganizationAggregate.MaxNameLength`](#org
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`](#checkorganizationaggregatettenantid-tunit-tunitid-2) | Runs the rule. |
 
 #### `Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`
@@ -1391,7 +1391,7 @@ No unit is above itself.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`](#checkorganizationaggregatettenantid-tunit-tunitid-3) | Runs the rule. |
 
 #### `Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`
@@ -1418,7 +1418,7 @@ Every unit's parent is a unit of the organization.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`](#checkorganizationaggregatettenantid-tunit-tunitid-4) | Runs the rule. |
 
 #### `Check(OrganizationAggregate<TTenantId, TUnit, TUnitId>)`
@@ -1445,7 +1445,7 @@ A unit has a name of 1 to [`OrganizationUnitEntity.MaxNameLength`](#organization
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(OrganizationUnitEntity<TUnitId>)`](#checkorganizationunitentitytunitid) | Runs the rule. |
 
 #### `Check(OrganizationUnitEntity<TUnitId>)`
@@ -1636,7 +1636,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Seat
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### Seat (`SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>`)
 
@@ -1918,7 +1918,7 @@ public sealed partial class ShopSeat;
 ### `Placement<TSeatId, TUnitId, TRoleId>`
 
 ```csharp
-public sealed class Placement<TSeatId, TUnitId, TRoleId>
+public sealed class Placement<TSeatId, TUnitId, TRoleId> : IEntity
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
@@ -1926,7 +1926,9 @@ public sealed class Placement<TSeatId, TUnitId, TRoleId>
 
 Where a seat belongs: one unit, with the roles granted to the seat at that unit. Within its seat it is known by that unit, because a seat has at most one placement per unit, and at most one of them is primary.
 
-A placement says where a seat belongs; what it may do there comes from the roles granted with it. A plain class rather than a toolkit entity, and not extended by the application: only the seat changes it.
+A placement says where a seat belongs. What the seat may do there comes from the roles granted with it.
+
+An entity with no id of its own. Its seat and its unit identify it. Only the seat changes it, and the application does not extend it.
 
 **Type parameters**
 
@@ -1945,14 +1947,14 @@ A placement says where a seat belongs; what it may do there comes from the roles
 ### `RoleGrant<TSeatId, TRoleId>`
 
 ```csharp
-public sealed class RoleGrant<TSeatId, TRoleId>
+public sealed class RoleGrant<TSeatId, TRoleId> : IEntity
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
 A role a seat holds at the unit of one of its placements, for a period. It is known by its role within its placement: a placement holds a role at most once.
 
-A plain class rather than a toolkit entity, and not extended by the application: a grant is a fact about a seat, and only the seat changes it.
+An entity with no id of its own. Its seat, its unit and its role identify it. Only the seat changes it, and the application does not extend it.
 
 **Type parameters**
 
@@ -2004,7 +2006,7 @@ A seat has at most one primary placement.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`](#checkseataggregatetseatid-ttenantid-tunitid-troleid) | Runs the rule. |
 
 #### `Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`
@@ -2031,7 +2033,7 @@ Every grant with an end has it later than its start.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`](#checkseataggregatetseatid-ttenantid-tunitid-troleid-1) | Runs the rule. |
 
 #### `Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`
@@ -2058,7 +2060,7 @@ A seat belongs to a verified identity.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`](#checkseataggregatetseatid-ttenantid-tunitid-troleid-2) | Runs the rule. |
 
 #### `Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`
@@ -2085,7 +2087,7 @@ A placement holds a role at most once.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`](#checkseataggregatetseatid-ttenantid-tunitid-troleid-3) | Runs the rule. |
 
 #### `Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`
@@ -2112,7 +2114,7 @@ A seat is placed in a unit at most once.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`](#checkseataggregatetseatid-ttenantid-tunitid-troleid-4) | Runs the rule. |
 
 #### `Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`
@@ -2461,7 +2463,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Role
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### Role (`RoleAggregate<TRoleId, TTenantId>`)
 
@@ -2760,7 +2762,7 @@ A role has a name of 1 to [`RoleAggregate.MaxNameLength`](#role-roleaggregatetro
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(RoleAggregate<TRoleId, TTenantId>)`](#checkroleaggregatetroleid-ttenantid) | Runs the rule. |
 
 #### `Check(RoleAggregate<TRoleId, TTenantId>)`
@@ -2787,7 +2789,7 @@ A role's permissions are distinct, not blank, and in ordinal order.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(RoleAggregate<TRoleId, TTenantId>)`](#checkroleaggregatetroleid-ttenantid-1) | Runs the rule. |
 
 #### `Check(RoleAggregate<TRoleId, TTenantId>)`
@@ -2996,7 +2998,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Invitation
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### Invitation (`InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>`)
 
@@ -3036,7 +3038,7 @@ What it offers does not change after it was issued: the tenant, the unit, the ro
 | `MaxAddressLength = 254` | The longest address an invitation may be for: the longest an e-mail address may be. |
 | [`InvitationAggregate()`](#invitationaggregate) | Parameterless constructor for persistence frameworks and serializers. |
 | `TTenantId TenantId { get; }` | The tenant the invitation is into. |
-| `string? Address { get; }` | The address the invitation is for, as it was given, while the invitation is open; `null` once it was accepted or cancelled. |
+| `string? Address { get; }` | The address the invitation is for, as it was given, while the invitation is open; `null` once it was accepted or cancelled. Not marked `[PersonalData]`, because whoever may read invitations needs it. |
 | `TUnitId UnitId { get; }` | The unit the seat is placed in, as its primary placement. |
 | `TRoleId RoleId { get; }` | The role the seat is granted at that unit. |
 | `DateTimeOffset? GrantUntil { get; }` | When the grant ends, or `null` for no end. Later than [`ExpiresAt`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid). |
@@ -3181,7 +3183,7 @@ An open invitation is for one valid address; one that is over has forgotten it.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>)`](#checkinvitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid) | Runs the rule. |
 
 #### `Check(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>)`
@@ -3208,7 +3210,7 @@ The grant an invitation offers does not end before the invitation does.
 
 | Member | Summary |
 |---|---|
-| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DDDToolkit.Analyzers` reads to report two rules on one entity sharing a code. |
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
 | [`Check(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>)`](#checkinvitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid-1) | Runs the rule. |
 
 #### `Check(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>)`
@@ -3349,7 +3351,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Shared value objects
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### `GrantPeriod`
 

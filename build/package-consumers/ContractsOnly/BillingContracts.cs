@@ -1,8 +1,8 @@
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Acme.Billing.Contracts;
 
-// What a contracts project publishes, and all of it compiles against DDDToolkit.Abstractions alone:
+// What a contracts project publishes, and all of it compiles against DTS.DDD.Abstractions alone:
 // an identifier, a read model and an integration event. The event is what makes the generator write
 // {Module}EventNames, the class the script reads the module name from. None of them is marked
 // [ModuleContract]: DDD_ModuleContracts in the project file publishes every public type here.

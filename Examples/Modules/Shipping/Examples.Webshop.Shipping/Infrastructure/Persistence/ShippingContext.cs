@@ -1,8 +1,8 @@
-using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Conventions;
-using DDDToolkit.EntityFramework.Inbox;
+using DTS.DDD.EntityFramework;
+using DTS.DDD.EntityFramework.Conventions;
+using DTS.DDD.EntityFramework.Inbox;
 using Examples.Webshop.Shipping.Converters;
-using DDDToolkit.EntityFramework.Supabase;
+using DTS.DDD.EntityFramework.Supabase;
 using Microsoft.EntityFrameworkCore;
 
 namespace Examples.Webshop.Shipping.Infrastructure.Persistence;

@@ -29,7 +29,7 @@ The stores a storage package implements are under [Stores](#stores). The registr
 
 ## Tenants
 
-Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Managers`.
 
 ### `TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -427,7 +427,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Organization
 
-Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Managers`.
 
 ### `OrganizationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -836,7 +836,7 @@ The unit was read for this answer and is tracked by nobody: nothing done to it i
 
 ## Seats
 
-Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Managers`.
 
 ### `SeatManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -1711,7 +1711,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Roles
 
-Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Managers`.
 
 ### `RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -2122,7 +2122,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Invitations
 
-Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Managers`.
 
 ### `InvitationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>`
 
@@ -2444,9 +2444,9 @@ Says which invitation and not its token: a record prints its members, and this o
 
 ## Stores
 
-Where the managers load and save. A storage package implements these interfaces and registers them: `DDDToolkit.Supporting.Tenancy.EntityFramework` does, in `AddTenancy` and `AddTenancyInvitations`. Your code takes the managers. A command of yours that changes a field of your own on one of the aggregates takes a store by the name the generator gives it, `TenancyStore` or, where you declare an invitation class, `InvitationStore`. Each name is an alias closed over your classes.
+Where the managers load and save. A storage package implements these interfaces and registers them: `DTS.Tenancy.EntityFramework` does, in `AddTenancy` and `AddTenancyInvitations`. Your code takes the managers. A command of yours that changes a field of your own on one of the aggregates takes a store by the name the generator gives it, `TenancyStore` or, where you declare an invitation class, `InvitationStore`. Each name is an alias closed over your classes.
 
-Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Managers`.
 
 ### `ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -2878,7 +2878,7 @@ public sealed class TenancyInvitationOptions<TInvitationId>
     where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 What an application that invites people may tell Tenancy: how long an invitation stays open, which has defaults. A new invitation's id is made by the id itself, with its `Create()`, as every id of Tenancy's is.
 
@@ -2899,7 +2899,7 @@ What an application that invites people may tell Tenancy: how long an invitation
 public sealed class TenancyOperatorsAttribute : Attribute
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 Marks the token roles of the application's operators, the ones it adds to `TenancyOptions.OperatorTokenRoles`, so the program that exports the database's policies writes them for the same roles:
 
@@ -2928,7 +2928,7 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 What the application tells Tenancy, all of it with a default: what it adds to the catalogue ([`Catalogue`](#tenancyoptionsttenantid-tseatid-tunitid-troleid)), which signed-in users may hold a seat ([`TenantSelection`](#tenancyoptionsttenantid-tseatid-tunitid-troleid)), and who its operators are ([`OperatorTokenRoles`](#operatortokenroles), empty unless it has any).
 
@@ -2973,7 +2973,7 @@ Whether `user` is one of the application's operators: a signed-in user whose tok
 public static class TenancyServiceCollectionExtensions
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 Registration of Tenancy's storage-agnostic parts. The storage package registers the rest, the store and the seat directory, and calls [`AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) itself; an application calls the storage package's registration, and adds its modules' permissions once, from the host: `services.AddTenancyPermissionsOfModules()`, which Tenancy's generator writes from the lists the modules mark with `TenancyPermissionsAttribute`. [`AddTenancyPermissions`](#addtenancypermissionsiservicecollection-ienumerablepermission) adds a list by hand.
 
@@ -3123,7 +3123,7 @@ It is a call of its own, and not a start-up check: a check reads and changes not
 public static class TenancyDbContextOptionsExtensions
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 Adds Tenancy's part of every save to a context.
 
@@ -3169,7 +3169,7 @@ The same call serves a context pool (`AddPooledDbContextFactory`, `AddDbContextP
 public static class TenancyEntityFrameworkServiceCollectionExtensions
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 Registers Tenancy, stored with Entity Framework.
 
@@ -3329,7 +3329,7 @@ It registers the module's access manager per scope as well: `TAccessManager`, th
 public static class TenancyOutboxExtensions
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+Namespace `DTS.Tenancy.EntityFramework`.
 
 Registers Tenancy's domain events with the outbox of Tenancy's context.
 
@@ -3409,7 +3409,7 @@ None of them is among the events the access history keeps: an invitation changes
 public static class TenancyPostgresServiceCollectionExtensions
 ```
 
-Namespace `DDDToolkit.Supporting.Tenancy.Postgres`.
+Namespace `DTS.Tenancy.Postgres`.
 
 Registers what Tenancy needs on Postgres with row level security.
 

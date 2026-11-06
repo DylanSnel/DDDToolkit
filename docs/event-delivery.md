@@ -5,7 +5,7 @@ that a confirmation goes out, stock is reserved and a van is booked, but only on
 covers when delivery happens: inside the save, in the aggregate's transaction, or after the save, from a stored row
 that survives a crash.
 
-`DDDToolkit.EntityFramework` has one mode for each:
+`DTS.DDD.EntityFramework` has one mode for each:
 
 - **In-process dispatch** runs your handlers while `SaveChanges` runs.
 - **The outbox** writes the events to a table in the same transaction, and delivers them afterwards.
@@ -187,19 +187,19 @@ pooled context without a scope is refused before any event is taken off the aggr
 a save that only writes outbox rows works from any pooled context. See
 [Contexts from a pool](entity-framework.md#contexts-from-a-pool).
 
-The events reach your handlers through a delegate. `DDDToolkit.Mediator` writes the delegate for you, or you can
+The events reach your handlers through a delegate. `DTS.DDD.Mediator` writes the delegate for you, or you can
 write it yourself.
 
 ### Dispatching with Mediator
 
-`DDDToolkit.Mediator` writes the delegate against [Mediator](https://github.com/martinothamar/Mediator):
+`DTS.DDD.Mediator` writes the delegate against [Mediator](https://github.com/martinothamar/Mediator):
 
 ```bash
-dotnet add package Temp.DDDToolkit.Mediator --prerelease
+dotnet add package DylansTechStack.DDD.Mediator --prerelease
 ```
 
 ```csharp
-using DDDToolkit.Mediator;
+using DTS.DDD.Mediator;
 
 builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
@@ -230,7 +230,7 @@ call at compile time, so set the lifetime there. Setting it in any other way thr
 **Reference `Mediator.SourceGenerator` from your composition root only.** Mediator generates its implementation and
 `AddMediator` into the assembly that runs the generator. Reference the generator from the project that builds the
 container, and from no other project. Handlers in other projects are still found, as long as the composition root
-references those projects. `DDDToolkit.Mediator` references only `Mediator.Abstractions`, so it adds no generator to
+references those projects. `DTS.DDD.Mediator` references only `Mediator.Abstractions`, so it adds no generator to
 your domain projects.
 
 Mediator also reports `MSG0005` at build time for a notification without a handler. That warning usually points to a
@@ -692,7 +692,7 @@ context.
   is retried, and the sinks that accepted it receive it again. See
   [Integration events](integration-events.md#when-one-sink-fails-and-another-does-not).
 
-`Tests/DDDToolkit.EntityFramework.Tests/OutboxTests.cs` tests the transactional write, the retries, `MaxAttempts`,
+`Tests/DTS.DDD.EntityFramework.Tests/OutboxTests.cs` tests the transactional write, the retries, `MaxAttempts`,
 unknown event names and the background service. `OutboxRetryTests.cs` next to it tests the wait between attempts.
 `OutboxLeaseTests.cs` tests the claim, a takeover, the release and two processors on one database. The provider tests
 run two processors on Postgres and on SQL Server.
@@ -732,7 +732,7 @@ before the write.
 
 MediatR did this job for the first two major versions of the toolkit. From version 13, MediatR has a commercial
 licence. This repository prefers dependencies without a licence fee. The examples and
-`DDDToolkit.Mediator` therefore target Mediator, which is MIT-licensed and uses a source generator instead of
+`DTS.DDD.Mediator` therefore target Mediator, which is MIT-licensed and uses a source generator instead of
 reflection. You can still use MediatR. Write [the dispatch delegate](#the-dispatch-delegate) and publish through
 MediatR's `IPublisher`.
 

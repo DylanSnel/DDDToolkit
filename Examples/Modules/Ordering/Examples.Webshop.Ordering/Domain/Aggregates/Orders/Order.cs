@@ -1,5 +1,5 @@
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Exceptions;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.DDD.Exceptions;
 using Examples.Webshop.Ordering.Contracts;
 using Examples.Webshop.SharedKernel;
 

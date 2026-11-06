@@ -3,7 +3,7 @@
  * request through the seven layers the page describes, from the attribute to the row.
  *
  * Everything it shows comes from walkthrough.json, and every line of code in that file is a line of the page, which
- * a test of DDDToolkit.Analyzers.Tests holds it to: the component is a way through the page, never a second source.
+ * a test of DTS.DDD.Analyzers.Tests holds it to: the component is a way through the page, never a second source.
  * The page shows its answers as tables too, for GitHub and for the Markdown the site writes for language models,
  * where this component is not drawn.
  *

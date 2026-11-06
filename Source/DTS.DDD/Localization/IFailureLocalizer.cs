@@ -1,0 +1,77 @@
+using DTS.DDD.Exceptions;
+using DTS.DDD.Invariants;
+using DTS.DDD.Validation;
+
+namespace DTS.DDD.Localization;
+
+/// <summary>
+/// Phrases a failure, or a refusal, in the reader's language.
+/// <para>
+/// The domain reports what is wrong with a stable code, a message in its own words and the values the
+/// message was built from. None of that depends on who is reading, and it must not: an invariant runs on
+/// a save in a background job as readily as in a request, and there is no reader there to ask. Choosing
+/// a language is the edge's job, at the moment a failure becomes a response, and this is the one thing
+/// the edge calls to do it.
+/// </para>
+/// <para>
+/// The language is <see cref="System.Globalization.CultureInfo.CurrentUICulture"/>, the same one
+/// <c>IStringLocalizer</c> reads, so ASP.NET Core's request localization middleware sets it per request
+/// with nothing else to wire. Values in the message are formatted with
+/// <see cref="System.Globalization.CultureInfo.CurrentCulture"/>.
+/// </para>
+/// <para>
+/// Where there is no request to take the language from, such as a mail written by a job, or where the
+/// request's culture is out of reach, as it is in an exception handler, the caller names the culture:
+/// <see cref="CultureScope"/> sets both for a block of work, and the <c>Localize</c> overloads of
+/// <see cref="FailureLocalizationExtensions"/> take one for a single failure.
+/// </para>
+/// <para>
+/// The interface lives here, in the core, so an integration such as <c>DTS.DDD.HotChocolate</c> can
+/// ask for one without depending on how translations are stored. The implementation that reads them
+/// through <c>IStringLocalizer</c> is <c>FailureLocalizer</c> in <c>DTS.DDD.Localization</c>; an
+/// application that registers none gets the domain's own messages.
+/// </para>
+/// </summary>
+public interface IFailureLocalizer
+{
+    /// <summary>
+    /// The failure in the reader's language, or its own <see cref="ValidationError.Message"/> when no
+    /// translation is known for its code.
+    /// </summary>
+    /// <param name="error">The failure to phrase.</param>
+    string Localize(ValidationError error);
+
+    /// <summary>
+    /// The violation in the reader's language, or its own <see cref="InvariantViolation.Message"/> when no
+    /// translation is known for its code.
+    /// </summary>
+    /// <param name="violation">The violation to phrase.</param>
+    string Localize(InvariantViolation violation);
+
+    /// <summary>
+    /// The refusal in the reader's language, or its own message when no translation is known for its
+    /// <see cref="RefusalException.Code"/>.
+    /// <para>
+    /// A default member, so a localizer written before refusals existed keeps compiling and answers with
+    /// the domain's own message. <c>FailureLocalizer</c> looks the code up like any other failure's.
+    /// </para>
+    /// </summary>
+    /// <param name="refusal">The refusal to phrase.</param>
+    string Localize(RefusalException refusal) => (refusal ?? throw new ArgumentNullException(nameof(refusal))).Message;
+
+    /// <summary>
+    /// A text of the application's own, by its key, in the reader's language: what the translations hold under
+    /// <paramref name="key"/>, or <paramref name="fallback"/> where none does. A permission's description is read so,
+    /// by the permission's name, with the description its <c>[Permissions]</c> class gives it as the fallback, from the
+    /// same resx files refusal texts are kept in:
+    /// <code>
+    /// localizer.Text(permission.Name, permission.Description)
+    /// </code>
+    /// <para>
+    /// A default member, so a localizer written before it existed keeps compiling and answers the fallback.
+    /// </para>
+    /// </summary>
+    /// <param name="key">The text's key, such as a permission's name: <c>boards.view</c>.</param>
+    /// <param name="fallback">What is answered where no translation holds the key: the English text.</param>
+    string Text(string key, string fallback) => fallback;
+}

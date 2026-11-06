@@ -166,10 +166,10 @@ packages always have the same version. Write a prerelease version in full, such 
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.DDD" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Tenancy" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Tenancy.Postgres" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.DDD.EntityFramework.Supabase" Version="3.2.0-preview.13" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
@@ -189,7 +189,7 @@ This keeps the database out of the domain. The comment at the top of each file s
 
   <!-- What the other modules may use of Tenancy: its ids. -->
   <ItemGroup>
-    <PackageReference Include="Temp.DDDToolkit" />
+    <PackageReference Include="DylansTechStack.DDD" />
   </ItemGroup>
 
 </Project>
@@ -202,7 +202,7 @@ This keeps the database out of the domain. The comment at the top of each file s
 
   <!-- The tenancy classes, and the rules the application adds to them. -->
   <ItemGroup>
-    <PackageReference Include="Temp.DDDToolkit.Supporting.Tenancy" />
+    <PackageReference Include="DylansTechStack.Tenancy" />
   </ItemGroup>
 
   <ItemGroup>
@@ -242,8 +242,8 @@ This keeps the database out of the domain. The comment at the top of each file s
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" />
-    <PackageReference Include="Temp.DDDToolkit.EntityFramework.Supabase" />
+    <PackageReference Include="DylansTechStack.Tenancy.Postgres" />
+    <PackageReference Include="DylansTechStack.DDD.EntityFramework.Supabase" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
@@ -324,7 +324,7 @@ the rest: equality, parsing, `Create()` and storage.
 **`Harbor.Tenancy.Contracts/ValueObjects/TenantId.cs`**
 
 ```csharp {5-6}
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Harbor.Tenancy.Contracts.ValueObjects;
 
@@ -339,7 +339,7 @@ public readonly partial record struct TenantId;
 **`Harbor.Tenancy.Domain/Module.cs`**
 
 ```csharp {3}
-using DDDToolkit.Supporting.Tenancy;
+using DTS.Tenancy;
 
 [assembly: GenerateTenancyClasses]
 ```
@@ -350,7 +350,7 @@ attribute names the template and the id type.
 **`Harbor.Tenancy.Domain/Aggregates/Seats/Seat.cs`**
 
 ```csharp {6-7,9,11}
-using DDDToolkit.Supporting.Tenancy;
+using DTS.Tenancy;
 using Harbor.Tenancy.Contracts.ValueObjects;
 
 namespace Harbor.Tenancy.Domain.Aggregates.Seats;
@@ -405,10 +405,10 @@ migration.
 **`Harbor.Tenancy.Infrastructure/Persistence/TenancyContext.cs`**
 
 ```csharp {11,15,19-21,26-28}
-using DDDToolkit.EntityFramework.Conventions;
-using DDDToolkit.EntityFramework.Outbox;
-using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DTS.DDD.EntityFramework.Conventions;
+using DTS.DDD.EntityFramework.Outbox;
+using DTS.DDD.EntityFramework.Supabase;
+using DTS.Tenancy.EntityFramework;
 using Harbor.Tenancy.Infrastructure.Converters;
 using Microsoft.EntityFrameworkCore;
 
@@ -533,7 +533,7 @@ Step 5 turns a refusal into an HTTP response: `tenancy.not-permitted` becomes `4
 **`Harbor.Tenancy.Application/Access/ITenancyRequest.cs`**
 
 ```csharp {5-6}
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Harbor.Tenancy.Application.Access;
 
@@ -544,8 +544,8 @@ public partial interface ITenancyRequest : IRequireAccess;
 **`Harbor.Tenancy.Application/GlobalUsings.cs`**: the namespaces every request file of the module uses.
 
 ```csharp
-global using DDDToolkit.Access;
-global using DDDToolkit.Supporting.Tenancy.Access;
+global using DTS.DDD.Access;
+global using DTS.Tenancy.Access;
 global using Harbor.Tenancy.Application.Access;
 global using Harbor.Tenancy.Contracts.ValueObjects;
 global using Mediator;
@@ -568,9 +568,9 @@ public static class TenancyApplication
 **`Harbor.Tenancy.Infrastructure/TenancyInfrastructure.cs`**
 
 ```csharp {15-16,18-20,22-24}
-using DDDToolkit.EntityFramework;
-using DDDToolkit.Supporting.Tenancy.EntityFramework;
-using DDDToolkit.Supporting.Tenancy.Postgres;
+using DTS.DDD.EntityFramework;
+using DTS.Tenancy.EntityFramework;
+using DTS.Tenancy.Postgres;
 using Harbor.Tenancy.Application.Access;
 using Harbor.Tenancy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -690,8 +690,8 @@ the database before it starts.
 **`src/Harbor.Host/Program.cs`**
 
 ```csharp {3,12-15,18,22}
-using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Startup;
+using DTS.DDD.EntityFramework.Supabase;
+using DTS.DDD.Startup;
 using Harbor.Host;
 using Harbor.Host.Requests;
 using Harbor.Tenancy.Api;
@@ -719,9 +719,9 @@ app.Run();
 **`src/Harbor.Host/Requests/RequestPipeline.cs`**
 
 ```csharp {14-15,17-19}
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Access;
-using DDDToolkit.Supporting.Tenancy.Access;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Access;
+using DTS.Tenancy.Access;
 
 namespace Harbor.Host.Requests;
 
@@ -749,7 +749,7 @@ public static class RequestPipeline
 **`src/Harbor.Host/Requests/RefusalsAsProblems.cs`**
 
 ```csharp {16-23}
-using DDDToolkit.Exceptions;
+using DTS.DDD.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 
 namespace Harbor.Host.Requests;
@@ -872,7 +872,7 @@ administrators' starter role at the root.
 **`Harbor.Tenancy.Application/Tenants/ProvisionTenant/ProvisionTenant.cs`**
 
 ```csharp {6,8,10,16,18,20-28}
-using DDDToolkit.Supporting.Tenancy;
+using DTS.Tenancy;
 using Harbor.Tenancy.Domain;
 
 namespace Harbor.Tenancy.Application.Tenants.ProvisionTenant;
@@ -962,8 +962,8 @@ public static class TenancyModule
 **`src/Harbor.Host/Program.cs`**: maps the development route in the Development environment only.
 
 ```csharp {24-27}
-using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Startup;
+using DTS.DDD.EntityFramework.Supabase;
+using DTS.DDD.Startup;
 using Harbor.Host;
 using Harbor.Host.Requests;
 using Harbor.Tenancy.Api;
@@ -1208,8 +1208,8 @@ that lists the units a seat can read.
 **`Harbor.Tenancy.Application/Units/AddUnit/AddUnit.cs`**
 
 ```csharp {3,7,14-22,24}
-using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Catalogue;
+using DTS.Tenancy;
+using DTS.Tenancy.Catalogue;
 using Harbor.Tenancy.Domain;
 
 namespace Harbor.Tenancy.Application.Units.AddUnit;
@@ -1239,7 +1239,7 @@ public sealed class AddUnitHandler(OrganizationManager organization)
 **`Harbor.Tenancy.Application/Units/UnitRefusals.cs`**: Harbor's refusal, with a code that a client can read.
 
 ```csharp {7,9-11}
-using DDDToolkit.Exceptions;
+using DTS.DDD.Exceptions;
 
 namespace Harbor.Tenancy.Application.Units;
 
@@ -1256,7 +1256,7 @@ public static class UnitRefusals
 **`Harbor.Tenancy.Application/Units/ListUnit/ListUnit.cs`**
 
 ```csharp {5,11-12}
-using DDDToolkit.Supporting.Tenancy;
+using DTS.Tenancy;
 
 namespace Harbor.Tenancy.Application.Units.ListUnit;
 
@@ -1276,7 +1276,7 @@ public sealed record UnitListing(OrganizationUnitId Id, OrganizationUnitId? Pare
 **`Harbor.Tenancy.Application/Seats/AddSeat/AddSeat.cs`**
 
 ```csharp {2,6,13-14}
-using DDDToolkit.Supporting.Tenancy.Catalogue;
+using DTS.Tenancy.Catalogue;
 using Harbor.Tenancy.Domain.Aggregates.Seats;
 
 namespace Harbor.Tenancy.Application.Seats.AddSeat;
@@ -1456,7 +1456,7 @@ may then add units below North. She may not add units below the root or below So
 **`Harbor.Tenancy.Application/Roles/CreateRole/CreateRole.cs`**
 
 ```csharp {2,6-7,11-12}
-using DDDToolkit.Supporting.Tenancy.Catalogue;
+using DTS.Tenancy.Catalogue;
 using Harbor.Tenancy.Domain;
 
 namespace Harbor.Tenancy.Application.Roles.CreateRole;
@@ -1474,7 +1474,7 @@ public sealed class CreateRoleHandler(RoleManager roles) : ICommandHandler<Creat
 **`Harbor.Tenancy.Application/Grants/GrantRole/GrantRole.cs`**
 
 ```csharp {2,6,10-11}
-using DDDToolkit.Supporting.Tenancy.Catalogue;
+using DTS.Tenancy.Catalogue;
 using Harbor.Tenancy.Domain.Aggregates.Seats;
 
 namespace Harbor.Tenancy.Application.Grants.GrantRole;
@@ -1694,9 +1694,9 @@ public sealed class ListManageableUnitHandler(IUnitReads units) : IQueryHandler<
 **`Harbor.Tenancy.Infrastructure/Persistence/UnitReads.cs`**: your query, with Tenancy's query inside it.
 
 ```csharp {11,15-16,18-23}
-using DDDToolkit.Supporting.Tenancy.Access;
-using DDDToolkit.Supporting.Tenancy.Catalogue;
-using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DTS.Tenancy.Access;
+using DTS.Tenancy.Catalogue;
+using DTS.Tenancy.EntityFramework;
 using Harbor.Tenancy.Application.Units;
 using Harbor.Tenancy.Contracts.ValueObjects;
 using Harbor.Tenancy.Domain;
@@ -1724,9 +1724,9 @@ internal sealed class UnitReads(TenancyContext db) : IUnitReads
 **`Harbor.Tenancy.Infrastructure/TenancyInfrastructure.cs`**: registers `UnitReads`.
 
 ```csharp {5,26}
-using DDDToolkit.EntityFramework;
-using DDDToolkit.Supporting.Tenancy.EntityFramework;
-using DDDToolkit.Supporting.Tenancy.Postgres;
+using DTS.DDD.EntityFramework;
+using DTS.Tenancy.EntityFramework;
+using DTS.Tenancy.Postgres;
 using Harbor.Tenancy.Application.Access;
 using Harbor.Tenancy.Application.Units;
 using Harbor.Tenancy.Infrastructure.Persistence;
