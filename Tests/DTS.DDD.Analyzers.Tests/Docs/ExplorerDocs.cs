@@ -141,6 +141,12 @@ internal static partial class ExplorerDocs
             {
                 return directory.FullName;
             }
+
+            // A repository that has this one as its submodule core/ runs these tests from there.
+            if (File.Exists(Path.Combine(directory.FullName, "core", "DDDToolkit.slnx")))
+            {
+                return Path.Combine(directory.FullName, "core");
+            }
         }
 
         throw new DirectoryNotFoundException($"No DDDToolkit.slnx above '{AppContext.BaseDirectory}'.");
