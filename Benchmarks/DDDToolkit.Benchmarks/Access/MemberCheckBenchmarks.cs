@@ -1,12 +1,12 @@
 using BenchmarkDotNet.Attributes;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.Benchmarks.Infrastructure;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.TestHost;
 using DDDToolkit.Supporting.Membership.TestHost.Documents;
 using DDDToolkit.Supporting.Membership.TestHost.Persistence;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,9 +16,11 @@ namespace DDDToolkit.Benchmarks.Access;
 /// One check of a request with <c>[OnResource(permission)]</c> on a document of the Membership test host, in a scope that
 /// already has its context: the caller begun, and the module's checks asked. The caller is a member of the document with
 /// the role that gives the permission, so the check passes. The check reads how the caller holds the permission, and
-/// until when, in one statement. The scope and its context are made once, so their cost is not measured.
+/// until when, in one statement. The scope and its context are made once, so their cost is not measured. On SQLite in
+/// memory a statement costs no round trip; on Postgres in a container, every statement is one.
 /// </summary>
 [MemoryDiagnoser]
+[MinColumn, MedianColumn]
 public class MemberCheckBenchmarks
 {
     private static readonly Guid Owner = Guid.Parse("a11ce000-0000-4000-8000-000000000001");
@@ -29,27 +31,30 @@ public class MemberCheckBenchmarks
 
     private readonly ShareDocument _request = new(Minutes, new UserId(Guid.Parse("c0c00000-0000-4000-8000-000000000003")));
 
-    private SqliteConnection _connection = null!;
+    private BenchmarkServer _server = null!;
     private ServiceProvider _services = null!;
     private AsyncServiceScope _scope;
     private AccessChecks<IFilingRequest> _checks = null!;
     private AccessManager _access = null!;
 
+    /// <summary>The database the check reads.</summary>
+    [Params(BenchmarkServerKind.Sqlite, BenchmarkServerKind.Postgres)]
+    public BenchmarkServerKind Server { get; set; }
+
     /// <summary>
-    /// Creates the database with the document and 20 others, each shared with members in roles, and a container with the
+    /// Starts the database with the document and 20 others, each shared with members in roles, and a container with the
     /// toolkit, the test host's Membership and the checks of its requests.
     /// </summary>
     [GlobalSetup]
     public void Setup()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _server = BenchmarkServer.StartAsync(Server).GetAwaiter().GetResult();
 
         var collection = new ServiceCollection();
         // The seed raises the documents' events, which the benchmark has no use for.
         collection.AddDDDToolkitEntityFramework(options => options.DispatchInProcess((_, _, _) => Task.CompletedTask));
         FilingHost.Add(collection);
-        collection.AddDbContext<FilingContext>((services, options) => options.UseSqlite(_connection).UseDDDToolkit(services));
+        collection.AddDbContext<FilingContext>((services, options) => _server.Use(options).UseDDDToolkit(services));
         _services = collection.BuildServiceProvider();
         _access = _services.GetRequiredService<AccessManager>();
 
@@ -81,13 +86,13 @@ public class MemberCheckBenchmarks
         _checks = _scope.ServiceProvider.GetRequiredService<AccessChecks<IFilingRequest>>();
     }
 
-    /// <summary>Disposes the scope and the container, and closes the database.</summary>
+    /// <summary>Disposes the scope and the container, and stops the database.</summary>
     [GlobalCleanup]
     public void Cleanup()
     {
         _scope.Dispose();
         _services.Dispose();
-        _connection.Dispose();
+        _server.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     /// <summary>A member whose role gives the permission that shares the document shares it.</summary>
