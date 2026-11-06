@@ -34,17 +34,6 @@
     <Project Path="Source/DDDToolkit.Localization/DDDToolkit.Localization.csproj" />
     <Project Path="Source/DDDToolkit.NewtonSoft.Json/DDDToolkit.NewtonSoft.Json.csproj" />
     <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Tenancy/DDDToolkit.Supporting.Tenancy.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Tenancy.Abstractions/DDDToolkit.Supporting.Tenancy.Abstractions.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Tenancy.Analyzers/DDDToolkit.Supporting.Tenancy.Analyzers.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Tenancy.EntityFramework/DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Tenancy.Postgres/DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Membership/DDDToolkit.Supporting.Membership.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Membership.Abstractions/DDDToolkit.Supporting.Membership.Abstractions.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Membership.Analyzers/DDDToolkit.Supporting.Membership.Analyzers.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Membership.EntityFramework/DDDToolkit.Supporting.Membership.EntityFramework.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.csproj" />
-    <Project Path="Source/DDDToolkit.Supporting.Membership.Postgres/DDDToolkit.Supporting.Membership.Postgres.csproj" />
   </Folder>
   <Folder Name="/Examples/">
     <File Path="Examples/README.md" />
@@ -112,39 +101,6 @@
     <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Fulfilment/Examples.Webshop.MassTransit.Fulfilment.csproj" />
     <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Gateway/Examples.Webshop.MassTransit.Gateway.csproj" />
   </Folder>
-  <Folder Name="/Examples/Tenancy/">
-    <Project Path="Examples/Tenancy/Examples.Tenancy.AppHost/Examples.Tenancy.AppHost.csproj" />
-    <Project Path="Examples/Tenancy/Examples.Tenancy.Catalogue/Examples.Tenancy.Catalogue.csproj" />
-    <Project Path="Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj" />
-    <Project Path="Examples/Tenancy/Examples.Tenancy.Host/Examples.Tenancy.Host.csproj" />
-    <Project Path="Examples/Tenancy/Examples.Tenancy.Ui/Examples.Tenancy.Ui.csproj" />
-  </Folder>
-  <Folder Name="/Examples/Tenancy/Modules/" />
-  <Folder Name="/Examples/Tenancy/Modules/Inspections/">
-    <Project Path="Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Domain/Examples.Tenancy.Inspections.Domain.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Application/Examples.Tenancy.Inspections.Application.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Examples.Tenancy.Inspections.Infrastructure.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Api/Examples.Tenancy.Inspections.Api.csproj" />
-  </Folder>
-  <Folder Name="/Examples/Tenancy/Modules/Projects/">
-    <Project Path="Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/Examples.Tenancy.Projects.Contracts.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Examples.Tenancy.Projects.Domain.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Examples.Tenancy.Projects.Application.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Examples.Tenancy.Projects.Infrastructure.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Examples.Tenancy.Projects.Api.csproj" />
-  </Folder>
-  <Folder Name="/Examples/Tenancy/Modules/Tenants/">
-    <Project Path="Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Contracts/Examples.Tenancy.Tenants.Contracts.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Examples.Tenancy.Tenants.Domain.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Examples.Tenancy.Tenants.Application.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Examples.Tenancy.Tenants.Infrastructure.csproj" />
-    <Project Path="Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Examples.Tenancy.Tenants.Api.csproj" />
-  </Folder>
-  <Folder Name="/Examples/Tenancy/Shared/">
-    <Project Path="Examples/Tenancy/Shared/Examples.Tenancy.Shared.Application/Examples.Tenancy.Shared.Application.csproj" />
-    <Project Path="Examples/Tenancy/Shared/Examples.Tenancy.Shared.Domain/Examples.Tenancy.Shared.Domain.csproj" />
-    <Project Path="Examples/Tenancy/Shared/Examples.Tenancy.Shared.Infrastructure/Examples.Tenancy.Shared.Infrastructure.csproj" />
-  </Folder>
   <Folder Name="/Tests/Spikes/">
     <Project Path="Tests/Spikes/DDDToolkit.Spikes.FusionInProcess/DDDToolkit.Spikes.FusionInProcess.csproj" />
   </Folder>
@@ -156,7 +112,6 @@
     <Project Path="Tests/DDDToolkit.EntityFramework.Tests/DDDToolkit.EntityFramework.Tests.csproj" />
     <Project Path="Tests/Examples.Webshop.Tests/Examples.Webshop.Tests.csproj" />
     <Project Path="Tests/Examples.AppHost.Tests/Examples.AppHost.Tests.csproj" />
-    <Project Path="Tests/Examples.Tenancy.Tests/Examples.Tenancy.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests/DDDToolkit.HotChocolate.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Harbor.Domain/DDDToolkit.HotChocolate.Tests.Harbor.Domain.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Harbor.Api/DDDToolkit.HotChocolate.Tests.Harbor.Api.csproj" />
@@ -166,16 +121,5 @@
     <Project Path="Tests/DDDToolkit.Mediator.Tests/DDDToolkit.Mediator.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Messaging.Tests/DDDToolkit.Messaging.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Testing.Tests/DDDToolkit.Testing.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Tenancy.TestHost/DDDToolkit.Supporting.Tenancy.TestHost.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Tenancy.Tests/DDDToolkit.Supporting.Tenancy.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Tenancy.EntityFramework.Tests/DDDToolkit.Supporting.Tenancy.EntityFramework.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Tenancy.Postgres.Tests/DDDToolkit.Supporting.Tenancy.Postgres.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Tenancy.Switch.Tests/DDDToolkit.Supporting.Tenancy.Switch.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Membership.TestHost/DDDToolkit.Supporting.Membership.TestHost.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Membership.Tests/DDDToolkit.Supporting.Membership.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Membership.EntityFramework.Tests/DDDToolkit.Supporting.Membership.EntityFramework.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Membership.Postgres.Tests/DDDToolkit.Supporting.Membership.Postgres.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Together.TestHost/DDDToolkit.Supporting.Together.TestHost.csproj" />
-    <Project Path="Tests/DDDToolkit.Supporting.Together.Tests/DDDToolkit.Supporting.Together.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1902,8 +1902,8 @@ admin fields.
 <details>
 <summary>Show the code: a module with two schemas, and a host with two gateways</summary>
 
-The sample's files are [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs) and
-[`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs).
+The sample's files are `Program.cs` and
+`SampleGateways.cs`.
 
 ```csharp
 // Tenants.Api/GraphQL/TenantsGraphQL.cs

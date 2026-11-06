@@ -53,15 +53,9 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
-  <!--
-    One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container, one list of
-    Supabase's images, the tags the Tenancy sample pins, which Supabase's own local stack starts together,
-    and one way of giving the Auth server a signing key.
-  -->
+  <!-- One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container. -->
   <ItemGroup>
     <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
-    <Compile Include="..\..\Examples\Tenancy\Examples.Tenancy.AppHost\SupabaseImages.cs" LinkBase="Infrastructure" />
-    <Compile Include="..\..\Examples\Tenancy\Examples.Tenancy.AppHost\AuthSigningKeys.cs" LinkBase="Infrastructure" />
   </ItemGroup>
 
 </Project>

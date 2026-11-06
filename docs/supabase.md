@@ -1097,7 +1097,7 @@ contribution:
 - A contribution of yours is named with its class, its assembly and the assembly's version. So a new version of the
   project that holds it writes a new access file. If a build sets every project's version, give that project its own
   version, as the sample's
-  [Projects infrastructure](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Examples.Tenancy.Projects.Infrastructure.csproj)
+  Projects infrastructure
   does. Otherwise each release writes the access files again.
 - A package's contribution is named with the package's class and assembly, without a version. So neither a release of
   your application nor a release of the package that writes the same SQL changes an access file.

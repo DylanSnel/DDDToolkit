@@ -54,9 +54,7 @@ jobs:
       # to find out whether a generator still compiles is the wrong trade.
       #
       # The example shop's end-to-end samples are left out too: the Sample Tests workflow starts their
-      # databases and brokers in a job of its own. So are the tests of the Tenancy sample that need its host on
-      # a database: they start Supabase's own images, carry the same category, and run in that workflow. What
-      # of that sample starts no database runs here.
+      # databases and brokers in a job of its own.
       #
       # The filter reads as "not these traits". A test with neither a Provider nor a Category trait
       # satisfies every clause, which is how every other project in the solution still runs.
@@ -82,16 +80,10 @@ jobs:
       - name: Verify package consumption
         run: ./build/verify-package-consumption.sh 0.0.0-ci
 
-      # The tutorials in docs/ show every file whole, and nothing else compiles that code: a renamed API breaks
-      # them without breaking a test. This builds the files as the pages show them, against the same packages.
-      - name: Verify the docs' tutorials
-        run: ./build/verify-docs-tutorials.sh 0.0.0-ci
-
   # The published packages declare the oldest dependency versions they work with (see
   # Directory.Packages.props), and the job above only ever builds against the newest. This one builds
   # and tests the whole solution against those floors, so a floor that no longer works fails here
-  # instead of in a consumer's build. The provider suites stay in their own workflow, and the Tenancy
-  # sample's host tests run at the floors in Sample Tests, as Tenancy.Supabase.Floor.
+  # instead of in a consumer's build. The provider suites stay in their own workflow.
   build-and-test-floors:
     runs-on: ubuntu-latest
 

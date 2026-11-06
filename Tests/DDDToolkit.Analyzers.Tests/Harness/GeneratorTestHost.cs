@@ -24,12 +24,8 @@ using EfSingleValueObjectConverterGenerator = DDDToolkit.EntityFramework.Analyze
 using EfValueObjectGenerator = DDDToolkit.EntityFramework.Analyzers.ValueObjectGenerator;
 using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.ValueObjectGenerator;
 using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.SingleValueObjectConverterGenerator;
-using MemberListGenerator = DDDToolkit.Supporting.Membership.Analyzers.MemberListGenerator;
-using MembershipPermissionsGenerator = DDDToolkit.Supporting.Membership.Analyzers.MembershipPermissionsGenerator;
-using MembershipWithTenancyGenerator = DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.MembershipWithTenancyGenerator;
 using SupabaseDesignTimeFactoryGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseDesignTimeFactoryGenerator;
 using SupabaseMigrationsGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseMigrationsGenerator;
-using TenancyPermissionsGenerator = DDDToolkit.Supporting.Tenancy.Analyzers.TenancyPermissionsGenerator;
 
 namespace DDDToolkit.Analyzers.Tests.Harness;
 
@@ -54,7 +50,7 @@ namespace DDDToolkit.Analyzers.Tests.Harness;
 /// result.ShouldNotHaveGeneratedFor("Money");
 /// </code>
 /// </remarks>
-public sealed class GeneratorTestHost
+public sealed partial class GeneratorTestHost
 {
     /// <summary>Assembly name of the compiled snippet. Generated registration namespaces derive from it.</summary>
     public const string DefaultAssemblyName = "DDDToolkit.Sample";
@@ -147,21 +143,6 @@ public sealed class GeneratorTestHost
 
     /// <summary>The generators in DDDToolkit.EntityFramework.Supabase.Analyzers: the list and the export, and the design-time factories.</summary>
     public static IIncrementalGenerator[] SupabaseGenerators() => [new SupabaseMigrationsGenerator(), new SupabaseDesignTimeFactoryGenerator()];
-
-    /// <summary>
-    /// The generators in DDDToolkit.Supporting.Membership.Analyzers, which a project that declares a member class runs: the
-    /// member list and what the resource says of itself, and the declaration of the permissions on a resource.
-    /// </summary>
-    public static IIncrementalGenerator[] MemberListGenerators() => [new MemberListGenerator(), new MembershipPermissionsGenerator()];
-
-    /// <summary>The generator in DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.</summary>
-    public static IIncrementalGenerator[] MembershipGenerators() => [new MembershipWithTenancyGenerator()];
-
-    /// <summary>
-    /// The generator in DDDToolkit.Supporting.Tenancy.Analyzers, which collects the keys the modules a project references
-    /// mark with <c>[TenancyPermissions]</c>, and reports a marked list it could not read where it is declared.
-    /// </summary>
-    public static IIncrementalGenerator[] TenancyGenerators() => [new TenancyPermissionsGenerator()];
 
     /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
     public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new AccessBehaviorCallAnalyzer(), new DirectHandlerCallAnalyzer(), new ApplicationMarkAnalyzer()];
@@ -407,56 +388,6 @@ public sealed class GeneratorTestHost
         var reference = MetadataReference.CreateFromImage(stream.ToArray());
         _projects.Add(reference);
         _extraReferences.Add(reference);
-        return this;
-    }
-
-    /// <summary>
-    /// Adds DDDToolkit.Supporting.Tenancy, the package as it ships: its templates and parents, compiled with the
-    /// generators, seen through metadata the way an application sees them.
-    /// </summary>
-    public GeneratorTestHost WithTenancy()
-    {
-        _extraReferences.AddRange(ReferenceSets.Tenancy);
-        return this;
-    }
-
-    /// <summary>
-    /// Adds DDDToolkit.Supporting.Tenancy.EntityFramework beside the package itself, with Entity Framework:
-    /// what a project sees that stores an organization, or asks Tenancy's questions over a context of its own.
-    /// </summary>
-    public GeneratorTestHost WithTenancyOnEntityFramework()
-    {
-        _extraReferences.AddRange(ReferenceSets.TenancyOnEntityFramework);
-        return this;
-    }
-
-    /// <summary>
-    /// Adds DDDToolkit.Supporting.Membership and its Entity Framework package, as they ship, with Entity
-    /// Framework itself: the member template and the registration an application gets closed over its classes.
-    /// </summary>
-    public GeneratorTestHost WithMembership()
-    {
-        _extraReferences.AddRange(ReferenceSets.Membership);
-        return this;
-    }
-
-    /// <summary>
-    /// Adds DDDToolkit.Supporting.Membership without its Entity Framework package: what a domain project sees,
-    /// which declares a member class and stores nothing.
-    /// </summary>
-    public GeneratorTestHost WithMembershipAlone()
-    {
-        _extraReferences.AddRange(ReferenceSets.MembershipAlone);
-        return this;
-    }
-
-    /// <summary>
-    /// Adds Tenancy and Membership on Postgres with the Supabase export, as an application gets them by referencing
-    /// the two Postgres packages: both declare themselves contributors of row level security.
-    /// </summary>
-    public GeneratorTestHost WithSupportingDomainsOnPostgres()
-    {
-        _extraReferences.AddRange(ReferenceSets.SupportingDomainsOnPostgres);
         return this;
     }
 

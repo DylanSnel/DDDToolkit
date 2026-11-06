@@ -29,7 +29,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     generic behavior with a constraint applies to the types that meet it. The behavior registered first is the
     outermost.
   - The core generator writes `Add{Module}Handlers()` into every project with a handler, internal handlers and closed
-    generic events of a package included, such as `INotificationHandler<SeatDeactivated<TenantId, SeatId>>`. The
+    generic events of a package included, such as `INotificationHandler<MemberJoined<PlayerId>>`. The
     generics are closed when the project compiles, so a dispatch calls no handler through reflection. The method calls
     the registrations of the module's other projects that the project references.
 
@@ -2649,15 +2649,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Samples
 
-- **The Tenancy sample reacts to one of Tenancy's events.** New in 3.2.0-preview.16. The Projects module handles
-  `SeatDeactivated<TenantId, SeatId>` with `DeactivatedSeatLeavesItsCrews`. The handler takes the seat off every open
-  crew it does not own, as the module's system work in the event's tenant. The Tenants module's outbox delivers its
-  events in process beside its sinks, with `AlsoDispatchInProcess` and `DispatchWithMediator()`. The port
-  `IProjectReading` has `CrewsToLeaveAsync`, and `DeactivatedSeatScenarios` checks the reaction on Supabase.
 - **The webshop and the example API publish their events through the toolkit's mediator.** New in
   3.2.0-preview.16. Their hosts no longer reference Mediator. `OrderLog` and the example API's handlers implement the
   toolkit's `INotificationHandler`, and `AddOrderingHandlers()` and `AddApiHandlers()` register them. The events drop
-  their `INotification` and `IBaseDomainEvent` markers. The Tenancy sample keeps Mediator for its requests.
+  their `INotification` and `IBaseDomainEvent` markers.
 - **The webshop's order is its customer's, in the access check too.** `Order.PlacedBy` is marked `[Owner]`, and
   `POST /orders/{id}/ship-to` sends an order elsewhere with `ShipElsewhere`, `[OwnOnly]` with `[Own]` on the order's
   id: Ordering's first request with an access requirement, whose endpoint asks the checks itself, with Ordering's
@@ -4641,6 +4636,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Removed
 
+- **Tenancy and Membership leave this repository.** The supporting domains are developed in a separate, private
+  repository from the next release on.
+  - Their packages, `Temp.DDDToolkit.Supporting.Tenancy`, `Temp.DDDToolkit.Supporting.Membership` and their
+    Abstractions, Analyzers, EntityFramework and Postgres packages, get no new versions on nuget.org. The versions up to
+    3.2.0-preview.15 stay available.
+  - The Tenancy sample, `Examples/Tenancy`, moved with them, and so did its tests.
+  - The core's tests that compile against Tenancy or Membership moved with them. They run in the private repository's
+    CI, against the code of this repository. `GeneratorTestHost` and `ReferenceSets` are partial classes for that.
+  - `build/verify-docs-tutorials.sh` and `build/generate-api-reference.sh` moved with them. So did the part of
+    `build/verify-package-consumption.sh` that builds an application with both domains.
+  - The docs of Tenancy and Membership stay on the docs site. A link from the docs to a file of the sample is plain text
+    now.
+  - The Auth tests keep their own copies of `SupabaseImages` and `AuthSigningKeys`, which they took from the sample.
 - **The `DDDToolkit.Mediator` package.** Removed in 3.2.0-preview.16. Its `DispatchWithMediator()` published through
   Mediator's `IPublisher` and required every event to implement Mediator's `INotification`. The core package now has
   its own mediator, and `DispatchWithMediator()` is on `DDDEntityFrameworkOptions`. A host that keeps Mediator for its

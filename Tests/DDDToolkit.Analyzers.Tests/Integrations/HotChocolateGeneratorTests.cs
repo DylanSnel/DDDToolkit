@@ -9,7 +9,7 @@ namespace DDDToolkit.Analyzers.Tests.Integrations;
 /// registers the converters. That method also binds the ids of the module's projects without HotChocolate, and
 /// the published ids of other modules, with the package's generic provider.
 /// </summary>
-public class HotChocolateGeneratorTests
+public partial class HotChocolateGeneratorTests
 {
     private const string Preamble = "using DDDToolkit.Abstractions.Attributes;\nusing System;\n\nnamespace Sample;\n\n";
 
@@ -823,43 +823,6 @@ public class HotChocolateGeneratorTests
             "the API project could not write the scalar's name, so nothing it calls has this binding");
         result.ShouldContain("BindingExtensions", Converted("global::Sales.Domain.Handle", "string"), "the converter a second time changes nothing");
         result.ShouldNotContain("BindingExtensions", "ParcelId", "what the called bindings bound whole is left to them");
-    }
-
-    [Fact]
-    public void A_referenced_package_without_a_module_gets_no_bindings()
-    {
-        // The Tenancy package declares TenantSlug, a single value object, and no module; a shared kernel without a
-        // module is no module's to bind either.
-        var result = Api(source:
-                """
-                using System;
-                using DDDToolkit.Abstractions.Attributes;
-
-                namespace Sales.Api;
-
-                [EntityId<Guid>]
-                public readonly partial record struct BasketId;
-                """)
-            .WithTenancy()
-            .WithReferencedAssembly(
-                """
-                using System;
-                using DDDToolkit.Abstractions.Attributes;
-
-                namespace Shared.Kernel;
-
-                [EntityId<Guid>]
-                public readonly partial record struct BatchNumber;
-                """,
-                "Shared.Kernel")
-            .WithHotChocolate()
-            .RunCoreAnd(GeneratorTestHost.HotChocolateGenerators());
-
-        result.ShouldCompile();
-        result.ShouldContain("BindingExtensions", "Sales.Api.BasketId");
-        result.ShouldNotContain("BindingExtensions", "TenantSlug");
-        result.ShouldNotContain("BindingExtensions", "BatchNumber");
-        result.ShouldNotContain("BindingExtensions", Provider);
     }
 
     [Fact]

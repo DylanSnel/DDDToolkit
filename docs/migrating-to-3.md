@@ -26,7 +26,7 @@ changes. The compiler cannot find the change to when handlers run, in
 | A save now runs your aggregates' invariants | [11](#11-entities-gain-an-invariant-seam) |
 | The packages have new ids for now, `Temp.DDDToolkit.*` | [12](#the-package-ids) |
 | HotChocolate 16, Entity Framework 10, FluentValidation 12 | [12](#12-package-versions) |
-| MediatR is no longer referenced | [13](#13-mediatr-is-replaced-by-mediator-in-the-examples) |
+| MediatR is no longer referenced | [13](#13-mediatr-is-replaced-in-the-examples) |
 
 Three more changes are optional, and recommended:
 [struct identifiers](#14-optional-make-your-identifiers-structs),

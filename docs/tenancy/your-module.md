@@ -595,7 +595,7 @@ Every domain event of Tenancy is a notification of the toolkit's mediator, close
 like an event of its own, with `INotificationHandler<TEvent>`. The sample's Projects module takes a deactivated seat
 off its crews:
 
-**[`Projects.Application/Crew/DeactivatedSeatLeavesItsCrews.cs`](../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/DeactivatedSeatLeavesItsCrews.cs)**
+**`Projects.Application/Crew/DeactivatedSeatLeavesItsCrews.cs`**
 
 ```csharp
 internal sealed class DeactivatedSeatLeavesItsCrews(CrewMemberManager crew, IProjectReads reads, TenancyAccessManager tenancy)

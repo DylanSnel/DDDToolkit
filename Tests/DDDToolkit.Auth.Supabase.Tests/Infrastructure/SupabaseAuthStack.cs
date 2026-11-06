@@ -6,7 +6,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
-using Examples.Tenancy.AppHost;
 using DDDToolkit.Identity;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
