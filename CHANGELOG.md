@@ -4602,6 +4602,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   with the factory the generated list builds the context with. See
   [Checking at start-up](docs/supabase.md#checking-at-start-up).
 
+### Removed
+
+- **Tenancy and Membership leave this repository.** The supporting domains are developed in a separate, private
+  repository from the next release on.
+  - Their packages, `Temp.DDDToolkit.Supporting.Tenancy`, `Temp.DDDToolkit.Supporting.Membership` and their
+    Abstractions, Analyzers, EntityFramework and Postgres packages, get no new versions on nuget.org. The versions up to
+    3.2.0-preview.15 stay available.
+  - The Tenancy sample, `Examples/Tenancy`, moved with them, and so did its tests.
+  - The core's tests that compile against Tenancy or Membership moved with them. They run in the private repository's
+    CI, against the code of this repository. `GeneratorTestHost` and `ReferenceSets` are partial classes for that.
+  - `build/verify-docs-tutorials.sh` and `build/generate-api-reference.sh` moved with them. So did the part of
+    `build/verify-package-consumption.sh` that builds an application with both domains.
+  - The docs of Tenancy and Membership stay on the docs site. A link from the docs to a file of the sample is plain text
+    now.
+  - The Auth tests keep their own copies of `SupabaseImages` and `AuthSigningKeys`, which they took from the sample.
+
 ### Fixed
 
 - **`GetHashCode()` no longer throws for a value object without compared properties.** It threw an

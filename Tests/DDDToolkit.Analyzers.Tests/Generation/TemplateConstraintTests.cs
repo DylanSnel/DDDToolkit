@@ -13,7 +13,7 @@ namespace DDDToolkit.Analyzers.Tests.Generation;
 /// compilation being read does not show yet, so of such an id only what its declaration settles is judged.
 /// </para>
 /// </summary>
-public class TemplateConstraintTests
+public partial class TemplateConstraintTests
 {
     private const string Usings =
         """
@@ -576,45 +576,6 @@ public class TemplateConstraintTests
         ShouldLeaveTheCompilerNothingToSay(result);
     }
 
-    // ------------------------------------------------------------------ a real package
-
-    [Theory]
-    [InlineData("TenantId", "TTenantId", new[] { "Tenant", "Organization", "Seat", "Role" })]
-    [InlineData("OrganizationUnitId", "TUnitId", new[] { "Organization", "OrganizationUnit", "Seat" })]
-    [InlineData("RoleId", "TRoleId", new[] { "Seat", "Role" })]
-    [InlineData("SeatId", "TSeatId", new[] { "Seat" })]
-    public void A_Tenancy_template_with_a_class_id_reports_DDD00053(string id, string parameter, string[] closedOverIt)
-    {
-        // The package as it ships, referenced the way an application references it. Its parents hold ids by
-        // value, so every class whose parent is closed over the id says so, and the others are generated.
-        var result = Tenancy(classId: id);
-
-        result.ShouldHaveExactlyDiagnostics([.. closedOverIt.Select(static _ => "DDD00053")]);
-        foreach (var (type, template) in TenancyClasses)
-        {
-            if (!closedOverIt.Contains(type))
-            {
-                Generated(result, type).Should().BeTrue($"the parent of {type} takes no {id}");
-                continue;
-            }
-
-            result.ShouldHaveDiagnostic("DDD00053", at: type).GetMessage().Should().Be(
-                $"'{type}' is declared with [{template}], but '{id}' does not meet the parent's constraint on '{parameter}', which requires a struct");
-            Generated(result, type).Should().BeFalse();
-        }
-
-        ShouldLeaveTheCompilerNothingToSay(result);
-    }
-
-    [Fact]
-    public void A_Tenancy_template_with_struct_ids_reports_nothing()
-    {
-        var result = Tenancy(classId: null);
-
-        result.ReportedDiagnostics.Should().BeEmpty();
-        result.ShouldCompile();
-    }
-
     private static readonly (string Type, string Template)[] TenancyClasses =
     [
         ("Tenant", "TenantAggregate"),
@@ -623,47 +584,4 @@ public class TemplateConstraintTests
         ("Seat", "SeatAggregate"),
         ("Role", "RoleAggregate"),
     ];
-
-    /// <summary>An application on the Tenancy package, with one of its four ids declared as a record class, or none.</summary>
-    private static GeneratorRunOutcome Tenancy(string? classId)
-    {
-        // An id over anything but a Guid says how a new one is made, which Tenancy asks of each of its ids.
-        string Id(string name, string value)
-            => $"[EntityId<{value}>]\npublic " + (name == classId ? "partial record " : "readonly partial record struct ") + name
-               + (value == "Guid" ? ";" : " { public static " + name + " Create() => new(1); }");
-
-        return GeneratorTestHost.Create(
-                $$"""
-                using System;
-                using DDDToolkit.Abstractions.Attributes;
-                using DDDToolkit.Supporting.Tenancy;
-
-                namespace Sample;
-
-                {{Id("TenantId", "long")}}
-
-                {{Id("SeatId", "Guid")}}
-
-                {{Id("OrganizationUnitId", "Guid")}}
-
-                {{Id("RoleId", "Guid")}}
-
-                [TenantAggregate<TenantId>]
-                public sealed partial class Tenant;
-
-                [OrganizationAggregate<TenantId>]
-                public sealed partial class Organization;
-
-                [OrganizationUnit<OrganizationUnitId>]
-                public sealed partial class OrganizationUnit;
-
-                [SeatAggregate<SeatId>]
-                public sealed partial class Seat;
-
-                [RoleAggregate<RoleId>]
-                public sealed partial class Role;
-                """)
-            .WithTenancy()
-            .RunCore();
-    }
 }

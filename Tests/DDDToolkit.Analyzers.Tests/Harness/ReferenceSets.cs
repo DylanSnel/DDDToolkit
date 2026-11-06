@@ -27,7 +27,7 @@ namespace DDDToolkit.Analyzers.Tests.Harness;
 /// inside the tests that actually asked for that set.
 /// </para>
 /// </summary>
-public static class ReferenceSets
+public static partial class ReferenceSets
 {
     private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyFramework = new(() =>
     [
@@ -128,59 +128,6 @@ public static class ReferenceSets
     [
         .. EntityFramework,
         FromType(typeof(global::DDDToolkit.EntityFramework.Options.OutboxOptions)),
-    ];
-
-    /// <summary>DDDToolkit.Supporting.Tenancy: a real package of templates and parents, for what a made-up one would not show.</summary>
-    public static ImmutableArray<PortableExecutableReference> Tenancy =>
-    [
-        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.TenantAggregateAttribute<>)),
-        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.OfTenantAttribute)),
-    ];
-
-    /// <summary>
-    /// DDDToolkit.Supporting.Tenancy with its Entity Framework package: the access manager and its queries, the
-    /// catalogue, and the way the queries are asked in a context.
-    /// </summary>
-    public static ImmutableArray<PortableExecutableReference> TenancyOnEntityFramework =>
-    [
-        .. EntityFrameworkRuntime,
-        .. Tenancy,
-        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.EntityFramework.TenancyEntityFrameworkExtensions)),
-    ];
-
-    /// <summary>
-    /// DDDToolkit.Supporting.Membership with its Entity Framework package, and what that registers against: a
-    /// real package whose template names more than its parent takes, and whose registration is named after it.
-    /// </summary>
-    public static ImmutableArray<PortableExecutableReference> Membership =>
-    [
-        .. EntityFrameworkRuntime,
-        .. MembershipAlone,
-        FromType(typeof(global::DDDToolkit.Supporting.Membership.EntityFramework.MembershipRegistration)),
-    ];
-
-    /// <summary>
-    /// Tenancy and Membership on Postgres, with the Supabase export: two real packages that declare themselves
-    /// contributors of row level security, and what the classes the export writes for them compile against.
-    /// </summary>
-    public static ImmutableArray<PortableExecutableReference> SupportingDomainsOnPostgres =>
-    [
-        .. Supabase,
-        .. TenancyOnEntityFramework,
-        .. MembershipAlone,
-        FromType(typeof(global::DDDToolkit.Supporting.Membership.EntityFramework.MembershipRegistration)),
-        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution)),
-        FromType(typeof(global::DDDToolkit.Supporting.Membership.Postgres.MembershipRowAccessContribution<>)),
-    ];
-
-    /// <summary>
-    /// DDDToolkit.Supporting.Membership alone, with the markers it references: the member template, the rules and
-    /// <c>[At]</c>, and nothing that stores them.
-    /// </summary>
-    public static ImmutableArray<PortableExecutableReference> MembershipAlone =>
-    [
-        FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>)),
-        FromType(typeof(global::DDDToolkit.Supporting.Membership.AtAttribute)),
     ];
 
     /// <summary>The Mediator library's abstractions alone: its messages, handlers and pipeline behavior.</summary>

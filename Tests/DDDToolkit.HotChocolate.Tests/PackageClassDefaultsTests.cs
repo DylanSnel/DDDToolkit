@@ -2,9 +2,6 @@ using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.HotChocolate.Tests.Domain;
 using DDDToolkit.HotChocolate.Tests.GraphQl;
-using DDDToolkit.Supporting.Membership;
-using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using FluentAssertions;
 using Gallery.Api;
 using HotChocolate.Execution;
@@ -25,68 +22,6 @@ namespace DDDToolkit.HotChocolate.Tests;
 public sealed partial class PackageClassDefaultsTests
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
-
-    [Fact]
-    public async Task The_methods_of_the_packages_entities_are_not_fields()
-    {
-        var sdl = await PrintAsync(graphql => graphql.AddQueryType<PackageQuery>());
-
-        var memberRole = TypeBlock(sdl, "type MemberRoleOfTicketIdAndTicketId");
-        memberRole.Should().Contain("startsAt: DateTime!");
-        memberRole.Should().NotContain("appliesAt");
-
-        var grant = TypeBlock(sdl, "type RoleGrant");
-        grant.Should().Contain("startsAt: DateTime!");
-        grant.Should().NotContain("appliesAt");
-    }
-
-    [Fact]
-    public async Task Without_the_toolkit_conventions_the_methods_and_the_long_names_would_be_in_the_schema()
-    {
-        // The same query in a schema that does not call AddDDDToolkitTypes: proof that the tests above see its doing.
-        var executor = await new ServiceCollection()
-            .AddGraphQL()
-            .AddGraphQlTestsGraphQlRuntimeBindings()
-            .AddQueryType<PackageQuery>()
-            .BuildRequestExecutorAsync(cancellationToken: Cancellation);
-
-        var sdl = executor.Schema.ToString();
-        TypeBlock(sdl, "type RoleGrantOfTicketIdAndTicketId").Should().Contain("appliesAt(moment: DateTime!): Boolean!");
-        TypeBlock(sdl, "type MemberRoleOfTicketIdAndTicketId").Should().Contain("appliesAt(moment: DateTime!): Boolean!");
-        sdl.Should().Contain("type PlacementOfTicketIdAndTicketIdAndTicketId");
-    }
-
-    [Fact]
-    public async Task The_methods_of_an_applications_own_class_stay_fields()
-    {
-        var sdl = await PrintAsync(graphql => graphql.AddQueryType<PackageQuery>());
-
-        TypeBlock(sdl, "type Stay").Should().Contain("nights: Int!");
-    }
-
-    [Fact]
-    public async Task A_class_with_a_display_name_names_its_type()
-    {
-        var sdl = await PrintAsync(graphql => graphql.AddQueryType<PackageQuery>());
-
-        sdl.Should().Contain("type Placement {");
-        sdl.Should().Contain("type RoleGrant {");
-        sdl.Should().Contain("type NamedUnit {");
-        sdl.Should().NotContain("PlacementOf");
-        sdl.Should().NotContain("RoleGrantOf");
-        sdl.Should().NotContain("NamedUnitOf");
-    }
-
-    [Fact]
-    public async Task A_name_the_application_gives_takes_precedence_over_the_display_name()
-    {
-        var sdl = await PrintAsync(graphql => graphql
-            .AddQueryType<PackageQuery>()
-            .AddObjectType<NamedUnit<TicketId>>(unit => unit.Name("OrganizationUnitName")));
-
-        sdl.Should().Contain("type OrganizationUnitName {");
-        sdl.Should().NotContain("type NamedUnit ");
-    }
 
     [Fact]
     public async Task A_display_name_that_is_no_GraphQL_name_fails_the_schema_build()
@@ -162,75 +97,6 @@ public sealed partial class PackageClassDefaultsTests
         var curator = TypeBlock(sdl, "type CuratorProfile");
         curator.Should().Contain("name: String!");
         curator.Should().NotContain("room");
-    }
-
-    [Fact]
-    public void Tenancy_marks_the_seats_identity_as_personal_data_and_leaves_the_invitations_address_unmarked()
-    {
-        Marked<PersonalDataAttribute>(typeof(SeatAggregate<,,,>), "Identity").Should().BeTrue();
-
-        // Whoever may read invitations needs the address.
-        Marked<PersonalDataAttribute>(typeof(InvitationAggregate<,,,,>), "Address").Should().BeFalse();
-    }
-
-    [Fact]
-    public void Both_packages_mark_the_starter_role_fields_of_a_role_as_bookkeeping()
-    {
-        foreach (var role in new[] { typeof(RoleAggregate<,>), typeof(CustomRoleAggregate<>) })
-        {
-            Marked<BookkeepingAttribute>(role, "FromStarterRole").Should().BeTrue(role.Name);
-            Marked<BookkeepingAttribute>(role, "PermissionsFromStarterRole").Should().BeTrue(role.Name);
-        }
-    }
-
-    [Fact]
-    public void A_roles_facts_are_internal()
-        => Marked<InternalAttribute>(typeof(RoleAggregate<,>), "Facts").Should().BeTrue();
-
-    [Fact]
-    public void The_packages_entities_without_an_id_of_their_own_are_entities()
-    {
-        typeof(Placement<,,>).Should().Implement<IEntity>();
-        typeof(RoleGrant<,>).Should().Implement<IEntity>();
-        typeof(MemberRole<,>).Should().Implement<IEntity>();
-    }
-
-    [Fact]
-    public void Tenancys_display_names_are_GraphQL_names_and_Membership_has_none()
-    {
-        var named = typeof(Placement<,,>).Assembly.GetTypes()
-            .Select(type => (Type: type, Display: type.GetCustomAttribute<DisplayNameAttribute>(inherit: false)))
-            .Where(pair => pair.Display is not null)
-            .ToDictionary(pair => pair.Display!.Name, pair => pair.Type);
-
-        named.Keys.Should().BeEquivalentTo(
-        [
-            "AcceptedInvitation", "IssuedInvitation", "NamedUnit", "PermissionReach", "Placement", "RoleGrant",
-            "SeatInTenant", "SeatOverview", "TenantListing", "TenantPage", "UnitInTree", "UnitRef",
-        ]);
-        named.Keys.Should().AllSatisfy(name => GraphQLName().IsMatch(name).Should().BeTrue(name));
-
-        typeof(MemberRole<,>).Assembly.GetTypes()
-            .Where(type => type.IsDefined(typeof(DisplayNameAttribute), inherit: false))
-            .Should().BeEmpty("an application can close Membership's classes more than once");
-    }
-
-    // The query roots below are this file's own, so the full test schema stays as it is.
-
-    /// <summary>A query that returns the packages' entities and an application's own class.</summary>
-    public sealed class PackageQuery
-    {
-        /// <summary>Membership's role on a member, with its method AppliesAt.</summary>
-        public IReadOnlyList<MemberRole<TicketId, TicketId>> MemberRoles() => [];
-
-        /// <summary>Tenancy's placement, whose grants carry the method AppliesAt.</summary>
-        public IReadOnlyList<Placement<TicketId, TicketId, TicketId>> Placements() => [];
-
-        /// <summary>Tenancy's name of a unit.</summary>
-        public IReadOnlyList<NamedUnit<TicketId>> Units() => [];
-
-        /// <summary>An application's own class with a method.</summary>
-        public Stay Stay() => new(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 4));
     }
 
     /// <summary>An application's class, outside any package. Its method is a field.</summary>

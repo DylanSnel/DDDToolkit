@@ -14,7 +14,7 @@ namespace DDDToolkit.Analyzers.Tests.Generation;
 /// compile. The name a rule asks by is the one the export resolves, and a test here holds the two spellings of it
 /// together.
 /// </summary>
-public class ResourceQuestionsGenerationTests
+public partial class ResourceQuestionsGenerationTests
 {
     private const string Shop =
         """
@@ -332,84 +332,6 @@ public class ResourceQuestionsGenerationTests
         result.CompilationErrors.Should().Contain(error => error.Id == "CS0246");
         result.ShouldHaveDiagnostic("DDD00039", at: "user.Sees<CrateId>()");
         result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
-    }
-
-    [Fact]
-    public void A_rule_asks_by_an_id_the_switch_of_its_own_project_writes()
-    {
-        // A module of one project: the switch writes OrganizationUnitId, and the rule is beside it.
-        var result = GeneratorTestHost.Create(
-                """
-                [assembly: DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses]
-
-                namespace Shop;
-
-                using System;
-                using DDDToolkit.Abstractions.Access;
-                using DDDToolkit.Abstractions.Attributes;
-
-                [AggregateRoot<Guid>]
-                public partial class Board
-                {
-                    public Board(BoardId id, OrganizationUnitId unit) : base(id) => Unit = unit;
-
-                    public OrganizationUnitId Unit { get; private set; }
-                }
-
-                [RowAccess<Board>(RowOperations.Read)]
-                public static partial class TheRule
-                {
-                    public static bool Allows(Board board, IRowUser user) => user.Holds<OrganizationUnitId>("boards.view").Contains(board.Unit);
-                }
-                """)
-            .WithBuildProperty("RootNamespace", "Shop")
-            .WithTenancy()
-            .WithModuleFromTheBuild("Shop")
-            .RunCore();
-
-        result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
-        RuleSql(result).Should().Be("({col:Unit} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/held_on}('boards.view'))))", "the rule asks the set by the id the switch wrote");
-    }
-
-    [Theory]
-    [InlineData("user.Sees<OrganizationUnitId>().Contains(board.Unit)", "({col:Unit} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/seen}())))")]
-    [InlineData("user.Holds<OrganizationUnitId>(\"boards.view\").Contains(board.Unit)", "({col:Unit} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/held_on}('boards.view'))))")]
-    [InlineData("user.FellowMembers<OrganizationUnitId, SeatId>().Contains(board.Seat)", "({col:Seat} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/fellow_members}())))")]
-    public void Each_question_is_asked_by_an_id_a_switch_of_the_project_writes(string expression, string sql)
-    {
-        var result = GeneratorTestHost.Create(
-                $$"""
-                [assembly: DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses]
-
-                namespace Shop;
-
-                using System;
-                using DDDToolkit.Abstractions.Access;
-                using DDDToolkit.Abstractions.Attributes;
-
-                [AggregateRoot<Guid>]
-                public partial class Board
-                {
-                    public Board(BoardId id, OrganizationUnitId unit, SeatId seat) : base(id) => (Unit, Seat) = (unit, seat);
-
-                    public OrganizationUnitId Unit { get; private set; }
-
-                    public SeatId Seat { get; private set; }
-                }
-
-                [RowAccess<Board>(RowOperations.Read)]
-                public static partial class TheRule
-                {
-                    public static bool Allows(Board board, IRowUser user) => {{expression}};
-                }
-                """)
-            .WithBuildProperty("RootNamespace", "Shop")
-            .WithTenancy()
-            .WithModuleFromTheBuild("Shop")
-            .RunCore();
-
-        result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
-        RuleSql(result).Should().Be(sql);
     }
 
     /// <summary>Projects' contracts as the sample's build compiles them: the module is the folder's <c>DDD_Module</c>, and no file says it.</summary>

@@ -388,7 +388,7 @@ A project below that folder belongs to the module, as if it declared `[assembly:
 
 A project added to the folder belongs to the module from its first build. The
 [Tenancy sample](../Examples/README.md#the-tenancy-sample) declares its three modules this way, and names each module
-after its folder: [`Examples/Tenancy/Modules/Directory.Build.props`](../Examples/Tenancy/Modules/Directory.Build.props).
+after its folder: `Examples/Tenancy/Modules/Directory.Build.props`.
 
 The build declares the module in two steps, because a source generator never sees what another generator writes:
 
@@ -540,7 +540,7 @@ convention, written in its own props file. The toolkit does not read project nam
 ```
 
 The [Tenancy sample](../Examples/README.md#the-tenancy-sample) does this in
-[`Examples/Tenancy/Modules/Directory.Build.props`](../Examples/Tenancy/Modules/Directory.Build.props), next to the
+`Examples/Tenancy/Modules/Directory.Build.props`, next to the
 `DDD_Module` that names each module. None of its contracts types carries `[ModuleContract]`. A project that matches the
 condition and should not publish everything sets `<DDD_ModuleContracts>false</DDD_ModuleContracts>` in its own
 project file. MSBuild reads the project file after the props file.
@@ -775,7 +775,7 @@ Only convention keeps a folder in step with its content, so the sample's tests c
 - `SourceTreeTests` reads the source tree. It checks that every aggregate, entity, event and invariant is in its
   folder, that every file declares one type, and that every namespace matches its folder.
 
-The tests are in [`Tests/Examples.Tenancy.Tests/Architecture`](../Tests/Examples.Tenancy.Tests/Architecture).
+The tests are in `Tests/Examples.Tenancy.Tests/Architecture`.
 
 Moving a class to another namespace changes its full name. Two things store a class name as text:
 

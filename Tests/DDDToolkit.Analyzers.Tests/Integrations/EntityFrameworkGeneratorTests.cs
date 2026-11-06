@@ -6,7 +6,7 @@ namespace DDDToolkit.Analyzers.Tests.Integrations;
 /// <c>[ComplexType]</c> on value objects. These run alongside the core generators, because they build on
 /// the base types the core generators emit.
 /// </summary>
-public class EntityFrameworkGeneratorTests
+public partial class EntityFrameworkGeneratorTests
 {
     private const string Preamble = "using DDDToolkit.Abstractions.Attributes;\nusing System;\n\nnamespace Sample;\n\n";
 
@@ -713,43 +713,6 @@ public class EntityFrameworkGeneratorTests
             "ConverterExtensions",
             "global::Sales.Infrastructure.Converters.ConverterExtensions.AddSalesConverters(modelConfigurationBuilder);");
         result.ShouldNotContain("ConverterExtensions", "Sales.Domain", "those the called registration has");
-    }
-
-    [Fact]
-    public void A_referenced_package_without_a_module_is_ignored()
-    {
-        // The Tenancy package declares TenantSlug, a single value object it maps itself; a shared kernel without a
-        // module is no module's to register.
-        var result = Infrastructure(source:
-                """
-                using System;
-                using DDDToolkit.Abstractions.Attributes;
-
-                namespace Sales.Infrastructure;
-
-                [EntityId<Guid>]
-                public readonly partial record struct OrderId;
-                """)
-            .WithTenancy()
-            .WithReferencedAssembly(
-                """
-                using System;
-                using DDDToolkit.Abstractions.Attributes;
-
-                namespace Shared.Kernel;
-
-                [EntityId<Guid>]
-                public readonly partial record struct CorrelationId;
-                """,
-                "Shared.Kernel")
-            .WithEntityFrameworkRuntime()
-            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
-
-        result.ShouldCompile();
-        result.ShouldContain("ConverterExtensions", "Sales.Infrastructure.OrderId");
-        result.ShouldNotContain("ConverterExtensions", "TenantSlug");
-        result.ShouldNotContain("ConverterExtensions", "CorrelationId");
-        result.ShouldNotContain("ConverterExtensions", Converter);
     }
 
     [Fact]

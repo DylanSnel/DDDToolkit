@@ -17,7 +17,7 @@ namespace DDDToolkit.Analyzers.Tests.Incremental;
 /// the others would pass on a pipeline that reports nothing at all.
 /// </para>
 /// </summary>
-public class IncrementalCachingTests
+public partial class IncrementalCachingTests
 {
     /// <summary>
     /// One of everything, including an aggregate whose id is generated from its own declaration: that
@@ -131,21 +131,6 @@ public class IncrementalCachingTests
     }
 
     [Fact]
-    public void What_a_packages_switch_writes_is_cached_across_an_unrelated_edit()
-    {
-        // The switch is read off the compilation on every edit, and every provider that hands on declared classes
-        // and ids now hands on its plan too: the plan has to come out equal, or every class and id is written again.
-        var first = GeneratorTestHost.Create(Generation.TemplateDefaultsTests.Switch, "Switch.cs")
-            .WithTenancyOnEntityFramework()
-            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
-        first.ShouldCompile();
-        first.ShouldHaveGenerated("Tenant.TemplateDefault.");
-
-        AssertNothingRegenerated(first, first.RunAgain(AppendComment));
-        AssertNothingRegenerated(first, first.RunAgain(AddUnrelatedFile));
-    }
-
-    [Fact]
     public void An_access_behavior_caches_its_output_across_an_unrelated_edit()
     {
         // The behavior is written from the library's own declaration, read off the compilation on every
@@ -153,19 +138,6 @@ public class IncrementalCachingTests
         var first = GeneratorTestHost.Create(Generation.AccessBehaviorGenerationTests.Billing).WithMediator().RunCore();
         first.ShouldCompile();
         first.ShouldHaveGenerated("BillingAccessBehavior.");
-
-        AssertNothingRegenerated(first, first.RunAgain(AppendComment));
-        AssertNothingRegenerated(first, first.RunAgain(AddUnrelatedFile));
-    }
-
-    [Fact]
-    public void The_member_list_of_a_resource_caches_its_output_across_an_unrelated_edit()
-    {
-        // The list is written from the resource's own declaration, read off its symbol on every edit, and has
-        // to come out equal when neither the member class nor the resource changed.
-        var first = Integrations.MemberListGeneratorTests.Run(Integrations.MemberListGeneratorTests.Documents);
-        first.ShouldCompile();
-        first.ShouldHaveGenerated("Document.Members.");
 
         AssertNothingRegenerated(first, first.RunAgain(AppendComment));
         AssertNothingRegenerated(first, first.RunAgain(AddUnrelatedFile));
@@ -241,24 +213,6 @@ public class IncrementalCachingTests
         AssertNothingRegenerated(first, second);
         second.Source("BindingExtensions").Should().Be(first.Source("BindingExtensions"));
 
-        AssertNothingRegenerated(first, first.RunAgain(AddUnrelatedFile));
-    }
-
-    [Fact]
-    public void What_joins_a_resource_with_members_to_an_organization_is_cached_across_an_unrelated_edit()
-    {
-        // Membership's own generator asks the core one which classes a registration was closed over, and looks
-        // for the organization's classes in the whole compilation, on every edit: what it finds has to come out
-        // equal when neither changed.
-        var first = Integrations.MembershipWithTenancyGeneratorTests
-            .CampusWith(
-                Integrations.MembershipWithTenancyGeneratorTests.Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"),
-                (Integrations.MembershipWithTenancyGeneratorTests.Courses, "Courses.cs"))
-            .RunCoreAnd(GeneratorTestHost.MembershipGenerators());
-        first.ShouldCompile();
-        first.ShouldHaveGenerated("AddCourseMembershipWithTenancy");
-
-        AssertNothingRegenerated(first, first.RunAgain(AppendComment));
         AssertNothingRegenerated(first, first.RunAgain(AddUnrelatedFile));
     }
 

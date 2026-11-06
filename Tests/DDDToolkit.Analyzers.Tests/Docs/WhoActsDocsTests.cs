@@ -1,8 +1,6 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using DDDToolkit.Exceptions;
-using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 
 namespace DDDToolkit.Analyzers.Tests.Docs;
 
@@ -62,85 +60,6 @@ public partial class WhoActsDocsTests
             situation.Why.Should().NotBeEmpty("{0} says why it fits", situation.Title);
             situation.Notes.Should().NotBeEmpty("{0} says what to watch out for", situation.Title);
             situation.Code.Should().NotBeEmpty("{0} shows a handler", situation.Title);
-        }
-    }
-
-    [Fact]
-    public void Every_call_is_a_member_of_the_access_manager_and_is_in_the_situation_s_code()
-    {
-        var members = typeof(TenancyAccessManager<,,,>).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Select(method => method.Name)
-            .ToHashSet(StringComparer.Ordinal);
-
-        foreach (var situation in Data.Situations)
-        {
-            var code = string.Join('\n', situation.Code);
-            foreach (var call in situation.Calls)
-            {
-                members.Should().Contain(call, "{0} names {1}, which TenancyAccessManager has", situation.Title, call);
-                situation.Use.Should().Contain("access." + call + "(", "the call to use for {0} names {1}", situation.Title, call);
-                code.Should().Contain("access." + call + "(", "the handler of {0} calls {1}", situation.Title, call);
-            }
-
-            // A situation without a call begins nothing in its code.
-            if (situation.Calls.Count == 0)
-            {
-                code.Should().NotContain("access.Begin", "{0} begins no work in its handler", situation.Title);
-            }
-        }
-    }
-
-    [Fact]
-    public void Every_attribute_is_Tenancy_s_and_is_on_the_situation_s_request()
-    {
-        var access = typeof(OperatorAttribute).Assembly;
-        foreach (var situation in Data.Situations)
-        {
-            var code = string.Join('\n', situation.Code);
-            foreach (var attribute in situation.Attributes)
-            {
-                var type = access.GetType("DDDToolkit.Supporting.Tenancy.Access." + attribute + "Attribute");
-                type.Should().NotBeNull("[{0}] of {1} is Tenancy's attribute", attribute, situation.Title);
-                type!.IsSubclassOf(typeof(Attribute)).Should().BeTrue();
-                situation.Use.Should().Contain("[" + attribute + "]", "the call to use for {0} names [{1}]", situation.Title, attribute);
-                code.Should().Contain("[" + attribute + "]", "the request of {0} carries [{1}]", situation.Title, attribute);
-            }
-
-            if (situation.OperatorTenant is { } where)
-            {
-                Enum.TryParse<OperatorTenant>(where, out _).Should().BeTrue("OperatorTenant.{0} is one of Tenancy's", where);
-                string.Join('\n', situation.Notes).Should().Contain("OperatorTenant." + where, "{0} says where the operator's tenant comes from", situation.Title);
-            }
-        }
-    }
-
-    [Fact]
-    public void Every_recorded_kind_is_one_Tenancy_writes()
-    {
-        string[] kinds = [TenancyActorKinds.Seat, TenancyActorKinds.Operator, TenancyActorKinds.System, TenancyActorKinds.Token];
-
-        Data.Situations.Select(situation => situation.Kind).Should().OnlyContain(kind => kinds.Contains(kind));
-        Data.Situations.Select(situation => situation.Kind).Distinct().Should().BeEquivalentTo(kinds, "the chooser shows each kind of actor once at least");
-    }
-
-    [Fact]
-    public void Every_refusal_code_is_declared_and_said_in_the_notes()
-    {
-        var codes = TenancyRefusals.Codes.Concat(ToolkitRefusals.Codes).ToHashSet(StringComparer.Ordinal);
-
-        foreach (var situation in Data.Situations)
-        {
-            var said = string.Join('\n', situation.Why.Concat(situation.Notes));
-            foreach (var code in situation.Refusals)
-            {
-                codes.Should().Contain(code, "{0} names {1}, which the code declares", situation.Title, code);
-                said.Should().Contain("`" + code + "`", "{0} says when {1} is given", situation.Title, code);
-            }
-
-            foreach (var written in RefusalCode().Matches(said).Select(match => match.Groups["code"].Value))
-            {
-                situation.Refusals.Should().Contain(written, "{0} writes {1}, so it lists it to be checked", situation.Title, written);
-            }
         }
     }
 

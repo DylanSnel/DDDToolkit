@@ -42,7 +42,7 @@ flowchart LR
 Projects declares a seat as its key alone: `[GraphQLName("Seat")] [EntityKey("id")] record ReferencedSeat(SeatId Id)`.
 Tenants declares the owned `Seat` type over its `Seat` class, with an internal lookup (`[Lookup] [Internal]`). The
 lookup uses a data loader that sends `SeatsById` once per batch, in parts of at most 200 ids
-([`DirectoryQueries.cs`](../../../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Directory/GraphQL/DirectoryQueries.cs)).
+(`DirectoryQueries.cs`).
 
 ## Tenancy's classes as GraphQL types
 
@@ -282,9 +282,9 @@ sequenceDiagram
 
 The modules follow the way HotChocolate 16 offers, and write nothing twice. `GraphQLDeclarationTests` checks every
 module against these rules. Projects' schema is the example:
-[`ProjectType.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Overview/GraphQL/ProjectType.cs),
-[`OverviewPagedQueries.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Overview/GraphQL/OverviewPagedQueries.cs),
-[`CrewMemberType.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewMemberType.cs).
+`ProjectType.cs`,
+`OverviewPagedQueries.cs`,
+`CrewMemberType.cs`.
 
 - **A field contains no logic.** It sends the request that the route of its feature sends. A mutation returns what it
   changed ([What a mutation returns](#what-a-mutation-returns)).

@@ -110,12 +110,12 @@ The response, shortened. It also carries the problem's `type` and a `traceId`.
   returns 409 `concurrency-conflict`.
 - The host's pipeline runs authentication, tenant selection, localization and authorization. Then come the route
   groups for signed-in callers, for seated callers and for operators
-  ([`Program.cs`](../../../Examples/Tenancy/Examples.Tenancy.Host/Program.cs)).
+  (`Program.cs`).
 
 ## The presets
 
 The Try it page runs the presets one by one or all at once
-([`DevAttempts.cs`](../../../Examples/Tenancy/Examples.Tenancy.Host/DevLogin/DevAttempts.cs)). One preset is an
+(`DevAttempts.cs`). One preset is an
 allowed read. All the others are refusals of the seeded data, so running them changes nothing.
 
 | Preset | Who tries what | Response |

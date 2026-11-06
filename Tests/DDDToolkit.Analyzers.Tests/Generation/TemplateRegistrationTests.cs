@@ -14,7 +14,7 @@ namespace DDDToolkit.Analyzers.Tests.Generation;
 /// forwards to the wrong types, or loses a default value on the way, fails too.
 /// </para>
 /// </summary>
-public class TemplateRegistrationTests
+public partial class TemplateRegistrationTests
 {
     /// <summary>
     /// The registrations of <see cref="TemplateEntityTests.Package"/>: each writes down what it was closed over
@@ -599,73 +599,6 @@ public class TemplateRegistrationTests
         result.ShouldHaveDiagnostic("DDD00044", at: "ShopOrganization").Properties.Should().Contain("ClassName", "ShopTenant");
         result.HintNames.Should().NotContain("Registration", "a registration that lacks a class is written for none");
         result.ShouldNotCrash();
-    }
-
-    /// <summary>The real Tenancy package's classes, as an application declares them, without the ones a test leaves out.</summary>
-    private static GeneratorTestHost WithTheTenancyPackage(params string[] leftOut)
-    {
-        var classes = new (string Name, string Declaration)[]
-        {
-            ("Tenant", "[TenantAggregate<TenantId>] public sealed partial class ShopTenant;"),
-            ("Organization", "[OrganizationAggregate<TenantId>] public sealed partial class ShopOrganization;"),
-            ("Unit", "[OrganizationUnit<OrganizationUnitId>] public sealed partial class ShopUnit;"),
-            ("Seat", "[SeatAggregate<SeatId>] public sealed partial class ShopSeat;"),
-            ("Role", "[RoleAggregate<RoleId>] public sealed partial class ShopRole;"),
-        };
-
-        const string Ids =
-            """
-            using System;
-            using DDDToolkit.Abstractions.Attributes;
-            using DDDToolkit.Supporting.Tenancy;
-
-            namespace Shop;
-
-            // A long says how a new one is made, which Tenancy asks of each of its ids.
-            [EntityId<long>]
-            public readonly partial record struct TenantId
-            {
-                public static TenantId Create() => new(1);
-            }
-
-            [EntityId<Guid>]
-            public readonly partial record struct SeatId;
-
-            [EntityId<Guid>]
-            public readonly partial record struct OrganizationUnitId;
-
-            [EntityId<Guid>]
-            public readonly partial record struct RoleId;
-            """;
-
-        var application = string.Join(Environment.NewLine, new[] { Ids }.Concat(classes.Where(each => !leftOut.Contains(each.Name)).Select(each => each.Declaration)));
-
-        return GeneratorTestHost.Create(application, "Application.cs").WithTenancyOnEntityFramework();
-    }
-
-    [Fact]
-    public void A_missing_role_class_of_the_tenancy_package_is_said_once_on_the_seat_that_takes_its_id()
-    {
-        // Every registration of the package's needs the role class as well. One class is missing, and it is said
-        // once, on the seat, whose parent takes the role's id, with the fix that declares it.
-        var result = WithTheTenancyPackage("Role").RunCore();
-
-        result.ReportedDiagnostics.Select(diagnostic => diagnostic.Id).Should().Equal(["DDD00044"]);
-        result.ShouldHaveDiagnostic("DDD00044", at: "ShopSeat").GetMessage().Should().Contain("from the class declared with [RoleAggregate]");
-    }
-
-    [Fact]
-    public void A_class_several_registrations_need_and_no_parent_takes_from_is_DDD00049_once_naming_them_all()
-    {
-        // No parent of the package's takes the organization: the registrations are what need it, and each of them
-        // does. They say so once, naming every one, on the first class declared with one of their templates.
-        var result = WithTheTenancyPackage("Organization").RunCore();
-
-        result.ReportedDiagnostics.Select(diagnostic => diagnostic.Id).Should().Equal(["DDD00049"]);
-        var message = result.ShouldHaveDiagnostic("DDD00049", at: "ShopTenant").GetMessage();
-        message.Should().StartWith("A class declared with [OrganizationAggregate] is needed by 'Tenancy")
-            .And.Contain("' and 'Tenancy", "more than one registration needs it, and each is named");
-        System.Text.RegularExpressions.Regex.Matches(message, @"'Tenancy[A-Za-z]+\.AddTenancy[A-Za-z]*'").Count.Should().BeGreaterThan(1);
     }
 
     [Fact]
