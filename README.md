@@ -106,6 +106,7 @@ public partial class Order { }
 | [Membership API: refusals](docs/membership/reference/refusals.md) | Generated from the code: every refusal code, the codes of one resource, and their texts |
 | [Membership API: Entity Framework](docs/membership/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
 | [Membership API: Postgres](docs/membership/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
+| [Design principles](docs/design-principles.md) | The rules the toolkit's packages follow, each with its reason: what the application writes, how a package plugs in, the domain, access and names |
 | [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |
 | [FluentValidation](docs/fluent-validation.md) | A value object's rules as a FluentValidation validator, and value objects inside a request validator |

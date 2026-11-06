@@ -3240,6 +3240,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
+- **Docs: design principles.** New in 0.1.0. [Design principles](docs/design-principles.md) lists the rules
+  that the toolkit's packages follow, each with its reason and a link to the page that shows it. It covers what the
+  application writes, how a package plugs in, the domain, access, and names. It sits under Supporting domains, and
+  [Writing your own supporting domain](docs/writing-a-supporting-domain.md) links to it.
 - **Docs: the access check of `[Own]`.** [Access checks](docs/performance.md#access-checks) measures the check before
   and after its compiled query, on SQLite in memory and on Postgres in a container. `OwnerCheckBenchmarks` takes the
   database as a parameter, shows the minimum and the median, and starts the Postgres container itself.

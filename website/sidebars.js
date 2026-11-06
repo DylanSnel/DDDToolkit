@@ -125,6 +125,7 @@ const sidebars = {
             },
           ],
         },
+        'design-principles',
         'writing-a-supporting-domain',
       ],
     },

@@ -18,6 +18,9 @@ becomes a module of that application. The way the application extends it makes i
 - **The application owns the database.** The package brings no migrations and no `DbContext`. The application's
   context and migrations stay in the module that owns them.
 
+The [design principles](design-principles.md) list the rules that Tenancy and Membership follow, each with its
+reason. Read them before you design a package of your own.
+
 The example on this page is a package for subscriptions and their invoices, `Acme.Subscriptions`, and a shop that uses
 it.
 
