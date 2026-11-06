@@ -1,4 +1,4 @@
-using DDDToolkit.BaseTypes;
+using DTS.DDD.BaseTypes;
 using Examples.Webshop.Catalog.Contracts;
 using Examples.Webshop.Catalog.Domain.Products;
 using Examples.Webshop.Inventory.Contracts;

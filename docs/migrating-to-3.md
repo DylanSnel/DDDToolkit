@@ -24,7 +24,7 @@ changes. The compiler cannot find the change to when handlers run, in
 | Misapplied attributes now fail the build | [10](#10-misapplied-attributes-now-fail-the-build) |
 | `CheckInvariants`, `EnsureInvariants`, `GetInvariantViolations` and their `Own` pair are now generated member names | [11](#11-entities-gain-an-invariant-seam) |
 | A save now runs your aggregates' invariants | [11](#11-entities-gain-an-invariant-seam) |
-| The packages have new ids for now, `Temp.DDDToolkit.*` | [12](#the-package-ids) |
+| The packages have new ids for now, `DylansTechStack.DDD.*` | [12](#the-package-ids) |
 | HotChocolate 16, Entity Framework 10, FluentValidation 12 | [12](#12-package-versions) |
 | MediatR is no longer referenced | [13](#13-mediatr-is-replaced-in-the-examples) |
 
@@ -208,7 +208,7 @@ public record OrderPlaced(OrderId OrderId) : IDomainEvent;                 // 2.
 ```
 
 ```csharp
-using DDDToolkit.BaseTypes;
+using DTS.DDD.BaseTypes;
 
 [DomainEventName("ordering.order-placed")]
 public sealed record OrderPlaced(OrderId OrderId) : DomainEvent;           // 3.0
@@ -494,25 +494,25 @@ deploy it ([Invariants](invariants.md)).
 
 ### The package ids
 
-For now, 3.x is published as `Temp.DDDToolkit`, `Temp.DDDToolkit.EntityFramework` and so on. The nuget.org account
-that owns the `DDDToolkit.*` ids cannot publish at the moment. So updating `DDDToolkit` to the latest version still
+For now, 3.x is published as `DylansTechStack.DDD`, `DylansTechStack.DDD.EntityFramework` and so on. The nuget.org account
+that owns the `DTS.DDD.*` ids cannot publish at the moment. So updating `DDDToolkit` to the latest version still
 gives you 2.0.22. Replace each reference with the prefixed id instead:
 
 ```xml
 <!-- 2.0.22 -->
 <PackageReference Include="DDDToolkit" Version="2.0.22" />
-<PackageReference Include="DDDToolkit.EntityFramework" Version="2.0.22" />
+<PackageReference Include="DTS.DDD.EntityFramework" Version="2.0.22" />
 
 <!-- 3.0.0 -->
-<PackageReference Include="Temp.DDDToolkit" Version="3.0.0" />
-<PackageReference Include="Temp.DDDToolkit.EntityFramework" Version="3.0.0" />
+<PackageReference Include="DylansTechStack.DDD" Version="3.0.0" />
+<PackageReference Include="DylansTechStack.DDD.EntityFramework" Version="3.0.0" />
 ```
 
 Only the ids changed.
 
-- The assemblies and namespaces are still `DDDToolkit.*`, so no `using` changes.
+- The assemblies and namespaces are still `DTS.DDD.*`, so no `using` changes.
 - The analyzer packages still arrive as dependencies.
-- Remove every 2.0.22 reference. NuGet sees `DDDToolkit` and `Temp.DDDToolkit` as different packages, so it does
+- Remove every 2.0.22 reference. NuGet sees `DDDToolkit` and `DylansTechStack.DDD` as different packages, so it does
   not pick one of the two. Both would put an assembly named `DDDToolkit` in the build.
 
 ### The dependencies
@@ -555,7 +555,7 @@ your persisted queries before you deploy ([GraphQL](graphql.md)).
 
 MediatR has a commercial license from version 13, so the repository stayed on 12.x. In 3.0 the examples published
 through [Mediator](https://github.com/martinothamar/Mediator), which is MIT licensed and source generated, with the
-`DDDToolkit.Mediator` package. From 3.2 the core package has a mediator of its own for domain events, and that package
+toolkit's Mediator package. From 0.1.0 the core package has a mediator of its own for domain events, and that package
 is gone. `DispatchWithMediator()` now publishes to the handlers of the toolkit's mediator:
 
 ```csharp
@@ -576,7 +576,7 @@ options.DispatchInProcess(async (sp, events, cancellationToken) =>
 
 If you move, three differences matter:
 
-- A handler implements `INotificationHandler<TEvent>` from `DDDToolkit.Mediator`, and returns a `ValueTask`.
+- A handler implements `INotificationHandler<TEvent>` from `DTS.DDD.Mediator`, and returns a `ValueTask`.
 - The generator registers every handler of a project in `Add{Module}Handlers()`, scoped, so a handler can inject your
   `DbContext`. Call that method where the module registers its services.
 - Every domain event is a notification, and an event without a handler is published to nobody. See
@@ -705,7 +705,7 @@ fails. The driver returns a `datetime2` as a `DateTime`, the model expects a `Da
 throws `InvalidCastException`.
 
 That failure is intended. A database without the migration fails the first time the processor polls, so it cannot
-differ from the model unnoticed. `Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`
+differ from the model unnoticed. `Tests/DTS.DDD.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`
 tests both halves against a real SQL Server.
 
 Rows written before you notice are correct. The column already holds the right instant, so the migration needs no
@@ -762,7 +762,7 @@ the remaining call is ambiguous. The build points at every place. A call to a na
 - `Entity<TId>.Id` still has a `protected set`, so a 2.x constructor that wrote `Id = id` after `base()` still
   compiles. `base(id)` is the better form.
 - Validation still runs through `protected bool Validate()`, or through a generated body when
-  `DDDToolkit.FluentValidation` is referenced. The second overload
+  `DTS.DDD.FluentValidation` is referenced. The second overload
   `protected override void Validate(ValidationErrorBuilder errors)` is new, and so is `TryToValid`, which does not
   throw, next to `ToValid()`. Nothing you already wrote has to change
   ([Failure handling](value-objects.md#failure-handling)).
@@ -776,7 +776,7 @@ validated. A copy now validates again when asked. Remove any workaround for this
 ## Checklist
 
 1. Retarget every project to `net10.0` and pin the SDK.
-2. Update the package references: `DDDToolkit.*` to `Temp.DDDToolkit.*` 3.0.0, and
+2. Update the package references: `DTS.DDD.*` to `DylansTechStack.DDD.*` 3.0.0, and
    `HotChocolate.Execution` to `HotChocolate`.
 3. Build. Fix the `IDomainEvent` errors by deriving your events from `DomainEvent`.
 4. Fix the `AddDomainEvent` errors. Rename the call to `RaiseDomainEvent` inside aggregates, and give the

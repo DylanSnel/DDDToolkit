@@ -5,7 +5,7 @@ that a confirmation goes out, stock is reserved and a van is booked, but only on
 covers when delivery happens: inside the save, in the aggregate's transaction, or after the save, from a stored row
 that survives a crash.
 
-`DDDToolkit.EntityFramework` has one mode for each:
+`DTS.DDD.EntityFramework` has one mode for each:
 
 - **In-process dispatch** runs your handlers while `SaveChanges` runs.
 - **The outbox** writes the events to a table in the same transaction, and delivers them afterwards.
@@ -62,7 +62,7 @@ builder.Services.AddDbContext<OrderingContext>((services, options) => options
 ```
 
 Every domain event is a notification of the toolkit's mediator, and a handler implements
-`INotificationHandler<TEvent>` from `DDDToolkit.Mediator`. The handler runs in the scope of the saving context, so its
+`INotificationHandler<TEvent>` from `DTS.DDD.Mediator`. The handler runs in the scope of the saving context, so its
 changes on that context are saved with the order:
 
 **[`Ordering/Application/Orders/DomainEvents/OrderLog.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/DomainEvents/OrderLog.cs)**
@@ -193,8 +193,8 @@ mediator, and you can write another one yourself.
 
 ### Dispatching with the toolkit's mediator
 
-The toolkit has a mediator of its own for notifications. Its interfaces are in `DDDToolkit.Abstractions`, in the
-namespace `DDDToolkit.Mediator`, and the implementation is in the core package. No other package is needed:
+The toolkit has a mediator of its own for notifications. Its interfaces are in `DylansTechStack.DDD.Abstractions`,
+in the namespace `DTS.DDD.Mediator`, and the implementation is in the core package. No other package is needed:
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
@@ -635,7 +635,7 @@ context.
   is retried, and the sinks that accepted it receive it again. See
   [Integration events](integration-events.md#when-one-sink-fails-and-another-does-not).
 
-`Tests/DDDToolkit.EntityFramework.Tests/OutboxTests.cs` tests the transactional write, the retries, `MaxAttempts`,
+`Tests/DTS.DDD.EntityFramework.Tests/OutboxTests.cs` tests the transactional write, the retries, `MaxAttempts`,
 unknown event names and the background service. `OutboxRetryTests.cs` next to it tests the wait between attempts.
 
 ## The dispatch loop
@@ -683,8 +683,8 @@ each assembly, which a modular monolith cannot share between its projects.
 
 The toolkit's mediator takes the design ideas it needs:
 
-- The interfaces are the toolkit's own, in `DDDToolkit.Abstractions`, and `IDomainEvent` derives from `INotification`.
-  Every event of every package is a notification without depending on a mediator library.
+- The interfaces are the toolkit's own, in `DylansTechStack.DDD.Abstractions`, and `IDomainEvent` derives from
+  `INotification`. Every event of every package is a notification without depending on a mediator library.
 - A source generator in each module writes the registration, with the generics closed. A dispatch makes no call
   through reflection.
 - A notification is dispatched on its runtime type, so an event that arrives as `IDomainEvent`, from a save or from

@@ -1,4 +1,4 @@
-using DDDToolkit.Access;
+using DTS.DDD.Access;
 using Examples.Webshop.Ordering.Contracts;
 
 namespace Examples.Webshop.Ordering.Application.Orders;

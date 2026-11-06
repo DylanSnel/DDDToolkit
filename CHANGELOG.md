@@ -14,9 +14,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
-- **The toolkit's own mediator for notifications.** New in 3.2.0-preview.16. It replaces the `DDDToolkit.Mediator`
+- **The toolkit's own mediator for notifications.** New in 0.1.0. It replaces the `Temp.DDDToolkit.Mediator`
   package and depends on no mediator library.
-  - The interfaces are in `DDDToolkit.Abstractions`, in the namespace `DDDToolkit.Mediator`, for .NET 10:
+  - The interfaces are in `DylansTechStack.DDD.Abstractions`, in the namespace `DTS.DDD.Mediator`, for .NET 10:
     `INotification`, `INotificationHandler<TNotification>`, `IPublisher`, `INotificationBehavior<TNotification>` and
     `NotificationHandlerDelegate<TNotification>`. Their names and signatures are Mediator's.
   - The core package implements them. `IPublisher` is scoped and resolves every handler and behavior from its scope.
@@ -2650,7 +2650,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 #### Samples
 
 - **The webshop and the example API publish their events through the toolkit's mediator.** New in
-  3.2.0-preview.16. Their hosts no longer reference Mediator. `OrderLog` and the example API's handlers implement the
+  0.1.0. Their hosts no longer reference Mediator. `OrderLog` and the example API's handlers implement the
   toolkit's `INotificationHandler`, and `AddOrderingHandlers()` and `AddApiHandlers()` register them. The events drop
   their `INotification` and `IBaseDomainEvent` markers.
 - **The webshop's order is its customer's, in the access check too.** `Order.PlacedBy` is marked `[Owner]`, and
@@ -3326,9 +3326,26 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
-- **`IDomainEvent` derives from `INotification`.** New in 3.2.0-preview.16. Every domain event is a notification of
-  the toolkit's mediator, the events of Tenancy and Membership included, so an event needs no marker of its own.
-- **`DispatchWithMediator()` publishes through the toolkit's mediator.** New in 3.2.0-preview.16. It is a method of
+- **New package ids and namespaces: `DylansTechStack.DDD.*` and `DTS.DDD.*`, from 0.1.0.**
+  - The packages are published as `DylansTechStack.DDD`, `DylansTechStack.DDD.EntityFramework` and so on. They replace
+    `Temp.DDDToolkit.*`, whose last version is 3.2.0-preview.15.
+  - The namespaces and the assemblies are `DTS.DDD.*`. `using DDDToolkit;` becomes `using DTS.DDD;`, and
+    `DDDToolkit.EntityFramework` becomes `DTS.DDD.EntityFramework`.
+  - The version starts again at 0.1.0. Every `DylansTechStack.*` package has the same version.
+  - These names stay: the product name DDDToolkit, the API names that carry it (`UseDDDToolkit()`,
+    `AddDDDToolkitEntityFramework()`, `DDDToolkitException` and the others), the Entity Framework annotations
+    (`DDDToolkit:AppendOnly` and the others), the diagnostic ids `DDD00001` to `DDD00107`, and the MSBuild properties
+    `DDD_Module`, `DDD_DeclareModule` and `DDD_ModuleContracts`.
+  - Tenancy and Membership are `DylansTechStack.Tenancy` and `DylansTechStack.Membership`, with the namespaces
+    `DTS.Tenancy` and `DTS.Membership`. They are part of DTS Pro and are not published on nuget.org.
+  - The projects and folders of this repository follow the namespaces, such as `Source/DTS.DDD.EntityFramework`. The
+    solution file stays `DDDToolkit.slnx`.
+  - `Directory.Build.props` makes the id from the project name, `DylansTechStack.` and the name without `DTS.`. The
+    `DDDPackageIdPrefix` property is gone.
+
+- **`IDomainEvent` derives from `INotification`.** New in 0.1.0. Every domain event is a notification of the
+  toolkit's mediator, the events of Tenancy and Membership included, so an event needs no marker of its own.
+- **`DispatchWithMediator()` publishes through the toolkit's mediator.** New in 0.1.0. It is a method of
   `DDDEntityFrameworkOptions` and needs no using. Calling it again changes nothing, so every module whose outbox
   delivers in process may call it. It is refused beside a `DispatchInProcess` delegate of the host's own.
   `AddDDDToolkitEntityFramework` registers the publisher.
@@ -4649,12 +4666,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - The docs of Tenancy and Membership stay on the docs site. A link from the docs to a file of the sample is plain text
     now.
   - The Auth tests keep their own copies of `SupabaseImages` and `AuthSigningKeys`, which they took from the sample.
-- **The `DDDToolkit.Mediator` package.** Removed in 3.2.0-preview.16. Its `DispatchWithMediator()` published through
+- **The `Temp.DDDToolkit.Mediator` package.** Removed in 0.1.0, so it has no `DylansTechStack.DDD.Mediator` id. Its `DispatchWithMediator()` published through
   Mediator's `IPublisher` and required every event to implement Mediator's `INotification`. The core package now has
   its own mediator, and `DispatchWithMediator()` is on `DDDEntityFrameworkOptions`. A host that keeps Mediator for its
   events writes a `DispatchInProcess` delegate
   ([The dispatch delegate](docs/event-delivery.md#the-dispatch-delegate)). Mediator's handlers of domain events become
-  `DDDToolkit.Mediator.INotificationHandler<TEvent>`, registered by the generated `Add{Module}Handlers()`.
+  `DTS.DDD.Mediator.INotificationHandler<TEvent>`, registered by the generated `Add{Module}Handlers()`.
 
 ### Fixed
 

@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Messaging.Postgres\DDDToolkit.Messaging.Postgres.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.Messaging.Postgres\DTS.DDD.Messaging.Postgres.csproj" />
   </ItemGroup>
 
 </Project>

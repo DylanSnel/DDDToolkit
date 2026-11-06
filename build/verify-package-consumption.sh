@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Builds Examples/DDDToolkit.NugetApi and the projects in build/package-consumers against the packed
+# Builds Examples/DTS.DDD.NugetApi and the projects in build/package-consumers against the packed
 # packages instead of the projects.
 #
 # Why this exists. A consumer gets the generators from analyzers/dotnet/cs, and the MSBuild properties
-# they read, DDD_Module for one, from the props file inside the DDDToolkit.Analyzers package. Neither
+# they read, DDD_Module for one, from the props file inside the DTS.DDD.Analyzers package. Neither
 # path is used inside this repository, where every project reference is a ProjectReference and
 # Directory.Build.props imports that props file from Source. So the whole of the packaging contract is
 # untested by a green solution build, and it has broken before.
@@ -12,7 +12,7 @@
 # What it proves, in order:
 #   1. Every assembly a package ships in lib/<tfm>/ has its XML documentation beside it, which is where
 #      an editor reads the package's comments from.
-#   2. Examples/DDDToolkit.NugetApi: every generator arrives as a dependency of the package above it
+#   2. Examples/DTS.DDD.NugetApi: every generator arrives as a dependency of the package above it
 #      and produces what Check.cs names.
 #   3. build/package-consumers: DDD_Module reaches the generators wherever they run, and declares the
 #      project's module there, with the build step that arrives beside the props file. With only
@@ -32,7 +32,7 @@ set -euo pipefail
 version="${1:-0.0.0-ci}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 feed="$root/nupkgs"
-consumer="$root/Examples/DDDToolkit.NugetApi"
+consumer="$root/Examples/DTS.DDD.NugetApi"
 consumers="$root/build/package-consumers"
 packages="$root/artifacts/package-verification"
 
@@ -48,19 +48,18 @@ feed_native="$(native_path "$feed")"
 packages_native="$(native_path "$packages")"
 
 # The ids the packages were packed under, asked of the build rather than written down here, so the
-# prefix in Directory.Build.props stays the one place that decides them. The tr drops the carriage
+# rule in Directory.Build.props stays the one place that decides them. The tr drops the carriage
 # return the SDK ends the line with on Windows. NuGet lowercases the id for the folder it restores a
 # package into.
-core_id="$(dotnet msbuild "$root/Source/DDDToolkit/DDDToolkit.csproj" -getProperty:PackageId | tr -d '\r')"
-prefix="${core_id%DDDToolkit}"
-analyzers_id="${prefix}DDDToolkit.Analyzers"
+core_id="$(dotnet msbuild "$root/Source/DTS.DDD/DTS.DDD.csproj" -getProperty:PackageId | tr -d '\r')"
+analyzers_id="$(dotnet msbuild "$root/Source/DTS.DDD.Analyzers/DTS.DDD.Analyzers.csproj" -getProperty:PackageId | tr -d '\r')"
 
 # NuGet lowercases the version for that folder as well. A release tag may carry a prerelease suffix in
 # capitals, v3.2.0-RC.1, and the folder is then 3.2.0-rc.1: Windows finds it either way, the release
 # job runs on Linux.
 version_folder="$(tr '[:upper:]' '[:lower:]' <<< "$version")"
 
-echo "==> Verifying package consumption at version $version, package ids ${prefix}DDDToolkit.*"
+echo "==> Verifying package consumption at version $version, package ids $core_id.*"
 
 if ! compgen -G "$feed/$core_id.$version.nupkg" > /dev/null; then
   echo "No $core_id.$version.nupkg in $feed. Pack first:" >&2
@@ -77,7 +76,7 @@ fi
 echo "==> The XML documentation beside every assembly in lib/"
 undocumented=""
 assemblies=0
-for nupkg in "$feed/${prefix}"DDDToolkit*."$version".nupkg; do
+for nupkg in "$feed/$core_id"*."$version".nupkg; do
   entries="$(unzip -Z1 "$nupkg" | tr -d '\r')"
   while IFS= read -r assembly; do
     assemblies=$((assemblies + 1))
@@ -142,7 +141,7 @@ EOF
 write_nuget_config "$work/consumer"
 
 echo "==> Restoring from $feed_native"
-dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
+dotnet restore "$work/consumer/DTS.DDD.NugetApi.csproj" \
   --packages "$packages_native" \
   -p:DDDToolkitPackageVersion="$version"
 
@@ -151,7 +150,7 @@ dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
 # them, so nothing below would notice them missing; only the IDE would, silently.
 analyzers_package="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version_folder"
 analyzers_folder="$analyzers_package/analyzers/dotnet/cs"
-for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
+for assembly in DTS.DDD.Analyzers.dll DTS.DDD.Analyzers.CodeFixes.dll; do
   if [ ! -f "$analyzers_folder/$assembly" ]; then
     echo "FAILED: $assembly is missing from analyzers/dotnet/cs in the $analyzers_id package." >&2
     exit 1
@@ -173,7 +172,7 @@ for folder in build buildTransitive; do
 done
 
 echo "==> Building the consumer"
-dotnet build "$work/consumer/DDDToolkit.NugetApi.csproj" \
+dotnet build "$work/consumer/DTS.DDD.NugetApi.csproj" \
   --no-restore \
   -c Release \
   -p:DDDToolkitPackageVersion="$version" \
@@ -188,9 +187,9 @@ echo "==> Generated by the packaged generators:"
 echo "$generated" | sed 's/^/    /'
 
 for expected in \
-  "DDDToolkit.Analyzers" \
-  "DDDToolkit.EntityFramework.Analyzers" \
-  "DDDToolkit.FluentValidation.Analyzers"
+  "DTS.DDD.Analyzers" \
+  "DTS.DDD.EntityFramework.Analyzers" \
+  "DTS.DDD.FluentValidation.Analyzers"
 do
   if ! grep -q "^$expected/" <<< "$generated"; then
     echo "FAILED: $expected produced nothing. It should have arrived as a dependency of the package above it." >&2
@@ -229,7 +228,6 @@ build_consumer() {
     --packages "$packages_native" \
     -c Release \
     -p:DDDToolkitPackageVersion="$version" \
-    -p:DDDPackageIdPrefix="$prefix" \
     -p:EmitCompilerGeneratedFiles=true \
     -p:UseSharedCompilation=false \
     -nodeReuse:false \

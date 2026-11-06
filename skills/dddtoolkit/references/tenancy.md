@@ -5,15 +5,14 @@ rules every application shares, and the application declares the classes, with i
 rules. Tenancy is the toolkit's first: who a person is in a tenant, and what they may do where in its
 organization. Full pages: `https://dylansnel.github.io/DDDToolkit/docs/tenancy/overview.md`, the topic pages
 beside it under `docs/tenancy/` (listed on the overview and in `llms.txt`), and
-`writing-a-supporting-domain.md`. The Tenancy packages are published as prereleases, under `Temp.` ids like
-every 3.x package, and their names can change until a release that is not one; read the project's references
-before writing against them.
+`writing-a-supporting-domain.md`. The Tenancy packages, `DylansTechStack.Tenancy` and the others, are part of DTS Pro and are not on nuget.org.
+Their names can change while they are 0.x; read the project's references before writing against them.
 
-Packages: `DDDToolkit.Supporting.Tenancy` (the model, its rules, a manager per aggregate, the access manager, no
-database), `DDDToolkit.Supporting.Tenancy.Abstractions` (`[OfTenant]`, the marker of a row's tenant, for a module's
+Packages: `DTS.Tenancy` (the model, its rules, a manager per aggregate, the access manager, no
+database), `DTS.Tenancy.Abstractions` (`[OfTenant]`, the marker of a row's tenant, for a module's
 domain project that sees only Tenancy's ids; the first package references it),
-`DDDToolkit.Supporting.Tenancy.EntityFramework` (`AddTenancy()`, the read model, the queries as `db.Tenancy()`, the
-convention that maps `[OfTenant]`) and `DDDToolkit.Supporting.Tenancy.Postgres` (the same queries as SQL functions
+`DTS.Tenancy.EntityFramework` (`AddTenancy()`, the read model, the queries as `db.Tenancy()`, the
+convention that maps `[OfTenant]`) and `DTS.Tenancy.Postgres` (the same queries as SQL functions
 and row level security).
 
 ## A class of a supporting domain
@@ -104,7 +103,7 @@ public sealed partial class ShopSeat
    (`seats.ByIdAsync(ids, ct)`, `roles.ListAsync(ct)`). A record nested in a manager is the package's own type:
    `SeatManager.SeatOverview`, `OrganizationManager.UnitInTree`.
    The stores the managers save through are interfaces (`ITenancyStore<...>`, `IInvitationStore<...>` in
-   `DDDToolkit.Supporting.Tenancy.Managers`): the generator writes `global using TenancyStore = ...;`, and
+   `DTS.Tenancy.Managers`): the generator writes `global using TenancyStore = ...;`, and
    `InvitationStore` where an invitation class is declared, into the declaring project and every project above that
    sees its classes (where the toolkit's generator runs). A command that changes a field of the application's own on
    a Tenancy aggregate takes `TenancyStore`, loads, changes, `SaveAsync`; write no alias of the stores either.
@@ -112,7 +111,7 @@ public sealed partial class ShopSeat
    Tenancy's classes get two classes of each name, and the host is warned once per name (DDD00075): copy the lines
    the messages write out into one module's domain project, beside `[assembly: Module]` or the switch,
    `[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]`, one per class (in
-   `DDDToolkit.Abstractions.Attributes`; another name works too, but not one a namespace has), and take that
+   `DTS.DDD.Abstractions.Attributes`; another name works too, but not one a namespace has), and take that
    module's managers by those names above. CS0246 for a name above: read DDD00065 in that project. Only a module of
    one project with HotChocolate types over the nested records keeps one alias of exactly the class's name there,
    since another generator does not see a generated class.
@@ -164,7 +163,7 @@ public sealed partial class ShopSeat
    ```
 
 6. A module's own tables: mark the aggregate root's tenant in the domain, `[OfTenant] public TenantId TenantId
-   { get; private set; }` (`DDDToolkit.Supporting.Tenancy`, package `...Tenancy.Abstractions`), and call
+   { get; private set; }` (`DTS.Tenancy`, package `...Tenancy.Abstractions`), and call
    `configurationBuilder.AddDDDToolkitConventions()` in the context's `ConfigureConventions`: Tenancy's convention
    gives every marked class the tenant filter and the save check, with no line per class. One marked property per
    class, of the tenant id, never nullable, on the root of a hierarchy; a model that breaks this, or that marks a
@@ -183,7 +182,7 @@ public sealed partial class ShopSeat
    project's assembly (a top-level `Program.cs` needs `using <HostAssembly>;`). The Postgres export finds the same
    lists itself, in the modules the exporting project references, and builds its catalogue from them and the
    `ApplicationCatalogue` marked `[TenancyCatalogue]` (written into that project's
-   `DDDToolkit.RowAccessContributionsOfPackages.g.cs`). Do not also call `AddTenancyPermissions` with a module's
+   `DTS.DDD.RowAccessContributionsOfPackages.g.cs`). Do not also call `AddTenancyPermissions` with a module's
    list: the catalogue refuses it twice (DDD00092 is a `[Permissions]` class or constant of the wrong shape;
    DDD00070 a `[TenancyCatalogue]` or `[TenancyOperators]` that a library keeps internal).
 7. Provisioning, seeding and jobs are system work, begun on purpose:

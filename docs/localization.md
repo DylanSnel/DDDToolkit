@@ -6,7 +6,7 @@ Every failure that the toolkit reports carries three things:
 - a **message** in the words of the domain;
 - the **arguments** that the message was built from.
 
-`DDDToolkit.Localization` uses the code and the arguments to write the failure in the reader's language, at the
+`DTS.DDD.Localization` uses the code and the arguments to write the failure in the reader's language, at the
 moment the failure becomes a response.
 
 This covers every failure that the toolkit hands you:
@@ -34,11 +34,11 @@ worse.
 ## Setup
 
 ```bash
-dotnet add package Temp.DDDToolkit.Localization --prerelease
+dotnet add package DylansTechStack.DDD.Localization --prerelease
 ```
 
 The interface `IFailureLocalizer` is in the core package `DDDToolkit`. So an integration can ask for a localizer
-without a dependency on how the translations are stored. `DDDToolkit.Localization` has the implementation, which
+without a dependency on how the translations are stored. `DTS.DDD.Localization` has the implementation, which
 reads translations through `IStringLocalizer`.
 
 ```csharp
@@ -232,7 +232,7 @@ sample's `ProjectRefusals` is such a class. Its English and Dutch texts are in t
 
 ## GraphQL
 
-`DDDToolkit.HotChocolate` has an error filter that does all of this for GraphQL. Every failure that the toolkit
+`DTS.DDD.HotChocolate` has an error filter that does all of this for GraphQL. Every failure that the toolkit
 throws becomes a GraphQL error, with its code in the extensions and its message in the reader's language. A
 refusal becomes one error. Its kind is in the `kind` extension, and the input it names is in the `field`
 extension. A validation failure has its property in the `field` extension too.
@@ -480,9 +480,9 @@ The toolkit writes eight messages itself, and ships them in English and Dutch:
 | Code | Where it comes from | Placeholders |
 | --- | --- | --- |
 | `Unspecified` | A `Validate()` that returned `false` without a reason. | `{ValueObject}` |
-| `ValueObjectValidator` | `MustBeValid()` in `DDDToolkit.FluentValidation`. | `{PropertyName}`, `{ValueObject}` |
-| `access.refused` | `ToolkitRefusals.Refused`, in two cases. `DDDToolkit.EntityFramework` makes it when a row level security (RLS) policy or a guard of the database refuses a save. A request that lets one caller or another through (`AccessRequirement.Any`, `[OrOwn]`) makes it when the caller is neither. Its argument `Reasons` then lists the code and the arguments of each case. | none |
-| `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`. `DDDToolkit.EntityFramework.Postgres` makes it for a token whose role is on none of the host's lists, before anything runs for it. | `{Role}` |
+| `ValueObjectValidator` | `MustBeValid()` in `DTS.DDD.FluentValidation`. | `{PropertyName}`, `{ValueObject}` |
+| `access.refused` | `ToolkitRefusals.Refused`, in two cases. `DTS.DDD.EntityFramework` makes it when a row level security (RLS) policy or a guard of the database refuses a save. A request that lets one caller or another through (`AccessRequirement.Any`, `[OrOwn]`) makes it when the caller is neither. Its argument `Reasons` then lists the code and the arguments of each case. | none |
+| `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`. `DTS.DDD.EntityFramework.Postgres` makes it for a token whose role is on none of the host's lists, before anything runs for it. | `{Role}` |
 | `access.not-signed-in` | `ToolkitRefusals.NotSignedIn`. A request requires a caller who signed in (`AccessRequirement.SignedIn()`), and the caller did not sign in, or is system work. | none |
 | `access.system-only` | `ToolkitRefusals.SystemOnly`. Only system work may do this, and the caller is not system work. That includes work that began no user. The methods of Tenancy's managers that only system work may call, such as provisioning, make it, and so does a handler that only system work may run. | none |
 | `access.not-own` | `ToolkitRefusals.NotOwn`. A request about the caller's own (`AccessRequirement.Own(value)`, `[Own]`) names a value that the caller does not have. | none |

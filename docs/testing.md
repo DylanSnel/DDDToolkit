@@ -1,6 +1,6 @@
 # Testing aggregates
 
-`DDDToolkit.Testing` is a package for testing what an aggregate does: which domain events a method raises, and
+`DTS.DDD.Testing` is a package for testing what an aggregate does: which domain events a method raises, and
 whether the method refuses. Such a test needs no database, clock or network, because an aggregate is plain
 domain code.
 
@@ -16,7 +16,7 @@ The toolkit puts `DequeueDomainEvents()` behind that cast on purpose, because
 the cast for you, and its failure messages list the events that were raised.
 
 ```bash
-dotnet add package Temp.DDDToolkit.Testing --prerelease
+dotnet add package DylansTechStack.DDD.Testing --prerelease
 ```
 
 The package references `DDDToolkit` and nothing else. It brings no test framework and no assertion library, so it
@@ -80,7 +80,7 @@ public partial class Order
 The tests:
 
 ```csharp
-using DDDToolkit.Testing;
+using DTS.DDD.Testing;
 
 public class OrderTests
 {
@@ -295,11 +295,11 @@ when the rule holds ([Running the checks by hand](invariants.md#running-the-chec
 a test that calls `order.Cancel(reason)` cannot set them. The event gets the time of the system clock.
 
 `DomainEventClock.Use(clock)` replaces the clock that both properties read, for the current asynchronous flow.
-`DomainEventClock` is in the core package (namespace `DDDToolkit.BaseTypes`), because the assertions of this
+`DomainEventClock` is in the core package (namespace `DTS.DDD.BaseTypes`), because the assertions of this
 package never compare `EventId` or `OccurredAt`. Use it in a test that asserts on the time itself:
 
 ```csharp
-using DDDToolkit.BaseTypes;
+using DTS.DDD.BaseTypes;
 
 var clock = new FakeTimeProvider(new DateTimeOffset(2024, 1, 21, 12, 0, 0, TimeSpan.Zero));
 

@@ -7,11 +7,11 @@ sidebar_label: Entity Framework
 
 # Membership API: Entity Framework
 
-The public API of `DDDToolkit.Supporting.Membership.EntityFramework`, by folder: the registration a host calls for each kind of resource, the mapping of a resource's member tables into the application's own context, the queries on the resource's own set, `db.Boards.WhereIHold(permission)`, that put what the access manager decides into a module's own statements, and what an application answers for a resource whose roles or places it keeps itself.
+The public API of `DTS.Membership.EntityFramework`, by folder: the registration a host calls for each kind of resource, the mapping of a resource's member tables into the application's own context, the queries on the resource's own set, `db.Boards.WhereIHold(permission)`, that put what the access manager decides into a module's own statements, and what an application answers for a resource whose roles or places it keeps itself.
 
 ## Registration
 
-Namespace `DDDToolkit.Supporting.Membership.EntityFramework`.
+Namespace `DTS.Membership.EntityFramework`.
 
 ### `MembershipEntityFrameworkServiceCollectionExtensions`
 
@@ -266,7 +266,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Mapping
 
-Namespace `DDDToolkit.Supporting.Membership.EntityFramework`.
+Namespace `DTS.Membership.EntityFramework`.
 
 ### `MembershipEntityTypeBuilderExtensions`
 
@@ -514,7 +514,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Queries
 
-Namespace `DDDToolkit.Supporting.Membership.EntityFramework`.
+Namespace `DTS.Membership.EntityFramework`.
 
 ### `MemberQueryableExtensions`
 
@@ -788,7 +788,7 @@ It is made by setting its members, which Entity Framework reads back as columns,
 
 ## Answered by the application
 
-Namespace `DDDToolkit.Supporting.Membership.EntityFramework`.
+Namespace `DTS.Membership.EntityFramework`.
 
 ### `IPlacesReached<TResourceId, TPlaceId>`
 

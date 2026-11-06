@@ -1,4 +1,4 @@
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 [assembly: Module("Catalog")]
 

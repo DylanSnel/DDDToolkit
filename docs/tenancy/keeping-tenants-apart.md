@@ -15,8 +15,8 @@ Tenancy adds two checks in C#, so they work on every database. `AddTenancy()` ad
 class of yours gets them when it marks the property that holds its tenant with `[OfTenant]`:
 
 ```csharp
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.Tenancy;
 
 [AggregateRoot<ProjectId>]
 public sealed partial class Project
@@ -29,8 +29,8 @@ public sealed partial class Project
 The marker is a fact about the class, like `[Owner]`, so it goes on the domain class. `AddDDDToolkitConventions()` in
 the context's `ConfigureConventions` finds the marker and adds both checks. The context needs no line for the class.
 
-- **The marker's package.** `[OfTenant]` is in `DDDToolkit.Supporting.Tenancy.Abstractions`, in the namespace
-  `DDDToolkit.Supporting.Tenancy`. The package holds Tenancy's markers for domain classes and has no Entity Framework.
+- **The marker's package.** `[OfTenant]` is in `DTS.Tenancy.Abstractions`, in the namespace
+  `DTS.Tenancy`. The package holds Tenancy's markers for domain classes and has no Entity Framework.
   Tenancy's own package references it. A module's domain project that sees only Tenancy's ids references the marker's
   package by itself.
 - **The marker names its convention.** The marker carries `[ModelConvention]`, which names `OfTenantConvention` in

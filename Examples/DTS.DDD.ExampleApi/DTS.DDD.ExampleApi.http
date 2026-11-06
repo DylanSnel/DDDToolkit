@@ -1,0 +1,6 @@
+@DTS.DDD.ExampleApi_HostAddress = http://localhost:5151
+
+GET {{DTS.DDD.ExampleApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

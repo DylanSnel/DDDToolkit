@@ -128,26 +128,24 @@ const blocks = [
   },
 ];
 
-// For now 3.x is published under Temp. ids (see Directory.Build.props). The names below are the
-// packages' own; the prefix goes on the install command and the NuGet links.
-const packageIdPrefix = 'Temp.';
+// The packages by their ids, DylansTechStack.DDD.*. Their namespaces are DTS.DDD.* (see Directory.Build.props).
 
 const packages = [
-  ['DDDToolkit', 'Base types and the core generators.'],
-  ['DDDToolkit.EntityFramework', 'Mapping, conventions, event dispatch, the outbox and the inbox.'],
-  ['DDDToolkit.EntityFramework.Postgres', 'Row level security, and rules in C# as Postgres policies.'],
-  ['DDDToolkit.EntityFramework.Supabase', 'Migrations and policies exported for supabase db push and branching.'],
-  ['DDDToolkit.Auth.Supabase', 'Supabase Auth, and each token’s user as the caller.'],
-  ['DDDToolkit.Auth.Supabase.AspNetCore', 'The same for ASP.NET Core requests.'],
-  ['DDDToolkit.Auth.Supabase.AzureFunctions', 'The same for Azure Functions invocations.'],
-  ['DDDToolkit.HotChocolate', 'GraphQL bindings, node ids, errors with codes, subscriptions.'],
-  ['DDDToolkit.HotChocolate.Fusion.InMemory', 'One schema over a modular monolith, composed in process.'],
-  ['DDDToolkit.Messaging.Postgres', 'pgmq: a queue in the database the outbox already writes to.'],
-  ['DDDToolkit.Messaging.Wolverine', 'Wolverine as the transport between outbox and inbox.'],
-  ['DDDToolkit.Messaging.MassTransit', 'MassTransit 8 as that transport.'],
-  ['DDDToolkit.FluentValidation', 'A generated validator per value object.'],
-  ['DDDToolkit.Localization', 'Failures phrased in the reader’s language.'],
-  ['DDDToolkit.Testing', 'Given/when/then tests for the domain events an aggregate raises.'],
+  ['DylansTechStack.DDD', 'Base types and the core generators.'],
+  ['DylansTechStack.DDD.EntityFramework', 'Mapping, conventions, event dispatch, the outbox and the inbox.'],
+  ['DylansTechStack.DDD.EntityFramework.Postgres', 'Row level security, and rules in C# as Postgres policies.'],
+  ['DylansTechStack.DDD.EntityFramework.Supabase', 'Migrations and policies exported for supabase db push and branching.'],
+  ['DylansTechStack.DDD.Auth.Supabase', 'Supabase Auth, and each token’s user as the caller.'],
+  ['DylansTechStack.DDD.Auth.Supabase.AspNetCore', 'The same for ASP.NET Core requests.'],
+  ['DylansTechStack.DDD.Auth.Supabase.AzureFunctions', 'The same for Azure Functions invocations.'],
+  ['DylansTechStack.DDD.HotChocolate', 'GraphQL bindings, node ids, errors with codes, subscriptions.'],
+  ['DylansTechStack.DDD.HotChocolate.Fusion.InMemory', 'One schema over a modular monolith, composed in process.'],
+  ['DylansTechStack.DDD.Messaging.Postgres', 'pgmq: a queue in the database the outbox already writes to.'],
+  ['DylansTechStack.DDD.Messaging.Wolverine', 'Wolverine as the transport between outbox and inbox.'],
+  ['DylansTechStack.DDD.Messaging.MassTransit', 'MassTransit 8 as that transport.'],
+  ['DylansTechStack.DDD.FluentValidation', 'A generated validator per value object.'],
+  ['DylansTechStack.DDD.Localization', 'Failures phrased in the reader’s language.'],
+  ['DylansTechStack.DDD.Testing', 'Given/when/then tests for the domain events an aggregate raises.'],
 ];
 
 const hosts = [
@@ -218,7 +216,7 @@ function Hero() {
           </p>
           <div className={styles.install}>
             <span className={styles.prompt}>$</span>
-            <code>dotnet add package {packageIdPrefix}DDDToolkit</code>
+            <code>dotnet add package DylansTechStack.DDD</code>
           </div>
           <div className={styles.buttons}>
             <Link className={clsx('button button--lg', styles.primaryButton)} to="/docs/getting-started">
@@ -420,7 +418,7 @@ function Packages() {
         <p className={styles.sectionLead}>A core package and an integration per tool, each on NuGet.</p>
         <div className={styles.packageGrid}>
           {packages.map(([name, text]) => (
-            <a key={name} className={styles.package} href={`https://www.nuget.org/packages/${packageIdPrefix}${name}`}>
+            <a key={name} className={styles.package} href={`https://www.nuget.org/packages/${name}`}>
               <code>{name}</code>
               <span>{text}</span>
             </a>

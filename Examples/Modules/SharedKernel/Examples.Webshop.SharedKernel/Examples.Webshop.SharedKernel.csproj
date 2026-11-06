@@ -16,18 +16,18 @@
     Nothing generated here needs a name of its own either: Money is a multi-property value object, which
     Entity Framework stores inline as a complex type, so there is no converter method to call.
 
-    DDDToolkit.EntityFramework and its generator are here for the same reason Ordering's contracts have
+    DTS.DDD.EntityFramework and its generator are here for the same reason Ordering's contracts have
     them: the modules store Money, and the generator is what marks a value object [ComplexType] so
     Entity Framework stores it inline. It has to run in the assembly that declares the type.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
-    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\..\..\Source\DTS.DDD\DTS.DDD.csproj" />
+    <ProjectReference Include="..\..\..\..\Source\DTS.DDD.EntityFramework\DTS.DDD.EntityFramework.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\Source\DTS.DDD.Analyzers\DTS.DDD.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\Source\DTS.DDD.EntityFramework.Analyzers\DTS.DDD.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

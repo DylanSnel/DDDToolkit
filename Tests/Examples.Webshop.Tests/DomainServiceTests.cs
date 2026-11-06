@@ -1,4 +1,4 @@
-using DDDToolkit.Testing;
+using DTS.DDD.Testing;
 using Examples.Webshop.Inventory;
 using Examples.Webshop.Ordering;
 using Examples.Webshop.Ordering.Contracts;

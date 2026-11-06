@@ -35,7 +35,7 @@
 
   <!-- One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container. -->
   <ItemGroup>
-    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DTS.DDD.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
   </ItemGroup>
 
 </Project>

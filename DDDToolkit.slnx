@@ -7,38 +7,38 @@
     <File Path="README.md" />
   </Folder>
   <Folder Name="/Benchmarks/">
-    <Project Path="Benchmarks/DDDToolkit.Benchmarks/DDDToolkit.Benchmarks.csproj" />
-    <Project Path="Benchmarks/DDDToolkit.Benchmarks.FluentValidation/DDDToolkit.Benchmarks.FluentValidation.csproj" />
+    <Project Path="Benchmarks/DTS.DDD.Benchmarks/DTS.DDD.Benchmarks.csproj" />
+    <Project Path="Benchmarks/DTS.DDD.Benchmarks.FluentValidation/DTS.DDD.Benchmarks.FluentValidation.csproj" />
   </Folder>
   <Folder Name="/Source/">
-    <Project Path="Source/DDDToolkit.Abstractions/DDDToolkit.Abstractions.csproj" />
-    <Project Path="Source/DDDToolkit/DDDToolkit.csproj" />
-    <Project Path="Source/DDDToolkit.Analyzers/DDDToolkit.Analyzers.csproj" />
-    <Project Path="Source/DDDToolkit.Analyzers.CodeFixes/DDDToolkit.Analyzers.CodeFixes.csproj" />
-    <Project Path="Source/DDDToolkit.EntityFramework/DDDToolkit.EntityFramework.csproj" />
-    <Project Path="Source/DDDToolkit.EntityFramework.Analyzers/DDDToolkit.EntityFramework.Analyzers.csproj" />
-    <Project Path="Source/DDDToolkit.Messaging.Postgres/DDDToolkit.Messaging.Postgres.csproj" />
-    <Project Path="Source/DDDToolkit.Messaging.Wolverine/DDDToolkit.Messaging.Wolverine.csproj" />
-    <Project Path="Source/DDDToolkit.Messaging.MassTransit/DDDToolkit.Messaging.MassTransit.csproj" />
-    <Project Path="Source/DDDToolkit.EntityFramework.Postgres/DDDToolkit.EntityFramework.Postgres.csproj" />
-    <Project Path="Source/DDDToolkit.EntityFramework.Supabase/DDDToolkit.EntityFramework.Supabase.csproj" />
-    <Project Path="Source/DDDToolkit.EntityFramework.Supabase.Analyzers/DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" />
-    <Project Path="Source/DDDToolkit.Auth.Supabase/DDDToolkit.Auth.Supabase.csproj" />
-    <Project Path="Source/DDDToolkit.Auth.Supabase.AspNetCore/DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
-    <Project Path="Source/DDDToolkit.Auth.Supabase.AzureFunctions/DDDToolkit.Auth.Supabase.AzureFunctions.csproj" />
-    <Project Path="Source/DDDToolkit.FluentValidation/DDDToolkit.FluentValidation.csproj" />
-    <Project Path="Source/DDDToolkit.FluentValidation.Analyzers/DDDToolkit.FluentValidation.Analyzers.csproj" />
-    <Project Path="Source/DDDToolkit.HotChocolate/DDDToolkit.HotChocolate.csproj" />
-    <Project Path="Source/DDDToolkit.HotChocolate.Fusion.InMemory/DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
-    <Project Path="Source/DDDToolkit.HotChocolate.Analyzers/DDDToolkit.HotChocolate.Analyzers.csproj" />
-    <Project Path="Source/DDDToolkit.Localization/DDDToolkit.Localization.csproj" />
-    <Project Path="Source/DDDToolkit.NewtonSoft.Json/DDDToolkit.NewtonSoft.Json.csproj" />
-    <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />
+    <Project Path="Source/DTS.DDD.Abstractions/DTS.DDD.Abstractions.csproj" />
+    <Project Path="Source/DTS.DDD/DTS.DDD.csproj" />
+    <Project Path="Source/DTS.DDD.Analyzers/DTS.DDD.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.Analyzers.CodeFixes/DTS.DDD.Analyzers.CodeFixes.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework/DTS.DDD.EntityFramework.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework.Analyzers/DTS.DDD.EntityFramework.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.Messaging.Postgres/DTS.DDD.Messaging.Postgres.csproj" />
+    <Project Path="Source/DTS.DDD.Messaging.Wolverine/DTS.DDD.Messaging.Wolverine.csproj" />
+    <Project Path="Source/DTS.DDD.Messaging.MassTransit/DTS.DDD.Messaging.MassTransit.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework.Postgres/DTS.DDD.EntityFramework.Postgres.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework.Supabase/DTS.DDD.EntityFramework.Supabase.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework.Supabase.Analyzers/DTS.DDD.EntityFramework.Supabase.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.Auth.Supabase/DTS.DDD.Auth.Supabase.csproj" />
+    <Project Path="Source/DTS.DDD.Auth.Supabase.AspNetCore/DTS.DDD.Auth.Supabase.AspNetCore.csproj" />
+    <Project Path="Source/DTS.DDD.Auth.Supabase.AzureFunctions/DTS.DDD.Auth.Supabase.AzureFunctions.csproj" />
+    <Project Path="Source/DTS.DDD.FluentValidation/DTS.DDD.FluentValidation.csproj" />
+    <Project Path="Source/DTS.DDD.FluentValidation.Analyzers/DTS.DDD.FluentValidation.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.HotChocolate/DTS.DDD.HotChocolate.csproj" />
+    <Project Path="Source/DTS.DDD.HotChocolate.Fusion.InMemory/DTS.DDD.HotChocolate.Fusion.InMemory.csproj" />
+    <Project Path="Source/DTS.DDD.HotChocolate.Analyzers/DTS.DDD.HotChocolate.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.Localization/DTS.DDD.Localization.csproj" />
+    <Project Path="Source/DTS.DDD.NewtonSoft.Json/DTS.DDD.NewtonSoft.Json.csproj" />
+    <Project Path="Source/DTS.DDD.Testing/DTS.DDD.Testing.csproj" />
   </Folder>
   <Folder Name="/Examples/">
     <File Path="Examples/README.md" />
-    <Project Path="Examples/DDDToolkit.ExampleLibrary/DDDToolkit.ExampleLibrary.csproj" />
-    <Project Path="Examples/DDDToolkit.ExampleApi/DDDToolkit.ExampleApi.csproj" />
+    <Project Path="Examples/DTS.DDD.ExampleLibrary/DTS.DDD.ExampleLibrary.csproj" />
+    <Project Path="Examples/DTS.DDD.ExampleApi/DTS.DDD.ExampleApi.csproj" />
   </Folder>
   <Folder Name="/Examples/Modules/" />
   <Folder Name="/Examples/Modules/Catalog/">
@@ -102,24 +102,24 @@
     <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Gateway/Examples.Webshop.MassTransit.Gateway.csproj" />
   </Folder>
   <Folder Name="/Tests/Spikes/">
-    <Project Path="Tests/Spikes/DDDToolkit.Spikes.FusionInProcess/DDDToolkit.Spikes.FusionInProcess.csproj" />
+    <Project Path="Tests/Spikes/DTS.DDD.Spikes.FusionInProcess/DTS.DDD.Spikes.FusionInProcess.csproj" />
   </Folder>
   <Folder Name="/Tests/">
-    <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Analyzers.Tests/DDDToolkit.Analyzers.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Auth.Supabase.Tests/DDDToolkit.Auth.Supabase.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.EntityFramework.Tests/DDDToolkit.EntityFramework.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Tests/DTS.DDD.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Analyzers.Tests/DTS.DDD.Analyzers.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Auth.Supabase.Tests/DTS.DDD.Auth.Supabase.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.EntityFramework.Providers.Tests/DTS.DDD.EntityFramework.Providers.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.EntityFramework.Tests/DTS.DDD.EntityFramework.Tests.csproj" />
     <Project Path="Tests/Examples.Webshop.Tests/Examples.Webshop.Tests.csproj" />
     <Project Path="Tests/Examples.AppHost.Tests/Examples.AppHost.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.HotChocolate.Tests/DDDToolkit.HotChocolate.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Harbor.Domain/DDDToolkit.HotChocolate.Tests.Harbor.Domain.csproj" />
-    <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Harbor.Api/DDDToolkit.HotChocolate.Tests.Harbor.Api.csproj" />
-    <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Gallery.Api/DDDToolkit.HotChocolate.Tests.Gallery.Api.csproj" />
-    <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Library.Api/DDDToolkit.HotChocolate.Tests.Library.Api.csproj" />
-    <Project Path="Tests/DDDToolkit.HotChocolate.Fusion.InMemory.Tests/DDDToolkit.HotChocolate.Fusion.InMemory.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Mediator.Tests/DDDToolkit.Mediator.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Messaging.Tests/DDDToolkit.Messaging.Tests.csproj" />
-    <Project Path="Tests/DDDToolkit.Testing.Tests/DDDToolkit.Testing.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests/DTS.DDD.HotChocolate.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Harbor.Domain/DTS.DDD.HotChocolate.Tests.Harbor.Domain.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Harbor.Api/DTS.DDD.HotChocolate.Tests.Harbor.Api.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Gallery.Api/DTS.DDD.HotChocolate.Tests.Gallery.Api.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Library.Api/DTS.DDD.HotChocolate.Tests.Library.Api.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Fusion.InMemory.Tests/DTS.DDD.HotChocolate.Fusion.InMemory.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Mediator.Tests/DTS.DDD.Mediator.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Messaging.Tests/DTS.DDD.Messaging.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Testing.Tests/DTS.DDD.Testing.Tests.csproj" />
   </Folder>
 </Solution>

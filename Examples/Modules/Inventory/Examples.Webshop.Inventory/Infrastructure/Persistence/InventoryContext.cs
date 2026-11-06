@@ -1,8 +1,8 @@
-using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Conventions;
-using DDDToolkit.EntityFramework.Inbox;
-using DDDToolkit.EntityFramework.Outbox;
-using DDDToolkit.EntityFramework.Supabase;
+using DTS.DDD.EntityFramework;
+using DTS.DDD.EntityFramework.Conventions;
+using DTS.DDD.EntityFramework.Inbox;
+using DTS.DDD.EntityFramework.Outbox;
+using DTS.DDD.EntityFramework.Supabase;
 using Examples.Webshop.Inventory.Converters;
 using Microsoft.EntityFrameworkCore;
 

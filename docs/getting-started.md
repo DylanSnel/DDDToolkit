@@ -22,20 +22,19 @@ pieces.
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit --prerelease
+dotnet add package DylansTechStack.DDD --prerelease
 ```
 
-Version 3.x is published under `Temp.` package ids for now. The package `DDDToolkit` on nuget.org is still 2.0.22,
-and these pages do not describe it. The namespaces are `DDDToolkit` in both. See [Packages](../README.md#packages).
+The packages are published as `DylansTechStack.DDD.*`, and their namespaces are `DTS.DDD.*`: the package
+`DylansTechStack.DDD.EntityFramework` holds the namespace `DTS.DDD.EntityFramework`. See [Packages](../README.md#packages).
 
-These pages describe 3.2.0, which is in preview. The current preview is 3.2.0-preview.13. Until 3.2.0 is released,
-add every `Temp.DDDToolkit.*` package with `--prerelease` or with `--version 3.2.0-preview.13`. Keep all the packages
-at the same version. A package of this release next to a 3.1.0 package fails in one of two ways:
+The packages start at 0.1.0 under these ids. Keep all of them at the same version. A package of one version next to
+another version fails in one of two ways:
 
 - Restore fails with NU1605, a package downgrade.
 - The application fails at run time with a `MissingMethodException`.
 
-`DDDToolkit` brings the base types and the core generators. The first steps need nothing else. Each integration has
+`DylansTechStack.DDD` brings the base types and the core generators. The first steps need nothing else. Each integration has
 a package of its own. The step that first uses an integration adds its package: Entity Framework when the aggregate
 is stored, the testing kit when the aggregate is tested.
 
@@ -311,11 +310,11 @@ rules costs nothing. The compiler removes an unimplemented `partial void` method
 
 ## Test the aggregate
 
-The aggregate needs no database, and neither does its test. `DDDToolkit.Testing` runs an action on an aggregate and
+The aggregate needs no database, and neither does its test. `DTS.DDD.Testing` runs an action on an aggregate and
 asserts on the domain events that the action raised:
 
 ```bash
-dotnet add package Temp.DDDToolkit.Testing --prerelease
+dotnet add package DylansTechStack.DDD.Testing --prerelease
 ```
 
 ```csharp
@@ -350,7 +349,7 @@ See [Testing](testing.md).
 ## Store the aggregate with Entity Framework
 
 ```bash
-dotnet add package Temp.DDDToolkit.EntityFramework --prerelease
+dotnet add package DylansTechStack.DDD.EntityFramework --prerelease
 ```
 
 Some projects reference a provider and a tool that ask for different Entity Framework versions. An example is

@@ -5,7 +5,7 @@ sidebar_label: Row level security
 
 # Row level security on Postgres
 
-`DDDToolkit.Supporting.Tenancy.Postgres` writes Tenancy's access rules into Postgres as row level security (RLS)
+`DTS.Tenancy.Postgres` writes Tenancy's access rules into Postgres as row level security (RLS)
 policies, SQL functions and triggers. Postgres then checks every row a query reads or writes against the caller's
 seat, also when the query skips your C# checks. Use the package when Tenancy is stored on Postgres. On any other
 database, every check runs in C# only. The [overview](overview.md) explains the words (tenant, unit, seat, grant,
@@ -19,7 +19,7 @@ On Postgres, Tenancy checks access in two places:
    ([Keeping tenants apart](keeping-tenants-apart.md)).
 2. **In Postgres**, with the same rules as [RLS](../row-level-security.md) policies.
 
-For the Postgres side, `DDDToolkit.Supporting.Tenancy.Postgres` writes three kinds of SQL into your access files:
+For the Postgres side, `DTS.Tenancy.Postgres` writes three kinds of SQL into your access files:
 
 - **Policies** on Tenancy's tables and on every table you keep to a tenant.
 - **SQL functions** for Tenancy's queries, such as `units_where_i_hold_permission('projects.read')`. The policies
@@ -98,7 +98,7 @@ enough for the export to write the SQL.
 - **The next build writes the access file again** when you mark a permission, change a starter role, change
   containment, or add a permission while the administrators' starter role lists none. That starter role then holds
   every permission. The new access file is the migration.
-- **The build generates the contribution** in `DDDToolkit.RowAccessContributionsOfPackages.g.cs` of the exporting
+- **The build generates the contribution** in `DTS.DDD.RowAccessContributionsOfPackages.g.cs` of the exporting
   project.
   - The build reports [DDD00071](../diagnostics.md#ddd00071) for two members marked `[TenancyCatalogue]`, or for a
     marked member of another type.
@@ -523,7 +523,7 @@ The policies and your rules call these SQL functions:
 [Who reads Tenancy's tables](#who-reads-tenancys-tables) lists the other functions with their readers.
 
 A module's rule asks these functions through [`TenancyRowAccess`](reference/queries.md#tenancyrowaccess), in the
-`DDDToolkit.Supporting.Tenancy` package and in the namespace of `IRowUser`, `DDDToolkit.Abstractions.Access`. So the
+`DTS.Tenancy` package and in the namespace of `IRowUser`, `DTS.DDD.Abstractions.Access`. So the
 module needs no reference to the Postgres package. `anon` may not run the functions, so write such a rule for signed-in
 users:
 

@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Messaging.MassTransit\DDDToolkit.Messaging.MassTransit.csproj" />
+    <ProjectReference Include="..\..\..\Source\DTS.DDD.Messaging.MassTransit\DTS.DDD.Messaging.MassTransit.csproj" />
   </ItemGroup>
 
 </Project>

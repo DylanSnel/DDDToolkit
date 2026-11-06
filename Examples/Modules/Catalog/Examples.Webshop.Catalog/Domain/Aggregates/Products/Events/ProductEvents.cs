@@ -1,4 +1,4 @@
-using DDDToolkit.BaseTypes;
+using DTS.DDD.BaseTypes;
 using Examples.Webshop.SharedKernel;
 
 namespace Examples.Webshop.Catalog.Domain.Products;

@@ -11,7 +11,7 @@ tutorial sets this up in [steps 3 to 5](tutorial.md#step-3-where-it-is-stored).
 
 ## The five functions
 
-`DDDToolkit.Supporting.Membership.Postgres` writes five functions per resource, from the same rules that the access
+`DTS.Membership.Postgres` writes five functions per resource, from the same rules that the access
 manager and `WhereIHold` read in C#. For `documents`:
 
 | Function | Returns | Your rules call it through |

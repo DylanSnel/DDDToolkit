@@ -1,4 +1,4 @@
-using DDDToolkit.Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.Extensions.Logging;
 
 namespace Examples.Webshop.Ordering.Application.Orders;

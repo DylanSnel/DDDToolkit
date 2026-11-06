@@ -1,4 +1,4 @@
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Examples.Webshop.Inventory.Domain.StockItems;
 

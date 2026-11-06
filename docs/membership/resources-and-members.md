@@ -12,16 +12,16 @@ beside Tenancy.
 ## The packages
 
 > [!NOTE]
-> The packages are published as `Temp.DDDToolkit.Supporting.Membership`, `.Abstractions`, `.EntityFramework` and
-> `.Postgres` ([the package ids](../migrating-to-3.md#the-package-ids)). They are prereleases, so their names can
-> still change.
+> The packages are `DylansTechStack.Membership`, `.Abstractions`, `.EntityFramework` and `.Postgres`, and their
+> namespaces are `DTS.Membership*`. They are part of DTS Pro and are not published on nuget.org. They are 0.x, so their
+> names can still change.
 
 | Package | What it holds |
 |---|---|
-| `DDDToolkit.Supporting.Membership` | The templates, the member list, the managers' base classes and the generator that writes the list and the managers, the rules, the access manager (`MembershipAccessManager<TResource>`) and the requirements. It has no database code. |
-| `DDDToolkit.Supporting.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on the property that says where a resource hangs, in the namespace `DDDToolkit.Supporting.Membership`. No Entity Framework. `DDDToolkit.Supporting.Membership` references it. |
-| `DDDToolkit.Supporting.Membership.EntityFramework` | The mapping by convention, with `HasMembers()` and `IsCustomRole()` for names of your own, the registrations, the stores the managers load and save through, and `WhereIHold` for your own queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
-| `DDDToolkit.Supporting.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
+| `DylansTechStack.Membership` | The templates, the member list, the managers' base classes and the generator that writes the list and the managers, the rules, the access manager (`MembershipAccessManager<TResource>`) and the requirements. It has no database code. |
+| `DylansTechStack.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on the property that says where a resource hangs, in the namespace `DTS.Membership`. No Entity Framework. `DTS.Membership` references it. |
+| `DylansTechStack.Membership.EntityFramework` | The mapping by convention, with `HasMembers()` and `IsCustomRole()` for names of your own, the registrations, the stores the managers load and save through, and `WhereIHold` for your own queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
+| `DylansTechStack.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
 
 - **Membership needs no dispatcher and no Tenancy.** Members are your users unless the rules say
   [otherwise](beside-an-organization.md#three-settings-of-the-rules).
@@ -212,7 +212,7 @@ member manager makes every other change through it.
 ```csharp title="Document.Members.g.cs"
 partial class Document
 {
-    private global::DDDToolkit.Supporting.Membership.MemberList<global::Filing.DocumentShare, global::Filing.DocumentShareId, global::Filing.UserId, global::DDDToolkit.Supporting.Membership.NamedRole> Members
+    private global::DTS.Membership.MemberList<global::Filing.DocumentShare, global::Filing.DocumentShareId, global::Filing.UserId, global::DTS.Membership.NamedRole> Members
         => new(_shares, OwnerId, Codes);
 }
 ```
@@ -220,9 +220,9 @@ partial class Document
 **Document.Membership.g.cs, shortened**
 
 ```csharp
-partial class Document : global::DDDToolkit.Supporting.Membership.IMembershipResource
+partial class Document : global::DTS.Membership.IMembershipResource
 {
-    public static global::DDDToolkit.Supporting.Membership.MembershipCodes Codes { get; } = global::DDDToolkit.Supporting.Membership.MembershipCodes.Under("documents");
+    public static global::DTS.Membership.MembershipCodes Codes { get; } = global::DTS.Membership.MembershipCodes.Under("documents");
 
     static string IMembershipResource.MembershipName => "documents";
     static MembershipCodes IMembershipResource.MembershipCodes => Codes;
@@ -233,14 +233,14 @@ partial class Document : global::DDDToolkit.Supporting.Membership.IMembershipRes
 **Document.MemberManagement.g.cs, shortened**
 
 ```csharp
-partial class Document : global::DDDToolkit.Supporting.Membership.IMembershipResource<global::Filing.DocumentShare, global::Filing.UserId, global::DDDToolkit.Supporting.Membership.NamedRole>
+partial class Document : global::DTS.Membership.IMembershipResource<global::Filing.DocumentShare, global::Filing.UserId, global::DTS.Membership.NamedRole>
 {
     partial void OnChangingMembers();
     partial void OnMemberAdded(global::Filing.DocumentShare member);
     partial void OnMemberRemoved(global::Filing.UserId member);
-    partial void OnRoleGiven(global::Filing.UserId member, global::DDDToolkit.Supporting.Membership.MemberRole<global::Filing.UserId, global::DDDToolkit.Supporting.Membership.NamedRole> role);
-    partial void OnRoleTaken(global::Filing.UserId member, global::DDDToolkit.Supporting.Membership.MemberRole<global::Filing.UserId, global::DDDToolkit.Supporting.Membership.NamedRole> role);
-    partial void OnOwnerNamed(global::DDDToolkit.Supporting.Membership.OwnerNamed<global::Filing.UserId, global::DDDToolkit.Supporting.Membership.NamedRole> named);
+    partial void OnRoleGiven(global::Filing.UserId member, global::DTS.Membership.MemberRole<global::Filing.UserId, global::DTS.Membership.NamedRole> role);
+    partial void OnRoleTaken(global::Filing.UserId member, global::DTS.Membership.MemberRole<global::Filing.UserId, global::DTS.Membership.NamedRole> role);
+    partial void OnOwnerNamed(global::DTS.Membership.OwnerNamed<global::Filing.UserId, global::DTS.Membership.NamedRole> named);
 
     // The member manager's way to the list, written as explicit members of the interface: AddMember, GiveRole,
     // TakeRole, RemoveMember and NameOwner. Each calls OnChangingMembers, then Members, then the hook of the change.
@@ -299,7 +299,7 @@ The generator writes two managers for a resource, into the project of the member
 - **Each method loads, checks, changes and saves**, and returns what it saved. A change takes the resource or its id.
   After the cancellation token comes the version the caller read, for a command that names one.
 - **Your code keeps the resource, its constructor and its hooks.** The managers keep the rest. The base classes are
-  `MemberManager<...>` and `CustomRoleManager<...>` in `DDDToolkit.Supporting.Membership.Managers`
+  `MemberManager<...>` and `CustomRoleManager<...>` in `DTS.Membership.Managers`
   ([Managers and access](reference/managers.md)).
 - **A type of the same name in your project** keeps the manager out. One in a namespace is
   [DDD00106](../diagnostics.md#ddd00106), because the generated manager would hide it. One in the global namespace

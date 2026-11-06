@@ -11,7 +11,7 @@ The permissions the modules declare, the catalogue the host builds from them, th
 
 ## Catalogue
 
-Namespace `DDDToolkit.Supporting.Tenancy.Catalogue`.
+Namespace `DTS.Tenancy.Catalogue`.
 
 ### `ApplicationCatalogue`
 
@@ -533,7 +533,7 @@ Reports `problems`.
 
 ## Starter roles
 
-Namespace `DDDToolkit.Supporting.Tenancy`.
+Namespace `DTS.Tenancy`.
 
 ### `IStarterRoleSync`
 

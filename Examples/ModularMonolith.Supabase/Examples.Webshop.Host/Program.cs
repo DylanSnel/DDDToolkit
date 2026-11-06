@@ -1,8 +1,8 @@
-using DDDToolkit.Auth.Supabase;
-using DDDToolkit.Auth.Supabase.AspNetCore;
-using DDDToolkit.EntityFramework.Postgres;
-using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.EntityFramework;
+using DTS.DDD.Auth.Supabase;
+using DTS.DDD.Auth.Supabase.AspNetCore;
+using DTS.DDD.EntityFramework.Postgres;
+using DTS.DDD.EntityFramework.Supabase;
+using DTS.DDD.EntityFramework;
 using Examples.Webshop.Catalog.Api;
 using Examples.Webshop.Catalog;
 using Examples.Webshop.Host;
@@ -15,10 +15,10 @@ using Examples.Webshop.Payments.Api;
 using Examples.Webshop.Payments;
 using Examples.Webshop.Shipping.Api;
 using Examples.Webshop.Shipping;
-using DDDToolkit.HotChocolate.Fusion.InMemory;
-using DDDToolkit.HotChocolate.Subscriptions;
-using DDDToolkit.Messaging.Postgres;
-using DDDToolkit.Startup;
+using DTS.DDD.HotChocolate.Fusion.InMemory;
+using DTS.DDD.HotChocolate.Subscriptions;
+using DTS.DDD.Messaging.Postgres;
+using DTS.DDD.Startup;
 using Npgsql;
 
 // There is no export command here. The project file turns the Supabase export on, and the build writes

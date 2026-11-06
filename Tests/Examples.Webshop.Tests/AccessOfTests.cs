@@ -1,7 +1,7 @@
 global using static AccessOfTests;
 
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Access;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Access;
 
 /// <summary>
 /// The access manager these tests begin work with, outside any service provider: <c>TestAccess.BeginAs(id)</c>,

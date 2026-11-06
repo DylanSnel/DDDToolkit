@@ -1,0 +1,47 @@
+﻿using DTS.DDD.ExampleLibrary.Common.ValueObjects;
+using DTS.DDD.NewtonSoft.Json.Converters;
+using DTS.DDD.NewtonSoft.Json.Resolver;
+using Newtonsoft.Json;
+
+namespace DTS.DDD.Tests.Serialization.NewtonSoft.ValueObjects;
+
+[Collection(NewtonsoftGlobalState.Name)]
+public class NewtonsoftJsonSingleValueObjectConverterTests
+{
+    private readonly JsonSerializerSettings _settings;
+
+    public NewtonsoftJsonSingleValueObjectConverterTests()
+    {
+        _settings = new JsonSerializerSettings();
+        _settings.Converters.Add(new SingleValueObjectConverter());
+        _settings.ContractResolver = new DDDContractResolver();// Assuming this is your converter
+    }
+
+    [Fact]
+    public void Serialize_SingleValueObject_ReturnsJsonValue()
+    {
+        var email = EmailAddress.Create("test@example.com");
+        var json = JsonConvert.SerializeObject(email, _settings);
+
+        Assert.Equal("\"test@example.com\"", json);
+    }
+
+    [Fact]
+    public void Deserialize_JsonValue_ReturnsSingleValueObject()
+    {
+        var json = "\"test@example.com\"";
+        var email = JsonConvert.DeserializeObject<EmailAddress>(json, _settings);
+
+        Assert.NotNull(email);
+        Assert.Equal("test@example.com", email.Value);
+    }
+
+    [Fact]
+    public void Deserialize_NullJsonValue_ReturnsNull()
+    {
+        var json = "null";
+        var email = JsonConvert.DeserializeObject<EmailAddress?>(json, _settings);
+
+        Assert.Null(email);
+    }
+}

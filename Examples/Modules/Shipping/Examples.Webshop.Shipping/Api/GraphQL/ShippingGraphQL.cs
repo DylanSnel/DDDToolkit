@@ -1,4 +1,4 @@
-using DDDToolkit.HotChocolate;
+using DTS.DDD.HotChocolate;
 using Examples.Webshop.Ordering.Contracts;
 using Examples.Webshop.Ordering.Contracts.GraphQl;
 using Examples.Webshop.Shipping.GraphQl;

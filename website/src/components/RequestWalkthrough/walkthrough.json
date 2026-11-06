@@ -1,5 +1,5 @@
 {
-  "$comment": "Built from docs/how-a-request-is-checked.md: every code line is the page's, which a test of DDDToolkit.Analyzers.Tests holds it to.",
+  "$comment": "Built from docs/how-a-request-is-checked.md: every code line is the page's, which a test of DTS.DDD.Analyzers.Tests holds it to.",
   "tenant": "harbor",
   "callers": [
     {

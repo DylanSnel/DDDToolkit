@@ -1,5 +1,5 @@
-using DDDToolkit.EntityFramework;
-using DDDToolkit.Messaging.MassTransit;
+using DTS.DDD.EntityFramework;
+using DTS.DDD.Messaging.MassTransit;
 using MassTransit;
 
 namespace Examples.Webshop.MassTransit.Fulfilment;
