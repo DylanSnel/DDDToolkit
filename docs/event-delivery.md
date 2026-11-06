@@ -320,6 +320,9 @@ aggregate's transaction, so a rollback of the aggregate also rolls back its even
 The cost is at-least-once delivery. The processor marks a message processed only after its handlers returned, so a
 crash in between delivers the message again. Handlers must be idempotent, keyed on `EventId`.
 
+Two hosts that poll the same table do not deliver one message both. Each batch claims its rows first, and holds them
+for a lease. See [Several processors on one table](#several-processors-on-one-table).
+
 With this configuration the outbox is durable and still in-process. The processor passes each event to the same
 delegate. Add a sink, and the row leaves the process instead:
 
@@ -371,14 +374,16 @@ lengths below.
 | `Attempts` | `int` | How many deliveries were attempted |
 | `NextAttemptAt` | `DateTimeOffset?` | When a failed message may be tried again. `null` when it is due now. See [Failures, retries and poison messages](#failures-retries-and-poison-messages) |
 | `LastError` | `string?`, 4000 | Type and message of the last failure |
+| `LockedBy` | `string?`, 128, concurrency token | The claim of the processor that holds the row. `null` when no processor holds it. See [Several processors on one table](#several-processors-on-one-table) |
+| `LockedUntil` | `DateTimeOffset?` | When that claim's lease ends. `null` when no processor holds the row |
 
 `CreatedAt` comes from `options.TimeProvider`, which defaults to `TimeProvider.System`. Tests can replace it. The
-processor takes the current time from the same provider when it compares `NextAttemptAt`.
+processor takes the current time from the same provider when it compares `NextAttemptAt` and `LockedUntil`.
 
 The index is on `ProcessedAt` only. `ProcessedAt` separates the few pending rows from the many delivered rows.
 `NextAttemptAt` only divides the pending rows into due and waiting. The condition "`null`, or not after now" is not
 one range that an index can seek. Adding `NextAttemptAt` to the index would therefore make the index bigger without
-making the poll faster.
+making the poll faster. `LockedUntil` has the same condition, and stays out of the index for the same reason.
 
 Payloads are written with System.Text.Json through `outbox.JsonOptions`. By default these options are
 case-insensitive on read, and include the toolkit's `SingleValueObjectConverterFactory`. Identifiers and single
@@ -514,22 +519,23 @@ var processor = scope.ServiceProvider.GetRequiredService<OutboxProcessor<Orderin
 var delivered = await processor.ProcessPendingAsync(batchSize: 100, cancellationToken);
 ```
 
-`ProcessPendingAsync` loads the pending messages that are due, oldest first, by `CreatedAt`, then `OccurredAt`, then
-`Id`. It delivers each message separately, and returns the number of messages delivered successfully. The processor
-throws when it is constructed if the outbox is not enabled, or if it has neither a sink nor a dispatch delegate.
+`ProcessPendingAsync` claims the pending messages that are due and that no other processor holds, oldest first, by
+`CreatedAt`, then `OccurredAt`, then `Id`. It delivers each message separately, and returns the number of messages
+delivered successfully. The processor throws when it is constructed if the outbox is not enabled, or if it has
+neither a sink nor a dispatch delegate.
 
 Each message is saved through the same scoped context. A handler that resolves that context and changes an aggregate
 commits its change together with the processed mark. Events that this change raises become new outbox rows.
 
-The processor reads the batch untracked. It attaches a row to the context while it delivers that row, and detaches the
-row after its save. So each save compares one outbox row with its snapshot, and not every row of the batch. A row that
-the context already tracks, because the caller saved its event through the same context, keeps its entry and stays
-tracked.
+The processor reads the claimed batch untracked. It attaches a row to the context while it delivers that row, and
+detaches the row after its save. So each save compares one outbox row with its snapshot, and not every row of the
+batch. A row that the context already tracks, because the caller saved its event through the same context, keeps its
+entry and stays tracked. The processor reads such a row again first, because its values are from before the claim.
 
 Cancellation stops the batch before the next message, and the delivery receives the token. When a delivery has
 finished, the processor still saves its outcome, the mark or the failure. That save may run for 5 seconds after
 cancellation was requested. So a message that was delivered just before the host stopped is marked, and is not
-delivered again.
+delivered again. The messages that the batch did not reach are released, so another processor can claim them at once.
 
 ### Failures, retries and poison messages
 
@@ -582,6 +588,83 @@ A batch that delivers nothing ends the background service's drain for that tick,
 message was due. A sink that is down therefore gets one batch per tick, and not every message in a loop. The next
 tick continues with the messages behind the failed ones, and with the failed messages whose time has come.
 
+### Several processors on one table
+
+Every host that runs `AddOutboxBackgroundService<TContext>` polls the same table, so three replicas run three
+processors. Each batch therefore starts with a claim, and two processors do not deliver one message both. The claim
+holds the rows for `LeaseDuration`, 5 minutes by default:
+
+```csharp
+options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.RegisterEventsFromAssemblyContaining<Order>();
+    outbox.LeaseDuration = TimeSpan.FromMinutes(5);
+});
+```
+
+```mermaid
+sequenceDiagram
+    participant A as Processor on host A
+    participant Outbox as OutboxMessages
+    participant B as Processor on host B
+
+    A->>Outbox: claim the oldest due rows that nobody holds
+    Outbox-->>A: rows 1 to 10, with A's claim
+    B->>Outbox: claim the oldest due rows that nobody holds
+    Outbox-->>B: rows 11 to 20, because A holds 1 to 10
+    rect rgba(31, 138, 91, 0.14)
+        A->>A: deliver row 1
+        A->>Outbox: mark row 1 where LockedBy is A's claim
+        Outbox-->>A: one row changed, and the claim cleared
+    end
+    rect rgba(201, 60, 60, 0.14)
+        Note over A,B: A's lease on row 2 ended, and B claimed it
+        A->>Outbox: mark row 2 where LockedBy is A's claim
+        Outbox-->>A: no row changed, so B's delivery counts
+    end
+```
+
+**The claim.** One `UPDATE` claims the batch. It writes a new `LockedBy` and a `LockedUntil` of now plus
+`LeaseDuration` on the oldest rows that are due and that no processor holds. A row is held while its `LockedUntil`
+is after now. The statement checks the condition twice: in the subquery that picks the oldest rows, and on each row
+it changes. The database runs the second check after it locks the row, so a row that another processor claimed in
+the meantime is left out. Postgres reads such a row again, SQL Server reads it under an update lock, and SQLite runs
+one writer at a time. A second query loads the claimed rows by their `LockedBy`.
+
+`LockedBy` holds the machine name, the process id and a Guid that is new for every batch. Two processors in one
+process therefore hold different claims as well.
+
+**The mark.** `LockedBy` is a concurrency token. The save that marks a message, delivered or failed, has the claim in
+its `WHERE` clause, and sets `LockedBy` and `LockedUntil` back to `null`. A failed message is claimed again at its
+`NextAttemptAt`. The mark is still one save on the processor's context, so a handler's change on that context still
+commits with it.
+
+**A takeover.** Another processor can claim a row after its lease ended. The first processor's mark then changes no
+row, and its save fails. That processor:
+
+- logs a warning,
+- counts the message neither as delivered nor as failed, and writes no `LastError`,
+- takes the save's changes off its context: the row, what a handler left unsaved, and the outbox rows of that
+  change's events,
+- rolls back its transaction under `DeliverInTransaction`, which takes a pgmq enqueue back too,
+- goes on with the next message.
+
+A lease that ended without a takeover does not stop the mark. Only another claim does.
+
+**Half the lease.** The processor starts a message only while at least half the lease is left. When less is left, it
+stops the batch and releases the rows it did not reach. The next batch claims them again with a new lease. So a
+delivery that takes less than half the lease ends before the lease does, and no other processor can take its row.
+The default of 5 minutes covers deliveries of up to 2.5 minutes. Set `LeaseDuration` to more than twice your slowest
+delivery. It accepts up to one day.
+
+**The release.** A batch that is cancelled, or whose save throws, also releases the rows it did not finish, with one
+`UPDATE`. The release has a timeout of its own, 5 seconds. When it fails, the processor logs a warning, and the rows
+wait for the end of their lease. A host that crashes releases nothing. Its rows wait for the end of their lease, at
+most 5 minutes with the default.
+
+**The clocks.** Each host compares `LockedUntil` with its own `options.TimeProvider`. A host whose clock runs ahead
+takes rows over sooner. Keep the hosts' clocks synchronized, as NTP does.
+
 ### An outbox per context
 
 `UseOutbox(...)` configures one outbox for every context. With a context per module, give each module that produces
@@ -627,9 +710,12 @@ context.
   as long as the sink takes to fail, and the processor delivers a batch one message at a time. A batch of 100
   messages that each wait for a 30-second timeout holds the processor for 50 minutes. Keep sink timeouts short, or
   batches small.
-- **Concurrent processors can deliver a message twice.** The processor takes no lock, so two instances that poll the
-  same table can pick up the same row. Together with the crash window before `ProcessedAt` is written, this makes
-  delivery at-least-once. Handlers must be idempotent, keyed on `EventId`, which is `OutboxMessage.Id`.
+- **A delivery longer than half the lease can repeat.** Another processor can claim the row when the lease ends, and
+  deliver the message again. Together with the crash window before `ProcessedAt` is written, this keeps delivery
+  at-least-once. Handlers must be idempotent, keyed on `EventId`, which is `OutboxMessage.Id`.
+- **Two claims at the same moment can leave one processor idle.** Both claims pick the same oldest rows. The second
+  finds them held and claims nothing, so that processor's drain ends until its next tick. The claim does not use
+  `FOR UPDATE SKIP LOCKED`, which Entity Framework does not write for every provider.
 - **Delivery is not immediate.** It happens on the next poll after the commit.
 - **Two sinks share one row.** When a message goes to more than one sink and one sink refuses it, the whole message
   is retried, and the sinks that accepted it receive it again. See
@@ -637,6 +723,8 @@ context.
 
 `Tests/DTS.DDD.EntityFramework.Tests/OutboxTests.cs` tests the transactional write, the retries, `MaxAttempts`,
 unknown event names and the background service. `OutboxRetryTests.cs` next to it tests the wait between attempts.
+`OutboxLeaseTests.cs` tests the claim, a takeover, the release and two processors on one database. The provider tests
+run two processors on Postgres and on SQL Server.
 
 ## The dispatch loop
 

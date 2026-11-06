@@ -43,6 +43,9 @@ public static class DomainEventStorage
     /// <summary>Longest aggregate key text kept on an outbox row.</summary>
     public const int MaxAggregateIdLength = 256;
 
+    /// <summary>Longest claim kept in an outbox row's <c>LockedBy</c>.</summary>
+    public const int MaxLockedByLength = 128;
+
     /// <summary>Longest kind of actor kept on an event log row.</summary>
     public const int MaxActedByKindLength = 64;
 

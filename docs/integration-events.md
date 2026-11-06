@@ -234,7 +234,7 @@ sequenceDiagram
     participant Handler as RaiseInvoice
 
     Save->>Outbox: the order and an OrderPlaced row, one transaction
-    Processor->>Outbox: read the row, after the commit
+    Processor->>Outbox: claim the row, after the commit
     Processor->>Publish: OrderPlaced, the domain event
     Publish-->>Processor: OrderPlacedV2, the contract
     Processor->>Sink: the contract, in its envelope
@@ -249,7 +249,7 @@ sequenceDiagram
         end
     end
     Sink-->>Processor: delivered
-    Processor->>Outbox: set ProcessedAt
+    Processor->>Outbox: set ProcessedAt and clear the claim
 ```
 
 <details>
@@ -985,6 +985,10 @@ consumer, so the module's handlers keep their progress across a retry.
   [`DeliverInTransaction`](transports.md#postgres-queues-pgmq) and a sink that writes to the
   same database, the delivery and the mark commit together, so that one step does not repeat. And the module sink's
   inbox rows make a consumer skip a message it already applied.
+- **More replicas do not add deliveries.** Every host that runs the background service polls the same outbox table.
+  Each batch claims its rows with a lease first, so two processors do not deliver one message both. A message can
+  still go out twice when one delivery takes longer than half of `OutboxOptions.LeaseDuration`, 5 minutes by
+  default. See [Several processors on one table](event-delivery.md#several-processors-on-one-table).
 - **Idempotency is keyed on `MessageId`.** It is the domain event's `EventId`, the same on every delivery, and the
   inbox stores it. If you write your own deduplication, key it on `MessageId` only.
 - **The inbox remembers a message only as long as its row exists.** With [retention](#keeping-the-tables-small), a

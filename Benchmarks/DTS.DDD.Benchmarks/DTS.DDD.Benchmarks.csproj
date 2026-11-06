@@ -18,6 +18,9 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- The access check benchmarks run on Postgres in a container as well, to measure what a statement costs over a socket. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>
 
   <ItemGroup>

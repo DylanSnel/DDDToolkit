@@ -729,6 +729,18 @@ An outbox table from before `NextAttemptAt` needs that column: nullable, of the 
 without an index. A scaffolded migration writes this. Existing rows read `null`, which means due now, so no row
 changes ([Failures, retries and poison messages](event-delivery.md#failures-retries-and-poison-messages)).
 
+### The outbox `LockedBy` and `LockedUntil` columns
+
+The processor claims its rows before it delivers them, so an outbox table needs two more nullable columns: `LockedBy`,
+a string of at most 128 characters, and `LockedUntil`, of the same type as `ProcessedAt`. Neither has an index. A
+scaffolded migration writes both. Existing rows read `null`, which means no processor holds them, so no row changes.
+The processor's first claim fails on a table without the columns, so apply the migration before the new build polls.
+`LeaseDuration` sets how long a claim holds its rows, 5 minutes by default
+([Several processors on one table](event-delivery.md#several-processors-on-one-table)).
+
+A database with row level security and a bookkeeping role needs `UPDATE` on the two columns for that role. A script
+written with `WriteGrants` grants it.
+
 ### The names of generated registrations
 
 Up to 3.0.1, `Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` took

@@ -35,6 +35,37 @@ public sealed class OutboxOptions
     public int MaxAttempts { get; set; } = 10;
 
     /// <summary>
+    /// How long a processor holds the messages of a batch it claimed. Defaults to 5 minutes.
+    /// <para>
+    /// <see cref="OutboxProcessor{TContext}.ProcessPendingAsync"/> claims its batch with one statement. The
+    /// statement writes <see cref="OutboxMessage.LockedBy"/> and <see cref="OutboxMessage.LockedUntil"/> on rows
+    /// that no other processor holds. Another processor skips those rows until <c>LockedUntil</c>. So two hosts
+    /// that poll the same outbox table do not deliver one message both.
+    /// </para>
+    /// <para>
+    /// The processor starts a message only while at least half the lease is left. When less is left, it stops the
+    /// batch and releases the rest, and the next batch claims them again with a new lease. A delivery that takes
+    /// longer than half the lease can still run past its end. Another host may then claim the message and deliver
+    /// it a second time. Set the lease to more than twice your slowest delivery. A host that crashes holds its
+    /// messages until the lease ends. A host that stops cleanly releases them at once.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative or longer than a day.</exception>
+    public TimeSpan LeaseDuration
+    {
+        get => _leaseDuration;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxLeaseDuration);
+            _leaseDuration = value;
+        }
+    }
+
+    /// <summary>The longest <see cref="LeaseDuration"/>: a day.</summary>
+    public static readonly TimeSpan MaxLeaseDuration = TimeSpan.FromDays(1);
+
+    /// <summary>
     /// How long a message waits after a failed attempt before it is tried again, given the number of
     /// attempts made so far (1 after the first failure). The processor writes the moment to
     /// <see cref="OutboxMessage.NextAttemptAt"/> and does not load the row before it, so a failing
@@ -286,4 +317,5 @@ public sealed class OutboxOptions
 
     private readonly List<IntegrationEventSinkRegistration> _sinks = [];
     private Func<int, TimeSpan> _retryDelay = DefaultRetryDelay;
+    private TimeSpan _leaseDuration = TimeSpan.FromMinutes(5);
 }

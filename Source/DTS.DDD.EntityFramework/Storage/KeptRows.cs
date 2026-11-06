@@ -33,7 +33,7 @@ internal static class KeptRows
     /// processor writes once the row is there. Everything else on the row is the event as it was raised, which
     /// nothing changes afterwards.
     /// </summary>
-    public static readonly string[] OutboxDeliveryProperties = ["Attempts", "LastError", "NextAttemptAt", "ProcessedAt"];
+    public static readonly string[] OutboxDeliveryProperties = ["Attempts", "LastError", "LockedBy", "LockedUntil", "NextAttemptAt", "ProcessedAt"];
 
     /// <summary>
     /// The longest a table can be told to keep a row: a thousand years. The guard takes the period off the

@@ -3266,6 +3266,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
+- **Docs: the access check of `[Own]`.** [Access checks](docs/performance.md#access-checks) measures the check before
+  and after its compiled query, on SQLite in memory and on Postgres in a container. `OwnerCheckBenchmarks` takes the
+  database as a parameter, shows the minimum and the median, and starts the Postgres container itself.
 - **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
@@ -3343,6 +3346,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `Directory.Build.props` makes the id from the project name, `DylansTechStack.` and the name without `DTS.`. The
     `DDDPackageIdPrefix` property is gone.
 
+- **The outbox processor claims its rows with a lease.** Before, every host that polled one outbox table read the
+  same due rows, so with more than one replica a message could be delivered twice. Now `ProcessPendingAsync` starts
+  each batch with one `UPDATE` that writes a claim on the oldest due rows that no other processor holds. The
+  statement checks that condition again on each row it changes, so two processors that claim at once never take the
+  same row. Postgres and SQL Server tests run two processors on one table, and each message is delivered once.
+  - `OutboxMessage` has two new nullable columns: `LockedBy`, a string of at most 128 characters, and `LockedUntil`.
+    `AddDomainEventOutbox` maps `LockedBy` as a concurrency token, and `CreateDomainEventOutbox` creates both.
+  - Every mark, delivered or failed, has the claim in its `WHERE` clause and clears it. A mark that changes no row
+    means another processor claimed the message after this lease ended. The message then counts neither as delivered
+    nor as failed, and the changes of the failed save come off the processor's context. A handler's change on that
+    context still commits with the mark.
+  - `OutboxOptions.LeaseDuration` sets how long a claim holds its rows, 5 minutes by default, at most a day. The
+    processor starts a message only while at least half the lease is left. It releases the rows it did not reach
+    when it stops early, is cancelled or throws.
+  - The bookkeeping role gets `UPDATE` on `LockedBy` and `LockedUntil` in the scripts written with `WriteGrants`.
+  - Every module of the webshop sample that has an outbox has a migration `OutboxLease`, with its Supabase SQL. The
+    Ordering module, which has row access rules, has a new access file after it.
+  - The claim adds two statements per batch. A batch of 1,000 messages allocates about 2.8 KB more per message. See
+    [Performance](docs/performance.md#the-cost-of-the-claim).
+
+  An existing outbox table needs the two columns before the new processor polls. No package has users yet, so the
+  claim has no opt-out. See [Several processors on one table](docs/event-delivery.md#several-processors-on-one-table)
+  and [The outbox `LockedBy` and `LockedUntil` columns](docs/migrating-to-3.md#the-outbox-lockedby-and-lockeduntil-columns).
+
 - **`IDomainEvent` derives from `INotification`.** New in 0.1.0. Every domain event is a notification of the
   toolkit's mediator, the events of Tenancy and Membership included, so an event needs no marker of its own.
 - **`DispatchWithMediator()` publishes through the toolkit's mediator.** New in 0.1.0. It is a method of
@@ -3376,6 +3403,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
   A batch of 1,000 messages went from 2.8 s and 2.9 GB to 46 ms and 15 MB. See
   [Performance](docs/performance.md#delivering-a-batch-of-outbox-messages).
+- **The access check of `[Own]` runs a compiled query.** The check built a LINQ query, and Entity Framework walked it
+  and looked it up in its query cache on every check. Now the query is compiled once with `EF.CompileAsyncQuery`, when
+  the owner's column is found, and a check sends the aggregate's id as its parameter. `[OrOwn]` on an aggregate's id
+  reads the owner in the same way. The query filters and row level security apply as before.
+
+  A check went from 17.0 μs and 13.6 KB to 6.0 μs and 3.9 KB on SQLite in memory. See
+  [Performance](docs/performance.md#access-checks).
 - **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
   `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
   `GetEqualityComponents()` with LINQ, so every comparison allocated two iterators and boxed each value-type property

@@ -2742,9 +2742,9 @@ checks the role in its prelude and in its privileges:
 - The script is refused when it is written if the bookkeeping role is the user's role, the anonymous caller's role,
   the scoped system role or the role of a token role. The bookkeeping role must be a separate role.
 - The script gives the role:
-  - `SELECT` and `DELETE` on the outbox table, and `UPDATE` on the four columns that record a delivery: `Attempts`,
-    `LastError`, `NextAttemptAt` and `ProcessedAt`. So the bookkeeping cannot rewrite an event that is still to be
-    delivered.
+  - `SELECT` and `DELETE` on the outbox table, and `UPDATE` on six columns. Four record a delivery: `Attempts`,
+    `LastError`, `NextAttemptAt` and `ProcessedAt`. Two claim a row: `LockedBy` and `LockedUntil`. So the bookkeeping
+    cannot rewrite an event that is still to be delivered.
   - every command on the inbox table,
   - `SELECT` on the migration history, where the database keeps one,
   - on an event log that deletes old rows, `DELETE`, and `SELECT` on the columns that find those rows.
