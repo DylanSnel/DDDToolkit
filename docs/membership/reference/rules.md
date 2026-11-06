@@ -11,7 +11,7 @@ The rules of one kind of resource, as one declaration: `MembershipRules.For<TRes
 
 ## Rules
 
-Namespace `DDDToolkit.Supporting.Membership.Access`.
+Namespace `DTS.Membership.Access`.
 
 ### `MembershipRules`
 
@@ -291,7 +291,7 @@ The names a resource's functions have: `documents_as_member`, `documents_as_memb
 
 ## Roles
 
-Namespace `DDDToolkit.Supporting.Membership.Access`.
+Namespace `DTS.Membership.Access`.
 
 ### `Roles`
 
@@ -527,7 +527,7 @@ Whether `role` is a role in use that a member can be given.
 
 ## Permissions
 
-Namespace `DDDToolkit.Supporting.Membership.Access`.
+Namespace `DTS.Membership.Access`.
 
 ### `OnAttribute<TResource>`
 
@@ -684,7 +684,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Reach from above
 
-Namespace `DDDToolkit.Supporting.Membership.Access`.
+Namespace `DTS.Membership.Access`.
 
 ### `ReachFromAbove`
 
@@ -745,7 +745,7 @@ public static implicit operator ReachFromAbove(DatabaseFunction function)
 
 ## Who a member is
 
-Namespace `DDDToolkit.Supporting.Membership.Access`.
+Namespace `DTS.Membership.Access`.
 
 ### `MemberSource`
 

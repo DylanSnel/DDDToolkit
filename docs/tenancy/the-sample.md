@@ -5,7 +5,7 @@ sidebar_label: Overview
 
 # Tenancy: the sample
 
-[`Examples/Tenancy`](../../Examples/Tenancy) is a small application built on Tenancy. Teams work on projects, and a
+`Examples/Tenancy` is a small application built on Tenancy. Teams work on projects, and a
 project's team is its **crew**. This page lists what the sample contains, who is in its seed data, and where each
 part is described. The words are defined in the [overview](overview.md).
 

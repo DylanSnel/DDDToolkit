@@ -1,4 +1,4 @@
-using DDDToolkit.Abstractions.Access;
+using DTS.DDD.Abstractions.Access;
 using Examples.Webshop.Ordering.Contracts;
 using Examples.Webshop.SharedKernel;
 using FluentAssertions;

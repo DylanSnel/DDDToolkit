@@ -545,13 +545,13 @@ derive from a struct.
 </PropertyGroup>
 
 <ItemGroup>
-  <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.1.0"
+  <PackageReference Include="DylansTechStack.DDD.Analyzers" Version="3.1.0"
                     PrivateAssets="all" ExcludeAssets="build;buildTransitive" />   <!-- DDD00014 -->
 </ItemGroup>
 ```
 
 A source generator sees only the MSBuild properties that the project lists as `CompilerVisibleProperty`. The
-`DDDToolkit.Analyzers` package lists the properties the toolkit's generators read, in a props file. NuGet imports
+`DTS.DDD.Analyzers` package lists the properties the toolkit's generators read, in a props file. NuGet imports
 that file into every project the generators arrive in. Here the generators arrived and the props file did not.
 The generators then ignore `DDD_Module`, whatever the project sets. They name `{Module}EventNames`,
 `Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` after the
@@ -1951,7 +1951,7 @@ DDD00054 is reported in the project that turns the Supabase export on (`<Supabas
 host, about a package that the project references:
 
 ```csharp
-// The host references DDDToolkit.Supporting.Membership.Postgres, and marks no resource's rules: DDD00054
+// The host references DTS.Membership.Postgres, and marks no resource's rules: DDD00054
 services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);
 ```
 
@@ -2408,12 +2408,12 @@ DDD00062 is an error. See [A field for one schema only](graphql.md#a-field-for-o
 </PropertyGroup>
 <ItemGroup>
   <CompilerVisibleProperty Include="DDD_Module" />
-  <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj"
+  <ProjectReference Include="..\DTS.DDD.Analyzers\DTS.DDD.Analyzers.csproj"
                     OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 </ItemGroup>
 ```
 
-`DDD_Module` declares the project's module through a build step. The `DDDToolkit.Analyzers` package carries a
+`DDD_Module` declares the project's module through a build step. The `DTS.DDD.Analyzers` package carries a
 targets file beside its props file. The targets file writes the module declaration into the project. Every
 generator of the project, and of the projects that reference it, reads the declaration there. A package reference
 brings both files.
@@ -2425,7 +2425,7 @@ arrives and the declaration does not:
 
 ```
 DDD_Module names this project's generated code after 'Ordering' and declares no module, because the build step
-of the DDDToolkit.Analyzers package that declares it did not run: the project is no project of module
+of the DTS.DDD.Analyzers package that declares it did not run: the project is no project of module
 'Ordering'. Import the package's targets file beside its props file, or declare [assembly: Module("Ordering")].
 ```
 
@@ -2440,7 +2440,7 @@ is no module:
 Without DDD00064, the first sign would be a call that does not compile, or an event stored under a name that
 changes once the targets file arrives.
 
-Import `DDDToolkit.Analyzers.targets` as well, from the package's `build` folder or from the source, in the same
+Import `DTS.DDD.Analyzers.targets` as well, from the package's `build` folder or from the source, in the same
 way that you import its props file. Or declare the module with `[assembly: Module("Ordering")]`. The targets file
 tells the generators that it was imported, by passing them `DDD_DeclareModule`. Where it was imported, a test
 project and a project that sets `DDD_DeclareModule` to false are no module on purpose, and are not reported. A
@@ -2594,7 +2594,7 @@ what to write:
 - An id written by hand, without `[EntityId<T>]`, which no generator completes: write the `Create()`, and add
   `ICreatableEntityId<TenantId>` to the interfaces it implements.
 - An id with a fitting `Create()` and without the interface: add the interface. For an id of a project that does
-  not target `net10.0`, change that project's target instead. Only the `net10.0` build of DDDToolkit.Abstractions
+  not target `net10.0`, change that project's target instead. Only the `net10.0` build of DTS.DDD.Abstractions
   has `ICreatableEntityId<T>`, and the generator implements it where the project sees it.
 - A `Create()` that is not `public static`, or that returns another type: make it `public static`, returning the
   id.
@@ -2623,27 +2623,27 @@ nothing reports it.
 **DDD_ModuleContracts makes a project its module's contracts where the project can name the attribute.**
 
 ```xml
-<!-- Billing.Contracts.csproj: the analyzers of this version, and a DDDToolkit.Abstractions from before the attribute -->
+<!-- Billing.Contracts.csproj: the analyzers of this version, and a DTS.DDD.Abstractions from before the attribute -->
 <PropertyGroup>
   <DDD_ModuleContracts>true</DDD_ModuleContracts>   <!-- DDD00068 -->
 </PropertyGroup>
 <ItemGroup>
-  <PackageReference Include="DDDToolkit.Abstractions" Version="3.1.0" />
-  <PackageReference Include="DDDToolkit.Analyzers" Version="..." />
+  <PackageReference Include="DTS.DDD.Abstractions" Version="3.1.0" />
+  <PackageReference Include="DTS.DDD.Analyzers" Version="..." />
 </ItemGroup>
 ```
 
 `DDD_ModuleContracts` set to `true` makes a project its module's contracts. The toolkit's generator writes
 `[assembly: ModuleContracts]` into the project, and every public type of the project is published to the other
 modules ([A contracts project](modules.md#a-contracts-project)). The attribute is declared in
-`DDDToolkit.Abstractions`. The generator ships in `DDDToolkit.Analyzers`. A contracts project may reference these
-two packages separately. If the project references a `DDDToolkit.Abstractions` older than the attribute, or none,
+`DTS.DDD.Abstractions`. The generator ships in `DTS.DDD.Analyzers`. A contracts project may reference these
+two packages separately. If the project references a `DTS.DDD.Abstractions` older than the attribute, or none,
 the generator cannot write the attribute:
 
 ```
 DDD_ModuleContracts is true, and the project publishes nothing by it: the toolkit's generator writes
-[assembly: ModuleContracts] from it, and no DDDToolkit.Abstractions the project references declares that
-attribute. Reference the DDDToolkit.Abstractions of the same version as DDDToolkit.Analyzers, or mark each type
+[assembly: ModuleContracts] from it, and no DTS.DDD.Abstractions the project references declares that
+attribute. Reference the DTS.DDD.Abstractions of the same version as DTS.DDD.Analyzers, or mark each type
 the other modules may name [ModuleContract].
 ```
 
@@ -2651,7 +2651,7 @@ The property is the project's explicit choice. Without DDD00068, the build would
 first sign would be [DDD00022](#ddd00022) in every module that names one of the project's types. DDD00022 says
 that the type is not published, which points away from the cause.
 
-Reference the `DDDToolkit.Abstractions` of the same version as the analyzers. A project that references the
+Reference the `DTS.DDD.Abstractions` of the same version as the analyzers. A project that references the
 `DDDToolkit` package gets both at one version. If you cannot do that yet, mark each type the other modules may
 name `[ModuleContract]`, and remove the property. A project whose property is anything but `true` is not
 reported. A project that declares `[assembly: ModuleContracts]` itself is not reported either.
@@ -2857,7 +2857,7 @@ public OrderingContext CreateDbContext(string[] args)
 
 Add the call after the provider. The code fix adds it, before the options' `.Options`.
 
-DDD00074 is reported in a project that references `DDDToolkit.EntityFramework`, at `CreateDbContext` of a
+DDD00074 is reported in a project that references `DTS.DDD.EntityFramework`, at `CreateDbContext` of a
 factory. It is reported when the factory's class calls none of `UseDDDToolkitDesignTime`, `UseDDDToolkit`,
 `UseDDDToolkitCore` and `MigrationsHistoryTable`, in `CreateDbContext` or in a method, property or field of the
 class that `CreateDbContext` reads. The analyzer reads one class at a time. So a factory whose options a helper of
@@ -2869,7 +2869,7 @@ names the table in the factory's options and in the host's options alike:
 `MigrationsHistoryTable(HistoryRepository.DefaultTableName)`. Or suppress the warning.
 
 A context marked `[SupabaseMigrations]` needs no factory written by hand. The build writes one beside it that
-calls `UseDDDToolkitDesignTime()` wherever the project references `DDDToolkit.EntityFramework`. The analyzer does
+calls `UseDDDToolkitDesignTime()` wherever the project references `DTS.DDD.EntityFramework`. The analyzer does
 not read generated code. See [Supabase](supabase.md#exporting-as-part-of-the-build).
 
 ## DDD00075
@@ -2920,7 +2920,7 @@ of the module that the host sees twice, one line each:
 
 ```csharp
 // Shop.Customers.Domain, beside [assembly: Module("Customers")] or Tenancy's switch
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 [assembly: TemplateFacadeName("TenantManager", "CustomersTenantManager")]
 [assembly: TemplateFacadeName("OrganizationManager", "CustomersOrganizationManager")]
@@ -2970,7 +2970,7 @@ it changed the name. So it is reported at the line, and the class keeps its name
 | The line | What to do |
 |---|---|
 | names no class that a referenced package asks for | write the class name as the message lists it: the package's class name without its type parameters |
-| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DDDToolkit.Supporting.Tenancy.Managers.SeatManager"` |
+| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DTS.Tenancy.Managers.SeatManager"` |
 | is in a project that declares none of the classes, such as an application project above the domain project | move it into the project that declares the classes. The class is written and named there |
 | names a class that an earlier line names already, in this project or in a project of its module that it takes classes from | keep one line. This project's line wins, then the line of the first other project by name |
 | gives a name that no class can have, such as a keyword or a name with a space | give a name that a class can have |
@@ -3739,10 +3739,10 @@ public sealed partial class Board
 }
 ```
 
-`[At]` is Membership's marker, in the namespace `DDDToolkit.Supporting.Membership`. It ships in the package
-`Temp.DDDToolkit.Supporting.Membership.Abstractions`, which references `DDDToolkit.Abstractions` alone and no Entity
+`[At]` is Membership's marker, in the namespace `DTS.Membership`. It ships in the package
+`DylansTechStack.Membership.Abstractions`, which references `DTS.DDD.Abstractions` alone and no Entity
 Framework, so a domain project references it for the marker. Membership's generator reports DDD00097. That generator
-ships in the package `Temp.DDDToolkit.Supporting.Membership`, which references the markers' package. A project that
+ships in the package `DylansTechStack.Membership`, which references the markers' package. A project that
 declares the aggregate and references only the markers' package gets no DDD00097. `[Owner]` stays in the core,
 because the core's checks of the owner read it.
 

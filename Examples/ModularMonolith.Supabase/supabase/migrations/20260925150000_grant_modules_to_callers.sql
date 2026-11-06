@@ -1,6 +1,6 @@
 -- Row level security for the modules' own queries. With Supabase:Url set, the host runs every request's
 -- queries as the role PostgREST would give that request: authenticated for a signed-in user, anon without
--- a token (DDDToolkit.AspNetCore.Supabase). Those two roles have no privileges in the module schemas
+-- a token (DTS.DDD.AspNetCore.Supabase). Those two roles have no privileges in the module schemas
 -- until this migration gives them some.
 --
 -- Granting a table does not open it to anybody by itself. The module schemas are not among the Data API's

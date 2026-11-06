@@ -45,7 +45,7 @@
     <NpgsqlVersion>10.0.0</NpgsqlVersion>
     <!--
       Not older than this, and the same in both sets. HotChocolate asks that all of its packages in one
-      application are the same version, and DDDToolkit.HotChocolate.Fusion.InMemory is written against the
+      application are the same version, and DTS.DDD.HotChocolate.Fusion.InMemory is written against the
       Fusion packages of 16.6.6: the interfaces of Fusion it implements have another shape at 16.0.0. So
       every HotChocolate, GreenDonut and Fusion package takes this one property, and the floor and the
       latest are raised together. 16.6.9 is the first release whose Fusion packages bring a
@@ -107,7 +107,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EntityFrameworkCoreVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="$(EntityFrameworkCoreVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EntityFrameworkCoreVersion)" />
-    <!-- Validating Supabase Auth's access tokens: DDDToolkit.Auth.Supabase and its two hosts. -->
+    <!-- Validating Supabase Auth's access tokens: DTS.DDD.Auth.Supabase and its two hosts. -->
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="$(IdentityModelVersion)" />
     <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="$(IdentityModelVersion)" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="$(AspNetCoreVersion)" />
@@ -131,7 +131,7 @@
     <PackageVersion Include="HotChocolate.Types.Scalars" Version="$(HotChocolateVersion)" />
     <!--
       RegisterDbContextFactory: how a schema is told that a context comes from a pooled factory. Only the tests of
-      DDDToolkit.HotChocolate use it; nothing in Source does.
+      DTS.DDD.HotChocolate use it; nothing in Source does.
     -->
     <PackageVersion Include="HotChocolate.Data.EntityFramework" Version="$(HotChocolateVersion)" />
     <!--
@@ -144,8 +144,8 @@
     <PackageVersion Include="GreenDonut.Data" Version="$(HotChocolateVersion)" />
     <PackageVersion Include="GreenDonut.Data.EntityFramework" Version="$(HotChocolateVersion)" />
     <!--
-      Fusion. DDDToolkit.HotChocolate.Fusion.InMemory builds on the gateway and on the in-memory connector,
-      which Tests/Spikes/DDDToolkit.Spikes.FusionInProcess tries too; the microservices samples have a gateway
+      Fusion. DTS.DDD.HotChocolate.Fusion.InMemory builds on the gateway and on the in-memory connector,
+      which Tests/Spikes/DTS.DDD.Spikes.FusionInProcess tries too; the microservices samples have a gateway
       of their own, and their AppHosts compose its schema with the Aspire package. The same version as every
       other HotChocolate package, as HotChocolate asks.
     -->
@@ -155,7 +155,7 @@
     <PackageVersion Include="FluentValidation" Version="$(FluentValidationVersion)" />
     <PackageVersion Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
     <PackageVersion Include="Mediator.Abstractions" Version="$(MediatorVersion)" />
-    <!-- Wolverine and MassTransit are transports for DDDToolkit.Messaging.Wolverine and .MassTransit. -->
+    <!-- Wolverine and MassTransit are transports for DTS.DDD.Messaging.Wolverine and .MassTransit. -->
     <!-- MassTransit 8: the last major version under Apache 2.0. 9 is commercial; see the package README. -->
     <PackageVersion Include="MassTransit" Version="$(MassTransitVersion)" />
     <PackageVersion Include="MassTransit.RabbitMQ" Version="$(MassTransitVersion)" />
@@ -169,7 +169,7 @@
     <!--
       Mediator generates its implementation, its handler registrations and AddMediator into the
       assembly the generator runs in, so this belongs in the composition root only: the example host
-      and the Mediator test project. Source/DDDToolkit.Mediator references the abstractions alone.
+      and the Mediator test project. Source/DTS.DDD.Mediator references the abstractions alone.
     -->
     <PackageVersion Include="Mediator.SourceGenerator" Version="$(MediatorVersion)" />
   </ItemGroup>

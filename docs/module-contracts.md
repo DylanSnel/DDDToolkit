@@ -204,7 +204,7 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
 A module marks what it publishes, type by type:
 
 ```csharp
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 [ModuleContract]
 [EntityId<Guid>("CUS")]
@@ -324,7 +324,7 @@ Both projects carry `[assembly: Module("Ordering")]`, so they are one module in 
   list itself. Every public type in it is published, so a type added there is part of the contract without a second
   step. A type the project keeps to itself is `internal`.
 - **Consumers get few dependencies.** A reference to the contracts brings the contracts, without Ordering's Entity
-  Framework model or its packages. The example's contracts project does reference `DDDToolkit.EntityFramework`, for
+  Framework model or its packages. The example's contracts project does reference `DTS.DDD.EntityFramework`, for
   one reason. It declares the published `OrderId`, and with the reference the generator writes the id's value
   converter into the contracts project, for the modules that store an `OrderId` in a column.
 

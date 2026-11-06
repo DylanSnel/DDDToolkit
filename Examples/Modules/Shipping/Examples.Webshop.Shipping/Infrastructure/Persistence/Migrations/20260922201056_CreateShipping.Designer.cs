@@ -26,7 +26,7 @@ namespace Examples.Webshop.Shipping.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("DDDToolkit.EntityFramework.Inbox.InboxMessage", b =>
+            modelBuilder.Entity("DTS.DDD.EntityFramework.Inbox.InboxMessage", b =>
                 {
                     b.Property<Guid>("MessageId")
                         .HasColumnType("uuid");

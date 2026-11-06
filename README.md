@@ -144,64 +144,69 @@ so an IDE opens it from the error list and an agent that reads the build output 
 
 ## Packages
 
-Reference `DDDToolkit` and add the integrations you actually use. Each integration package brings its
+Reference `DylansTechStack.DDD` and add the integrations you actually use. Each integration package brings its
 own generator, so referencing it is all the configuration there is.
 
-**For now 3.x is published under `Temp.` ids:** `Temp.DDDToolkit`,
-`Temp.DDDToolkit.EntityFramework`, and so on, each package in the table below with `Temp.` in
-front of its name. The nuget.org account that owns the `DDDToolkit.*` ids cannot publish at the moment,
-so `DDDToolkit` there is still 2.0.22. Only the package id is different. The assemblies and namespaces
-are the ones this page names, so `using DDDToolkit;` stays as it is.
+**Package ids and namespaces.** The packages are published as `DylansTechStack.DDD.*`, and their namespaces and
+assemblies are `DTS.DDD.*`. The package `DylansTechStack.DDD.EntityFramework` holds the namespace
+`DTS.DDD.EntityFramework`, so an application writes `using DTS.DDD;`. The table names each package by its id.
 
-**3.2.0 is in preview.** This page and the docs describe it: 3.2.0-preview.13 as they are written. Until
-3.2.0 is released, add every `Temp.DDDToolkit.*` package with `--prerelease`, or with
-`--version 3.2.0-preview.13`, and keep them all at the same version. A package of this release next to 3.1.0
-of another fails restore with NU1605, a package downgrade, or fails at run time with a `MissingMethodException`.
+**0.x.** The packages start at 0.1.0 under these ids, where `Temp.DDDToolkit` 3.2.0-preview.15 stopped. Keep every
+`DylansTechStack.DDD.*` package at the same version. A package of one version next to another version fails restore with
+NU1605, a package downgrade, or fails at run time with a `MissingMethodException`.
 
 | Package | Use it for |
 |---|---|
-| `DDDToolkit` | Base types and the core generators. Start here. |
-| `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DDDToolkit.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#the-module-name-in-generated-code) wants. |
-| `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
-| `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
-| `DDDToolkit.Messaging.Wolverine` | [Wolverine](https://wolverinefx.net/) as the transport between one process's outbox and another's inbox. |
-| `DDDToolkit.Messaging.MassTransit` | [MassTransit](https://masstransit.io/) 8 as that transport, for those already on it. |
-| `DDDToolkit.EntityFramework.Postgres` | Row level security on any Postgres: each connection a context opens runs as the current user (`ICurrentUser`), as PostgREST's do, and `[RowAccess]` rules written in C# become the policies. |
-| `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations and row access rules written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
-| `DDDToolkit.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes or its JWT secret, and turned into the current user row level security runs your queries as. No Entity Framework needed. For server code, a client for Auth's admin API: invite an address, make a user under an id of your own, and find or delete one by id. |
-| `DDDToolkit.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the current user. |
-| `DDDToolkit.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the current user. |
-| `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
-| `DDDToolkit.FluentValidation` | A generated validator per value object. |
-| `DDDToolkit.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |
-| `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.9 or later. |
-| `DDDToolkit.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.9 or later. |
-| `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
-| `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, a manager per aggregate, and the access manager. No database in it. |
-| `DDDToolkit.Supporting.Tenancy.Abstractions` | Tenancy's markers for domain classes, `[OfTenant]` on the property that says which tenant a row belongs to, for a module's domain project that sees only Tenancy's ids. Tenancy's package references it. |
-| `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with its queries as Entity Framework queries (`db.Tenancy()`), on every provider, and the convention that maps `[OfTenant]`. |
-| `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's queries as SQL functions, its row level security policies, and the start-up checks. |
-| `DDDToolkit.Supporting.Membership` | [Membership](docs/membership/overview.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
-| `DDDToolkit.Supporting.Membership.Abstractions` | Membership's markers for domain classes, `[At]` on the property that says where a resource hangs. Membership's package references it. |
-| `DDDToolkit.Supporting.Membership.EntityFramework` | A resource's members in a context of your own, mapped by convention, a registration named after each resource, and queries inside your own statements (`db.Boards.WhereIHold(permission)`). Its generator joins a resource to Tenancy where an application has both. |
-| `DDDToolkit.Supporting.Membership.Postgres` | A resource's access queries as SQL functions for your row access rules, and a start-up check. |
-| `DDDToolkit.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |
+| `DylansTechStack.DDD` | Base types and the core generators. Start here. |
+| `DylansTechStack.DDD.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DylansTechStack.DDD.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#the-module-name-in-generated-code) wants. |
+| `DylansTechStack.DDD.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
+| `DylansTechStack.DDD.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
+| `DylansTechStack.DDD.Messaging.Wolverine` | [Wolverine](https://wolverinefx.net/) as the transport between one process's outbox and another's inbox. |
+| `DylansTechStack.DDD.Messaging.MassTransit` | [MassTransit](https://masstransit.io/) 8 as that transport, for those already on it. |
+| `DylansTechStack.DDD.EntityFramework.Postgres` | Row level security on any Postgres: each connection a context opens runs as the current user (`ICurrentUser`), as PostgREST's do, and `[RowAccess]` rules written in C# become the policies. |
+| `DylansTechStack.DDD.EntityFramework.Supabase` | Your Entity Framework migrations and row access rules written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
+| `DylansTechStack.DDD.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes or its JWT secret, and turned into the current user row level security runs your queries as. No Entity Framework needed. For server code, a client for Auth's admin API: invite an address, make a user under an id of your own, and find or delete one by id. |
+| `DylansTechStack.DDD.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the current user. |
+| `DylansTechStack.DDD.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the current user. |
+| `DylansTechStack.DDD.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
+| `DylansTechStack.DDD.FluentValidation` | A generated validator per value object. |
+| `DylansTechStack.DDD.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |
+| `DylansTechStack.DDD.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.9 or later. |
+| `DylansTechStack.DDD.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.9 or later. |
+| `DylansTechStack.DDD.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
+| `DylansTechStack.DDD.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |
 
 ```bash
-dotnet add package Temp.DDDToolkit --prerelease
+dotnet add package DylansTechStack.DDD --prerelease
 ```
 
-There are five more packages you never reference directly: `DDDToolkit.Analyzers` and the
+There are five more packages you never reference directly: `DylansTechStack.DDD.Analyzers` and the
 `.EntityFramework`, `.EntityFramework.Supabase`, `.FluentValidation` and `.HotChocolate` analyzer
 packages beside it. Each one
 carries the generators for its integration and arrives as a dependency of the package above, so
-adding `DDDToolkit.HotChocolate` is all it takes to get the GraphQL generator.
+adding `DylansTechStack.DDD.HotChocolate` is all it takes to get the GraphQL generator.
+
+### DTS Pro
+
+Tenancy and Membership, the supporting domains, are part of DTS Pro. They are developed in a private repository and are
+not published on nuget.org. Their docs are on this site.
+
+| Package | Use it for |
+|---|---|
+| `DylansTechStack.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, a manager per aggregate, and the access manager. No database in it. |
+| `DylansTechStack.Tenancy.Abstractions` | Tenancy's markers for domain classes, `[OfTenant]` on the property that says which tenant a row belongs to, for a module's domain project that sees only Tenancy's ids. Tenancy's package references it. |
+| `DylansTechStack.Tenancy.EntityFramework` | Tenancy in a context of your own, with its queries as Entity Framework queries (`db.Tenancy()`), on every provider, and the convention that maps `[OfTenant]`. |
+| `DylansTechStack.Tenancy.Postgres` | Tenancy's queries as SQL functions, its row level security policies, and the start-up checks. |
+| `DylansTechStack.Membership` | [Membership](docs/membership/overview.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
+| `DylansTechStack.Membership.Abstractions` | Membership's markers for domain classes, `[At]` on the property that says where a resource hangs. Membership's package references it. |
+| `DylansTechStack.Membership.EntityFramework` | A resource's members in a context of your own, mapped by convention, a registration named after each resource, and queries inside your own statements (`db.Boards.WhereIHold(permission)`). Its generator joins a resource to Tenancy where an application has both. |
+| `DylansTechStack.Membership.Postgres` | A resource's access queries as SQL functions for your row access rules, and a start-up check. |
 
 Requires .NET 10. The generators themselves target `netstandard2.0` and carry no runtime
 dependencies, so they load in any recent SDK.
 
 The core has no mediator dependency and does not need one: in-process event delivery is a delegate you
-write, and `DDDToolkit.Mediator` only saves you writing it. The examples publish through Mediator
+write, and `DTS.DDD.Mediator` only saves you writing it. The examples publish through Mediator
 rather than MediatR because MediatR is commercially licensed from version 13, and this repository
 prefers dependencies its users can take for free. MediatR still works perfectly well with the toolkit;
 [Delivering domain events](docs/event-delivery.md#the-dispatch-delegate) shows the delegate to write for it.
@@ -216,9 +221,9 @@ prefers dependencies its users can take for free. MediatR still works perfectly 
 | `[ValueObject]` on a `partial record`, positional or with `{ get; protected init; }` properties | Structural equality across the properties you did not exclude, a `With(...)` for changed copies, and a `Valid` twin |
 | `[Entity<TId>]` / `[AggregateRoot<TId>]` on a `partial class` | The base type, a persistence constructor, a `CheckInvariants()` seam, `GetInvariantViolations()` and `EnsureInvariants()` over it, over any nested `IInvariant<T>` rules and over every child entity it holds, an `EnsureOwnInvariants()` / `GetOwnInvariantViolations()` pair that stops at this object, and an implementation for every get-only partial collection property |
 
-Add `DDDToolkit.EntityFramework` and the same declarations also produce value converters, `[Owned]`
+Add `DTS.DDD.EntityFramework` and the same declarations also produce value converters, `[Owned]`
 and `[ComplexType]` annotations, and a single `Add<Module>Converters` call for your `DbContext`. Add
-`DDDToolkit.HotChocolate` and they produce GraphQL type bindings. You never write that code.
+`DTS.DDD.HotChocolate` and they produce GraphQL type bindings. You never write that code.
 
 ## Beyond the declarations
 

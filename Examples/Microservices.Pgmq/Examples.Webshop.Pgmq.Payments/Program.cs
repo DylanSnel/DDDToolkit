@@ -1,8 +1,8 @@
-using DDDToolkit.EntityFramework;
-using DDDToolkit.HotChocolate;
-using DDDToolkit.Mediator;
-using DDDToolkit.Messaging.Postgres;
-using DDDToolkit.Startup;
+using DTS.DDD.EntityFramework;
+using DTS.DDD.HotChocolate;
+using DTS.DDD.Mediator;
+using DTS.DDD.Messaging.Postgres;
+using DTS.DDD.Startup;
 using Examples.Hosting;
 using Examples.Webshop.Payments;
 using Examples.Webshop.Payments.Api;

@@ -1,4 +1,4 @@
-using DDDToolkit.Exceptions;
+using DTS.DDD.Exceptions;
 using Examples.Webshop.SharedKernel;
 using HotChocolate;
 using HotChocolate.Types.Composite;

@@ -2,7 +2,7 @@
 
   <!-- The one project of the two that references the toolkit. It sets no DDD_Module of its own. -->
   <ItemGroup>
-    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="DylansTechStack.DDD" Version="$(DDDToolkitPackageVersion)" />
   </ItemGroup>
 
 </Project>

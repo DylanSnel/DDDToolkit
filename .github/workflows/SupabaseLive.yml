@@ -34,12 +34,12 @@ on:
   pull_request:
     paths:
       - Examples/**
-      - Source/DDDToolkit.EntityFramework/**
-      - Source/DDDToolkit.EntityFramework.Postgres/**
-      - Source/DDDToolkit.EntityFramework.Supabase/**
-      - Source/DDDToolkit.Auth.Supabase/**
-      - Source/DDDToolkit.Auth.Supabase.AspNetCore/**
-      - Source/DDDToolkit.Messaging.Postgres/**
+      - Source/DTS.DDD.EntityFramework/**
+      - Source/DTS.DDD.EntityFramework.Postgres/**
+      - Source/DTS.DDD.EntityFramework.Supabase/**
+      - Source/DTS.DDD.Auth.Supabase/**
+      - Source/DTS.DDD.Auth.Supabase.AspNetCore/**
+      - Source/DTS.DDD.Messaging.Postgres/**
       - .github/workflows/SupabaseLive.yml
 
 concurrency:

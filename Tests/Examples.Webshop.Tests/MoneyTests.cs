@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Examples.Webshop.SharedKernel;
-using DDDToolkit.Validation;
+using DTS.DDD.Validation;
 using FluentAssertions;
 
 namespace Examples.Webshop.Tests;

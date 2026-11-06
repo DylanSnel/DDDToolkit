@@ -3240,10 +3240,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
-- **Docs: design principles.** New in 3.2.0-preview.16. [Design principles](docs/design-principles.md) lists the rules
+- **Docs: design principles.** New in 0.1.0. [Design principles](docs/design-principles.md) lists the rules
   that the toolkit's packages follow, each with its reason and a link to the page that shows it. It covers what the
   application writes, how a package plugs in, the domain, access, and names. It sits under Supporting domains, and
   [Writing your own supporting domain](docs/writing-a-supporting-domain.md) links to it.
+- **Docs: the access check of `[Own]`.** [Access checks](docs/performance.md#access-checks) measures the check before
+  and after its compiled query, on SQLite in memory and on Postgres in a container. `OwnerCheckBenchmarks` takes the
+  database as a parameter, shows the minimum and the median, and starts the Postgres container itself.
 - **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
@@ -3304,6 +3307,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **New package ids and namespaces: `DylansTechStack.DDD.*` and `DTS.DDD.*`, from 0.1.0.**
+  - The packages are published as `DylansTechStack.DDD`, `DylansTechStack.DDD.EntityFramework` and so on. They replace
+    `Temp.DDDToolkit.*`, whose last version is 3.2.0-preview.15.
+  - The namespaces and the assemblies are `DTS.DDD.*`. `using DDDToolkit;` becomes `using DTS.DDD;`, and
+    `DDDToolkit.EntityFramework` becomes `DTS.DDD.EntityFramework`.
+  - The version starts again at 0.1.0. Every `DylansTechStack.*` package has the same version.
+  - These names stay: the product name DDDToolkit, the API names that carry it (`UseDDDToolkit()`,
+    `AddDDDToolkitEntityFramework()`, `DDDToolkitException` and the others), the Entity Framework annotations
+    (`DDDToolkit:AppendOnly` and the others), the diagnostic ids `DDD00001` to `DDD00107`, and the MSBuild properties
+    `DDD_Module`, `DDD_DeclareModule` and `DDD_ModuleContracts`.
+  - Tenancy and Membership are `DylansTechStack.Tenancy` and `DylansTechStack.Membership`, with the namespaces
+    `DTS.Tenancy` and `DTS.Membership`. They are part of DTS Pro and are not published on nuget.org.
+  - The projects and folders of this repository follow the namespaces, such as `Source/DTS.DDD.EntityFramework`. The
+    solution file stays `DDDToolkit.slnx`.
+  - `Directory.Build.props` makes the id from the project name, `DylansTechStack.` and the name without `DTS.`. The
+    `DDDPackageIdPrefix` property is gone.
+
 - **The save interceptors call `DetectChanges` once and read only the changed entries.** Each interceptor used to
   call `DetectChanges()` and then `ChangeTracker.Entries()`. `Entries()` calls `DetectChanges` again and creates an
   `EntityEntry` for every tracked entity. One save called `DetectChanges` 7 times. Now each interceptor calls it once
@@ -3331,6 +3351,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
   A batch of 1,000 messages went from 2.8 s and 2.9 GB to 46 ms and 15 MB. See
   [Performance](docs/performance.md#delivering-a-batch-of-outbox-messages).
+- **The access check of `[Own]` runs a compiled query.** The check built a LINQ query, and Entity Framework walked it
+  and looked it up in its query cache on every check. Now the query is compiled once with `EF.CompileAsyncQuery`, when
+  the owner's column is found, and a check sends the aggregate's id as its parameter. `[OrOwn]` on an aggregate's id
+  reads the owner in the same way. The query filters and row level security apply as before.
+
+  A check went from 17.0 μs and 13.6 KB to 6.0 μs and 3.9 KB on SQLite in memory. See
+  [Performance](docs/performance.md#access-checks).
 - **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
   `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
   `GetEqualityComponents()` with LINQ, so every comparison allocated two iterators and boxed each value-type property
@@ -4605,6 +4632,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   for those the message writes out each call, `services.AddSupabaseMigrations<TenancyContext, TenancyContextDesignTimeFactory>();`,
   with the factory the generated list builds the context with. See
   [Checking at start-up](docs/supabase.md#checking-at-start-up).
+
+### Removed
+
+- **Tenancy and Membership leave this repository.** The supporting domains are developed in a separate, private
+  repository from the next release on.
+  - Their packages, `Temp.DDDToolkit.Supporting.Tenancy`, `Temp.DDDToolkit.Supporting.Membership` and their
+    Abstractions, Analyzers, EntityFramework and Postgres packages, get no new versions on nuget.org. The versions up to
+    3.2.0-preview.15 stay available.
+  - The Tenancy sample, `Examples/Tenancy`, moved with them, and so did its tests.
+  - The core's tests that compile against Tenancy or Membership moved with them. They run in the private repository's
+    CI, against the code of this repository. `GeneratorTestHost` and `ReferenceSets` are partial classes for that.
+  - `build/verify-docs-tutorials.sh` and `build/generate-api-reference.sh` moved with them. So did the part of
+    `build/verify-package-consumption.sh` that builds an application with both domains.
+  - The docs of Tenancy and Membership stay on the docs site. A link from the docs to a file of the sample is plain text
+    now.
+  - The Auth tests keep their own copies of `SupabaseImages` and `AuthSigningKeys`, which they took from the sample.
 
 ### Fixed
 

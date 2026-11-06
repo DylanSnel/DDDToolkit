@@ -1,7 +1,7 @@
 # How a request is checked
 
 This page follows a request from the attribute above it to the rows that Postgres lets it read or write. It uses six
-requests and six callers from the seed of the [Tenancy sample](../Examples/Tenancy). Four of the requests are the
+requests and six callers from the seed of the Tenancy sample. Four of the requests are the
 sample's own. Each piece also has a page of its own:
 
 - [Access requirements](access-requirements.md): the requirement and the access check.
@@ -72,7 +72,7 @@ The sample's seed has a tenant called **harbor** (Harbor Works). Its organizatio
 regions below it (North and South), and areas below those, such as North Coast. The project **Pier 7** is at North
 Coast. Leo owns it, and Juno and Vic are on its crew. The project **Bay bridge** is at South Bay, and Juno is not on its
 crew. Every request below is sent for harbor. Its `Tenant` header names the tenant, and the host looks up the caller's
-seat there before anything else ([TenantHeader](../Examples/Tenancy/Examples.Tenancy.Host/Access/TenantHeader.cs)).
+seat there before anything else (TenantHeader).
 
 | Caller | Who it is | Runs on Postgres as |
 |---|---|---|
@@ -217,7 +217,7 @@ The two blocks below are the generator's output for this page's requests. The re
 `ITenantsRequest` here, so its line does not appear in the sample's own generated file.
 
 ```csharp title="TenantsAccessBehavior.g.cs for this page's requests, the interface's part, shortened"
-using DDDToolkit_Generated_IRequireAccess = global::DDDToolkit.Access.IRequireAccess;
+using DDDToolkit_Generated_IRequireAccess = global::DTS.DDD.Access.IRequireAccess;
 
 namespace Examples.Tenancy.Tenants.Application.Access;
 

@@ -489,7 +489,7 @@ parent class, and the parent's rules run with yours. See
 
 ## Persistence
 
-Nothing above needs a database. With `DDDToolkit.EntityFramework` referenced, Entity Framework maps the same
+Nothing above needs a database. With `DTS.DDD.EntityFramework` referenced, Entity Framework maps the same
 declarations without configuration:
 
 - a root as an entity type;

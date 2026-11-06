@@ -1,6 +1,6 @@
 # GraphQL
 
-`DDDToolkit.HotChocolate` adapts a domain model built with the toolkit to a HotChocolate GraphQL schema. Without
+`DTS.DDD.HotChocolate` adapts a domain model built with the toolkit to a HotChocolate GraphQL schema. Without
 the package, HotChocolate publishes the model as it finds it:
 
 - A strongly typed id becomes an object type with a `value` field. A client has to know that an `OrderId` wraps a
@@ -21,7 +21,7 @@ generates.
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit.HotChocolate --prerelease
+dotnet add package DylansTechStack.DDD.HotChocolate --prerelease
 ```
 
 The package contains its own source generator, so the package reference is the only build-time setup. The package
@@ -35,7 +35,7 @@ application uses one version of all of them. Reference any other HotChocolate pa
 Two kinds of call on the `IRequestExecutorBuilder` set up the toolkit:
 
 ```csharp
-using DDDToolkit.HotChocolate;
+using DTS.DDD.HotChocolate;
 using Ordering.Domain.GraphQl;   // generated
 using SharedKernel.GraphQl;      // generated
 
@@ -287,8 +287,8 @@ rows, the runtime types match. The tests run `Guid`, `int` and `string` end to e
 `[GraphQLType<TSchemaType>]` replaces the default for one type:
 
 ```csharp
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.HotChocolate.Attributes;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.DDD.HotChocolate.Attributes;
 using HotChocolate.Types;
 
 [GraphQLType<EmailAddressType>]
@@ -329,7 +329,7 @@ public readonly partial record struct LoginId
 ```
 
 `TSchemaType` must implement `HotChocolate.Types.ITypeDefinition`. The attribute is the toolkit's, in
-`DDDToolkit.HotChocolate.Attributes`. HotChocolate's `GraphQLTypeAttribute` is a different attribute. It annotates
+`DTS.DDD.HotChocolate.Attributes`. HotChocolate's `GraphQLTypeAttribute` is a different attribute. It annotates
 single members and arguments.
 
 ## Binding fields by convention
@@ -475,7 +475,7 @@ application's own records, which are no entities, stay fields.
 ## Personal data and bookkeeping are left out
 
 Some stored members do not belong in an API unless the application chooses to show them. The packages mark them
-with two attributes from `DDDToolkit.Abstractions.Attributes`:
+with two attributes from `DTS.DDD.Abstractions.Attributes`:
 
 - `[PersonalData]` marks data about a person that no reader of the object needs. Tenancy marks the seat's `Identity`,
   the id of the person's account at the identity provider. The invitation's `Address` is not marked, because whoever
@@ -513,7 +513,7 @@ An application marks its own members the same way. The Tenancy sample marks its 
 
 HotChocolate names a generic type after its type arguments. Tenancy's `Placement<SeatId, OrganizationUnitId, RoleId>`
 would be `PlacementOfSeatIdAndOrganizationUnitIdAndRoleId`. An application closes Tenancy's generic classes once, so
-Tenancy gives each of them a name with `[DisplayName]` from `DDDToolkit.Abstractions.Attributes`:
+Tenancy gives each of them a name with `[DisplayName]` from `DTS.DDD.Abstractions.Attributes`:
 
 | Class | Type name |
 |---|---|
@@ -579,7 +579,7 @@ The error never contains the rejected value, because that value may be a passwor
 error through unchanged.
 
 The message is in the reader's language when the application registered an `IFailureLocalizer`, by calling
-`AddDDDToolkitLocalization()` from `DDDToolkit.Localization`. Without a localizer, the message is the text that the
+`AddDDDToolkitLocalization()` from `DTS.DDD.Localization`. Without a localizer, the message is the text that the
 domain wrote. The language is the request's UI culture, so call `app.UseRequestLocalization(...)` before
 `app.MapGraphQL()`. See [Localization](localization.md).
 
@@ -1083,7 +1083,7 @@ reports the call with diagnostic [DDD00032](diagnostics.md#ddd00032), a warning.
 The generator writes the nested `ChangeTypeProvider` and `NodeIdValueSerializer` into the project that declares the
 identifier, and only when that project references this package. A module split into projects by layer
 ([A module in layers](modules.md#a-module-in-layers)) declares its identifiers in a domain or contracts project
-without this package. The reason is the dependency. `DDDToolkit.HotChocolate` depends on `HotChocolate.AspNetCore`.
+without this package. The reason is the dependency. `DTS.DDD.HotChocolate` depends on `HotChocolate.AspNetCore`.
 Every module that reads a contracts project references that project, so the package there would add ASP.NET Core to
 all those modules. Instead, the module's API project, which builds the schema, binds those identifiers.
 
@@ -1130,7 +1130,7 @@ builder.Services
 Every identifier, single value object and always-valid twin implements `ISingleValue<TSelf, TValue>`. That interface
 names the value and the way to create the type from the value
 ([Identifiers](identifiers.md#an-identifier-stored-by-another-project)). The package has one provider and one
-serializer for all these types, in `DDDToolkit.HotChocolate.Types`: `SingleValueChangeTypeProvider<T, TValue>` and
+serializer for all these types, in `DTS.DDD.HotChocolate.Types`: `SingleValueChangeTypeProvider<T, TValue>` and
 `SingleValueNodeIdSerializer<T, TValue>`. In a project that references the package, the generated
 `Add{Module}GraphQlRuntimeBindings()` registers them for the types of other projects:
 
@@ -1214,7 +1214,7 @@ Page<Order> page = await context.Orders
 HotChocolate writes each key into the cursor with a serializer for the key's type. HotChocolate has serializers for
 `Guid` and `string`, and none for unknown types. Ordering by an `OrderId` therefore fails with "The key type
 `Ordering.OrderId` is not supported." The package contains the serializer, `SingleValueCursorKeySerializer<T, TValue>`
-in `DDDToolkit.HotChocolate.Paging`. The generated `Add{Module}GraphQlRuntimeBindings()` registers it for every
+in `DTS.DDD.HotChocolate.Paging`. The generated `Add{Module}GraphQlRuntimeBindings()` registers it for every
 struct identifier that the method binds, the project's own and those
 [of other projects](#binding-ids-from-other-projects):
 
@@ -1449,7 +1449,7 @@ attribute says which schema a class belongs to. A gateway says which schemas for
 ## One schema over a modular monolith
 
 HotChocolate Fusion puts a gateway in front of several GraphQL services. The gateway composes their schemas, each
-one a source schema, into one schema. `DDDToolkit.HotChocolate.Fusion.InMemory` applies this to the modules of a
+one a source schema, into one schema. `DTS.DDD.HotChocolate.Fusion.InMemory` applies this to the modules of a
 monolith:
 
 - Each module serves its own GraphQL source schema.
@@ -1457,10 +1457,10 @@ monolith:
 - The gateway calls the modules in memory, with no HTTP.
 
 ```bash
-dotnet add package Temp.DDDToolkit.HotChocolate.Fusion.InMemory --prerelease
+dotnet add package DylansTechStack.DDD.HotChocolate.Fusion.InMemory --prerelease
 ```
 
-**The package requires HotChocolate Fusion 16.6.9 or later**, the same version as `DDDToolkit.HotChocolate`. The
+**The package requires HotChocolate Fusion 16.6.9 or later**, the same version as `DTS.DDD.HotChocolate`. The
 package declares this dependency, so NuGet refuses an older HotChocolate. Without the declaration, the gateway would
 fail at run time.
 
@@ -1581,7 +1581,7 @@ surface and lists the schemas of each ([Several gateways](#several-gateways)). E
 adds requirements for its callers as it does on a route. A tool such as GraphQL Codegen reads the schema with the
 application's schema key ([Reading the schema from a tool](#reading-the-schema-from-a-tool)).
 
-The package handles four problems of the in-memory setup. The spike in `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess`
+The package handles four problems of the in-memory setup. The spike in `Tests/Spikes/DTS.DDD.Spikes.FusionInProcess`
 shows the first two:
 
 - **The gateway has its own service container inside the application.** HotChocolate and Fusion each register
@@ -1902,8 +1902,8 @@ admin fields.
 <details>
 <summary>Show the code: a module with two schemas, and a host with two gateways</summary>
 
-The sample's files are [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs) and
-[`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs).
+The sample's files are `Program.cs` and
+`SampleGateways.cs`.
 
 ```csharp
 // Tenants.Api/GraphQL/TenantsGraphQL.cs
@@ -2195,7 +2195,7 @@ The Postgres transport uses `LISTEN` and `NOTIFY`. Several servers share subscri
 no Redis and no broker to run or pay for. With the [pgmq sink](transports.md#postgres-queues-pgmq), a Postgres
 deployment carries both the durable path and the live path without another service.
 
-`Tests/DDDToolkit.HotChocolate.Tests/SubscriptionSinkTests.cs` runs the sink against the real in-memory transport,
+`Tests/DTS.DDD.HotChocolate.Tests/SubscriptionSinkTests.cs` runs the sink against the real in-memory transport,
 including a client that subscribes through the schema and receives what the outbox published.
 
 ## What this package does not do

@@ -1,4 +1,4 @@
-using DDDToolkit.Abstractions.Access;
+using DTS.DDD.Abstractions.Access;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 

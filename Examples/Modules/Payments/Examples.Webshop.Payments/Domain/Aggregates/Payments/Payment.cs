@@ -1,5 +1,5 @@
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.BaseTypes;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.DDD.BaseTypes;
 using Examples.Webshop.Ordering.Contracts;
 using Examples.Webshop.SharedKernel;
 

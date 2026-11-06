@@ -154,7 +154,7 @@ builder.Services.AddInMemoryFusionGateway();     // composes whatever source sch
 app.MapInMemoryFusionGateway();                  // /graphql
 ```
 
-The gateway is the toolkit's `DDDToolkit.HotChocolate.Fusion.InMemory`, and it knows no module; see
+The gateway is the toolkit's `DTS.DDD.HotChocolate.Fusion.InMemory`, and it knows no module; see
 [One schema over a modular monolith](../docs/graphql.md#one-schema-over-a-modular-monolith).
 
 Every entity a client can refetch is a Relay node: `node(id:)` finds orders, products, payments,
@@ -542,7 +542,7 @@ Paths are under `Modules/`.
 | The same modules on another database, and who applies the migrations | `Shared/Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
 | Migrations per provider in separate assemblies | each module's `Infrastructure/Persistence/Migrations` and its `*.Migrations.SqlServer` project |
 | The whole system under test, containers included | `Tests/Examples.AppHost.Tests` |
-| One GraphQL schema over modules that do not know each other: Fusion in the monolith | each module's `Api/GraphQL` (`Add{Module}SourceSchema`, `ProductStub.cs`, `ProductStock.cs`, `OrderStub.cs`), `DDDToolkit.HotChocolate.Fusion.InMemory` |
+| One GraphQL schema over modules that do not know each other: Fusion in the monolith | each module's `Api/GraphQL` (`Add{Module}SourceSchema`, `ProductStub.cs`, `ProductStock.cs`, `OrderStub.cs`), `DTS.DDD.HotChocolate.Fusion.InMemory` |
 | The same schema composed across services by a Fusion gateway | each `Microservices.*` AppHost and gateway, `OrderStub.cs` in Payments and Shipping |
 | Relay node ids from the toolkit's identifiers, and references to another module's node | each `Api/GraphQL/*Type.cs`, `.ID("Order")` in Payments, Inventory and Shipping |
 | Rules and invalid values as GraphQL errors with their codes | `AddDDDToolkitErrors()` in each module's `Add{Module}SourceSchema`, `Ordering/.../Api/GraphQL/OrderingOperations.cs` |
@@ -731,7 +731,7 @@ The host runs on Postgres, as Supabase runs it, at the connection string it is g
   the application's is in with its version, and is written anew when that version changes, so the project that
   holds the sample's own, `Examples.Tenancy.Projects.Infrastructure`, has a version of its own and does not
   follow the toolkit's. Tenancy's and Membership's SQL comes with the exporter's references to the modules
-  that use their Postgres packages, made in `DDDToolkit.RowAccessContributionsOfPackages.g.cs` among the
+  that use their Postgres packages, made in `DTS.DDD.RowAccessContributionsOfPackages.g.cs` among the
   exporter's generated files from what the sample marks, and is named by the package's class and assembly,
   without a version.
 - **A module has one set of migrations**, beside its context in its infrastructure project. The context is marked
@@ -960,13 +960,13 @@ over a stub).
 | The access history as a list, paged with `PagingArguments` and `ToPageAsync` | `...Tenants.Application/History/Queries/AccessHistory.cs`, `HistoryAsync` in `...Tenants.Infrastructure/Persistence/EfTenancyReads.cs`, `...Tenants.Api/History/Rest/HistoryEndpoints.cs` and `History/GraphQL/HistoryPagedQueries.cs`, `Ui/Components/Pages/History.razor`; `AccessHistoryScenarios`, `AccessHistoryFieldScenarios` |
 | Inviting a person by address: the package's invitations, an account through the identity port, whose id the invitation keeps so it can be mailed again or deleted unused, a seat when they accept | `Invitation` in `...Tenants.Domain/Aggregates/Invitations/`, the feature `Invitations` in `...Tenants.Application` and `...Tenants.Api`, with a route and a GraphQL field for each command and query, `AddTenancyInvitations` in `TenantsContext.cs` and `TenantsInfrastructure.cs`, `Host/Auth/SampleIdentityAccounts.cs` and `Host/DevLogin/DevIdentityAccounts.cs`, `Ui/Components/Pages/Invitations.razor` and `AcceptInvitation.razor`, and for the link in Auth's mail `InvitationPage.cs` in the feature, `Sample:Invitations:AcceptPage`, `Ui/Auth/AuthLink.cs` and `Ui/Auth/LinkSignIn.cs`, which asks before a link's sign-in replaces a tab's; `InvitationScenarios`, `LinkSignInTests`, `InvitationFieldScenarios`, `InvitationOverTimeScenarios`, `InvitationWithSupabaseAuthTests`, `InvitedByMailTests` |
 | A column that never changes once its row is saved | `IsFixedAfterInsert()` on a project's number in `ProjectsContext.cs` and on an inspection's project in `InspectionsContext.cs`; `MigrationTests` |
-| A class kept to its tenant by a mark in the domain, with no line in its context: the tenant filter on its reads and Tenancy's save check on its writes | `[OfTenant]` on the `TenantId` of `Project`, `ProjectRole` and `Inspection` in the domain projects, which reference `DDDToolkit.Supporting.Tenancy.Abstractions` for it and nothing else of Tenancy's, and which `AddDDDToolkitConventions()` in `ProjectsContext.cs` and `InspectionsContext.cs` maps; `ModuleModelTests` |
+| A class kept to its tenant by a mark in the domain, with no line in its context: the tenant filter on its reads and Tenancy's save check on its writes | `[OfTenant]` on the `TenantId` of `Project`, `ProjectRole` and `Inspection` in the domain projects, which reference `DTS.Tenancy.Abstractions` for it and nothing else of Tenancy's, and which `AddDDDToolkitConventions()` in `ProjectsContext.cs` and `InspectionsContext.cs` maps; `ModuleModelTests` |
 | A role a tenant makes, mapped by Membership with no line in its context: a name and a starter role once per tenant, because the role marks its tenant, and the module's own refusal on the name's index | `ProjectRole` in `...Projects.Domain/Aggregates/ProjectRoles/`, the `RefusesAs` on the name's index in `ProjectsContext.cs`; `ProjectRoleScenarios`, `MigrationTests` |
 | An administrators' starter role that lists its permissions, and the marks pinned by a test | `Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs`; `AccessAdminScenarios`, `ApplicationRuleScenarios` |
 | A role made from a starter role follows it: a permission a module brings later, or a permission added to a starter role, reaches the tenants' roles at the host's next start, what a tenant changed itself stays, and the change is in the access history | `SyncStarterRoles()` after `RunStartupChecks()` in `Host/Program.cs`, the `KeysFromPack` and `StarterRolesRenamed` migrations in `...Tenants.Infrastructure/Persistence/Migrations/` and their exported `*.tenants.ddd.sql` files; `StarterRoleSyncScenarios`, `MigrationTests` |
 | Tenancy's managers taken by the package's own names, `TenantManager`, `SeatManager` and the others, classes the toolkit's generator writes into the Tenants domain project, which declares the classes, so no project of the sample writes the nine types; a second module with Tenancy's classes would give its own other names, with a line per class beside its switch | `SeatManager` in `...Tenants.Application/Seats/Commands/SuspendTenantSeat.cs`, `SeatManager.PermissionReach` in `...Tenants.Api/Seats/GraphQL/PermissionOfMineType.cs`, `TenantManager` and `new TenantToProvision(...)` in `Host/Seeding/DemoSeeder.cs`; `SourceTreeTests`, which holds every file of the sample and of its tests to closing the managers nowhere |
 | Tenancy's ids named once: the access manager closed over them wherever the Tenants module's classes are seen, a line that names them in a module that sees only the ids, the registrations in each module's own infrastructure project, and tenant selection without them | `TenancyAccessManager` and `access.BeginSystem()` in `Host/Seeding/DemoSeeder.cs`, `TenancyUsers.Ambient` in `Host/Access/SeatRequirementHandler.cs`, `ITenantSelection` and the core's `AccessManager`, which begins the request's user, in `Host/Access/TenantHeader.cs`, `outbox.AddTenancyDomainEvents()` in `TenantsInfrastructure.cs`; `[assembly: TenancyIds<...>]` in `...Projects.Application/GlobalUsings.cs` and `...Inspections.Application/GlobalUsings.cs`, whose modules see only the ids, with `AddTenancyAccess<IProjectsRequest, ProjectsContext>()` in `ProjectsInfrastructure.cs`; `SourceTreeTests`, which holds every project that sees the classes to naming no id where a closed form exists |
-| A module's permissions declared once, in a `[Permissions]` class with their levels, which Tenancy's generator lists so the host and the export both find them without naming a module | `...Projects.Application/Access/ProjectPermissions.cs` and `...Inspections.Application/Access/InspectionPermissions.cs`, `AddTenancyPermissionsOfModules()` in `Host/Program.cs`, and for the export the same lists, found by the exporter's build and written into its `DDDToolkit.RowAccessContributionsOfPackages.g.cs` beside the part of the catalogue `Catalogue/SampleCatalogue.cs` marks `[TenancyCatalogue]`; `ModulePermissionsTests` |
+| A module's permissions declared once, in a `[Permissions]` class with their levels, which Tenancy's generator lists so the host and the export both find them without naming a module | `...Projects.Application/Access/ProjectPermissions.cs` and `...Inspections.Application/Access/InspectionPermissions.cs`, `AddTenancyPermissionsOfModules()` in `Host/Program.cs`, and for the export the same lists, found by the exporter's build and written into its `DTS.DDD.RowAccessContributionsOfPackages.g.cs` beside the part of the catalogue `Catalogue/SampleCatalogue.cs` marks `[TenancyCatalogue]`; `ModulePermissionsTests` |
 | A unit's kind, kept by the application on its own unit class since Tenancy keeps none | `UnitKind` and `OrganizationUnit.Kind` in `...Tenants.Domain/Aggregates/Organizations/`, set in the manager's callback by `...Tenants.Application/Organization/Commands/AddOrganizationUnit.cs` and by the seeder's `ConfigureRoot`, stored by `UnitKindKeyConverter`; `GraphQLMutationScenarios`, `RequestBodyTests` |
 | A seat's name, kept per tenant by the application on its own seat class since Tenancy keeps none, with a rule of its own, and renamed by a command of its own | `Seat.DisplayName` and its rule `DisplayNameIsValid` in `...Tenants.Domain/Aggregates/Seats/`, set in the managers' callbacks by the seeder and by `...Tenants.Application/Invitations/Commands/AcceptInvitation.cs`, shown by the seat's GraphQL type, `...Tenants.Api/Seats/GraphQL/SeatType.cs`, which lists the seat's fields one by one and never its identity, and listed by name by `...Tenants.Application/Seats/SeatsByName.cs`, renamed by `Seats/Commands/RenameSeat.cs`; `SeatNameScenarios`, `InvitationScenarios`, `MigrationTests` |
 | A field of the application's own on the package's table, guarded in the database by the application: Tenancy holds only its own columns of a seat (id, identity, tenant, status), so a column rule holds the name to the rule of `RenameSeat`, and the job title, with no command, is as writable as the row | `...Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsPermission.cs`, written by the exporter into the newest `*_access.tenants.ddd.sql`; `SampleOnPostgresTests` |
@@ -1012,21 +1012,21 @@ over a stub).
 | A model check: a module maps no more of Tenancy than access facts | `TenancyModel.ReadsBeyondAccessFacts`; `ModuleModelTests` |
 | A screen that resolves the names of the ids it was answered | `Tenancy/Examples.Tenancy.Ui/Api/DirectoryNames.cs`, `Components/Pages/MyProjects.razor` and `ProjectDetail.razor`; `DirectoryNamesTests` |
 
-## `DDDToolkit.ExampleApi` and `DDDToolkit.ExampleLibrary`
+## `DTS.DDD.ExampleApi` and `DTS.DDD.ExampleLibrary`
 
 The example that predates the one above. They survive because four test projects use their types as
-fixtures: `DDDToolkit.Tests`, `DDDToolkit.EntityFramework.Tests`,
-`DDDToolkit.EntityFramework.Providers.Tests` and `DDDToolkit.HotChocolate.Tests` all reference
+fixtures: `DTS.DDD.Tests`, `DTS.DDD.EntityFramework.Tests`,
+`DTS.DDD.EntityFramework.Providers.Tests` and `DTS.DDD.HotChocolate.Tests` all reference
 `EmailAddress`, `PersonName`, `UserId` and `ExampleContext`. Deleting them is therefore a change to the
 test suite, not to this folder.
 
 They still work, and `ExampleLibrary` is the only place FluentValidation validators and the
 HotChocolate attributes are demonstrated. Read `ModularMonolith.Supabase/` first.
 
-## `DDDToolkit.NugetApi`
+## `DTS.DDD.NugetApi`
 
 Deliberately outside the solution, and the only project here that consumes the toolkit as packages
 rather than as project references. It names every generated member it expects, including all four
 members of the invariant check, a nested rule on the root and one on a child, so a generator that did
 not arrive fails the build. See the
-[README](DDDToolkit.NugetApi/README.md) in that folder.
+[README](DTS.DDD.NugetApi/README.md) in that folder.

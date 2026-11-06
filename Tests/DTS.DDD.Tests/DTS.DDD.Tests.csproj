@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <DDD_Module>Tests</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <!--
+    A web host with Kestrel, for the start-up checks' runner: it runs before the server binds its port. The shared
+    framework brings the container and localization the tests use as well, so neither is a package of its own here.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Examples\DTS.DDD.ExampleLibrary\DTS.DDD.ExampleLibrary.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD\DTS.DDD.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.NewtonSoft.Json\DTS.DDD.NewtonSoft.Json.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.FluentValidation\DTS.DDD.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.Localization\DTS.DDD.Localization.csproj" />
+  </ItemGroup>
+
+  <!-- Generators run on this project too, so tests can declare their own aggregates, ids and value objects. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DTS.DDD.Analyzers\DTS.DDD.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.FluentValidation.Analyzers\DTS.DDD.FluentValidation.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

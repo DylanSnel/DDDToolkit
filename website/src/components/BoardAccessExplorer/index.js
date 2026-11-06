@@ -3,9 +3,9 @@
  * permission, and see each of the five ways a caller holds a permission on a board, yes or no and why, and the answer
  * the access check gives the tutorial's request for that permission.
  *
- * Everything it shows comes from boards.json, which a test of DDDToolkit.Analyzers.Tests holds to the overview, the
+ * Everything it shows comes from boards.json, which a test of DTS.DDD.Analyzers.Tests holds to the overview, the
  * tutorial and the code: the component is a way through the tutorial's world, never a second source. The five ways
- * are Membership's (DDDToolkit.Supporting.Membership.EntityFramework, EfMemberQuestions): the owner, a member now, a
+ * are Membership's (DTS.Membership.EntityFramework, EfMemberQuestions): the owner, a member now, a
  * role now, the permission held at the board's unit or above, and system work in the module's scope. A caller who
  * sees the board as owner, as member, from above with the permission every member holds, or as system work, and holds
  * the permission in none of the five ways, gets not-permitted; a caller who does not see it gets not-found. The page

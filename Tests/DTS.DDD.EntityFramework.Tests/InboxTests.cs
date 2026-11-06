@@ -1,0 +1,390 @@
+using System.Data.Common;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Access;
+using DTS.DDD.BaseTypes;
+using DTS.DDD.EntityFramework.Inbox;
+using DTS.DDD.EntityFramework.Integration;
+using DTS.DDD.EntityFramework.Options;
+using DTS.DDD.EntityFramework.Outbox;
+using DTS.DDD.EntityFramework.Tests.Domain;
+using DTS.DDD.EntityFramework.Tests.Domain.Events;
+using DTS.DDD.EntityFramework.Tests.Infrastructure;
+using DTS.DDD.ExampleApi.Domain.UserAggregate.ValueObjects;
+using DTS.DDD.ExampleLibrary.Common.ValueObjects;
+using DTS.DDD.Interfaces;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace DTS.DDD.EntityFramework.Tests;
+
+/// <summary>
+/// The receiving half: running a handler once for a message and consumer, with the effect and the
+/// "already applied" marker in one transaction.
+/// </summary>
+public sealed class InboxTests(ExplicitCurrentUserPostgres postgres) : IDisposable
+{
+    private const string Consumer = "billing.person-projector";
+
+    private readonly SqliteDatabase _db = new();
+    private readonly ManualClock _clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
+
+    public void Dispose() => _db.Dispose();
+
+    private TestHost CreateHost(Action<DDDEntityFrameworkOptions>? configure = null, Action<IServiceCollection>? services = null)
+        => new(
+            _db,
+            options =>
+            {
+                options.TimeProvider = _clock;
+                configure?.Invoke(options);
+            },
+            dispatchThroughRecorder: true,
+            collection =>
+            {
+                collection.AddDomainEventInbox<LibraryContext>();
+                services?.Invoke(collection);
+            });
+
+    private static Person NewPerson(string first) => new(MemberId.CreateUnique(), new PersonName(first, "Lovelace"), null, new ValidDateOfBirth(new DateOnly(1815, 12, 10)));
+
+    /// <summary>
+    /// A transport's delivery, twice, in a host that requires explicit callers, on Postgres with row level
+    /// security: the receiver's own work needs no caller of anybody's, and the inbox's read, the handler and the
+    /// inbox row run as the module's scoped system caller, so the second delivery finds the row it wrote.
+    /// </summary>
+    [Fact]
+    public async Task The_inbox_receives_with_explicit_callers_required()
+    {
+        var cancellation = TestContext.Current.CancellationToken;
+        await using var work = await ToolkitWork.StartAsync(
+            await postgres.CreateDatabaseAsync(cancellation),
+            module => module
+                .Around((_, _, _) => TestAccess.BeginSystem(ToolkitWork.ReceivingScope))
+                .Handle<ShelfOpenedV3, ReceiptLog>());
+        var receiver = work.Services.GetRequiredService<IntegrationEventReceiver>();
+        var message = ToolkitWork.Opened("Fiction");
+
+        await receiver.ReceiveAsync(message, cancellation);
+        await receiver.ReceiveAsync(message, cancellation);
+
+        work.Seen.Callers.Should().ContainSingle("the second delivery found the inbox row the first one wrote")
+            .Which!.ToString().Should().Be($"system in {ToolkitWork.ReceivingScope}");
+        var claims = $$"""{"role":"{{ExplicitCurrentUserPostgres.SystemInRole}}","scope":"{{ToolkitWork.ReceivingScope}}"}""";
+        (await work.InboxAsync()).Should().Equal(new Written("callers.receipt-log", ExplicitCurrentUserPostgres.SystemInRole, claims));
+        (await work.ReceiptsAsync()).Should().Equal(new Written("Fiction", ExplicitCurrentUserPostgres.SystemInRole, claims));
+    }
+
+    /// <summary>Runs the inbox in a fresh scope, the way a consumer of one delivery would.</summary>
+    private Task<bool> DeliverAsync(TestHost host, Guid messageId, Func<LibraryContext, CancellationToken, Task> handler, string consumer = Consumer)
+        => host.InScopeAsync((context, services) => services
+            .GetRequiredService<DomainEventInbox<LibraryContext>>()
+            .ExecuteOnceAsync(messageId, consumer, token => handler(context, token)));
+
+    private static Task ProjectAsync(LibraryContext context, CancellationToken cancellationToken)
+    {
+        context.People.Add(NewPerson("Ada"));
+        return Task.CompletedTask;
+    }
+
+    private List<Person> People()
+    {
+        using var check = _db.CreateLibraryContext();
+        return [.. check.People];
+    }
+
+    private List<InboxMessage> Rows()
+    {
+        using var check = _db.CreateLibraryContext();
+        return [.. check.Inbox];
+    }
+
+    [Fact]
+    public async Task The_handler_runs_once_however_often_the_message_is_delivered()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        var first = await DeliverAsync(host, messageId, ProjectAsync);
+        var second = await DeliverAsync(host, messageId, ProjectAsync);
+        var third = await DeliverAsync(host, messageId, ProjectAsync);
+
+        first.Should().BeTrue();
+        second.Should().BeFalse("the message had already been applied by this consumer");
+        third.Should().BeFalse();
+
+        People().Should().ContainSingle().Which.Name.FirstName.Should().Be("Ada");
+        var row = Rows().Should().ContainSingle().Subject;
+        row.MessageId.Should().Be(messageId);
+        row.Consumer.Should().Be(Consumer);
+        row.ProcessedAt.Should().Be(_clock.GetUtcNow());
+        row.MessageName.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_crash_between_handling_and_marking_applies_nothing_and_the_redelivery_applies_it_once()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        var crash = async () => await DeliverAsync(host, messageId, async (context, token) =>
+        {
+            context.People.Add(NewPerson("Ada"));
+
+            // The handler even saves for itself, so a naive inbox would already have written the row.
+            await context.SaveChangesAsync(token);
+            throw new InvalidOperationException("the process died here");
+        });
+
+        await crash.Should().ThrowAsync<InvalidOperationException>().WithMessage("the process died here");
+
+        People().Should().BeEmpty("the effect is rolled back with the marker it never got");
+        Rows().Should().BeEmpty();
+
+        var applied = await DeliverAsync(host, messageId, ProjectAsync);
+
+        applied.Should().BeTrue("nothing was recorded, so the redelivery is the first real attempt");
+        People().Should().ContainSingle();
+        Rows().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_failed_attempt_leaves_nothing_tracked_for_the_next_save_on_the_same_context()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        var applied = await host.InScopeAsync(async (context, services) =>
+        {
+            var inbox = services.GetRequiredService<DomainEventInbox<LibraryContext>>();
+
+            var failing = () => inbox.ExecuteOnceAsync(messageId, "billing", _ =>
+            {
+                context.People.Add(NewPerson("Half"));
+                return Task.FromException(new InvalidOperationException("billing failed"));
+            });
+            await failing.Should().ThrowAsync<InvalidOperationException>();
+
+            // The next consumer of the same message on the same context, the way the module sink runs them.
+            return await inbox.ExecuteOnceAsync(messageId, "search", token => ProjectAsync(context, token));
+        });
+
+        applied.Should().BeTrue();
+        People().Select(p => p.Name.FirstName).Should().Equal(["Ada"], "the failed attempt was rolled back, so its write must not ride along with the next save");
+        Rows().Select(r => r.Consumer).Should().Equal("search");
+    }
+
+    [Fact]
+    public async Task A_copy_that_loses_the_race_to_another_copy_is_a_repeat_rather_than_an_error()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        // The other copy is applied after this one found no inbox row and before it started its own
+        // transaction: the window two parallel deliveries of one message share.
+        var race = new BeforeTransaction(() => DeliverAsync(host, messageId, ProjectAsync));
+        await using var context = _db.CreateLibraryContext(options => options.AddInterceptors(race));
+        var inbox = new DomainEventInbox<LibraryContext>(context, host.Options);
+
+        var applied = await inbox.ExecuteOnceAsync(messageId, Consumer, token => ProjectAsync(context, token), TestContext.Current.CancellationToken);
+
+        race.Ran.Should().BeTrue();
+        applied.Should().BeFalse("the other copy applied the message first, which makes this one a repeat");
+        People().Should().ContainSingle("the losing copy's write is rolled back together with its inbox row");
+        Rows().Should().ContainSingle();
+        context.ChangeTracker.Entries().Should().BeEmpty("nothing of the rolled back attempt stays tracked");
+    }
+
+    [Fact]
+    public async Task A_failure_that_is_not_a_lost_race_still_throws()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        // Another consumer applied the message meanwhile. That does not make this consumer's failure a repeat.
+        var race = new BeforeTransaction(() => DeliverAsync(host, messageId, ProjectAsync, consumer: "search"));
+        await using var context = _db.CreateLibraryContext(options => options.AddInterceptors(race));
+        var inbox = new DomainEventInbox<LibraryContext>(context, host.Options);
+
+        var act = () => inbox.ExecuteOnceAsync(messageId, Consumer, _ => Task.FromException(new InvalidOperationException("billing failed")), TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("billing failed");
+        race.Ran.Should().BeTrue();
+        Rows().Select(r => r.Consumer).Should().Equal("search");
+    }
+
+    [Fact]
+    public async Task Two_consumers_of_the_same_message_each_run_once()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        await DeliverAsync(host, messageId, ProjectAsync, "billing");
+        await DeliverAsync(host, messageId, ProjectAsync, "billing");
+        var other = await DeliverAsync(host, messageId, ProjectAsync, "search");
+
+        other.Should().BeTrue("the key is the pair, so a consumer added later is not skipped");
+        People().Should().HaveCount(2);
+        Rows().Select(r => r.Consumer).Should().BeEquivalentTo("billing", "search");
+    }
+
+    [Fact]
+    public async Task It_joins_the_caller_transaction_and_leaves_committing_to_them()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        await host.InScopeAsync(async (context, services) =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var inbox = services.GetRequiredService<DomainEventInbox<LibraryContext>>();
+
+            var applied = await inbox.ExecuteOnceAsync(messageId, Consumer, token => ProjectAsync(context, token));
+
+            applied.Should().BeTrue();
+            await transaction.RollbackAsync();
+            return applied;
+        });
+
+        People().Should().BeEmpty("the inbox joined the caller's transaction rather than committing its own");
+        Rows().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task The_envelope_overload_keeps_the_published_name_on_the_row()
+    {
+        using var host = CreateHost();
+        var message = new IntegrationEventMessage
+        {
+            MessageId = Guid.CreateVersion7(),
+            Name = "library.shelf-opened",
+            Version = 3,
+            Payload = """{"ShelfId":"SHELF_1","DisplayName":"Fiction"}""",
+            OccurredAt = _clock.GetUtcNow(),
+        };
+
+        var applied = await host.InScopeAsync((context, services) => services
+            .GetRequiredService<DomainEventInbox<LibraryContext>>()
+            .ExecuteOnceAsync(message, Consumer, (received, token) =>
+            {
+                received.Version.Should().Be(3);
+                return ProjectAsync(context, token);
+            }));
+
+        applied.Should().BeTrue();
+        Rows().Should().ContainSingle().Which.MessageName.Should().Be("library.shelf-opened");
+    }
+
+    [Fact]
+    public async Task HasProcessedAsync_answers_per_consumer()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+        await DeliverAsync(host, messageId, ProjectAsync);
+
+        var answers = await host.InScopeAsync(async (_, services) =>
+        {
+            var inbox = services.GetRequiredService<DomainEventInbox<LibraryContext>>();
+            return (
+                Mine: await inbox.HasProcessedAsync(messageId, Consumer),
+                Theirs: await inbox.HasProcessedAsync(messageId, "search"),
+                Other: await inbox.HasProcessedAsync(Guid.CreateVersion7(), Consumer));
+        });
+
+        answers.Mine.Should().BeTrue();
+        answers.Theirs.Should().BeFalse();
+        answers.Other.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_context_without_the_inbox_table_fails_with_guidance()
+    {
+        using var context = new NoOutboxContext(_db.Options<NoOutboxContext>());
+        var inbox = new DomainEventInbox<NoOutboxContext>(context);
+
+        var act = () => inbox.ExecuteOnceAsync(Guid.CreateVersion7(), Consumer, _ => Task.CompletedTask);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*NoOutboxContext*AddDomainEventInbox*");
+    }
+
+    [Fact]
+    public async Task A_consumer_name_is_required()
+    {
+        using var host = CreateHost();
+
+        var act = () => DeliverAsync(host, Guid.CreateVersion7(), ProjectAsync, consumer: "  ");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task An_at_least_once_outbox_and_an_inbox_together_apply_the_effect_exactly_once()
+    {
+        // The full loop: the outbox redelivers because a second sink is broken, and the inbox behind
+        // the first sink makes that redelivery harmless.
+        var broken = new RecordingSink { Refuse = true };
+        using var host = new TestHost(
+            _db,
+            options =>
+            {
+                options.TimeProvider = _clock;
+                options.UseOutbox(outbox => outbox
+                    .RegisterEvent<ShelfCreated>()
+                    .SendTo<ProjectingSink>()
+                    .SendTo(broken));
+            },
+            dispatchThroughRecorder: false,
+            services =>
+            {
+                services.AddOutboxProcessor<LibraryContext>();
+                services.AddDomainEventInbox<LibraryContext>();
+            });
+
+        await host.InScopeAsync(async context =>
+        {
+            context.Shelves.Add(new Shelf(ShelfId.CreateUnique(), "Fiction", UserId.CreateUnique(), CatId.CreateUnique(), null));
+            await context.SaveChangesAsync();
+        });
+
+        var firstRun = await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
+        firstRun.Should().Be(0, "the broken sink fails the message as a whole");
+        People().Should().ContainSingle("the working sink did apply it");
+
+        broken.Refuse = false;
+        _clock.Advance(TimeSpan.FromSeconds(5));
+        var secondRun = await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
+
+        secondRun.Should().Be(1);
+        People().Should().ContainSingle("the sink saw the message twice; the inbox applied it once");
+        Rows().Should().ContainSingle().Which.Consumer.Should().Be("library.person-projector");
+    }
+
+    /// <summary>Runs <paramref name="action"/> once, just before the context starts its first transaction.</summary>
+    private sealed class BeforeTransaction(Func<Task> action) : DbTransactionInterceptor
+    {
+        public bool Ran { get; private set; }
+
+        public override async ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(
+            DbConnection connection,
+            TransactionStartingEventData eventData,
+            InterceptionResult<DbTransaction> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Ran)
+            {
+                Ran = true;
+                await action();
+            }
+
+            return result;
+        }
+    }
+
+    /// <summary>A sink that consumes through the inbox, which is how a real consumer would be written.</summary>
+    private sealed class ProjectingSink(DomainEventInbox<LibraryContext> inbox, LibraryContext context) : IIntegrationEventSink
+    {
+        public Task SendAsync(IntegrationEventMessage message, CancellationToken cancellationToken = default)
+            => inbox.ExecuteOnceAsync(message, "library.person-projector", (_, token) => ProjectAsync(context, token), cancellationToken);
+    }
+}

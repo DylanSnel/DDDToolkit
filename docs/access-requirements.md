@@ -58,7 +58,7 @@ public sealed class RequestQuoteHandler(AccessManager access, IQuoteStore quotes
 
 </details>
 
-The namespace `DDDToolkit.Access` has the types for the first question: stating the requirement on the request, and
+The namespace `DTS.DDD.Access` has the types for the first question: stating the requirement on the request, and
 checking the caller before the handler runs. They are part of the core package. They depend on no dispatcher and on
 no [supporting domain](writing-a-supporting-domain.md):
 
@@ -139,10 +139,10 @@ public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest
   interface. A request that declares nothing then requires that default ([A module's default](#a-modules-default)).
 - **`[AllowAnonymous]` has the same name as the attributes of ASP.NET Core and HotChocolate.** It goes on a request
   in the application layer, which references neither library, so the name is free there. A file that imports
-  `Microsoft.AspNetCore.Authorization` or `HotChocolate.Authorization` next to `DDDToolkit.Access` sees two
+  `Microsoft.AspNetCore.Authorization` or `HotChocolate.Authorization` next to `DTS.DDD.Access` sees two
   attributes with that name, and the compiler reports CS0104. This happens, for example, in a route or a resolver
-  that declares its own request. Write the attribute in full, `[DDDToolkit.Access.AllowAnonymous]`, or add an alias
-  at the top of that file: `using AllowAnonymous = DDDToolkit.Access.AllowAnonymousAttribute;`.
+  that declares its own request. Write the attribute in full, `[DTS.DDD.Access.AllowAnonymous]`, or add an alias
+  at the top of that file: `using AllowAnonymous = DTS.DDD.Access.AllowAnonymousAttribute;`.
 - **A requirement is a record.** Two requirements with the same values are equal, so a test can compare each
   request's requirement with the one it should declare.
 

@@ -37,7 +37,7 @@ A principle here is a rule with a reason. When a design breaks one, the reason s
 - **A new mechanism is for every module.** When a package needs something the toolkit lacks, the toolkit gains it for
   all modules. A feature that only one package uses splits the toolkit in two.
 - **The core knows no supporting domain.** The markers a domain class carries for a package, such as `[OfTenant]` and
-  `[At]`, live in a small `DDDToolkit.Supporting.<Domain>.Abstractions` package. A domain project takes that package
+  `[At]`, live in a small `DylansTechStack.<Domain>.Abstractions` package. A domain project takes that package
   and nothing else of the domain. General hooks, such as `[ModelConvention]`, stay in the core.
 - **A package forces no dependency on the application.** A package references no mediator, no transport and no
   provider beyond what its own job needs. Its events are domain events, and the application decides how they are

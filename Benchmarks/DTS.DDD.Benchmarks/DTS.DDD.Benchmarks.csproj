@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- Module Benchmarks, which also names the generated AddBenchmarksConverters method. -->
+    <DDD_Module>Benchmarks</DDD_Module>
+    <!--
+      BenchmarkDotNet refuses to measure a Debug build, so the numbers in docs/performance.md come
+      from `dotnet run -c Release`. The Debug configuration still compiles, which is what keeps the
+      benchmarks honest: they break with the rest of the solution when the generators change.
+    -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- The access check benchmarks run on Postgres in a container as well, to measure what a statement costs over a socket. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DTS.DDD\DTS.DDD.csproj" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.EntityFramework\DTS.DDD.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <!-- Generators. NuGet consumers get these transitively through the packages above. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DTS.DDD.Analyzers\DTS.DDD.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DTS.DDD.EntityFramework.Analyzers\DTS.DDD.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

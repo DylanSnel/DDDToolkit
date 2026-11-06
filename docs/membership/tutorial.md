@@ -142,15 +142,15 @@ package and Tenancy's markers package. Boards' context uses the Entity Framework
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Temp.DDDToolkit" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.13" />
-    <PackageVersion Include="Temp.DDDToolkit.EntityFramework.Supabase" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.DDD" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Tenancy" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Tenancy.Postgres" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Tenancy.EntityFramework" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Tenancy.Abstractions" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Membership" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Membership.EntityFramework" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Membership.Postgres" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.DDD.EntityFramework.Supabase" Version="3.2.0-preview.13" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
@@ -171,7 +171,7 @@ references only the toolkit's core package.
 
   <!-- What the other modules may use of Boards: a board's id, and the questions about boards a row access rule asks. -->
   <ItemGroup>
-    <PackageReference Include="Temp.DDDToolkit" />
+    <PackageReference Include="DylansTechStack.DDD" />
   </ItemGroup>
 
 </Project>
@@ -188,9 +188,9 @@ list and the two managers. From Tenancy, it references the contracts project and
 
   <!-- The board classes: a board, the seats on it, and the roles a tenant keeps for boards. -->
   <ItemGroup>
-    <PackageReference Include="Temp.DDDToolkit.Supporting.Membership" />
+    <PackageReference Include="DylansTechStack.Membership" />
     <!-- [OfTenant], Tenancy's marker of the tenant a board or a role belongs to, and nothing else of Tenancy's. -->
-    <PackageReference Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" />
+    <PackageReference Include="DylansTechStack.Tenancy.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
@@ -209,7 +209,7 @@ contracts project. The other two ids stay in the domain project.
 **`Harbor.Boards.Contracts/ValueObjects/BoardId.cs`**
 
 ```csharp {5-6}
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Harbor.Boards.Contracts.ValueObjects;
 
@@ -220,7 +220,7 @@ public readonly partial record struct BoardId;
 **`Harbor.Boards.Domain/Aggregates/Boards/ValueObjects/BoardMemberId.cs`**
 
 ```csharp {5-6}
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Harbor.Boards.Domain.Aggregates.Boards.ValueObjects;
 
@@ -231,7 +231,7 @@ public readonly partial record struct BoardMemberId;
 **`Harbor.Boards.Domain/Aggregates/BoardRoles/ValueObjects/BoardRoleId.cs`**
 
 ```csharp {5-6}
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 
@@ -245,7 +245,7 @@ template adds the rest.
 **`Harbor.Boards.Domain/Aggregates/Boards/Entities/BoardMember.cs`**
 
 ```csharp {9-10}
-using DDDToolkit.Supporting.Membership;
+using DTS.Membership;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards.ValueObjects;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -263,8 +263,8 @@ change to them raises the board's version. The board does not read a clock, so t
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
 ```csharp {18,21,28-29,31}
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.Tenancy;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -304,9 +304,9 @@ the tenant's first roles.
 **`Harbor.Boards.Domain/Aggregates/BoardRoles/BoardRole.cs`**
 
 ```csharp {10,13-14,16-17}
-using DDDToolkit.Supporting.Membership;
-using DDDToolkit.Supporting.Membership.Access;
-using DDDToolkit.Supporting.Tenancy;
+using DTS.Membership;
+using DTS.Membership.Access;
+using DTS.Tenancy;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -430,7 +430,7 @@ Tenancy knows, `[AtUnit]` and `[AtTenant]`, and the `TenancyIds` line.
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Boards.Domain\Harbor.Boards.Domain.csproj" />
     <!-- Tenancy's levels for a permission held in the organization, [AtUnit] and [AtTenant], and its access manager. -->
-    <PackageReference Include="Temp.DDDToolkit.Supporting.Tenancy" />
+    <PackageReference Include="DylansTechStack.Tenancy" />
     <PackageReference Include="Mediator.Abstractions" />
   </ItemGroup>
 
@@ -443,7 +443,7 @@ in this project. The infrastructure project references this one and gets the lin
 **`Harbor.Boards.Application/TenancyIds.cs`**
 
 ```csharp {4-5}
-using DDDToolkit.Supporting.Tenancy;
+using DTS.Tenancy;
 using Harbor.Tenancy.Contracts.ValueObjects;
 
 // The ids of Tenancy's tenant, seat, unit and role. The generator writes Tenancy's names into the module over these ids.
@@ -456,9 +456,9 @@ and the export writes the database functions from it. A screen for making roles 
 **`Harbor.Boards.Application/Access/BoardPermissions.cs`**
 
 ```csharp {8,11,14,17,20,23}
-using DDDToolkit.Access;
-using DDDToolkit.Supporting.Membership.Access;
-using DDDToolkit.Supporting.Tenancy.Access;
+using DTS.DDD.Access;
+using DTS.Membership.Access;
+using DTS.Tenancy.Access;
 using Harbor.Boards.Domain.Aggregates.Boards;
 
 namespace Harbor.Boards.Application.Access;
@@ -488,7 +488,7 @@ public static class BoardPermissions
 **`Harbor.Boards.Application/Access/BoardMembership.cs`**
 
 ```csharp {8-11}
-using DDDToolkit.Supporting.Membership.Access;
+using DTS.Membership.Access;
 using Harbor.Boards.Domain.Aggregates.Boards;
 
 namespace Harbor.Boards.Application.Access;
@@ -580,9 +580,9 @@ joins Membership to Tenancy (step 5).
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Temp.DDDToolkit.Supporting.Membership.Postgres" />
-    <PackageReference Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" />
-    <PackageReference Include="Temp.DDDToolkit.EntityFramework.Supabase" />
+    <PackageReference Include="DylansTechStack.Membership.Postgres" />
+    <PackageReference Include="DylansTechStack.Tenancy.EntityFramework" />
+    <PackageReference Include="DylansTechStack.DDD.EntityFramework.Supabase" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
@@ -597,9 +597,9 @@ the conventions.
 **`Harbor.Boards.Infrastructure/Persistence/BoardsContext.cs`**
 
 ```csharp {25,27,32,34}
-using DDDToolkit.EntityFramework.Conventions;
-using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DTS.DDD.EntityFramework.Conventions;
+using DTS.DDD.EntityFramework.Supabase;
+using DTS.Tenancy.EntityFramework;
 using Harbor.Boards.Domain.Aggregates.BoardRoles;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Boards.Infrastructure.Converters;
@@ -641,7 +641,7 @@ functions for boards.
 **`Harbor.Boards.Application/Access/BoardMembership.cs`**
 
 ```csharp {3,9-10}
-using DDDToolkit.Supporting.Membership.Access;
+using DTS.Membership.Access;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
 
@@ -737,8 +737,8 @@ export finds the function.
 **`Harbor.Boards.Infrastructure/Access/BoardRowRules.cs`**
 
 ```csharp {9,12,15,19-20,24,28-29}
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Abstractions.Attributes;
 using Harbor.Boards.Application.Access;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -775,8 +775,8 @@ limits who may write a role row.
 **`Harbor.Boards.Infrastructure/Access/BoardRoleRowRules.cs`**
 
 ```csharp {8,11,14,17}
-using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Access;
+using DTS.DDD.Abstractions.Attributes;
 using Harbor.Boards.Application.Access;
 using Harbor.Boards.Domain.Aggregates.BoardRoles;
 
@@ -801,9 +801,9 @@ the members (step 7), and for naming a new owner. The database's lock checks the
 **`Harbor.Boards.Application/Access/BoardPermissions.cs`**
 
 ```csharp {17}
-using DDDToolkit.Access;
-using DDDToolkit.Supporting.Membership.Access;
-using DDDToolkit.Supporting.Tenancy.Access;
+using DTS.DDD.Access;
+using DTS.Membership.Access;
+using DTS.Tenancy.Access;
 using Harbor.Boards.Domain.Aggregates.Boards;
 
 namespace Harbor.Boards.Application.Access;
@@ -833,7 +833,7 @@ database.
 
 ### What it does
 
-- `IRowUser`: the rule's user, from `DDDToolkit.Abstractions.Access`. That `using` is the only one the questions need.
+- `IRowUser`: the rule's user, from `DTS.DDD.Abstractions.Access`. That `using` is the only one the questions need.
 - `Harbor.Boards.Contracts` holds only `BoardId`. A rule of any module sees the id, asks the question, and the question
   answers only for the caller. So a module has no class to publish per question. A question that nothing answers is
   refused when the export writes the access file.
@@ -947,7 +947,7 @@ so each module's checks decide only that module's requests.
 **`Harbor.Boards.Application/Access/IBoardsRequest.cs`**
 
 ```csharp {5-6}
-using DDDToolkit.Abstractions.Attributes;
+using DTS.DDD.Abstractions.Attributes;
 
 namespace Harbor.Boards.Application.Access;
 
@@ -958,9 +958,9 @@ public partial interface IBoardsRequest : IRequireAccess;
 **`Harbor.Boards.Application/GlobalUsings.cs`**: the namespaces every request file of the module uses.
 
 ```csharp
-global using DDDToolkit.Access;
-global using DDDToolkit.Supporting.Membership.Access;
-global using DDDToolkit.Supporting.Tenancy.Access;
+global using DTS.DDD.Access;
+global using DTS.Membership.Access;
+global using DTS.Tenancy.Access;
 global using Harbor.Boards.Application.Access;
 global using Harbor.Boards.Contracts.ValueObjects;
 global using Harbor.Boards.Domain.Aggregates.BoardRoles;
@@ -994,10 +994,10 @@ registered next to it.
 **`Harbor.Boards.Infrastructure/BoardsInfrastructure.cs`**
 
 ```csharp {23,26-28}
-using DDDToolkit.EntityFramework;
-using DDDToolkit.Supporting.Membership.EntityFramework;
-using DDDToolkit.Supporting.Membership.Postgres;
-using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DTS.DDD.EntityFramework;
+using DTS.Membership.EntityFramework;
+using DTS.Membership.Postgres;
+using DTS.Tenancy.EntityFramework;
 using Harbor.Boards.Application.Access;
 using Harbor.Boards.Infrastructure.Persistence;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -1099,9 +1099,9 @@ handlers too.
 **`src/Harbor.Host/Program.cs`**
 
 ```csharp {3-4,16,18,28}
-using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Startup;
-using DDDToolkit.Supporting.Tenancy;
+using DTS.DDD.EntityFramework.Supabase;
+using DTS.DDD.Startup;
+using DTS.Tenancy;
 using Harbor.Boards.Api;
 using Harbor.Host;
 using Harbor.Host.Requests;
@@ -1271,10 +1271,10 @@ internal sealed class BoardRepository(BoardsContext db) : IBoardRepository
 **`Harbor.Boards.Infrastructure/BoardsInfrastructure.cs`**: registers the repository.
 
 ```csharp {6,31}
-using DDDToolkit.EntityFramework;
-using DDDToolkit.Supporting.Membership.EntityFramework;
-using DDDToolkit.Supporting.Membership.Postgres;
-using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DTS.DDD.EntityFramework;
+using DTS.Membership.EntityFramework;
+using DTS.Membership.Postgres;
+using DTS.Tenancy.EntityFramework;
 using Harbor.Boards.Application.Access;
 using Harbor.Boards.Application.Boards;
 using Harbor.Boards.Infrastructure.Persistence;
@@ -1339,7 +1339,7 @@ public sealed class OpenBoardHandler(
 **`Harbor.Boards.Application/Boards/GetBoard/GetBoard.cs`**
 
 ```csharp {5,7,9-11}
-using DDDToolkit.Supporting.Membership;
+using DTS.Membership;
 
 namespace Harbor.Boards.Application.Boards.GetBoard;
 
@@ -1563,8 +1563,8 @@ change only through the member manager, so the board gets no method for them.
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
 ```csharp {33}
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Tenancy;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.Tenancy;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -1640,7 +1640,7 @@ it.
 **`Harbor.Boards.Application/Boards/EditBoard/EditBoard.cs`**
 
 ```csharp {5,7,9,14}
-using DDDToolkit.Supporting.Membership;
+using DTS.Membership;
 
 namespace Harbor.Boards.Application.Boards.EditBoard;
 
@@ -1842,7 +1842,7 @@ board he is a member of.
 
 - `[At]` marks the property that holds the board's unit, where the board hangs. This is a fact about the board, so it
   goes on the domain class. The marker comes from Membership's markers package, `Supporting.Membership.Abstractions`,
-  in the namespace `DDDToolkit.Supporting.Membership`. The Membership package references it, so the domain project
+  in the namespace `DTS.Membership`. The Membership package references it, so the domain project
   needs no new reference.
 - `reachFromAbove: true`: a permission held at that unit, or above it, counts on the board. The code that joins
   Membership to Tenancy (step 5) reads where the caller holds the permission from Tenancy's queries in C#, and from
@@ -1864,9 +1864,9 @@ board he is a member of.
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
 ```csharp {2,25-26}
-using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Supporting.Membership;
-using DDDToolkit.Supporting.Tenancy;
+using DTS.DDD.Abstractions.Attributes;
+using DTS.Membership;
+using DTS.Tenancy;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -1906,7 +1906,7 @@ public sealed partial class Board
 **`Harbor.Boards.Application/Access/BoardMembership.cs`**
 
 ```csharp {14-15}
-using DDDToolkit.Supporting.Membership.Access;
+using DTS.Membership.Access;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
 
@@ -2013,7 +2013,7 @@ public interface IBoardRepository
 **`Harbor.Boards.Infrastructure/Persistence/BoardRepository.cs`**
 
 ```csharp {1,23-28}
-using DDDToolkit.Supporting.Membership.EntityFramework;
+using DTS.Membership.EntityFramework;
 using Harbor.Boards.Application.Boards;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -2061,7 +2061,7 @@ public sealed record BoardWithPermissions(Board Board, IReadOnlyList<string> May
 **`Harbor.Boards.Application/Boards/GetBoard/GetBoard.cs`**
 
 ```csharp {5,7-9,11,16-19}
-using DDDToolkit.Supporting.Membership;
+using DTS.Membership;
 
 namespace Harbor.Boards.Application.Boards.GetBoard;
 

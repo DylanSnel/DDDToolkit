@@ -11,7 +11,7 @@ The managers the generator writes for a resource's member class and for its role
 
 ## Member manager
 
-Namespace `DDDToolkit.Supporting.Membership.Managers`.
+Namespace `DTS.Membership.Managers`.
 
 ### `MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>`
 
@@ -676,7 +676,7 @@ Begins the resource's own work in `scope`, for `member`, the caller.
 
 ## Role manager
 
-Namespace `DDDToolkit.Supporting.Membership.Managers`.
+Namespace `DTS.Membership.Managers`.
 
 ### `CustomRoleManager<TRole, TRoleId, TResource>`
 
@@ -1172,7 +1172,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Who may be a member
 
-Namespace `DDDToolkit.Supporting.Membership.Managers`.
+Namespace `DTS.Membership.Managers`.
 
 ### `IMemberDirectory<TResourceId, TMemberId>`
 
@@ -1246,7 +1246,7 @@ Whether `role` may be given to a member of the resource.
 
 ## Access manager
 
-Namespace `DDDToolkit.Supporting.Membership.Access`.
+Namespace `DTS.Membership.Access`.
 
 ### `MembershipAccessManager`
 
@@ -1917,7 +1917,7 @@ The permissions of `permissions` the caller holds on each of `resources` it sees
 
 ## Requirements
 
-Namespace `DDDToolkit.Supporting.Membership.Access`.
+Namespace `DTS.Membership.Access`.
 
 ### `MemberAccess`
 
@@ -2422,7 +2422,7 @@ The permission is held by the caller on each of [`Resources`](#memberaccessoneac
 
 ## Asking about a resource by its id
 
-From `DDDToolkit.Abstractions`: the questions a row access rule of any module asks about a resource with members, by the resource's id, and the sets its access answers.
+From `DTS.DDD.Abstractions`: the questions a row access rule of any module asks about a resource with members, by the resource's id, and the sets its access answers.
 
 ### `ResourceQuestions`
 
@@ -2430,7 +2430,7 @@ From `DDDToolkit.Abstractions`: the questions a row access rule of any module as
 public static class ResourceQuestions
 ```
 
-Namespace `DDDToolkit.Abstractions.Access`.
+Namespace `DTS.DDD.Abstractions.Access`.
 
 The questions a row access rule asks about a resource, by the resource's id. A module publishes the id in its contracts, and that is all a rule of any module needs:
 
@@ -2530,7 +2530,7 @@ The ids of the members of every resource the caller is a member of now, the call
 public enum ResourceAccessSet
 ```
 
-Namespace `DDDToolkit.Abstractions.Attributes`.
+Namespace `DTS.DDD.Abstractions.Attributes`.
 
 One of the questions the access to a resource answers for the caller of the connection, with the ids of the resources it answers yes for, or, for [`FellowMembers`](#resourceaccessset), with the ids of the members it finds. A row access rule asks each through [`ResourceQuestions`](#resourcequestions), by the resource's id.
 
