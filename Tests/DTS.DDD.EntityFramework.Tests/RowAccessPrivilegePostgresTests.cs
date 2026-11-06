@@ -158,6 +158,8 @@ public sealed class RowAccessPrivilegePostgresTests(ExplicitCurrentUserPostgres 
                 "ddd.OutboxMessages ddd_system SELECT",
                 "ddd.OutboxMessages ddd_system UPDATE(Attempts)",
                 "ddd.OutboxMessages ddd_system UPDATE(LastError)",
+                "ddd.OutboxMessages ddd_system UPDATE(LockedBy)",
+                "ddd.OutboxMessages ddd_system UPDATE(LockedUntil)",
                 "ddd.OutboxMessages ddd_system UPDATE(NextAttemptAt)",
                 "ddd.OutboxMessages ddd_system UPDATE(ProcessedAt)",
                 "ddd.OutboxMessages ddd_system_in INSERT",

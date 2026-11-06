@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DTS.DDD.BaseTypes;
+using DTS.DDD.Interfaces;
 using DTS.DDD.Messaging.Postgres;
 using DTS.DDD.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
@@ -230,6 +231,37 @@ public sealed class PgmqSinkTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_lost_lease_takes_the_enqueue_back_with_the_mark()
+    {
+        var database = Database;
+        await using var context = database.CreateContext();
+        await context.Database.EnsureCreatedAsync(Cancellation);
+
+        var options = new Options.DDDEntityFrameworkOptions { TimeProvider = new ManualClock(new DateTimeOffset(2026, 11, 4, 12, 0, 0, TimeSpan.Zero)) };
+        options.UseOutbox(outbox =>
+        {
+            outbox.RegisterEvent<Domain.Events.ShelfCreated>();
+            outbox.DeliverInTransaction = true;
+            outbox.SendTo(new PgmqSink<PgmqContext>(context, new PgmqSinkOptions().UseQueue("lease_q")));
+            outbox.SendTo(new TakeOverSink(database));
+        });
+
+        var id = await WriteRowAsync(context);
+        var processor = new Outbox.OutboxProcessor<PgmqContext>(context, new ServiceProviderStub(), options);
+
+        var processed = await processor.ProcessPendingAsync(cancellationToken: Cancellation);
+
+        processed.Should().Be(0);
+        (await ReadAsync(database, "lease_q")).Should().BeEmpty("the mark found the row claimed by another processor, so the transaction with the enqueue was rolled back");
+
+        await using var check = database.CreateContext();
+        var row = await check.Outbox.SingleAsync(m => m.Id == id, Cancellation);
+        row.LockedBy.Should().Be(TakeOverSink.Claim, "the other processor's claim stays");
+        row.ProcessedAt.Should().BeNull();
+        row.LastError.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Queues_read_from_configuration_each_get_the_message()
     {
         var database = Database;
@@ -293,5 +325,22 @@ public sealed class PgmqSinkTests : IAsyncLifetime
     private sealed class ServiceProviderStub : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;
+    }
+
+    /// <summary>
+    /// Plays another processor that claims the row while this delivery runs: on a connection of its own, so its
+    /// claim commits while the processor's transaction with the enqueue is still open.
+    /// </summary>
+    private sealed class TakeOverSink(PgmqDatabase database) : IIntegrationEventSink
+    {
+        public const string Claim = "other-host:1:00000000000000000000000000000000";
+
+        public async Task SendAsync(IntegrationEventMessage message, CancellationToken cancellationToken = default)
+        {
+            await using var other = database.CreateContext();
+            await other.Outbox
+                .Where(row => row.Id == message.MessageId)
+                .ExecuteUpdateAsync(set => set.SetProperty(row => row.LockedBy, Claim), cancellationToken);
+        }
     }
 }

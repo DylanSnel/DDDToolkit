@@ -3320,6 +3320,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `Directory.Build.props` makes the id from the project name, `DylansTechStack.` and the name without `DTS.`. The
     `DDDPackageIdPrefix` property is gone.
 
+- **The outbox processor claims its rows with a lease.** Before, every host that polled one outbox table read the
+  same due rows, so with more than one replica a message could be delivered twice. Now `ProcessPendingAsync` starts
+  each batch with one `UPDATE` that writes a claim on the oldest due rows that no other processor holds. The
+  statement checks that condition again on each row it changes, so two processors that claim at once never take the
+  same row. Postgres and SQL Server tests run two processors on one table, and each message is delivered once.
+  - `OutboxMessage` has two new nullable columns: `LockedBy`, a string of at most 128 characters, and `LockedUntil`.
+    `AddDomainEventOutbox` maps `LockedBy` as a concurrency token, and `CreateDomainEventOutbox` creates both.
+  - Every mark, delivered or failed, has the claim in its `WHERE` clause and clears it. A mark that changes no row
+    means another processor claimed the message after this lease ended. The message then counts neither as delivered
+    nor as failed, and the changes of the failed save come off the processor's context. A handler's change on that
+    context still commits with the mark.
+  - `OutboxOptions.LeaseDuration` sets how long a claim holds its rows, 5 minutes by default, at most a day. The
+    processor starts a message only while at least half the lease is left. It releases the rows it did not reach
+    when it stops early, is cancelled or throws.
+  - The bookkeeping role gets `UPDATE` on `LockedBy` and `LockedUntil` in the scripts written with `WriteGrants`.
+  - Every module of the webshop sample that has an outbox has a migration `OutboxLease`, with its Supabase SQL. The
+    Ordering module, which has row access rules, has a new access file after it.
+  - The claim adds two statements per batch. A batch of 1,000 messages allocates about 2.8 KB more per message. See
+    [Performance](docs/performance.md#the-cost-of-the-claim).
+
+  An existing outbox table needs the two columns before the new processor polls. No package has users yet, so the
+  claim has no opt-out. See [Several processors on one table](docs/event-delivery.md#several-processors-on-one-table)
+  and [The outbox `LockedBy` and `LockedUntil` columns](docs/migrating-to-3.md#the-outbox-lockedby-and-lockeduntil-columns).
+
 - **The save interceptors call `DetectChanges` once and read only the changed entries.** Each interceptor used to
   call `DetectChanges()` and then `ChangeTracker.Entries()`. `Entries()` calls `DetectChanges` again and creates an
   `EntityEntry` for every tracked entity. One save called `DetectChanges` 7 times. Now each interceptor calls it once

@@ -55,4 +55,18 @@ public sealed class OutboxMessage
 
     /// <summary>The last failure, or <see langword="null"/>.</summary>
     public string? LastError { get; set; }
+
+    /// <summary>
+    /// The claim that holds the row's lease, or <see langword="null"/> when no processor holds it. A processor
+    /// writes a new value for every batch it claims: the machine name, the process id and a Guid. The processor
+    /// marks the row only while this column still holds its own value. <c>AddDomainEventOutbox</c> maps it as a
+    /// concurrency token for that check.
+    /// </summary>
+    public string? LockedBy { get; set; }
+
+    /// <summary>
+    /// When the lease of <see cref="LockedBy"/> ends, <c>OutboxOptions.LeaseDuration</c> after the claim. Another
+    /// processor may claim the row from this moment on. <see langword="null"/> when no processor holds the row.
+    /// </summary>
+    public DateTimeOffset? LockedUntil { get; set; }
 }

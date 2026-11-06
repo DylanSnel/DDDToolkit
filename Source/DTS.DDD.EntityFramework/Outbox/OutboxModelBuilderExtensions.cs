@@ -69,12 +69,19 @@ public static class OutboxModelBuilderExtensions
             builder.Property(m => m.CreatedAt).AsTimestamp(utcDateTime);
             builder.Property(m => m.ProcessedAt).AsTimestamp(utcDateTime);
             builder.Property(m => m.NextAttemptAt).AsTimestamp(utcDateTime);
+            builder.Property(m => m.LockedUntil).AsTimestamp(utcDateTime);
+
+            // The processor marks a row only while it still holds the row's lease. As a concurrency token,
+            // LockedBy goes into the WHERE clause of the mark's UPDATE, so a mark of a row that another
+            // processor claimed in the meantime changes nothing and fails the save.
+            builder.Property(m => m.LockedBy).HasMaxLength(DomainEventStorage.MaxLockedByLength).IsConcurrencyToken();
 
             // The processor filters on ProcessedAt IS NULL, which is what separates the few pending rows
             // from the many delivered ones, so that is what the index is on. NextAttemptAt is left out:
             // it only divides the pending rows into due and waiting, and as "IS NULL OR <= now" it is
             // no single range an index could seek. Leaving the index alone also keeps the upgrade to
-            // one nullable column.
+            // one nullable column. The claim filters on the same columns plus LockedUntil, which divides the
+            // pending rows too, so it uses the same index.
             builder.HasIndex(m => m.ProcessedAt);
         });
 

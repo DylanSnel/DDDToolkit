@@ -466,6 +466,23 @@ A batch of 1,000 rows therefore made 4 million row comparisons.
   user, the processor checks before and after each in-process dispatch which entities a handler changed. It reads the
   added, modified and deleted entries from the state manager, as the save interceptors do.
 
+### The cost of the claim
+
+The processor now claims its batch with a lease before it delivers it
+([Several processors on one table](event-delivery.md#several-processors-on-one-table)). The same benchmark, run again
+with the claim:
+
+| Messages | After | With the claim |
+|---|---|---|
+| 10 | 569 μs, 303 KB | 824 μs, 373 KB |
+| 100 | 5.45 ms, 1,678 KB | 4.02 ms, 1,997 KB |
+| 1,000 | 45.8 ms, 15,421 KB | 33.2 ms, 18,244 KB |
+
+The claim adds two statements per batch: the `UPDATE` that writes the claim, and the query that reads the claimed
+rows. Each mark also sets `LockedBy` and `LockedUntil` back to `null`, and carries the claim in its `WHERE` clause.
+The allocations grow by 70 KB for 10 messages and by about 2.8 KB per message for 1,000. The times are within the
+factor of two by which runs differ on this machine, so the run shows no change in time.
+
 ## Access checks
 
 The benchmark `OwnerCheckBenchmarks` makes one check of a request with `[Own]` on a parcel's id, by the parcel's

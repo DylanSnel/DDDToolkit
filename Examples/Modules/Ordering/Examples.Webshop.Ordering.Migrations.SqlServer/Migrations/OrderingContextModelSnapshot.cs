@@ -75,6 +75,14 @@ namespace Examples.Webshop.Ordering.Migrations.SqlServer
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
 
+                    b.Property<string>("LockedBy")
+                        .IsConcurrencyToken()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTimeOffset?>("LockedUntil")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("datetimeoffset");
 
