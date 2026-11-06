@@ -1918,7 +1918,7 @@ public sealed partial class ShopSeat;
 ### `Placement<TSeatId, TUnitId, TRoleId>`
 
 ```csharp
-public sealed class Placement<TSeatId, TUnitId, TRoleId>
+public sealed class Placement<TSeatId, TUnitId, TRoleId> : IEntity
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
@@ -1926,7 +1926,9 @@ public sealed class Placement<TSeatId, TUnitId, TRoleId>
 
 Where a seat belongs: one unit, with the roles granted to the seat at that unit. Within its seat it is known by that unit, because a seat has at most one placement per unit, and at most one of them is primary.
 
-A placement says where a seat belongs; what it may do there comes from the roles granted with it. A plain class rather than a toolkit entity, and not extended by the application: only the seat changes it.
+A placement says where a seat belongs. What the seat may do there comes from the roles granted with it.
+
+An entity with no id of its own. Its seat and its unit identify it. Only the seat changes it, and the application does not extend it.
 
 **Type parameters**
 
@@ -1945,14 +1947,14 @@ A placement says where a seat belongs; what it may do there comes from the roles
 ### `RoleGrant<TSeatId, TRoleId>`
 
 ```csharp
-public sealed class RoleGrant<TSeatId, TRoleId>
+public sealed class RoleGrant<TSeatId, TRoleId> : IEntity
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
 A role a seat holds at the unit of one of its placements, for a period. It is known by its role within its placement: a placement holds a role at most once.
 
-A plain class rather than a toolkit entity, and not extended by the application: a grant is a fact about a seat, and only the seat changes it.
+An entity with no id of its own. Its seat, its unit and its role identify it. Only the seat changes it, and the application does not extend it.
 
 **Type parameters**
 
@@ -3036,7 +3038,7 @@ What it offers does not change after it was issued: the tenant, the unit, the ro
 | `MaxAddressLength = 254` | The longest address an invitation may be for: the longest an e-mail address may be. |
 | [`InvitationAggregate()`](#invitationaggregate) | Parameterless constructor for persistence frameworks and serializers. |
 | `TTenantId TenantId { get; }` | The tenant the invitation is into. |
-| `string? Address { get; }` | The address the invitation is for, as it was given, while the invitation is open; `null` once it was accepted or cancelled. |
+| `string? Address { get; }` | The address the invitation is for, as it was given, while the invitation is open; `null` once it was accepted or cancelled. Not marked `[PersonalData]`, because whoever may read invitations needs it. |
 | `TUnitId UnitId { get; }` | The unit the seat is placed in, as its primary placement. |
 | `TRoleId RoleId { get; }` | The role the seat is granted at that unit. |
 | `DateTimeOffset? GrantUntil { get; }` | When the grant ends, or `null` for no end. Later than [`ExpiresAt`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid). |

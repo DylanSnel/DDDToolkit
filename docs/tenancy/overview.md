@@ -120,7 +120,7 @@ The classes carry marks that an API layer reads. In GraphQL these are the defaul
 - The role's `FromStarterRole` and `PermissionsFromStarterRole` are `[Bookkeeping]`. They are left out of the type.
 - `Placement`, `RoleGrant`, `NamedUnit` and the records of the managers have a `[DisplayName]`. The type is named
   `Placement` instead of after its type arguments.
-- The package's assembly is a `[ToolkitPackage]`. Methods such as `RoleGrant.AppliesAt(moment)` are no fields.
+- `Placement` and `RoleGrant` are entities. Methods such as `RoleGrant.AppliesAt(moment)` are no fields.
 
 ## Reach: a grant covers the units below it
 

@@ -464,14 +464,13 @@ referenced, such as `MoneyInput`, therefore never enters the schema.
 
 ### The methods of the packages' classes
 
-A package also has plain classes that implement neither `IEntity` nor `IValueObject`. Membership's
-`MemberRole<TMemberId, TRoleId>` and Tenancy's `RoleGrant<TSeatId, TRoleId>` are two of them. Both have
-`AppliesAt(moment)`. Without the toolkit, each would print a field `appliesAt(moment: DateTime!): Boolean!`.
+The packages have entities without an id of their own. Tenancy's `Placement<TSeatId, TUnitId, TRoleId>` and
+`RoleGrant<TSeatId, TRoleId>` and Membership's `MemberRole<TMemberId, TRoleId>` implement `IEntity`. The ids around
+them identify them. A seat, a unit and a role identify a grant.
 
-Tenancy and Membership mark their assemblies with `[assembly: ToolkitPackage]`. The interceptor removes the method
-fields of every class declared in such an assembly, as it does for an entity. A closed generic class, such as
-`MemberRole<SeatId, BoardRoleId>`, is declared in the assembly of its definition. An application does not mark its
-own assemblies, so the methods of its own records stay fields.
+`RoleGrant` and `MemberRole` have `AppliesAt(moment)`. Without the toolkit, each would print a field
+`appliesAt(moment: DateTime!): Boolean!`. The interceptor removes it, as it does for every entity. The methods of an
+application's own records, which are no entities, stay fields.
 
 ## Personal data and bookkeeping are left out
 

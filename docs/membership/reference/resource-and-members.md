@@ -673,7 +673,7 @@ Whether the period covers `moment`: it has started, and has not ended.
 ### `MemberRole<TMemberId, TRoleId>`
 
 ```csharp
-public sealed class MemberRole<TMemberId, TRoleId>
+public sealed class MemberRole<TMemberId, TRoleId> : IEntity
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
@@ -682,7 +682,7 @@ A role a member holds on a resource, for a period of its own. Within its member 
 
 Being a member and holding a role are two things, each with its own dates: a role can end while the membership goes on, and a member can hold two roles at once. A role counts only while its own period applies and the membership it is held in does.
 
-A plain class rather than a toolkit entity, and not extended by the application: a held role is a fact about a member, and only the member list changes it. It remembers which role it is, never what the role gives: that is asked where the role is used.
+An entity with no id of its own. Its member and its role identify it. Only the member list changes it, and the application does not extend it. It remembers which role it is, never what the role gives. That is asked where the role is used.
 
 **Type parameters**
 

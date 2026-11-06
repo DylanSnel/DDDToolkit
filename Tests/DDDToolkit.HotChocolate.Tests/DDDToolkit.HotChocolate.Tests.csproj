@@ -52,7 +52,7 @@
     -->
     <ProjectReference Include="..\DDDToolkit.HotChocolate.Tests.Library.Api\DDDToolkit.HotChocolate.Tests.Library.Api.csproj" />
     <!--
-      The supporting packages, for their classes in a schema: what the conventions do to a package's plain classes, its
+      The supporting packages, for their classes in a schema: what the conventions do to a package's entities, its
       marked members and its display names is checked against the classes themselves.
     -->
     <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
