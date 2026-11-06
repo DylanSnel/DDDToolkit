@@ -3,11 +3,11 @@
 [Identifiers](identifiers.md) recommends the struct form of an identifier, because of its memory layout. This page
 has the measurements behind that advice, including two places where the measurements first disagreed with it. The
 [Tenancy section](#tenancy-the-shape-of-the-access-data) measures the database shapes behind the Tenancy
-supporting domain. Five sections measure code beside the identifiers:
+supporting domain. Six sections measure code beside the identifiers:
 [value object equality](#value-object-equality), [FluentValidation](#fluentvalidation),
 [a read that skips a named query filter](#skipping-a-named-query-filter),
-[a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates) and
-[a batch of outbox messages](#delivering-a-batch-of-outbox-messages).
+[a save on a context that tracks many aggregates](#a-save-on-a-context-that-tracks-many-aggregates),
+[a batch of outbox messages](#delivering-a-batch-of-outbox-messages) and [the access check of `[Own]`](#access-checks).
 
 The benchmarks are in `Benchmarks/DTS.DDD.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
 Run them with:
@@ -483,6 +483,40 @@ rows. Each mark also sets `LockedBy` and `LockedUntil` back to `null`, and carri
 The allocations grow by 70 KB for 10 messages and by about 2.8 KB per message for 1,000. The times are within the
 factor of two by which runs differ on this machine, so the run shows no change in time.
 
+## Access checks
+
+The benchmark `OwnerCheckBenchmarks` makes one check of a request with `[Own]` on a parcel's id, by the parcel's
+courier, and the check passes. The scope and its context exist already, so their cost is not part of the numbers. The
+check reads the owner's column of one row in one statement. It runs on SQLite in memory, and on Postgres 17 in Docker
+29.6 on the test machine, reached over localhost. The benchmark starts the container itself, so Docker must run.
+
+| Database | Before | After |
+|---|---|---|
+| SQLite in memory | 17.0 μs, 13.6 KB | 6.0 μs, 3.9 KB |
+| Postgres, the medians of two runs | 2.01 and 1.70 ms, 15.1 KB | 1.74 and 1.24 ms, 5.4 KB |
+
+- **SQLite.** The times differed by up to a factor of 1.6 between runs on this machine, because other processes ran
+  beside the benchmarks. The allocations differed by less than 3%. Before and after were measured one after the other.
+- **Postgres.** The round trip varied a lot on this machine. Within one run, the standard deviation was 0.4 to 0.6 ms.
+  Two runs before the ones in the table had means of up to 35 ms. So the table has the median of each run instead of
+  the mean. Before and after were measured in turn, twice: before, after, before, after.
+- **The median on Postgres is lower after, in both pairs.** It is 0.27 and 0.46 ms lower. On SQLite the check saves
+  11 μs of work in the process. The spread of the round trip is larger than both, so these runs do not tell how much of
+  the difference on Postgres the compiled query makes.
+
+Before, the check built its query as a LINQ expression and handed it to Entity Framework. Entity Framework walked the
+expression to take out its parameters, and computed a hash of it to find the compiled query in its cache. It did not
+translate the query again: a count of Entity Framework's query compilations showed one for each shape of statement.
+Building and walking the expression made most of the cost.
+
+Now the package compiles the query with `EF.CompileAsyncQuery` when it finds the owner's column of an aggregate, the
+first time a request asks about the aggregate. A check sends the aggregate's id as the one parameter. `[OrOwn]` on an
+aggregate's id reads the owner in the same way.
+
+The query filters and row level security apply as before. A compiled query applies the query filters of the context it
+runs on, and evaluates a filter that reads the context again for every execution. Its command goes through the same
+interceptors. A test checks this with a filter that reads a member of the context.
+
 ## Tenancy: the shape of the access data
 
 The [Tenancy](tenancy/overview.md) supporting domain makes three choices:
@@ -591,8 +625,9 @@ The script of the storage and list comparison is not in the repository. Its numb
 
 ## Not measured
 
-- **Other providers.** Everything before the Tenancy section runs on SQLite in memory. The suite above checks the
-  mapping on PostgreSQL and SQL Server, but does not time it.
+- **Other providers.** Everything before the Tenancy section runs on SQLite in memory, except
+  [the access check](#access-checks), which runs on Postgres as well. The suite above checks the mapping on PostgreSQL
+  and SQL Server, but does not time it.
 - **The generators.** Nothing measures the build-time cost of the source generators.
 - **The outbox.** The throughput of `OutboxProcessor` under load, and the effect of the `ProcessedAt` index as the
   table grows, are open questions.

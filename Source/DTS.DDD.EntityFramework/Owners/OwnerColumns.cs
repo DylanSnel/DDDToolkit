@@ -259,11 +259,19 @@ internal abstract class OwnerColumn<TId>
 /// read in one statement.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The statement runs on a context of its own where the host registered a factory for the context, since the requests of
 /// one scope may be checked side by side; otherwise on the scope's own. Where the aggregate's query filter reads a member
 /// of the context, it runs on the scope's own wherever the scope has one, as Membership's questions do: that rule is the
 /// request's context's. Either way it runs as the caller wherever the host runs its queries so, and a row the policies or
 /// the filter keep from the caller is no row.
+/// </para>
+/// <para>
+/// The query is compiled once, with <c>EF.CompileAsyncQuery</c>, when the column is found. A check then sends the
+/// aggregate's id as the one parameter, and Entity Framework neither builds the query again nor looks it up. The query
+/// filters apply to the compiled query as to any other, and a filter that reads the context reads the context the query
+/// runs on.
+/// </para>
 /// </remarks>
 /// <typeparam name="TId">The aggregate's id.</typeparam>
 /// <typeparam name="TContext">The context that maps it.</typeparam>
@@ -275,10 +283,14 @@ internal sealed class OwnerColumn<TId, TContext, TAggregate, TOwner> : OwnerColu
     where TAggregate : AggregateRoot<TId>
     where TOwner : struct, IEquatable<TOwner>
 {
-    private readonly Expression<Func<TAggregate, TOwner?>> _owner;
+    private static readonly MethodInfo SelectMethod = new Func<IQueryable<TAggregate>, Expression<Func<TAggregate, TOwner?>>, IQueryable<TOwner?>>(Queryable.Select).Method;
+
+    private static readonly MethodInfo TakeMethod = new Func<IQueryable<TOwner?>, int, IQueryable<TOwner?>>(Queryable.Take).Method;
+
+    private readonly Func<TContext, TId, IAsyncEnumerable<TOwner?>> _read;
     private readonly bool _followsTheRequest;
 
-    /// <summary>The column of <paramref name="owner"/>.</summary>
+    /// <summary>The column of <paramref name="owner"/>, and the compiled query that reads it.</summary>
     /// <param name="owner">The property the aggregate marks <c>[Owner]</c>.</param>
     /// <param name="followsTheRequest">Whether the aggregate's query filter reads a member of its context.</param>
     public OwnerColumn(PropertyInfo owner, bool followsTheRequest)
@@ -291,7 +303,13 @@ internal sealed class OwnerColumn<TId, TContext, TAggregate, TOwner> : OwnerColu
             read = Expression.Convert(read, typeof(TOwner?));
         }
 
-        _owner = Expression.Lambda<Func<TAggregate, TOwner?>>(read, candidate);
+        var column = Expression.Lambda<Func<TAggregate, TOwner?>>(read, candidate);
+
+        // (context, aggregate) => context.Set<TAggregate>().AsNoTracking().Where(id).Select(column).Take(1): the row by its id,
+        // and of the row the owner's column alone.
+        Expression<Func<TContext, TId, IQueryable<TAggregate>>> row = (context, aggregate) => context.Set<TAggregate>().AsNoTracking().Where(found => found.Id.Equals(aggregate));
+        var owners = Expression.Call(TakeMethod, Expression.Call(SelectMethod, row.Body, Expression.Quote(column)), Expression.Constant(1));
+        _read = EF.CompileAsyncQuery(Expression.Lambda<Func<TContext, TId, IQueryable<TOwner?>>>(owners, row.Parameters));
         _followsTheRequest = followsTheRequest;
     }
 
@@ -302,18 +320,21 @@ internal sealed class OwnerColumn<TId, TContext, TAggregate, TOwner> : OwnerColu
     public override async ValueTask<AggregateOwner?> ReadAsync(IServiceProvider services, TId aggregate, CancellationToken cancellationToken)
     {
         // Whether there is a row is told apart from whose it is: none read is no row, and a null read a row of nobody's.
-        var owners = await ReadOnAsync(
-            services,
-            context => context.Set<TAggregate>().AsNoTracking()
-                .Where(candidate => candidate.Id.Equals(aggregate))
-                .Select(_owner)
-                .Take(1)
-                .ToListAsync(cancellationToken),
-            cancellationToken).ConfigureAwait(false);
+        var (found, owner) = await ReadOnAsync(services, context => FirstAsync(_read(context, aggregate), cancellationToken), cancellationToken).ConfigureAwait(false);
 
-        return owners.Count == 0 ? null
-            : owners[0] is { } owner ? new AggregateOwner(owner)
+        return !found ? null
+            : owner is { } some ? new AggregateOwner(some)
             : AggregateOwner.Nobody;
+    }
+
+    /// <summary>Whether <paramref name="owners"/> answers a row, and the owner it answers.</summary>
+    private static async Task<(bool Found, TOwner? Owner)> FirstAsync(IAsyncEnumerable<TOwner?> owners, CancellationToken cancellationToken)
+    {
+        var reading = owners.GetAsyncEnumerator(cancellationToken);
+        await using (reading.ConfigureAwait(false))
+        {
+            return await reading.MoveNextAsync().ConfigureAwait(false) ? (true, reading.Current) : (false, null);
+        }
     }
 
     private async Task<T> ReadOnAsync<T>(IServiceProvider services, Func<TContext, Task<T>> read, CancellationToken cancellationToken)

@@ -3240,6 +3240,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
+- **Docs: the access check of `[Own]`.** [Access checks](docs/performance.md#access-checks) measures the check before
+  and after its compiled query, on SQLite in memory and on Postgres in a container. `OwnerCheckBenchmarks` takes the
+  database as a parameter, shows the minimum and the median, and starts the Postgres container itself.
 - **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
@@ -3368,6 +3371,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
   A batch of 1,000 messages went from 2.8 s and 2.9 GB to 46 ms and 15 MB. See
   [Performance](docs/performance.md#delivering-a-batch-of-outbox-messages).
+- **The access check of `[Own]` runs a compiled query.** The check built a LINQ query, and Entity Framework walked it
+  and looked it up in its query cache on every check. Now the query is compiled once with `EF.CompileAsyncQuery`, when
+  the owner's column is found, and a check sends the aggregate's id as its parameter. `[OrOwn]` on an aggregate's id
+  reads the owner in the same way. The query filters and row level security apply as before.
+
+  A check went from 17.0 μs and 13.6 KB to 6.0 μs and 3.9 KB on SQLite in memory. See
+  [Performance](docs/performance.md#access-checks).
 - **A `[ValueObject]` compares its properties directly.** The generated `Equals` compares each compared property with
   `EqualityComparer<T>.Default` of its type, and `GetHashCode` adds each one to a `HashCode`. Before, both walked
   `GetEqualityComponents()` with LINQ, so every comparison allocated two iterators and boxed each value-type property
