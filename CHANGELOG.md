@@ -45,8 +45,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     delegates, `Unit`, `MissingMessageHandlerException` and `InvalidMessageException`. Code written for Mediator changes
     only its `using`. `INotification` derives from `IMessage`, as in Mediator.
   - The core package implements them. `ISender` and `IMediator` are one scoped object. A message is sent to the one
-    handler of its runtime type, or of the one base type that has a handler. A message without a handler throws
-    `MissingMessageHandlerException`, which names its type.
+    handler of its exact runtime type, as in Mediator. A handler of a base type or an interface does not handle it. A
+    message without a handler throws `MissingMessageHandlerException`, which names its type.
   - `services.AddCommandHandler<TCommand, TResponse, THandler>()` and its siblings for requests, queries and the stream
     kinds register a handler, scoped. A second handler of one message throws and names both handlers.
   - `services.AddPipelineBehavior(type)` and `services.AddStreamPipelineBehavior(type)` register a behavior. An open

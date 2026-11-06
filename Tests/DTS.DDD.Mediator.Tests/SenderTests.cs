@@ -98,12 +98,14 @@ public sealed class SenderTests
     }
 
     [Fact]
-    public async Task A_handler_of_a_base_type_handles_what_derives_from_it()
+    public async Task A_handler_of_a_base_type_does_not_handle_what_derives_from_it()
     {
         await using var provider = Provider(services => services.AddCommandHandler<StockCommand, int, OnAnyStockCommand>());
         await using var scope = provider.CreateAsyncScope();
 
-        (await scope.ServiceProvider.GetRequiredService<ISender>().Send(new Discard("tea"), Cancellation)).Should().Be(1);
+        var act = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(new Discard("tea"), Cancellation);
+
+        (await act.Should().ThrowAsync<MissingMessageHandlerException>()).Which.Message.Should().Contain(typeof(Discard).FullName!);
     }
 
     [Fact]

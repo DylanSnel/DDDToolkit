@@ -796,8 +796,8 @@ app.MapPost("/invoices/{id}/close", (InvoiceId id, ISender sender, CancellationT
   its notification handlers, each scoped. A handler may be internal.
 - **A request has one handler.** A second handler of one request in a project is
   [DDD00110](diagnostics.md#ddd00110). A second registration at run time throws, and names both handlers.
-- **The handler is found by the request's runtime type.** A handler declared for a base type handles what derives from
-  it, unless the derived type has a handler of its own.
+- **The handler is found by the request's exact runtime type.** A handler declared for a base type or an interface
+  does not handle what derives from it, as in Mediator.
 - **A request without a handler throws.** `MissingMessageHandlerException` names the request's type.
 - **`IMediator` sends and publishes.** It is the same scoped object as `ISender`. `IPublisher` is resolved beside it.
 

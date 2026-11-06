@@ -3,7 +3,8 @@ namespace DTS.DDD.Mediator;
 
 /// <summary>
 /// Thrown when a request, a command or a query is sent and no handler is registered for its type. The message names
-/// the type. The generated <c>Add{Module}Handlers()</c> of the module that handles it registers the handler.
+/// the type. A handler of a base class or an interface of the type does not count. The generated
+/// <c>Add{Module}Handlers()</c> of the module that handles it registers the handler.
 /// </summary>
 public sealed class MissingMessageHandlerException : Exception
 {
@@ -21,7 +22,7 @@ public sealed class MissingMessageHandlerException : Exception
     private static string Describe(object? message)
         => message is null
             ? "No handler is registered for the message, which is null."
-            : $"No handler is registered for '{message.GetType().FullName}'. The generated Add{{Module}}Handlers() of the module that handles it registers its handler.";
+            : $"No handler is registered for '{message.GetType().FullName}'. A handler of a base class or an interface of it does not handle it. The generated Add{{Module}}Handlers() of the module that handles it registers its handler.";
 }
 
 /// <summary>
