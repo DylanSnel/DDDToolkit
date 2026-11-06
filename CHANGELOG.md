@@ -3243,6 +3243,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Docs: the access check of `[Own]`.** [Access checks](docs/performance.md#access-checks) measures the check before
   and after its compiled query, on SQLite in memory and on Postgres in a container. `OwnerCheckBenchmarks` takes the
   database as a parameter, shows the minimum and the median, and starts the Postgres container itself.
+- **Docs: the access checks of Membership and Tenancy.** [Access checks](docs/performance.md#access-checks) measures
+  the checks of Membership and Tenancy beside `[Own]`, before and after their compiled queries in DTS Pro.
+  [Several requirements on one request](docs/performance.md#several-requirements-on-one-request) measures a request
+  with a marker on each of two resources against one marker on a list of both. On Postgres every case that reads costs
+  a statement, and one statement for both resources costs as much as one for one resource. The benchmarks are in DTS
+  Pro's `Benchmarks/DTS.Pro.Benchmarks`. The Tenancy reference pages list the three new members of
+  `ITenancyReadSource`.
 - **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
