@@ -7,7 +7,7 @@ namespace DDDToolkit.Analyzers.Tests.Integrations;
 /// <c>Add{Module}IntegrationEvents()</c> methods, with every name and version the run-time registration
 /// would otherwise read off attributes written out as literals.
 /// </summary>
-public class IntegrationEventsGeneratorTests
+public partial class IntegrationEventsGeneratorTests
 {
     private const string Hint = "IntegrationEventExtensions";
     private const string Services = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
@@ -265,27 +265,6 @@ public class IntegrationEventsGeneratorTests
         result.ShouldCompile();
         result.ShouldContain(Hint, "outbox.RegisterEvent<global::Sales.Infrastructure.StockCounted>(");
         result.ShouldNotContain(Hint, "OrderArchived", "its own project registers it");
-    }
-
-    [Fact]
-    public void A_referenced_package_without_a_module_is_ignored()
-    {
-        // The Tenancy package's events are generic, and its own; a shared kernel's events have no module to be named after.
-        var result = Infrastructure()
-            .WithTenancy()
-            .WithReferencedAssembly(
-                """
-                namespace Shared.Kernel;
-
-                public sealed record ClockTicked(long At) : DDDToolkit.BaseTypes.DomainEvent;
-                """,
-                "Shared.Kernel")
-            .WithEntityFrameworkRuntime()
-            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
-
-        result.ShouldCompile();
-        result.ReportedDiagnostics.Should().BeEmpty();
-        result.GeneratedSources.Should().NotContain(source => source.HintName.Contains(Hint));
     }
 
     [Fact]

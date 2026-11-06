@@ -12,7 +12,7 @@ describes the same rules from Tenancy's side.
 ## The layers of a module
 
 Each module is a folder with one project per layer.
-[`Modules/Directory.Build.props`](../../../Examples/Tenancy/Modules/Directory.Build.props) gives each project the
+`Modules/Directory.Build.props` gives each project the
 module name of its folder ([A module named by its folder](../../modules.md#a-module-named-by-its-folder)).
 
 | Project | Contains |
@@ -34,7 +34,7 @@ module name of its folder ([A module named by its folder](../../modules.md#a-mod
   Contracts.
 - The Domain projects of Projects and Inspections also reference `Tenants.Contracts` for the ids. The Domain and
   Application projects of Inspections also reference `Projects.Contracts`.
-- **Two ports.** [`ProjectsInfrastructure.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs)
+- **Two ports.** `ProjectsInfrastructure.cs`
   registers both:
   - A command that changes the project itself loads, changes and saves it through `IProjectStore`. The store works
     on the request's context, which is the request's unit of work. A command on the crew or on the project roles
@@ -82,8 +82,8 @@ sequenceDiagram
 ```
 
 The command declares its requirement with attributes. The module's request interface is one line
-([`CloseProject.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/CloseProject.cs),
-[`IProjectsRequest.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs)):
+(`CloseProject.cs`,
+`IProjectsRequest.cs`):
 
 ```csharp
 public sealed record CloseProject([OnResource(ProjectPermissionNames.Close)] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
@@ -271,7 +271,7 @@ for the tenant's shape.
 
 **Which permissions manage access.** All of Tenancy's permissions except `tenancy.history.view`, and two of
 Projects' permissions that the host marks (`AccessManagingPermissions` in
-[`SampleCatalogue.cs`](../../../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)):
+`SampleCatalogue.cs`):
 
 - `projects.owner.change`, because the owner leads the crew until the organization names another owner.
 - `projects.crew.manage`, because at a unit it puts anyone on every crew there, in any role, the holder included.
@@ -366,7 +366,7 @@ sample is that package's worked example.
 **The owner.** Each project has one owner. The owner is on the crew with no end date and holds no project role.
 
 - By owning the project, the owner holds what
-  [`ProjectPermissions`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectPermissions.cs)
+  `ProjectPermissions`
   gives an owner: seeing, renaming, closing and reopening the project, and managing its crew.
 - Owning the project does not let the owner:
   - record an inspection;
@@ -543,7 +543,7 @@ The Tenants module turns [invitations](../invitations.md) on, in its own feature
   body.
 
 **The account.** A seat belongs to a verified identity, so the person needs an account.
-[`InvitePerson`](../../../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Invitations/Commands/InvitePerson.cs)
+`InvitePerson`
 asks the toolkit's port `IIdentityAccounts` for an account only after the package has issued the invitation. So a
 caller who may not invite never causes an account or a mail.
 

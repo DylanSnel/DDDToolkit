@@ -42,8 +42,8 @@ public class MemberNameTests
         var files = Parsed(SampleFiles());
 
         files.Should().Contain(file => file.Path.StartsWith("Examples/", StringComparison.Ordinal), "the samples' code is under Examples/");
-        files.Should().Contain(file => file.Path.StartsWith("Tests/Examples.Tenancy.Tests/", StringComparison.Ordinal), "the sample's tests are read with it");
-        files.Should().Contain(file => file.Path == "Tests/DDDToolkit.HotChocolate.Tests/Infrastructure/WholeBatches.cs", "a file the sample's tests compile from another project is read with them");
+        files.Should().Contain(file => file.Path.StartsWith("Tests/Examples.AppHost.Tests/", StringComparison.Ordinal), "the samples' tests are read with them");
+        files.Should().Contain(file => file.Path == "Tests/DDDToolkit.EntityFramework.Tests/Infrastructure/RequiredContainers.cs", "a file the samples' tests compile from another project is read with them");
         Declared(files, shownOnly: false).Should().BeEmpty(
             "an application copies the samples, their tests and internal helpers included, so they name a member after what it does as the packages do");
     }

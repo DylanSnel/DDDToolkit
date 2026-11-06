@@ -10,7 +10,7 @@ namespace DDDToolkit.Analyzers.Tests.Diagnostics;
 /// only the requests' project can: whether something says the caller's own of the owner's type. Each is an error, since a
 /// request that reads as if the owner came through, and lets nobody through, is a door a review would misread.
 /// </summary>
-public class OwnerDiagnosticTests
+public partial class OwnerDiagnosticTests
 {
     /// <summary>A domain of its own, compiled with the core generators.</summary>
     private static GeneratorRunOutcome Declared(string domain)
@@ -151,50 +151,5 @@ public class OwnerDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00088");
         Message(result, "DDD00088", at: at).Should().Contain(said).And.Contain("a struct that is IEquatable of itself");
-    }
-
-    [Fact]
-    public void A_request_about_an_owner_whose_type_nothing_says_the_caller_s_own_of_is_DDD00088_and_gets_no_line()
-    {
-        // The board's owner is the application's UserId, and no handle of it is beside the requests: the domain cannot tell
-        // that, the requests' project can.
-        var result = OwnerRequirementGenerationTests.OverTheDomain("[OwnOnly] public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;").RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00088");
-        Message(result, "DDD00088", at: "Own").Should().Contain("marks 'Board' [Own], the id of 'Board', whose [Owner] 'Owner' is a 'UserId': nothing says what the caller's own UserId is")
-            .And.Contain("services.AddOwnedByCurrentUser<UserId, ...>()");
-        result.ShouldNotContain("BillingAccessBehavior.", "ArchiveBoard", "a request stopped every time it is sent gets no line");
-    }
-
-    // ------------------------------------------------------------------ and what stays DDD00086
-
-    [Fact]
-    public void The_id_of_an_aggregate_that_marks_no_owner_stays_DDD00086_and_says_where_the_owner_would_be_marked()
-    {
-        var result = OwnerRequirementGenerationTests.OverTheDomain("[OwnOnly] public sealed record CloseLedger([Own] LedgerId Ledger) : IBillingRequest;").RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00086");
-        Message(result, "DDD00086", at: "Own").Should().Contain("nothing says what the caller's own LedgerId is")
-            .And.Contain("for the id of 'Ledger', a request about its owner, mark the property of 'Ledger' that names its owner [Owner]");
-    }
-
-    [Fact]
-    public void A_member_that_may_be_null_stays_DDD00086_whatever_its_aggregate_marks()
-    {
-        var result = OwnerRequirementGenerationTests.OverTheDomain(OwnerRequirementGenerationTests.CurrentUserId + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId? Board) : IBillingRequest;").RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00086");
-        Message(result, "DDD00086", at: "Own").Should().Contain("which is 'BoardId?' and may be null");
-    }
-
-    [Fact]
-    public void An_id_of_two_aggregates_that_each_mark_an_owner_is_DDD00087_at_the_request()
-    {
-        var result = OwnerRequirementGenerationTests.OverTheDomain(
-            OwnerRequirementGenerationTests.CurrentUserId + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;",
-            OwnerRequirementGenerationTests.Owned + "\n[AggregateRoot<BoardId>]\npublic sealed partial class Whiteboard\n{\n    [Owner] public UserId Owner { get; private set; }\n}\n").RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00087");
-        Message(result, "DDD00087", at: "Own").Should().Contain("the id of 'Board' and 'Whiteboard', which each mark an [Owner]");
     }
 }

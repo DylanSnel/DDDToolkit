@@ -4,8 +4,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
-using DDDToolkit.Supporting.Membership.Access;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.Analyzers.Tests.Docs;
@@ -30,348 +28,12 @@ public partial class HowARequestIsCheckedDocsExampleTests
     /// <summary>The sample's requests the page shows as the sample writes them.</summary>
     private static readonly string[] SampleRequests = ["OrganizationUnits", "AddOrganizationUnit", "RenameSeat", "AddCrewMember"];
 
-    /// <summary>What the page leaves out of every example: the usings, the module interfaces' namespaces among them.</summary>
-    private const string Header =
-        """
-        using System;
-        using System.Collections.Generic;
-        using System.Threading;
-        using System.Threading.Tasks;
-        using DDDToolkit.Abstractions.Attributes;
-        using DDDToolkit.Access;
-        using DDDToolkit.Exceptions;
-        using DDDToolkit.Supporting.Membership.Access;
-        using DDDToolkit.Supporting.Tenancy.Access;
-        using DDDToolkit.Supporting.Tenancy.Catalogue;
-        using Examples.Tenancy.Projects.Application.Access;
-        using Examples.Tenancy.Tenants.Application.Access;
-        using Mediator;
-        using Microsoft.Extensions.DependencyInjection;
-
-        """;
-
-    /// <summary>
-    /// What the sample declares elsewhere and the page's requests name: the ids, the unit, the seat and the tenant its commands answer,
-    /// the organization manager's record of a unit and a kind of unit, the
-    /// projects' permissions, and the module interfaces in the sample's namespaces, with the line that says which ids are
-    /// Tenancy's, so the project gets the access manager the page's check takes. And what a test adds to run the
-    /// requirement of the module's own: a plan it answers, a stand-in for Tenancy's check of the permission, and counts of
-    /// how often each is asked.
-    /// </summary>
-    private const string TestOnly =
-        """
-        using System;
-        using System.Collections.Generic;
-        using System.Threading;
-        using System.Threading.Tasks;
-        using DDDToolkit.Abstractions.Attributes;
-        using DDDToolkit.Access;
-        using DDDToolkit.Exceptions;
-        using DDDToolkit.Supporting.Tenancy.Access;
-
-        [assembly: DDDToolkit.Supporting.Tenancy.TenancyIds<Examples.Tenancy.TenantId, Examples.Tenancy.SeatId, Examples.Tenancy.OrganizationUnitId, Examples.Tenancy.RoleId>]
-
-        namespace Examples.Tenancy
-        {
-            [EntityId<Guid>] public readonly partial record struct TenantId;
-            [EntityId<Guid>] public readonly partial record struct SeatId;
-            [EntityId<Guid>] public readonly partial record struct OrganizationUnitId;
-            [EntityId<Guid>] public readonly partial record struct RoleId;
-            [EntityId<Guid>] public readonly partial record struct ProjectId;
-            [EntityId<Guid>] public readonly partial record struct ProjectRoleId;
-            [EntityId<Guid>] public readonly partial record struct BoardId;
-
-            public enum UnitKind { Region, Area }
-
-            public sealed class OrganizationUnit;
-
-            public sealed class Seat;
-
-            public sealed class Tenant;
-
-            public static class OrganizationManager
-            {
-                public sealed record UnitInTree(OrganizationUnitId Id, string Path, int Depth);
-            }
-
-            public sealed record AuditEntry(string What);
-
-            public readonly record struct PagingArguments(int? First, string? After);
-
-            public sealed record Page<T>(IReadOnlyList<T> Items);
-
-            public static class ProjectPermissionNames
-            {
-                public const string ManageCrew = "projects.crew.manage";
-            }
-
-            public static class BoardPermissions
-            {
-                public const string Export = "boards.export";
-            }
-
-            [AccessRequests] public partial interface IAuditRequest : IRequireAccess;
-
-            public sealed class PlanOfTheTest : ITenantPlans
-            {
-                public Plan Plan { get; set; }
-
-                public int Asked { get; set; }
-
-                public TenantId? AskedFor { get; set; }
-
-                public ValueTask<Plan> CurrentAsync(TenantId tenant, CancellationToken cancellationToken)
-                {
-                    Asked++;
-                    AskedFor = tenant;
-                    return ValueTask.FromResult(Plan);
-                }
-            }
-
-            public sealed class PermissionOfTheTest
-            {
-                public bool Held { get; set; }
-
-                public int Asked { get; set; }
-            }
-
-            public sealed class PermissionCheckOfTheTest(PermissionOfTheTest permission) : IAccessCheck
-            {
-                public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement;
-
-                public ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
-                {
-                    permission.Asked++;
-                    return permission.Held
-                        ? ValueTask.CompletedTask
-                        : ValueTask.FromException(new RefusalException("tenancy.not-permitted", RefusalKind.NotPermitted, "You lack the permission."));
-                }
-            }
-        }
-
-        namespace Examples.Tenancy.Tenants.Application.Access
-        {
-            [AccessRequests] public partial interface ITenantsRequest : IRequireAccess;
-        }
-
-        namespace Examples.Tenancy.Projects.Application.Access
-        {
-            // As the sample's: the module's default is a caller in the tenant.
-            [AccessRequests, InTenant] public partial interface IProjectsRequest : IRequireAccess;
-        }
-        """;
-
-    /// <summary>The namespaces a generated name is written in full with, longest first, which the page leaves out.</summary>
-    private static readonly string[] WrittenInFull =
-    [
-        "Examples.Tenancy.Tenants.Application.Access.",
-        "Examples.Tenancy.Projects.Application.Access.",
-        "Examples.Tenancy.",
-        "DDDToolkit.Supporting.Membership.Access.",
-        "DDDToolkit.Supporting.Tenancy.Access.",
-        "DDDToolkit.Access.",
-        "Microsoft.Extensions.DependencyInjection.",
-        "System.Threading.Tasks.",
-        "System.Threading.",
-        "System.",
-        "Mediator.",
-    ];
-
     [Fact]
     public void Every_example_of_the_page_is_one_of_the_sections_its_tests_compile()
     {
         // A plain csharp block is an example a test compiles; one anywhere else on the page would be compiled by nobody.
         var compiled = DocsExamples.Of(Page, Requests).Concat(DocsExamples.Of(Page, OwnRequirement)).ToList();
         PlainExamples().Should().BeEquivalentTo(compiled, "every example on the page is in a section this test compiles");
-    }
-
-    [Fact]
-    public void The_examples_compile_as_the_page_writes_them_and_nothing_is_reported()
-    {
-        var result = Run();
-
-        result.ShouldCompile();
-        result.ReportedDiagnostics.Should().BeEmpty("the requests say what they require one way each, and the module's own attribute is declared as a package declares one");
-    }
-
-    [Fact]
-    public void The_sample_writes_its_four_requests_as_the_page_does()
-    {
-        var examples = DocsExamples.Of(Page, Requests).Take(2).ToList();
-        foreach (var name in SampleRequests)
-        {
-            var example = examples.Single(each => DeclarationOf(name).IsMatch(each));
-            var file = SampleFileOf(name);
-            var lines = File.ReadAllLines(file).Select(line => line.Trim()).ToHashSet(StringComparer.Ordinal);
-
-            foreach (var line in DeclarationLines(example, name))
-            {
-                lines.Should().Contain(line, "the page shows {0} as {1} writes it", name, Path.GetFileName(file));
-            }
-        }
-    }
-
-    [Fact]
-    public void The_module_interfaces_the_test_stands_in_carry_the_sample_s_defaults()
-    {
-        // The page says which last arm each module's switch has: Tenants' stops a request it has no line for, and
-        // Projects' answers the module's default. So the stand-ins carry the sample's default, or none, as the sample does.
-        foreach (var (name, declared) in new[] { ("ITenantsRequest", "[AccessRequests]"), ("IProjectsRequest", "[AccessRequests, InTenant]") })
-        {
-            File.ReadAllLines(SampleFileOf(name)).Select(line => line.Trim()).Should().Contain(declared, "the sample declares {0} so", name);
-            TestOnly.Should().Contain(declared + " public partial interface " + name + " : IRequireAccess;");
-        }
-
-        Run().Source("ProjectsAccessBehavior.").Should().Contain("_ => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.InTenant(),", "the page says Projects' last arm answers the default");
-        DocsExamples.Titled(Page, "ProjectsAccessBehavior.g.cs for this page's requests, the interface's part, shortened").Should().Contain("a last arm that answers the module's default, TenancyAccess.InTenant()");
-    }
-
-    [Theory]
-    [InlineData("TenantsAccessBehavior.g.cs for this page's requests, the interface's part, shortened", "TenantsAccessBehavior.")]
-    [InlineData("ProjectsAccessBehavior.g.cs for this page's requests, the interface's part, shortened", "ProjectsAccessBehavior.")]
-    [InlineData("TenantsAccessBehavior.g.cs, the behavior, shortened", "TenantsAccessBehavior.")]
-    [InlineData("BoardsAccessBehavior.g.cs, the interface's part, shortened", "BoardsAccessBehavior.")]
-    public void What_the_page_says_the_generator_writes_is_what_it_writes(string title, string hint)
-    {
-        var written = Written(Run().Source(hint));
-
-        foreach (var line in Written(DocsExamples.Titled(Page, title)).Split('\n').Where(Shown))
-        {
-            written.Should().Contain(line, "the page shows '{0}' as the generator writes it", title);
-        }
-    }
-
-    [Fact]
-    public void Written_as_the_property_each_request_requires_what_its_attributes_do()
-    {
-        var emitted = Run().Emit();
-        var unit = emitted.New("Examples.Tenancy.OrganizationUnitId", Guid.NewGuid());
-        var seat = emitted.New("Examples.Tenancy.SeatId", Guid.NewGuid());
-        var project = emitted.New("Examples.Tenancy.ProjectId", Guid.NewGuid());
-
-        object?[][] made =
-        [
-            ["OrganizationUnits"],
-            ["AddOrganizationUnit", unit, "Kade 3", null],
-            ["RenameSeat", seat, "Ada L."],
-            ["AddCrewMember", project, seat, null, null, 7L],
-            ["RegisterOrganization", "harbor-two", "Harbor Two", "Ada"],
-        ];
-
-        foreach (var arguments in made)
-        {
-            var name = (string)arguments[0]!;
-            var attribute = Required(emitted.New("Examples.Tenancy." + name, arguments[1..]));
-            var property = Required(emitted.New("Examples.Tenancy.AsProperty." + name, arguments[1..]));
-
-            property.Should().Be(attribute, "{0} written as the property requires what its attributes say", name);
-        }
-
-        // The audit log says it as the property alone, and C# takes its own over the interface's default.
-        Required(emitted.New("Examples.Tenancy.TenantAuditLog", emitted.New("Examples.Tenancy.TenantId", Guid.NewGuid()), emitted.New("Examples.Tenancy.PagingArguments", null, null)))
-            .Should().Be(AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant("tenancy.seats.manage")));
-    }
-
-    [Fact]
-    public void The_attributes_and_the_markers_are_the_calls_the_page_names()
-    {
-        var emitted = Run().Emit();
-        var unit = emitted.New("Examples.Tenancy.OrganizationUnitId", Guid.NewGuid());
-        var seat = emitted.New("Examples.Tenancy.SeatId", Guid.NewGuid());
-        var project = emitted.New("Examples.Tenancy.ProjectId", Guid.NewGuid());
-
-        Required(emitted.New("Examples.Tenancy.OrganizationUnits")).Should().Be(TenancyAccess.InTenant());
-        Required(emitted.New("Examples.Tenancy.RegisterOrganization", "harbor-two", "Harbor Two", "Ada")).Should().Be(AccessRequirement.SignedIn());
-        Required(emitted.New("Examples.Tenancy.AddCrewMember", project, seat, null, null, 7L)).ToString()
-            .Should().Contain("projects.crew.manage").And.Contain("7", "the version the caller read, which the check compares once the caller may act");
-        Required(emitted.New("Examples.Tenancy.AddOrganizationUnit", unit, "Kade 3", null)).GetType().Name.Should().Be("AtUnit`1");
-        Required(emitted.New("Examples.Tenancy.RenameSeat", seat, "Ada L."))
-            .Should().BeOfType<AccessRequirement.AnyOf>("yours, or the permission: [OrOwn] beside [RequiresPermission]");
-    }
-
-    [Fact]
-    public void A_requirement_of_the_modules_own_is_asked_first_and_the_permission_after_it_as_the_attributes_are_written()
-    {
-        var emitted = Run().Emit();
-        var plan = emitted.New("Examples.Tenancy.PlanOfTheTest")!;
-        var permission = emitted.New("Examples.Tenancy.PermissionOfTheTest")!;
-        using var provider = Services(emitted, plan, permission, withPlanCheck: true);
-        var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
-        var tenant = emitted.New("Examples.Tenancy.TenantId", Guid.NewGuid())!;
-        using var seated = AsSeatOf(emitted, tenant);
-
-        Required(export).Should().Be(
-            AccessRequirement.All((AccessRequirement)emitted.CallStatic("Examples.Tenancy.PlanAtLeast", "RequiresPlan", PlanOf(emitted, "Pro"))!, TenancyAccess.AtTenant("boards.export")),
-            "stacked attributes are All of their calls, in the order they are written");
-
-        // A tenant on the Free plan is refused with the module's code, and Tenancy is asked nothing.
-        Set(emitted, plan, "Plan", PlanOf(emitted, "Free"));
-        Set(emitted, permission, "Held", true);
-        Refusal(provider, emitted, export).Code.Should().Be("boards.plan-too-low");
-        emitted.Property(permission, "Asked").Should().Be(0, "the first case refused, so the second is not asked");
-        emitted.Property(plan, "AskedFor").Should().Be(tenant, "the plan read is the one of the tenant the caller works in");
-
-        // On the Pro plan the permission is asked next, and its refusal is its own.
-        Set(emitted, plan, "Plan", PlanOf(emitted, "Pro"));
-        Set(emitted, permission, "Held", false);
-        Refusal(provider, emitted, export).Code.Should().Be("tenancy.not-permitted");
-
-        Set(emitted, permission, "Held", true);
-        FluentActions.Invoking(() => Require(provider, emitted, export)).Should().NotThrow();
-        emitted.Property(permission, "Asked").Should().Be(2);
-    }
-
-    [Fact]
-    public void A_caller_who_is_nobody_in_the_tenant_is_refused_with_its_own_reason_before_any_plan_is_read()
-    {
-        var emitted = Run().Emit();
-        var plan = emitted.New("Examples.Tenancy.PlanOfTheTest")!;
-        var permission = emitted.New("Examples.Tenancy.PermissionOfTheTest")!;
-        using var provider = Services(emitted, plan, permission, withPlanCheck: true);
-        var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
-
-        // The new sign-in, an operator or an anonymous caller: nobody in the tenant, as outside any seat begun, so no
-        // tenant's plan to learn.
-        Set(emitted, plan, "Plan", PlanOf(emitted, "Free"));
-        Refusal(provider, emitted, export).Code.Should().Be("tenancy.not-seated", "the caller's own reason comes before anything is read");
-        emitted.Property(plan, "Asked").Should().Be(0, "a caller who is nobody in the tenant learns nothing of its plan");
-        emitted.Property(permission, "Asked").Should().Be(0, "the first case refused, so the second is not asked");
-    }
-
-    [Fact]
-    public void A_module_that_forgets_its_check_has_the_request_stopped_with_the_registration_named()
-    {
-        var emitted = Run().Emit();
-        using var provider = Services(emitted, emitted.New("Examples.Tenancy.PlanOfTheTest")!, emitted.New("Examples.Tenancy.PermissionOfTheTest")!, withPlanCheck: false);
-        var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
-
-        FluentActions.Invoking(() => Require(provider, emitted, export))
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*AddAccessCheck<IBoardsRequest, TCheck>()*", "a case nothing decides lets nobody through, and says which registration is missing");
-    }
-
-    [Fact]
-    public void The_policies_the_page_shows_are_lines_of_the_samples_newest_export()
-    {
-        var blocks = TitledSql().Matches(Read()).ToList();
-        blocks.Should().NotBeEmpty();
-
-        foreach (var block in blocks)
-        {
-            var file = block.Groups["file"].Value;
-            var path = Path.Combine(Migrations(), file);
-            File.Exists(path).Should().BeTrue("the page names {0}, which the sample's export wrote", file);
-
-            var module = Regex.Match(file, @"_access\.(?<module>\w+)\.ddd\.sql$").Groups["module"].Value;
-            var newest = Directory.GetFiles(Migrations(), "*_access." + module + ".ddd.sql").Select(Path.GetFileName).Order(StringComparer.Ordinal).Last();
-            file.Should().Be(newest, "the page shows what the policies of {0} are now, which the newest access file says", module);
-
-            var lines = File.ReadAllText(path).ReplaceLineEndings("\n").Split('\n').Select(line => line.TrimEnd()).ToHashSet(StringComparer.Ordinal);
-            foreach (var line in block.Groups["code"].Value.Split('\n').Select(line => line.TrimEnd()).Where(line => line.Length > 0))
-            {
-                lines.Should().Contain(line, "the page copies {0} line by line", file);
-            }
-        }
     }
 
     [Fact]
@@ -496,64 +158,6 @@ public partial class HowARequestIsCheckedDocsExampleTests
         return table;
     }
 
-    /// <summary>
-    /// The page's examples in one project of the application, as the sample's modules see Tenancy, Membership and
-    /// Mediator: the requests of the first section in the application's namespace, the same requests written as the
-    /// property in one of their own, and the module of the last section.
-    /// </summary>
-    private static GeneratorRunOutcome Run()
-    {
-        var requests = DocsExamples.Of(Page, Requests);
-        requests.Should().HaveCount(4, "the sample's Tenants requests, its Projects request, the page's two of its own, and the same written as the property");
-        var own = DocsExamples.Of(Page, OwnRequirement);
-
-        var host = GeneratorTestHost.Create(TestOnly, "TestOnly.cs");
-        for (var index = 0; index < 3; index++)
-        {
-            host = host.WithSource(Header + "namespace Examples.Tenancy;\n\n" + requests[index], "Requests" + index + ".cs");
-        }
-
-        host = host.WithSource(Header + "using Examples.Tenancy;\n\nnamespace Examples.Tenancy.AsProperty;\n\n" + requests[3], "AsProperty.cs");
-        for (var index = 0; index < own.Count; index++)
-        {
-            host = host.WithSource(Header + "namespace Examples.Tenancy;\n\n" + own[index], "Own" + index + ".cs");
-        }
-
-        return host.WithAssemblyName("Examples.Tenancy").WithTenancy().WithMembershipAlone().WithMediator().RunCore();
-    }
-
-    /// <summary>
-    /// The module of the boards with its check, or without it, beside the access manager the generator wrote for the
-    /// project's line and the test's stand-in for Tenancy's check.
-    /// </summary>
-    private static ServiceProvider Services(EmittedAssembly emitted, object plan, object permission, bool withPlanCheck)
-    {
-        var services = new ServiceCollection();
-        if (withPlanCheck)
-        {
-            emitted.CallStatic("Examples.Tenancy.BoardsModule", "AddBoardsAccess", services);
-        }
-
-        services.AddSingleton(emitted.Type("Examples.Tenancy.ITenantPlans"), plan);
-        services.AddSingleton(emitted.Type("Examples.Tenancy.PermissionOfTheTest"), permission);
-        services.AddSingleton(DDDToolkit.Supporting.Tenancy.Catalogue.TenancyCatalogue.Build(new DDDToolkit.Supporting.Tenancy.Catalogue.ApplicationCatalogue(), []));
-        services.AddSingleton(TimeProvider.System);
-        services.AddScoped(emitted.Type("Examples.Tenancy.TenancyAccessManager"));
-        typeof(AccessCheckServiceCollectionExtensions).GetMethod(nameof(AccessCheckServiceCollectionExtensions.AddAccessCheck))!
-            .MakeGenericMethod(emitted.Type("Examples.Tenancy.IBoardsRequest"), emitted.Type("Examples.Tenancy.PermissionCheckOfTheTest"))
-            .Invoke(null, [services]);
-
-        return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-    }
-
-    /// <summary>Makes a seat of <paramref name="tenant"/> the Tenancy user until disposed, as tenant selection does for a request.</summary>
-    private static IDisposable AsSeatOf(EmittedAssembly emitted, object tenant)
-    {
-        var caller = typeof(TenancyUser<,>).MakeGenericType(emitted.Type("Examples.Tenancy.TenantId"), emitted.Type("Examples.Tenancy.SeatId"));
-        var seat = emitted.New("Examples.Tenancy.SeatId", Guid.NewGuid());
-        return TenancyUsers.Begin((ITenancyUser)caller.GetMethod("InSeat")!.Invoke(null, [tenant, seat])!);
-    }
-
     /// <summary>Asks the boards' checks about <paramref name="request"/> in a scope of its own, and throws what they throw.</summary>
     private static void Require(ServiceProvider provider, EmittedAssembly emitted, object request)
     {
@@ -578,17 +182,6 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
     private static void Set(EmittedAssembly emitted, object target, string property, object value)
         => target.GetType().GetProperty(property)!.SetValue(target, value);
-
-    /// <summary>A generated text as the page writes it: the names without the namespaces they are written in full with, the spaces as one.</summary>
-    private static string Written(string code)
-    {
-        foreach (var name in WrittenInFull)
-        {
-            code = code.Replace("global::" + name, string.Empty, StringComparison.Ordinal);
-        }
-
-        return string.Join('\n', code.Replace("global::", string.Empty, StringComparison.Ordinal).ReplaceLineEndings("\n").Split('\n').Select(line => Spaces().Replace(line.Trim(), " ")));
-    }
 
     /// <summary>Whether a line of a generated block is one to find in what was generated: not a brace, and not the page's own elision.</summary>
     private static bool Shown(string line) => line.Length > 0 && line is not "{" and not "}" and not "};" && !line.StartsWith("// ...", StringComparison.Ordinal);
@@ -615,18 +208,11 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
     private static Regex DeclarationOf(string name) => new(@"\brecord " + name + @"\b[ (:]", RegexOptions.Multiline);
 
-    /// <summary>The file of the sample that declares <paramref name="name"/>, in the application project of its module.</summary>
-    private static string SampleFileOf(string name)
-        => Directory.GetFiles(Path.Combine(Root(), "Examples", "Tenancy", "Modules"), name + ".cs", SearchOption.AllDirectories)
-            .Should().ContainSingle(file => file.Contains(".Application", StringComparison.Ordinal), "the sample declares {0} once, in a module's application project", name).Subject;
-
     /// <summary>The plain csharp blocks of the page: its examples.</summary>
     private static List<string> PlainExamples()
         => [.. PlainCsharp().Matches(Read()).Select(match => match.Groups["code"].Value)];
 
     private static string Read() => File.ReadAllText(Path.Combine(Root(), "docs", Page)).ReplaceLineEndings("\n");
-
-    private static string Migrations() => Path.Combine(Root(), "Examples", "Tenancy", "supabase", "migrations");
 
     private static string WalkthroughPath() => Path.Combine(Root(), "website", "src", "components", "RequestWalkthrough", "walkthrough.json");
 

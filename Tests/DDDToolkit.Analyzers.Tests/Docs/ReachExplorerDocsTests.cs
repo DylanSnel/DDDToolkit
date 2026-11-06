@@ -1,7 +1,5 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
-using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Catalogue;
 
 namespace DDDToolkit.Analyzers.Tests.Docs;
 
@@ -117,48 +115,6 @@ public partial class ReachExplorerDocsTests
             var made = RoleMade().Matches(tutorial).SingleOrDefault(match => match.Groups["name"].Value == role.Name);
             made.Should().NotBeNull("the tutorial makes the role {0} with POST /roles", role.Name);
             Permissions(made!.Groups["permissions"].Value).Should().Equal(role.Permissions, "{0} contains what the tutorial gives it", role.Name);
-        }
-    }
-
-    [Fact]
-    public void Each_permission_is_Tenancy_s_with_its_description_and_its_request_is_the_tutorial_s()
-    {
-        var tutorial = ExplorerDocs.Page(Tutorial);
-        foreach (var permission in Data.Permissions)
-        {
-            var declared = TenancyPermissions.All.SingleOrDefault(each => each.Name == permission.Name);
-            declared.Should().NotBeNull("{0} is one of Tenancy's permissions", permission.Name);
-            permission.Description.Should().Be(declared!.Description, "the explorer shows the catalogue's description of {0}", permission.Name);
-
-            var constant = typeof(TenancyPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
-                .First(field => field.IsLiteral && (string?)field.GetRawConstantValue() == permission.Name).Name;
-            var request = permission.Request;
-            var forTheTenant = new Regex(@"\[RequiresPermission\(TenancyPermissions\." + constant + @"\)\]\npublic sealed record " + request.Name + @"\(").IsMatch(tutorial);
-            var atAUnit = new Regex(@"public sealed record " + request.Name + @"\([^\n]*\[AtUnit\(TenancyPermissions\." + constant + @"\)\]").IsMatch(tutorial);
-            (forTheTenant || atAUnit).Should().BeTrue("the tutorial's {0} requires {1}", request.Name, permission.Name);
-
-            // Where the permission is checked: at a unit with [AtUnit(permission)] on the unit, for the whole tenant with [RequiresPermission].
-            request.At.Should().Be(atAUnit ? "unit" : "tenant", "{0} checks {1} where its declaration says", request.Name, permission.Name);
-            if (request.At == "unit")
-            {
-                request.Where.Should().EndWith("or above it", "a permission held above a unit counts at the unit");
-            }
-            else
-            {
-                request.Where.Should().Be("for the whole tenant");
-            }
-
-            tutorial.Should().Contain(ExplorerDocs.Mapped(request.Route), "the tutorial's endpoints send {0} on {1}", request.Name, request.Route);
-        }
-    }
-
-    [Fact]
-    public void The_refusals_are_Tenancy_s_with_the_status_the_tutorial_s_host_gives_them()
-    {
-        foreach (var refusal in new[] { Data.Refusals.NotPermitted, Data.Refusals.NotSeated })
-        {
-            TenancyRefusals.Codes.Should().Contain(refusal.Code);
-            refusal.Status.Should().Be(ExplorerDocs.StatusOf(TenancyRefusals.KindOf(refusal.Code)), "the host of the tutorial answers {0} so", refusal.Code);
         }
     }
 
