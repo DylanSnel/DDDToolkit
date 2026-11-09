@@ -53,6 +53,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     behavior runs around every message that meets its constraints, and a closed one around its own message. The
     behavior registered first is the outermost.
   - The generated `Add{Module}Handlers()` registers a project's request handlers beside its notification handlers.
+    A response type keeps its `?`, so a query declared `IQuery<Invoice?>` is registered with `Invoice?`.
   - Left out from Mediator: `MessagePreProcessor`, `MessagePostProcessor`, `MessageExceptionHandler` and
     `INotificationPublisher`. A pipeline behavior does the work of the first three.
 

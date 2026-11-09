@@ -52,6 +52,14 @@ public sealed class HandlersGenerator : IIncrementalGenerator
     private const string NotificationRegistration = "AddNotificationHandler";
     private const string ServiceCollection = "global::Microsoft.Extensions.DependencyInjection.IServiceCollection";
 
+    /// <summary>
+    /// How a message or a response type is written in the registration: fully qualified, with the <c>?</c> of a
+    /// nullable reference type. A query declared <c>IQuery&lt;Overview?&gt;</c> is registered with <c>Overview?</c>, so
+    /// the registration meets the constraints of its handler interface.
+    /// </summary>
+    private static readonly SymbolDisplayFormat TypeArgumentFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
     /// <summary>Each handler interface of a message answered once or with a stream, with the registration it gets.</summary>
     private static readonly Dictionary<string, (string Registration, bool Streamed)> RequestHandlers = new(StringComparer.Ordinal)
     {
@@ -183,7 +191,7 @@ public sealed class HandlersGenerator : IIncrementalGenerator
                     handler,
                     handlerName,
                     NotificationRegistration,
-                    implemented.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    implemented.TypeArguments[0].ToDisplayString(TypeArgumentFormat),
                     implemented.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
                     Response: null,
                     Streamed: false,
@@ -195,9 +203,9 @@ public sealed class HandlersGenerator : IIncrementalGenerator
                     handler,
                     handlerName,
                     kind.Registration,
-                    implemented.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    implemented.TypeArguments[0].ToDisplayString(TypeArgumentFormat),
                     implemented.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
-                    implemented.TypeArguments[1].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    implemented.TypeArguments[1].ToDisplayString(TypeArgumentFormat),
                     kind.Streamed,
                     location));
             }

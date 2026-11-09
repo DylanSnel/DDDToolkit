@@ -344,6 +344,36 @@ public class HandlersGenerationTests
     }
 
     [Fact]
+    public void A_query_that_answers_a_nullable_reference_is_registered_with_its_question_mark()
+    {
+        const string source =
+            """
+            #nullable enable
+            using DTS.DDD.Mediator;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Billing;
+
+            public sealed record Invoice(int Number);
+
+            public sealed record FindInvoice(int Number) : IQuery<Invoice?>;
+
+            internal sealed class FindInvoiceHandler : IQueryHandler<FindInvoice, Invoice?>
+            {
+                public ValueTask<Invoice?> Handle(FindInvoice query, CancellationToken cancellationToken) => new((Invoice?)null);
+            }
+            """;
+
+        var result = GeneratorTestHost.Create(source).WithDependencyInjection().RunCore();
+
+        result.ShouldCompile();
+        result.ShouldContain(Hint, "AddQueryHandler<global::Billing.FindInvoice, global::Billing.Invoice?, global::Billing.FindInvoiceHandler>(services);");
+        result.OutputCompilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(diagnostic => diagnostic.Id == "CS8631")
+            .Should().BeEmpty("the registration meets the constraints of the handler interface");
+    }
+
+    [Fact]
     public void A_second_handler_of_one_command_reports_DDD00110_at_the_second_and_the_registration_keeps_the_first()
     {
         var result = GeneratorTestHost.Create(Billing, "Billing.cs")
