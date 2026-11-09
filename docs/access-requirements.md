@@ -161,9 +161,8 @@ partial interface IBillingRequest
 }
 ```
 
-`CloseInvoice` has no line, because it implements the property itself. When the project uses Mediator, the same file
-also contains the [behavior](#the-generated-behavior-with-mediator). Without Mediator, the file contains only the
-lines, because whatever asks the checks reads them through the property.
+`CloseInvoice` has no line, because it implements the property itself. The same file also contains the
+[behavior](#the-generated-behavior). Whatever asks the checks reads the lines through the property.
 
 </details>
 
@@ -499,7 +498,7 @@ a request implements `RequiredAccess` ([Any and All in RequiredAccess](#any-and-
 | `[Owner]`, on a property of an aggregate | The aggregate root itself, once, on a property of a type with an own value. The property may be nullable. | [DDD00087](diagnostics.md#ddd00087), [DDD00088](diagnostics.md#ddd00088) |
 | `[At]`, from Membership's markers, on a property of an aggregate | The aggregate root itself, once, on an instance property that is never null. It names the unit the aggregate is placed at. The rules of a resource with members read it when the resource is reached from above. | [DDD00097](diagnostics.md#ddd00097), and [DDD00098](diagnostics.md#ddd00098) for rules that reach a class that marks none |
 | `[Permissions]`, on a class | A static class whose public constants each have a level, written without a permission: `[AtTenant]`, `[AtUnit]` or `[On<TResource>]`. | [DDD00092](diagnostics.md#ddd00092), [DDD00093](diagnostics.md#ddd00093) |
-| `[SeenWith<TResourceId>(permission)]` | A query. | [DDD00082](diagnostics.md#ddd00082) on a command, or on a plain request of Mediator |
+| `[SeenWith<TResourceId>(permission)]` | A query. | [DDD00082](diagnostics.md#ddd00082) on a command, or on a plain request of the mediator |
 | `[Operator]` | Neither `[InTenant]`, `[RequiresPermission]` nor a permission marker, because an operator holds no seat and no permission. On a query, no `Tenant` and no `Scope`. | [DDD00104](diagnostics.md#ddd00104), [DDD00105](diagnostics.md#ddd00105) (a warning) |
 | `[ForTenant]` | `[Operator]` without `Tenant = OperatorTenant.FromRequest`. Once per request, on a member of the application's tenant id. | [DDD00102](diagnostics.md#ddd00102), [DDD00103](diagnostics.md#ddd00103), [DDD00081](diagnostics.md#ddd00081) |
 | any of them | One module interface of the same project, with `[AccessRequests]` and `partial`. | [DDD00083](diagnostics.md#ddd00083) |
@@ -1042,8 +1041,8 @@ flowchart LR
 
 In the Webshop sample, only the customer who placed an order can send it to another address with `ShipElsewhere`.
 `Order.PlacedBy` is marked `[Owner]` and may be null. A guest's order therefore belongs to nobody, and nobody can send
-it to another address, not even someone with a link to it. Its endpoint asks the checks itself, as an endpoint without
-Mediator does ([Asking the checks without Mediator](#asking-the-checks-without-mediator)).
+it to another address, not even someone with a link to it. Its endpoint asks the checks itself, as an endpoint that sends
+nothing does ([Asking the checks yourself](#asking-the-checks-yourself)).
 
 #### The caller's own on a resource
 
@@ -1481,10 +1480,11 @@ await check.RequireAsync(requirement, request, cancellationToken);  // in hand f
 work that handles it, with the requirement it passed. So the check can be [asked again](#asking-the-check-again) later
 in that flow. The toolkit does this when the policies refuse a save that the check allowed.
 
-## Asking the checks without Mediator
+## Asking the checks yourself
 
-Something must ask the checks before every handler. The core depends on no dispatcher, so whatever sends your
-requests makes one call: your own dispatcher, an endpoint filter, or a behavior of another library.
+Something must ask the checks before every handler. On the toolkit's mediator the
+[generated behavior](#the-generated-behavior) asks them. Where a request reaches its handler another way, whatever
+hands it over makes one call: your own dispatcher, an endpoint filter, or a behavior of another library.
 
 ```csharp
 public interface IHandler<TRequest>
@@ -1575,12 +1575,11 @@ apart: the caller's permissions changed in the meantime, or C# and the policies 
 log line, `ToString()` names the request and its requirement by their types, never by their values:
 `ChangeProjectName (MemberAccess<ProjectId>.On)`.
 
-## The generated behavior, with Mediator
+## The generated behavior
 
-In a project that references [Mediator](https://github.com/martinothamar/Mediator), the source-generated library
-(`Mediator.Abstractions`), mark the interface. The generator then writes the pipeline behavior that asks the checks,
-and its registration. The toolkit's packages reference no dispatcher. The only code that names Mediator is code the
-generator writes into your project.
+Mark the interface, and the generator writes the pipeline behavior of the toolkit's mediator that asks the checks, and
+its registration. The behavior runs in front of every request of the interface that is sent through `ISender`
+([Sending requests](event-delivery.md#sending-requests)).
 
 ```csharp
 [AccessRequests]
@@ -1630,39 +1629,32 @@ public static class BillingAccessBehaviorRegistration
   the namespaces inside it sees the call. Code anywhere else needs a using directive, and this includes a registration
   class one namespace up. Without it the call is CS1061, and [DDD00107](diagnostics.md#ddd00107) names the namespace.
 - The behavior runs the next step inside `BeginWork`, so the work a check begins reaches the handler and ends with it.
-  A command an operator sends runs as operator work this way. A message that implements Mediator's `IBaseQuery` is
-  passed as a query, and a check begins nothing for it.
-- A streamed message, such as an `IStreamQuery<T>`, passes its own pipeline in Mediator, `IStreamPipelineBehavior<,>`.
+  A command an operator sends runs as operator work this way. A message that implements `IBaseQuery` is passed as a
+  query, and a check begins nothing for it.
+- A streamed message, such as an `IStreamQuery<T>`, passes its own pipeline, `IStreamPipelineBehavior<,>`.
   No `IPipelineBehavior<,>` is part of that pipeline. So the generator writes a second class,
   `BillingAccessStreamBehavior<TMessage, TResponse>`, and the same call registers it. The checks of a stream query that
   implements the interface run before its handler streams anything. The stream behavior begins no work, because the
   reader of the stream asks for each item in its own flow.
-- Both behaviors are registered per scope, like the checks, so register Mediator with `ServiceLifetime.Scoped`.
-  Behaviors run in the order they were registered.
+- Both behaviors are registered per scope, like the checks and the handlers. Behaviors run in the order they were
+  registered.
 - The generator reads the shape of `IPipelineBehavior<TMessage, TResponse>` and
-  `IStreamPipelineBehavior<TMessage, TResponse>` from the library version the project references, including the order
-  of the parameters of `Handle`. A version the generator does not know is [DDD00057](diagnostics.md#ddd00057), and
-  nothing is written.
+  `IStreamPipelineBehavior<TMessage, TResponse>` from the DTS.DDD.Abstractions the project references. An
+  Abstractions of another version, with a shape the generator does not know, is [DDD00057](diagnostics.md#ddd00057),
+  and nothing is written.
 - A notification reaches its handlers through neither pipeline, so nothing would check its requirement. A
   notification that implements the interface is [DDD00058](diagnostics.md#ddd00058). Send work that needs a check as
   a command or a query.
-- Without the library, no behavior and no registration are generated. You call `RequireAsync` yourself,
-  [as described above](#asking-the-checks-without-mediator). The generator still writes the requirements of the
-  attributes into a `partial` interface, because your call reads them. A call to the registration in such a project is
-  [DDD00107](diagnostics.md#ddd00107).
+- The mediator is declared for .NET 10. A project for netstandard2.0 gets no behavior and no registration. You call
+  `RequireAsync` yourself there, [as described above](#asking-the-checks-yourself). The generator still writes the
+  requirements of the attributes into a `partial` interface, because your call reads them. A call to the registration
+  of such a project is [DDD00107](diagnostics.md#ddd00107).
 
-Mediator's own generator registers the behaviors a host lists in `MediatorOptions.PipelineBehaviors`. It reads that
-list from your source code, and one source generator cannot see what another one writes. So the registration depends
-on where the interface is declared:
-
-| The interface is declared in | The generated behavior |
-|---|---|
-| a module's class library, which the project that runs Mediator's generator references | The behavior is a type of a referenced assembly like any other. Add it with `services.AddBillingAccessBehavior()`, or list it. When you list it, still register the set of checks it asks: `AddAccessCheck` does that, or `AddAccessChecks<IBillingRequest>()` for a module that adds no check. Also list the second class in the other pipeline: `typeof(BillingAccessStreamBehavior<,>)` in `MediatorOptions.StreamPipelineBehaviors`. A host that lists only the first leaves the module's stream queries unchecked. Once the module has a stream query, that host [does not start](#handlers-reached-without-the-access-check). |
-| the project that runs Mediator's generator itself | The behavior cannot be listed, because `typeof(BillingAccessBehavior<,>)` in the list is Mediator's error MSG0007. Add it with `services.AddBillingAccessBehavior()`, after `AddMediator`. It then runs after the behaviors you listed. |
-
-A single-project host that wants every behavior in that list, so that Mediator's generator registers them all, writes
-the behavior itself and leaves `[AccessRequests]` off the interface. [DDD00057](diagnostics.md#ddd00057) shows the
-complete class. A host that sends stream queries also writes the behavior for `IStreamPipelineBehavior<,>`.
+The registration adds both behaviors open, so they stand in front of every message of the interface. A host may
+register a behavior closed over one message instead, with
+`services.AddPipelineBehavior(typeof(BillingAccessBehavior<CloseInvoice, Unit>))`. That registration holds that
+message only. The [start-up check](#handlers-reached-without-the-access-check) then names every message of the
+interface that the host left out.
 
 ## Handlers reached without the access check
 
@@ -1681,17 +1673,17 @@ The toolkit detects two ways around the behavior:
 In detail:
 
 - **The behavior is missing from the pipeline.** This happens when a module registers its checks but not the
-  behavior, when a host forgets the registration of a module completely, or when a host lists its behaviors for
-  Mediator's generator and leaves one out. Registering the checks adds the [start-up check](startup-checks.md)
+  behavior, when a host forgets the registration of a module completely, or when a host registers the behaviors closed
+  over their messages and leaves one out. Registering the checks adds the [start-up check](startup-checks.md)
   `access.behaviors-registered` for each interface the generator wrote a behavior for. A host that calls
   `RunStartupChecks()` then does not start. The message names the behavior, its interface, and the line that adds it.
   You write nothing for this check: `AddAccessCheck`, `AddTenancyAccess`, the generated `AddDocumentMemberAccess` and
   `AddBillingAccessBehavior` itself all add it.
-- **How the start-up check works.** Mediator registers every handler as its handler interface, closed over its
-  message. So the check reads from the host's registrations which commands and queries the host can handle. For each
+- **How the start-up check works.** The generated registration registers every handler as its handler interface,
+  closed over its message. So the check reads from the host's registrations which commands and queries the host can handle. For each
   of them whose interface has a generated behavior, in any module, the behavior must be in its pipeline. It counts
-  when it is registered open, as the generated call registers it, or closed over that message, as Mediator registers a
-  listed behavior. A streamed query needs the stream behavior. A module without streamed queries needs nothing in that
+  when it is registered open, as the generated call registers it, or closed over that message, as `AddPipelineBehavior`
+  registers a closed behavior. A streamed query needs the stream behavior. A module without streamed queries needs nothing in that
   pipeline. A behavior registered as a service that no pipeline asks for, such as the behavior type itself, does not
   count, and the message states this. One registration adds the check for every module. So a module whose registration
   was forgotten is found, as long as any other module registered its checks. A host that registered no checks of any
@@ -1706,7 +1698,7 @@ In detail:
 - **A transport that skips the pipeline.** A route, a GraphQL resolver or a message consumer that sends through
   `ISender` passes the behavior like any other caller. One that calls a handler of a marked request directly is the
   case above, and is reported where it is written. A transport that dispatches in another way must ask the checks
-  itself with `AccessChecks<IBillingRequest>.RequireAsync`, [as described above](#asking-the-checks-without-mediator).
+  itself with `AccessChecks<IBillingRequest>.RequireAsync`, [as described above](#asking-the-checks-yourself).
   Neither the build nor the start-up check can detect such a transport. This includes a dispatcher that calls
   `Handle` on a handler of a type parameter without a constraint to a marked interface, because the build cannot tell
   which requests pass through it.
@@ -1743,19 +1735,20 @@ IBillingRequest reaches its handler with nothing asking what it requires, held o
 Add services.AddBillingAccessBehavior() where the module registers its checks.
 ```
 
-A host that lists its behaviors for Mediator's generator and leaves one out gets a message to list it. Calling the
-generated registration as well would put the other behavior in the pipeline twice:
+A host that registers the behaviors closed over their messages, and leaves one out, gets a message that names the
+open registration. Calling the generated registration as well would put the other behavior in the pipeline twice:
 
 ```text
 System.InvalidOperationException: BillingAccessStreamBehavior<TMessage, TResponse>, the behavior the toolkit wrote
 to ask the access checks of IBillingRequest of a query answered with a stream, is not in the pipeline of streams:
-every such query that implements IBillingRequest is streamed with nothing asking what it requires. The host lists
-its behaviors for the Mediator library: list typeof(BillingAccessStreamBehavior<,>) among its
-StreamPipelineBehaviors as well.
+every such query that implements IBillingRequest is streamed with nothing asking what it requires. The host
+registers its behaviors closed over their messages: add
+services.AddStreamPipelineBehavior(typeof(BillingAccessStreamBehavior<,>)), which puts it in front of every message
+of the pipeline.
 ```
 
 ```csharp
-// With the Mediator library, a command of IBillingRequest, marked [AccessRequests] as above, and its handler
+// A command of IBillingRequest, marked [AccessRequests] as above, and its handler
 public sealed record CloseOverdueInvoice(InvoiceId Invoice) : ICommand, IBillingRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => new BillingAccess.OnInvoice("billing.close", Invoice);
@@ -1804,7 +1797,7 @@ Some mistakes no check can detect. Write a test of your own for them, over the r
 - **A requirement that never refuses for a missing permission belongs on a query.**
   `[SeenWith<TResourceId>(permission)]` lets every signed-in caller through, even one who holds nothing. It refuses a
   caller who did not sign in, who could not reach anything with any rule. It states what the query's own statement
-  filters by, and that filter is the real check. On a Mediator message that is not a query, such as a command or a
+  filters by, and that filter is the real check. On a message of the mediator that is not a query, such as a command or a
   plain `IRequest`, the build reports [DDD00082](diagnostics.md#ddd00082). The build cannot catch three cases: a
   requirement of your own that works the same way, the same requirement returned from `RequiredAccess`, and a request
   of another dispatcher, which the build cannot identify as a query. Test these yourself, as the Tenancy sample's

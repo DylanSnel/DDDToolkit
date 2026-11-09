@@ -10,7 +10,8 @@ Namespaces: `AddDDDToolkitEntityFramework` and `UseDDDToolkit` are in `DTS.DDD.E
 `IOutboundIntegrationEvent<,>`, `IIntegrationEventHandler<>` and `[IntegrationEventConsumer]` in
 `DTS.DDD.EntityFramework.Integration`; `IntegrationEventMessage` in `DTS.DDD.BaseTypes`;
 `IDomainEvent` in `DTS.DDD.Interfaces`; `DispatchWithMediator()` on the options; `INotificationHandler<>`,
-`IPublisher`, `INotificationBehavior<>` and `AddNotificationBehavior` in `DTS.DDD.Mediator`.
+`IPublisher`, `INotificationBehavior<>`, `AddNotificationBehavior`, `ICommand<>`, `IQuery<>`, `ICommandHandler<,>`,
+`IQueryHandler<,>`, `ISender`, `IMediator`, `IPipelineBehavior<,>` and `AddPipelineBehavior` in `DTS.DDD.Mediator`.
 
 ## Entity Framework Core
 
@@ -166,6 +167,10 @@ internal sealed class OrderLog(ILogger<OrderLog> logger) : DTS.DDD.Mediator.INot
   Membership are notifications too: `INotificationHandler<SeatDeactivated<TenantId, SeatId>>` works. They must not call
   `SaveChanges` in process. The save is already running and picks up their changes.
 - `services.AddNotificationBehavior(typeof(MyBehavior<>))` wraps each handler call. The first registered is the outermost.
+- Requests run on the same mediator, with Mediator's names: `ICommand<T>` with one `ICommandHandler<TCommand, T>`,
+  `IQuery<T>` with one `IQueryHandler<TQuery, T>`, sent with `ISender.Send`. `Add{Module}Handlers()` registers the
+  request handlers too. A second handler of one request is DDD00110. `services.AddPipelineBehavior(typeof(MyBehavior<,>))`
+  wraps each request handler. The access behavior of an `[AccessRequests]` interface is one.
 - In-process handlers run before the save checks invariants, so they also run for a save that is then
   refused. Their database changes roll back with it; an email sent or an HTTP call made does not. Keep
   in-process handlers to changes in the same database, and send anything else through the outbox.

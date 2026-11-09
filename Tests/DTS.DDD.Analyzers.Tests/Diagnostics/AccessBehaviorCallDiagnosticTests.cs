@@ -1,5 +1,3 @@
-using DTS.DDD.Analyzers.Tests.Generation;
-
 namespace DTS.DDD.Analyzers.Tests.Diagnostics;
 
 /// <summary>
@@ -41,24 +39,10 @@ public class AccessBehaviorCallDiagnosticTests
     private static void ShouldBeCs1061(GeneratorRunOutcome result)
         => result.CompilationErrors.Select(error => error.Id).Should().Contain("CS1061", "the compiler still reports the call");
 
-    // ------------------------------------------------------------------ the library is missing
+    // ------------------------------------------------------------------ the project has no behavior
 
     [Fact]
-    public void A_project_without_the_library_reports_DDD00107_naming_the_package_and_the_other_way()
-    {
-        var result = Project().WithSource(CallFrom("Shop.Billing"), "Application.cs").WithDependencyInjection().RunCore();
-
-        ShouldBeCs1061(result);
-        result.ShouldNotCrash();
-        result.ShouldHaveExactlyDiagnostics("DDD00107");
-        result.ShouldHaveDiagnostic("DDD00107", at: "AddBillingAccessBehavior").GetMessage().Should()
-            .StartWith("'AddBillingAccessBehavior', the registration of the access behavior of 'IBillingRequest', cannot be called here.")
-            .And.Contain("Add the package Mediator.Abstractions to '" + GeneratorTestHost.DefaultAssemblyName + "'")
-            .And.Contain("AccessChecks<IBillingRequest>.RequireAsync");
-    }
-
-    [Fact]
-    public void A_project_without_the_library_that_asks_the_checks_itself_reports_nothing()
+    public void A_project_that_asks_the_checks_itself_reports_nothing()
     {
         var result = Project().WithSource(
                 """
@@ -101,23 +85,26 @@ public class AccessBehaviorCallDiagnosticTests
     }
 
     [Fact]
-    public void An_interface_in_a_referenced_project_without_the_library_names_that_project()
+    public void An_interface_in_a_referenced_project_built_without_the_generator_names_that_project()
     {
+        // A module's project built for a framework without the toolkit's mediator, netstandard2.0 say, gets no behavior.
         var result = GeneratorTestHost.Create(CallFrom("Shop.Host"), "Application.cs")
             .WithDependencyInjection()
-            .WithReferencedAssembly(Requests, "Shop.Billing.Application")
-            .WithMediator()
+            .WithReferencedAssemblyAsBuilt(Requests, "Shop.Billing.Application")
             .WithAnalyzers(GeneratorTestHost.CoreAnalyzers())
             .RunCore();
 
         ShouldBeCs1061(result);
+        result.ShouldNotCrash();
         result.ShouldHaveExactlyDiagnostics("DDD00107");
         result.ShouldHaveDiagnostic("DDD00107", at: "AddBillingAccessBehavior").GetMessage().Should()
-            .Contain("Add the package Mediator.Abstractions to 'Shop.Billing.Application'");
+            .StartWith("'AddBillingAccessBehavior', the registration of the access behavior of 'IBillingRequest', cannot be called here.")
+            .And.Contain("Build 'Shop.Billing.Application' for .NET 10 with DylansTechStack.DDD")
+            .And.Contain("AccessChecks<IBillingRequest>.RequireAsync");
     }
 
     [Fact]
-    public void A_referenced_project_with_a_behavior_and_no_registration_is_not_told_to_add_the_library()
+    public void A_referenced_project_with_a_behavior_and_no_registration_reports_nothing()
     {
         var result = GeneratorTestHost.Create(CallFrom("Shop.Host", "using Shop.Billing.Access;"), "Application.cs")
             .WithMediatorAlone()
@@ -251,7 +238,7 @@ public class AccessBehaviorCallDiagnosticTests
     }
 
     [Fact]
-    public void A_misshapen_interface_with_the_library_is_said_by_DDD00056_alone()
+    public void A_misshapen_interface_is_said_by_DDD00056_alone()
     {
         var result = Project(Requests.Replace("public partial interface IBillingRequest : IRequireAccess;", "public interface IBillingRequest;", StringComparison.Ordinal))
             .WithSource(CallFrom("Shop.Billing"), "Application.cs")
@@ -260,18 +247,5 @@ public class AccessBehaviorCallDiagnosticTests
 
         ShouldBeCs1061(result);
         result.ShouldHaveExactlyDiagnostics("DDD00056");
-    }
-
-    [Fact]
-    public void A_library_of_an_unknown_shape_is_said_by_DDD00057_alone()
-    {
-        var result = Project()
-            .WithSource(CallFrom("Shop.Billing"), "Application.cs")
-            .WithDependencyInjection()
-            .WithReferencedAssembly(AccessBehaviorGenerationTests.LibraryDeclaring(handle: "void Handle();"), "Mediator.Abstractions")
-            .RunCore();
-
-        ShouldBeCs1061(result);
-        result.ShouldHaveExactlyDiagnostics("DDD00057");
     }
 }

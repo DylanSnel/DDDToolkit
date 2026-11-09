@@ -23,8 +23,6 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Basic.Reference.Assemblies.Net100" />
-    <!-- The library the core generator writes an access behavior against when a project can see it. Its abstractions only: no generator of its runs here. -->
-    <PackageReference Include="Mediator.Abstractions" />
     <!-- UseNpgsql, which the design-time factory the Supabase package's generator writes for a marked context builds it on. -->
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>

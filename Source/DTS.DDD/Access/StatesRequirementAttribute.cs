@@ -55,7 +55,7 @@ public sealed class StatesRequirementAttribute(Type factory, string method) : At
 
     /// <summary>
     /// Whether only a query may state it: a requirement that refuses nobody for want of a permission and says what a query's
-    /// own statement filters by, such as Membership's <c>SeenWith</c>. On a message of the Mediator library that is no
+    /// own statement filters by, such as Membership's <c>SeenWith</c>. On a message of the toolkit's mediator that is no
     /// query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
     /// A request of another dispatcher, which the generator cannot tell for a command or a query, is not reported.
     /// </summary>

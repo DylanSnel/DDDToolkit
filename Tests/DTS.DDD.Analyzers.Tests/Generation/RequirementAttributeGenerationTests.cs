@@ -104,7 +104,9 @@ public partial class RequirementAttributeGenerationTests
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
-        result.GeneratedSources.Should().BeEmpty("the property alone needs nothing written");
+        result.GeneratedSources.Select(source => source.HintName).Should().OnlyContain(
+            hint => hint.StartsWith("BillingAccessBehavior.", StringComparison.Ordinal),
+            "the property alone needs nothing written but the interface's access behavior");
     }
 
     /// <summary>A current user whose host answers the user a test gives it, where nothing was begun.</summary>

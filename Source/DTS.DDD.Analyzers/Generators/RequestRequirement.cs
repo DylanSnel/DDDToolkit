@@ -1930,7 +1930,7 @@ internal sealed record RequestRequirement(
         }
 
         /// <summary>
-        /// DDD00082: a requirement its package declares for queries only, on a message of the Mediator library that is
+        /// DDD00082: a requirement its package declares for queries only, on a message of the toolkit's mediator that is
         /// no query: a command, or a plain request, which may change as much as a command does.
         /// </summary>
         private void QueriesOnly()
@@ -1947,9 +1947,9 @@ internal sealed record RequestRequirement(
         }
 
         /// <summary>
-        /// What the request is where it is a message of the Mediator library and no query of it, as a message says
-        /// it: "a command", or "a request of Mediator's that is no query". <see langword="null"/> for a query, and
-        /// where the project has no Mediator or the request is none of its messages: then nothing tells.
+        /// What the request is where it is a message of the toolkit's mediator and no query of it, as a message says
+        /// it: "a command", or "a message of the mediator's that is no query". <see langword="null"/> for a query, and
+        /// where the project cannot see the mediator or the request is none of its messages: then nothing tells.
         /// </summary>
         private string? NoQuery()
         {
@@ -1967,7 +1967,7 @@ internal sealed record RequestRequirement(
 
             return Implements(compilation.GetTypeByMetadataName(KnownTypes.MediatorBaseCommand)) || Implements(compilation.GetTypeByMetadataName(KnownTypes.MediatorBaseStreamCommand))
                 ? "a command"
-                : "a request of Mediator's that is no query";
+                : "a message of the mediator's that is no query";
         }
 
         private bool Implements(INamedTypeSymbol? interfaceType)

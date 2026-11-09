@@ -2294,7 +2294,7 @@ is `MemberAccess.SeenWith<DocumentId>(DocumentPermissions.View)`.
 
 **Remarks**
 
-For queries only. It refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check. On a message of the Mediator library that is no query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
+For queries only. It refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check. On a message of the toolkit's mediator that is no query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
 
 | Member | Summary |
 |---|---|
@@ -2315,7 +2315,7 @@ The primary constructor: the type's summary says what it makes.
 
 **Remarks**
 
-For queries only. It refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check. On a message of the Mediator library that is no query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
+For queries only. It refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check. On a message of the toolkit's mediator that is no query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
 
 ### `MemberAccessCheck<TResource, TResourceId>`
 

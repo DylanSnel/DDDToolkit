@@ -1483,7 +1483,7 @@ docs must explain. A package can take over these lines:
   - A package's check can begin work around the handler of a request it let through. It implements `IBeginsWork`
     beside `IAccessCheck`. The behavior the generator writes, and a dispatcher of your own, call
     `AccessChecks<TRequests>.BeginWork(request, isQuery)` after the checks and run the handler inside it
-    ([Asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)). Begin nothing
+    ([Asking the checks yourself](access-requirements.md#asking-the-checks-yourself)). Begin nothing
     for a query that would change anything. Tenancy's check of `[Operator]` begins operator work for a command this
     way.
   - `[assembly: PermissionWithoutMarker(typeof(...), nameof(...))]` names the call that the core's

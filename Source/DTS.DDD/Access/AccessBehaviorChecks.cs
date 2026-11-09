@@ -24,7 +24,7 @@ public static class AccessBehaviorChecks
     /// <summary>
     /// The start-up check that every message the host can hand to a handler, of a request interface the toolkit wrote
     /// a behavior for, has that behavior in its pipeline (<see cref="EnsureBehaviorsAreRegistered"/>): registered by
-    /// the generated call, or listed for the Mediator library, either way. It reads what the host registered and opens
+    /// the generated call, or registered closed over its messages, either way. It reads what the host registered and opens
     /// no connection, so it runs with the checks of the services, first.
     /// </summary>
     public const string BehaviorsRegisteredCheck = "access.behaviors-registered";
@@ -36,16 +36,16 @@ public static class AccessBehaviorChecks
     /// Throws when <paramref name="services"/> register a handler of a message whose request interface the toolkit
     /// wrote a behavior for (<see cref="AccessBehaviorAttribute"/>), and leave that behavior out of the message's
     /// pipeline: the message would reach its handler with nothing asking what it requires. A query answered with a
-    /// stream passes a pipeline of its own, where the library has one, and needs the behavior written for that one.
+    /// stream passes a pipeline of its own, and needs the behavior written for that one.
     /// <para>
-    /// The messages are read from the handlers the library registered, each under its handler interface closed over
+    /// The messages are read from the handlers the host registered, each under its handler interface closed over
     /// its message, <c>ICommandHandler&lt;CloseInvoice, Unit&gt;</c> say. The interfaces held are the ones those
     /// messages implement, whether or not their checks are registered, so a module whose registration was forgotten
     /// altogether is found as well.
     /// </para>
     /// <para>
     /// A behavior counts for a message when it is registered as the pipeline it implements: open, as the generated call
-    /// adds it, or closed over that message, as the Mediator library registers what a host lists in its options, once
+    /// adds it, or closed over that message, as <c>AddPipelineBehavior</c> registers a closed behavior, once
     /// for each message that meets the behavior's constraints. So a module without a stream query needs nothing in the
     /// pipeline of streams, and one closed registration speaks for its own message only. A behavior registered as
     /// anything else, itself say, with a factory, or under a permission, is none the pipeline asks for, and does not count.
@@ -77,7 +77,7 @@ public static class AccessBehaviorChecks
             var missing = behavior.MissingFor(messages.Where(each => !each.Streamed));
             var missingStreams = streams?.MissingFor(messages.Where(each => each.Streamed)) ?? [];
 
-            // A host that lists its behaviors for the library has them registered closed, and is told the one it
+            // A host that registers its behaviors closed over their messages is told the one it
             // left out of each list. A host that lists none is told the one line that puts both in.
             var lists = behavior.ClosedOver.Count > 0 || streams?.ClosedOver.Count > 0;
             if (missing.Count > 0)
@@ -125,9 +125,9 @@ public static class AccessBehaviorChecks
     }
 
     /// <summary>
-    /// Every message a library hands to a handler the host registered: a handler interface of the library, closed
+    /// Every message a mediator hands to a handler the host registered: a handler interface of the mediator, closed
     /// over its message first, <c>ICommandHandler&lt;CloseInvoice, Unit&gt;</c>. Read by its shape, as the core
-    /// references no library: an interface named for a handler, and of the library's handlers of streams where its
+    /// references no mediator: an interface named for a handler, and of the mediator's handlers of streams where its
     /// name says so. A notification is no request, and passes no pipeline of the toolkit's.
     /// </summary>
     private static List<HandledMessage> HandledMessages(IServiceCollection services)
@@ -160,12 +160,12 @@ public static class AccessBehaviorChecks
 
     /// <summary>
     /// What the toolkit's generator says it wrote for <paramref name="requests"/>, in the assembly that declares the
-    /// interface, or null where it wrote nothing: a project without the library asks the checks itself.
+    /// interface, or null where it wrote nothing: a project that cannot see the mediator asks the checks itself.
     /// </summary>
     private static AccessBehaviorAttribute? WrittenFor(Type requests)
         => requests.Assembly.GetCustomAttributes<AccessBehaviorAttribute>().FirstOrDefault(written => written.Requests == requests);
 
-    /// <summary>The assembly of the library whose pipeline <paramref name="behavior"/> is part of, and whose handlers it stands in front of.</summary>
+    /// <summary>The assembly of the mediator whose pipeline <paramref name="behavior"/> is part of, and whose handlers it stands in front of.</summary>
     private static Assembly? LibraryOf(Type behavior)
         => Definition(behavior).GetInterfaces().FirstOrDefault(static pipeline => pipeline.IsGenericType)?.Assembly;
 
@@ -237,7 +237,7 @@ public static class AccessBehaviorChecks
 
         var definition = Definition(behavior.Behavior);
         var putItIn = lists
-            ? $" The host lists its behaviors for the Mediator library: list typeof({WrittenTypeNames.Of(definition)}<{new string(',', definition.GetGenericArguments().Length - 1)}>) among its {(streamed ? "StreamPipelineBehaviors" : "PipelineBehaviors")} as well."
+            ? $" The host registers its behaviors closed over their messages: add services.{(streamed ? "AddStreamPipelineBehavior" : "AddPipelineBehavior")}(typeof({WrittenTypeNames.Of(definition)}<{new string(',', definition.GetGenericArguments().Length - 1)}>)), which puts it in front of every message of the pipeline."
             : written.Registration is { Length: > 0 } registration
                 ? $" Add {registration} where the module registers its checks."
                 : $" Put {Named(behavior.Behavior)} in the pipeline of the messages that implement {interfaceName}.";
@@ -270,7 +270,7 @@ public static class AccessBehaviorChecks
     /// <summary>A message a library hands to a handler the host registered.</summary>
     /// <param name="Message">The message.</param>
     /// <param name="Library">The assembly that declares the handler interface it is registered under.</param>
-    /// <param name="Streamed">Whether that interface is one of the library's handlers of streams.</param>
+    /// <param name="Streamed">Whether that interface is one of the mediator's handlers of streams.</param>
     private sealed record HandledMessage(Type Message, Assembly Library, bool Streamed);
 
     /// <summary>How one behavior is registered.</summary>

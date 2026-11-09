@@ -416,12 +416,10 @@ its requests.
 
 ## DDD00057
 
-Error, on an `[AccessRequests]` interface. The referenced version of the Mediator library declares
-`IPipelineBehavior<,>`, or `IStreamPipelineBehavior<,>` for the messages answered with a stream, with a shape
-the generator does not know (more to implement than one `Handle`, a `Handle` that does not take the message,
-a cancellation token and the next-step delegate once each, or one that answers neither a `ValueTask` nor a
-`Task` of the response, for a stream an `IAsyncEnumerable` of it), so no behavior is written. Remove
-`[AccessRequests]` and write the behavior by hand for that version: a class implementing
+Error, on an `[AccessRequests]` interface. The referenced `DTS.DDD.Abstractions` is of another version than the
+analyzers, and declares `IPipelineBehavior<,>`, or `IStreamPipelineBehavior<,>` for the messages answered with a
+stream, with a shape the generator does not know, so no behavior is written. Reference the packages of one version.
+Until then, remove `[AccessRequests]` and write the behavior by hand: a class implementing
 `IPipelineBehavior<TMessage, TResponse>` constrained to the interface, whose `Handle` awaits
 `AccessChecks<TheInterface>.RequireAsync(message, cancellationToken)` and then awaits the next step inside
 `using (checks.BeginWork(message, isQuery: message is IBaseQuery))`, in the same method (an operator's command runs as
@@ -431,8 +429,8 @@ work. A module with stream queries needs the same for
 
 ## DDD00058
 
-Error, on a class, struct or interface that implements an `[AccessRequests]` interface and Mediator's
-`INotification`. Mediator publishes a notification through no pipeline, so the generated access behavior
+Error, on a class, struct or interface that implements an `[AccessRequests]` interface and the mediator's
+`INotification`. The mediator publishes a notification through no pipeline, so the generated access behavior
 never sees it and nothing asks the requirement it declares. Take the `[AccessRequests]` interface off the
 notification. If the work needs a check, send it as a command or a query that implements the interface; if
 only some callers may publish it, call `AccessChecks<TheInterface>.RequireAsync(request, cancellationToken)`
@@ -467,7 +465,7 @@ the same mistake is DDD00045 or DDD00050 instead, an error, on the same class.
 
 ## DDD00061
 
-Warning, on a call to `Handle` of a Mediator handler (`ICommandHandler`, `IQueryHandler`, `IRequestHandler`, their
+Warning, on a call to `Handle` of a mediator handler (`ICommandHandler`, `IQueryHandler`, `IRequestHandler`, their
 stream kinds, or a class implementing one) whose message implements an `[AccessRequests]` interface, and on a
 reference to such a `Handle` made into a delegate. The call skips the pipeline, so the generated access behavior
 never asks what the request requires. Send the request instead: `await sender.Send(request, cancellationToken)`,
@@ -717,7 +715,7 @@ message names, or fix the member's type. A unit or resource that may be null is 
 
 ## DDD00082
 
-Error, on a message of the Mediator library that is no query (a command, `ICommand` or `IStreamCommand`, or a plain
+Error, on a message of the toolkit's mediator that is no query (a command, `ICommand` or `IStreamCommand`, or a plain
 `IRequest` or `IStreamRequest`) and carries a requirement its package declares for queries only:
 `[SeenWith<TResourceId>(permission)]` (refuses nobody, the query's statement filters). Make it a query (`IQuery`,
 `IStreamQuery`) if it only reads. If it changes something, require the permission where it acts,
@@ -919,7 +917,7 @@ no permission, so the request refuses every caller. Keep one. For a request an o
 
 ## DDD00105
 
-Warning, at `[Operator(Tenant = ...)]` or `[Operator(Scope = ...)]` on a query of Mediator's: nothing begins for a
+Warning, at `[Operator(Tenant = ...)]` or `[Operator(Scope = ...)]` on a query: nothing begins for a
 query, so the arguments say nothing. Take them off. An operator's query reads across tenants through its token's
 database role.
 
@@ -938,9 +936,9 @@ change members and roles; never add member-changing methods to the resource inst
 
 Error, at a call such as `services.AddBillingAccessBehavior()`, beside the compiler's CS1061. The message names the
 cause. The generator declares the registration in the namespace of the `[AccessRequests]` interface. If the file does
-not import that namespace, add the `using` the message names, or a `global using`. If the interface's project does not
-reference Mediator, add the package `Mediator.Abstractions` to the project the message names, or remove the call and
-ask `AccessChecks<TRequests>.RequireAsync` yourself.
+not import that namespace, add the `using` the message names, or a `global using`. If the interface's project was
+built without the toolkit's mediator, for netstandard2.0 say, build it for .NET 10 with `DylansTechStack.DDD`, or remove
+the call and ask `AccessChecks<TRequests>.RequireAsync` yourself.
 
 ## DDD00108
 
@@ -957,6 +955,15 @@ marker becomes `MemberAccess.OnEach(permission, request.Boards)`, which takes th
 nothing more. `[ExpectedVersion]` names the version of one resource, and `[OrOwn]` the caller's own on one resource.
 Remove the attribute, or send one request for each resource where a version or the caller's own is needed. An
 `[ExpectedVersion]` beside a marker on one id of the same resource belongs to that marker and is not reported.
+
+## DDD00110
+
+Error, at a handler class: it is the second handler in the project of one request, command or query (or stream kind),
+ordered by file and position. The toolkit's mediator sends a message to exactly one handler, and the registration
+keeps the first. Delete one of the handlers. Put what should run around the handler in an
+`IPipelineBehavior<TMessage, TResponse>` registered with `services.AddPipelineBehavior(typeof(...))`. A class derived
+from a handler counts as a second handler: make the base abstract. Notifications may have many handlers and are not
+reported.
 
 ## Not a diagnostic: the owned type must carry the key part
 

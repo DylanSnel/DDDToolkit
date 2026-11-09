@@ -10,16 +10,16 @@ namespace DTS.DDD.Analyzers.Analyzers;
 /// <summary>
 /// Reports a message that says what it requires of its caller and reaches its handlers with nothing asking:
 /// DDD00058, on a type that implements an interface marked <c>[AccessRequests]</c> and is a notification of
-/// the Mediator library.
+/// the toolkit's mediator.
 /// <para>
-/// The behavior the generator writes for such an interface is part of the library's pipeline for commands and
+/// The behavior the generator writes for such an interface is part of the mediator's pipeline for commands and
 /// queries, and of its pipeline for the messages answered with a stream. A notification is published to its
 /// handlers through neither. So a notification that implements the interface looks held to what it declares,
 /// and is not: every handler of it runs for whoever published it.
 /// </para>
 /// <para>
-/// Silent in a project that does not use the library: it registers nothing where the library's notification
-/// type cannot be seen, as the generator writes nothing there.
+/// Silent in a project that cannot see the mediator, one for netstandard2.0 say: it registers nothing where the
+/// mediator's notification type cannot be seen, as the generator writes nothing there.
 /// </para>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]

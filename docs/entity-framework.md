@@ -1576,7 +1576,7 @@ build, and can check at start-up that Supabase applied them ([Supabase](supabase
 ## Where to look next
 
 - [Getting started](getting-started.md) for the module name and your first aggregate.
-- [Delivering domain events](event-delivery.md) for in-process dispatch, Mediator and the outbox.
+- [Delivering domain events](event-delivery.md) for in-process dispatch, the toolkit's mediator and the outbox.
 - [Identifiers](identifiers.md) for what a struct identifier is, and `ColumnLength`.
 - [Value objects](value-objects.md) for `[ValueObject]` and `[SingleValueObject<T>]`.
 - [Entities and aggregates](entities-and-aggregates.md) for read-only collections and `[BackingField]`.

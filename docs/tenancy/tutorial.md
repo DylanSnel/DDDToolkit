@@ -173,8 +173,6 @@ packages always have the same version. Write a prerelease version in full, such 
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
-    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
-    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
   </ItemGroup>
 </Project>
 ```
@@ -217,10 +215,9 @@ This keeps the database out of the domain. The comment at the top of each file s
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The requests and their handlers, a folder per feature. The mediator itself is generated into the host. -->
+  <!-- The requests and their handlers, a folder per feature. The toolkit's mediator comes with the domain's packages. -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Tenancy.Domain\Harbor.Tenancy.Domain.csproj" />
-    <PackageReference Include="Mediator.Abstractions" />
   </ItemGroup>
 
 </Project>
@@ -275,8 +272,8 @@ This keeps the database out of the domain. The comment at the top of each file s
   `Supporting.Tenancy.EntityFramework` instead.
 - `EntityFramework.Supabase` (infrastructure) writes the migrations and policies as SQL files for Supabase. At
   start-up it checks that the database has them.
-- `Mediator.Abstractions` (application) is the Mediator library. Each request is a command or a query, and one
-  handler handles it. `Mediator.SourceGenerator` writes the mediator itself into the host, in step 5.
+- The toolkit's mediator is in `DylansTechStack.DDD`, which the domain's package brings. Each request is a command
+  or a query, and one handler handles it. The application project needs no package of its own for it.
 - `Microsoft.EntityFrameworkCore.Design` (infrastructure) is what `dotnet ef` needs to make migrations.
   `GenerateRuntimeConfigurationFiles` lets `dotnet ef` run the infrastructure project as its own startup project, so
   migrations need no host.
@@ -545,10 +542,10 @@ public partial interface ITenancyRequest : IRequireAccess;
 
 ```csharp
 global using DTS.DDD.Access;
+global using DTS.DDD.Mediator;
 global using DTS.Tenancy.Access;
 global using Harbor.Tenancy.Application.Access;
 global using Harbor.Tenancy.Contracts.ValueObjects;
-global using Mediator;
 ```
 
 **`Harbor.Tenancy.Application/TenancyApplication.cs`**
@@ -561,7 +558,7 @@ namespace Harbor.Tenancy.Application;
 public static class TenancyApplication
 {
     public static IServiceCollection AddTenancyApplication(this IServiceCollection services)
-        => services.AddTenancyAccessBehavior();
+        => services.AddTenancyHandlers().AddTenancyAccessBehavior();
 }
 ```
 
@@ -624,6 +621,8 @@ public static class TenancyModule
 - `IRequireAccess`: the toolkit's interface for a request that states what it requires of its caller. A module's own
   request interface derives from it.
 - `partial`: the generator adds a `RequiredAccess` property to `ITenancyRequest`, with one line for each request.
+- `AddTenancyHandlers()` is generated into the application project, for the module `Tenancy`. It registers every
+  handler of the project with the toolkit's mediator, each per scope.
 - `AddTenancyAccessBehavior()` is generated for `ITenancyRequest`. It registers the behavior that runs the check before
   each handler. It is in the namespace of `ITenancyRequest`, one namespace below `TenancyApplication`, so the
   `global using` of `Harbor.Tenancy.Application.Access` is what makes the call compile.
@@ -678,18 +677,12 @@ the database before it starts.
     <SupabaseLoginRole>harbor_api</SupabaseLoginRole>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- The mediator is generated here, with every handler of the modules this project references. -->
-    <PackageReference Include="Mediator.Abstractions" />
-    <PackageReference Include="Mediator.SourceGenerator" PrivateAssets="all" />
-  </ItemGroup>
-
 </Project>
 ```
 
 **`src/Harbor.Host/Program.cs`**
 
-```csharp {3,12-15,18,22}
+```csharp {3,11-14,17,21}
 using DTS.DDD.EntityFramework.Supabase;
 using DTS.DDD.Startup;
 using Harbor.Host;
@@ -700,7 +693,6 @@ var builder = WebApplication.CreateBuilder(args);
 var database = builder.Configuration.GetConnectionString("Supabase")
     ?? throw new InvalidOperationException("ConnectionStrings:Supabase is not set.");
 
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddSupabaseRowLevelSecurity();
 builder.Services.AddTenancyModule(database);
 builder.Services.AddTenancyPermissionsOfModules();
@@ -781,8 +773,6 @@ public sealed class RefusalsAsProblems : IExceptionHandler
 
 - `SupabaseMigrationsExport`: `Write` makes each build write the SQL files that are missing. `Check` only compares
   them and fails the build when one is missing, for a CI build.
-- `AddMediator(...)` registers the generated mediator. Mediator's default lifetime is singleton. The access behavior
-  and its checks are registered per scope, so the mediator must be `ServiceLifetime.Scoped`.
 - `AddSupabaseRowLevelSecurity()`: every query runs as the caller's database role. The RLS policies are written for
   that role.
 - `using Harbor.Host;`: the toolkit generates methods into the host, in the host's namespace.
@@ -909,7 +899,7 @@ public sealed class ProvisionTenantHandler(TenantManager tenants, TenancyAccessM
 
 ```csharp {13-17}
 using Harbor.Tenancy.Application.Tenants.ProvisionTenant;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -961,7 +951,7 @@ public static class TenancyModule
 
 **`src/Harbor.Host/Program.cs`**: maps the development route in the Development environment only.
 
-```csharp {24-27}
+```csharp {23-26}
 using DTS.DDD.EntityFramework.Supabase;
 using DTS.DDD.Startup;
 using Harbor.Host;
@@ -972,7 +962,6 @@ var builder = WebApplication.CreateBuilder(args);
 var database = builder.Configuration.GetConnectionString("Supabase")
     ?? throw new InvalidOperationException("ConnectionStrings:Supabase is not set.");
 
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddSupabaseRowLevelSecurity();
 builder.Services.AddTenancyModule(database);
 builder.Services.AddTenancyPermissionsOfModules();
@@ -996,7 +985,7 @@ app.Run();
 ### What it does
 
 - `[SignedIn]`: the check lets any signed-in caller through, and refuses an anonymous one.
-- `ICommand<T>` and `ICommandHandler<TCommand, T>`: Mediator's interfaces for a command that returns a `T`, and for
+- `ICommand<T>` and `ICommandHandler<TCommand, T>`: the mediator's interfaces for a command that returns a `T`, and for
   its handler. A query uses `IQuery<T>` and `IQueryHandler<TQuery, T>` instead (step 7).
 - `TenantManager`: Tenancy's manager of tenants, generated for your classes in step 2.
 - `TenancyAccessManager`: who acts and in which tenant.
@@ -1104,7 +1093,7 @@ request before the handler runs.
 
 ```csharp {13-14}
 using Harbor.Tenancy.Application.Seats.WhoAmI;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -1151,7 +1140,7 @@ public static class TenancyModule
 
 ### What it does
 
-- `IQuery<MyOverview>` and `IQueryHandler<WhoAmIQuery, MyOverview>`: Mediator's interfaces for a query that returns a
+- `IQuery<MyOverview>` and `IQueryHandler<WhoAmIQuery, MyOverview>`: the mediator's interfaces for a query that returns a
   `MyOverview`, and for its handler.
 - `SeatManager`: Tenancy's manager of seats, which changes seats and reads them, as `WhoAmIAsync` does. Step 8
   reads units with `OrganizationManager.ListUnitsAsync`.
@@ -1300,7 +1289,7 @@ public sealed class AddSeatHandler(SeatManager seats) : ICommandHandler<AddSeatC
 using Harbor.Tenancy.Application.Units.AddUnit;
 using Harbor.Tenancy.Application.Units.ListUnit;
 using Harbor.Tenancy.Contracts.ValueObjects;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -1334,7 +1323,7 @@ using Harbor.Tenancy.Application.Seats.AddSeat;
 using Harbor.Tenancy.Application.Seats.WhoAmI;
 using Harbor.Tenancy.Contracts.ValueObjects;
 using Harbor.Tenancy.Domain.Aggregates.Seats;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -1492,7 +1481,7 @@ public sealed class GrantRoleHandler(SeatManager seats) : ICommandHandler<GrantR
 
 ```csharp {13-17}
 using Harbor.Tenancy.Application.Roles.CreateRole;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -1524,7 +1513,7 @@ using Harbor.Tenancy.Application.Seats.AddSeat;
 using Harbor.Tenancy.Application.Seats.WhoAmI;
 using Harbor.Tenancy.Contracts.ValueObjects;
 using Harbor.Tenancy.Domain.Aggregates.Seats;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -1762,7 +1751,7 @@ using Harbor.Tenancy.Application.Units.AddUnit;
 using Harbor.Tenancy.Application.Units.ListUnit;
 using Harbor.Tenancy.Application.Units.ListManageableUnit;
 using Harbor.Tenancy.Contracts.ValueObjects;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;

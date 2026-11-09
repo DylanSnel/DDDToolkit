@@ -154,8 +154,6 @@ package and Tenancy's markers package. Boards' context uses the Entity Framework
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
-    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
-    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
   </ItemGroup>
 </Project>
 ```
@@ -431,7 +429,6 @@ Tenancy knows, `[AtUnit]` and `[AtTenant]`, and the `TenancyIds` line.
     <ProjectReference Include="..\Harbor.Boards.Domain\Harbor.Boards.Domain.csproj" />
     <!-- Tenancy's levels for a permission held in the organization, [AtUnit] and [AtTenant], and its access manager. -->
     <PackageReference Include="DylansTechStack.Tenancy" />
-    <PackageReference Include="Mediator.Abstractions" />
   </ItemGroup>
 
 </Project>
@@ -959,6 +956,7 @@ public partial interface IBoardsRequest : IRequireAccess;
 
 ```csharp
 global using DTS.DDD.Access;
+global using DTS.DDD.Mediator;
 global using DTS.Membership.Access;
 global using DTS.Tenancy.Access;
 global using Harbor.Boards.Application.Access;
@@ -967,12 +965,12 @@ global using Harbor.Boards.Domain.Aggregates.BoardRoles;
 global using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 global using Harbor.Boards.Domain.Aggregates.Boards;
 global using Harbor.Tenancy.Contracts.ValueObjects;
-global using Mediator;
 ```
 
 **The application's registration.** **Why:** the generator writes the behavior next to `IBoardsRequest`, in this
 project. `AddBoardsAccessBehavior` is in the namespace of `IBoardsRequest`, one namespace below this class, so the
-`global using` of `Harbor.Boards.Application.Access` above is what makes the call compile.
+`global using` of `Harbor.Boards.Application.Access` above is what makes the call compile. `AddBoardsHandlers()` is
+generated into this project as well, and registers its handlers with the toolkit's mediator.
 
 **`Harbor.Boards.Application/BoardsApplication.cs`**
 
@@ -984,7 +982,7 @@ namespace Harbor.Boards.Application;
 public static class BoardsApplication
 {
     public static IServiceCollection AddBoardsApplication(this IServiceCollection services)
-        => services.AddBoardsAccessBehavior();
+        => services.AddBoardsHandlers().AddBoardsAccessBehavior();
 }
 ```
 
@@ -1087,18 +1085,12 @@ handlers too.
     <SupabaseLoginRole>harbor_api</SupabaseLoginRole>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- The mediator is generated here, with every handler of the modules this project references. -->
-    <PackageReference Include="Mediator.Abstractions" />
-    <PackageReference Include="Mediator.SourceGenerator" PrivateAssets="all" />
-  </ItemGroup>
-
 </Project>
 ```
 
 **`src/Harbor.Host/Program.cs`**
 
-```csharp {3-4,16,18,28}
+```csharp {3-4,15,17,27}
 using DTS.DDD.EntityFramework.Supabase;
 using DTS.DDD.Startup;
 using DTS.Tenancy;
@@ -1111,7 +1103,6 @@ var builder = WebApplication.CreateBuilder(args);
 var database = builder.Configuration.GetConnectionString("Supabase")
     ?? throw new InvalidOperationException("ConnectionStrings:Supabase is not set.");
 
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddSupabaseRowLevelSecurity();
 builder.Services.AddTenancyModule(database);
 builder.Services.AddBoardsModule(database);
@@ -1383,7 +1374,7 @@ using Harbor.Boards.Application.Boards.OpenBoard;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Tenancy.Contracts.ValueObjects;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -1667,7 +1658,7 @@ public sealed class EditBoardHandler(IBoardRepository boards) : ICommandHandler<
 ```csharp {14-15,20}
 using Harbor.Boards.Application.BoardRoles.ListBoardRole;
 using Harbor.Boards.Domain.Aggregates.BoardRoles;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -1701,7 +1692,7 @@ using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Tenancy.Contracts.ValueObjects;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -2123,7 +2114,7 @@ using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Tenancy.Contracts.ValueObjects;
-using Mediator;
+using DTS.DDD.Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;

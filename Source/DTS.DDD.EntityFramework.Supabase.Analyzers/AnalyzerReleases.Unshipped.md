@@ -55,7 +55,7 @@ DDD00053 | DTS.DDD.Entities | Error | A type argument of a template meets its pa
 DDD00054 | DTS.DDD.Supabase | Warning | A package's row access contribution is made from what the application marks
 DDD00055 | DTS.DDD.Supabase | Warning | A context's migration files are named after its module
 DDD00056 | DTS.DDD.Access | Error | A request interface is one a behavior can be written for
-DDD00057 | DTS.DDD.Access | Error | The Mediator library's pipeline behavior has the shape the generator writes a behavior for
+DDD00057 | DTS.DDD.Access | Error | The mediator's pipeline behavior has the shape the generator writes a behavior for
 DDD00058 | DTS.DDD.Access | Error | A notification implements no request interface
 DDD00059 | DTS.DDD.Membership | Warning | The member list of a resource is written from what the resource declares
 DDD00060 | DTS.DDD.Membership | Warning | A member class names an aggregate root whose members it is
@@ -107,3 +107,4 @@ DDD00106 | DTS.DDD.Membership | Info | A member or role manager is not written
 DDD00107 | DTS.DDD.Access | Error | The registration of an access behavior is written and in scope where it is called
 DDD00108 | DTS.DDD.Supabase | Warning | The migrations make the model the access files are written from
 DDD00109 | DTS.DDD.Access | Error | A permission marker on a collection of ids takes no marker argument and no [OrOwn]
+DDD00110 | DTS.DDD.Mediator | Error | A request, a command or a query has one handler

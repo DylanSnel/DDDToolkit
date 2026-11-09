@@ -10,9 +10,9 @@ namespace DTS.DDD.Mediator.Tests.Infrastructure;
 
 /// <summary>
 /// A minimal application container on one in-memory SQLite database: the toolkit's mediator with the handlers
-/// <c>AddMediatorTestsHandlers()</c> registers, Mediator with scoped request handlers, the DDDToolkit Entity
-/// Framework integration dispatching through <c>DispatchWithMediator</c>, and <see cref="BasketContext"/> registered
-/// with <c>UseDDDToolkit</c>. This is what a real host does in Program.cs, minus the web server.
+/// <c>AddMediatorTestsHandlers()</c> registers, the DDDToolkit Entity Framework integration dispatching through
+/// <c>DispatchWithMediator</c>, and <see cref="BasketContext"/> registered with <c>UseDDDToolkit</c>. This is what a
+/// real host does in Program.cs, minus the web server.
 /// <para>
 /// The SQLite connection stays open for the lifetime of the host, because closing it drops the
 /// in-memory database, and every scope gets a fresh context so read-backs come from the database
@@ -20,7 +20,7 @@ namespace DTS.DDD.Mediator.Tests.Infrastructure;
 /// </para>
 /// <para>
 /// The requests about a basket are held to what they declare by the access behavior the toolkit's generator writes
-/// into this project, next to a behavior of the host's own that is listed for Mediator's generator.
+/// into this project, next to a behavior of the host's own.
 /// </para>
 /// <para>
 /// With <c>pooled</c> the context comes from a context pool instead: <c>AddPooledDbContextFactory</c> with
@@ -53,29 +53,21 @@ public sealed class TestHost : IDisposable
         services.AddSingleton(Log);
         services.AddSingleton(StepLog);
 
-        // Every INotificationHandler of this project, written by the toolkit's generator.
+        // Every handler of this project, the notification handlers and the request handlers, written by the
+        // toolkit's generator. Each is scoped, so a handler can take the scope's services, as a module's handlers do.
         services.AddMediatorTestsHandlers();
         register?.Invoke(services);
 
-        // Mediator runs the requests. Scoped, not the Singleton default, so a request handler can take the scope's
-        // services, as a module's handlers do. Mediator's source generator reads this call at compile time, so the
-        // lifetime has to be written here rather than configured later.
-        //
-        // The behaviors listed here are the ones Mediator's generator registers. It reads the list when this
-        // project compiles, from the code as its author wrote it, so only a behavior somebody wrote can be on
-        // it: naming the one the toolkit's generator writes, BasketAccessBehavior<,>, is its error MSG0007.
-        //
-        // The second module's behaviors are listed here too, as a host lists those of a module in a class library:
-        // Mediator's generator registers each closed over every message that meets its constraints.
-        services.AddMediator(options =>
-        {
-            options.ServiceLifetime = ServiceLifetime.Scoped;
-            options.PipelineBehaviors = [typeof(Listed<,>), typeof(StockAccess<,>)];
-            options.StreamPipelineBehaviors = [typeof(StockStreamAccess<,>)];
-        });
+        // A behavior of the host's own, in front of every request, command and query.
+        services.AddPipelineBehavior(typeof(Listed<,>));
+
+        // The second module's behavior, registered closed over its one command, as a host may register a module's
+        // behaviors message by message. The module has no query answered with a stream, so its behavior for streams
+        // is registered over nothing.
+        services.AddPipelineBehavior(typeof(StockAccess<TakeStock, Unit>));
 
         // The module's check, and the behavior the toolkit wrote for IBasketRequest, added to the container by
-        // the registration written with it. After AddMediator, so it runs after the listed behaviors.
+        // the registration written with it. After the host's behavior, so it runs inside it.
         services.AddAccessCheck<IBasketRequest, BasketAccessCheck>();
         if (accessBehavior)
         {
@@ -95,7 +87,7 @@ public sealed class TestHost : IDisposable
         if (pooled)
         {
             // The callback runs once, with the root provider; the scope a context is rented in is what
-            // the handlers get, and with it the scope's own Mediator.
+            // the handlers get, and with it the scope's own mediator.
             services.AddPooledDbContextFactory<BasketContext>(Options);
             services.AddScopedFromPool<BasketContext>();
         }

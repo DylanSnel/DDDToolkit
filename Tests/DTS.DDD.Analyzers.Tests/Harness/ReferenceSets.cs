@@ -130,14 +130,14 @@ public static partial class ReferenceSets
         FromType(typeof(global::DTS.DDD.EntityFramework.Options.OutboxOptions)),
     ];
 
-    /// <summary>The Mediator library's abstractions alone: its messages, handlers and pipeline behavior.</summary>
-    public static PortableExecutableReference MediatorAlone => FromType(typeof(global::Mediator.IPipelineBehavior<,>));
-
     /// <summary>The service collection, which the toolkit's own package brings to every project that references it.</summary>
     public static PortableExecutableReference DependencyInjection => DependencyInjectionAbstractions;
 
-    /// <summary>The Mediator library's abstractions and the service collection: what a generated behavior and its registration compile against.</summary>
-    public static ImmutableArray<PortableExecutableReference> Mediator => [MediatorAlone, DependencyInjectionAbstractions];
+    /// <summary>
+    /// The service collection, beside the toolkit's mediator that <see cref="Core"/> brings: what a generated behavior and
+    /// its registration compile against.
+    /// </summary>
+    public static ImmutableArray<PortableExecutableReference> Mediator => [DependencyInjectionAbstractions];
 
     /// <summary>EF Core, with its design-time factory interface, the Supabase package the marker lives in, and the Postgres package of the rules.</summary>
     public static ImmutableArray<PortableExecutableReference> Supabase =>

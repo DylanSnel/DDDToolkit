@@ -57,7 +57,7 @@ problem, and the fix.
 | [DDD00054](#ddd00054) | Warning | A package's row access contribution is made from what the application marks |
 | [DDD00055](#ddd00055) | Warning | A context's migration files are named after its module |
 | [DDD00056](#ddd00056) | Error | A request interface is one a behavior can be written for |
-| [DDD00057](#ddd00057) | Error | The Mediator library's pipeline behavior has the shape the generator writes a behavior for |
+| [DDD00057](#ddd00057) | Error | The mediator's pipeline behavior has the shape the generator writes a behavior for |
 | [DDD00058](#ddd00058) | Error | A notification implements no request interface |
 | [DDD00059](#ddd00059) | Warning | The member list of a resource is written from what the resource declares |
 | [DDD00060](#ddd00060) | Warning | A member class names an aggregate root whose members it is |
@@ -109,6 +109,7 @@ problem, and the fix.
 | [DDD00107](#ddd00107) | Error | The registration of an access behavior is written and in scope where it is called |
 | [DDD00108](#ddd00108) | Warning | The migrations make the model the access files are written from |
 | [DDD00109](#ddd00109) | Error | A permission marker on a collection of ids takes no marker argument and no [OrOwn] |
+| [DDD00110](#ddd00110) | Error | A request, a command or a query has one handler |
 
 The Meaning column is the title the IDE shows for each id.
 
@@ -142,9 +143,11 @@ rules, by topic:
   checks differently from the C# method, checks more often than needed, or does not check at all.
   [DDD00100](#ddd00100) and [DDD00101](#ddd00101) do the same for rules over Tenancy's tables.
 - [DDD00056](#ddd00056) to [DDD00058](#ddd00058) and [DDD00061](#ddd00061): the
-  [access behavior written for a request interface](access-requirements.md#the-generated-behavior-with-mediator).
+  [access behavior written for a request interface](access-requirements.md#the-generated-behavior).
   They catch a message that reaches its handler without a check of what it requires. [DDD00107](#ddd00107) names
   the cause when a call to the behavior's registration does not compile.
+- [DDD00110](#ddd00110): the [handlers of the toolkit's mediator](event-delivery.md#sending-requests). It catches a
+  second handler of one request, which the registration would refuse when the host starts.
 - [DDD00077](#ddd00077) to [DDD00086](#ddd00086), [DDD00089](#ddd00089) and [DDD00109](#ddd00109):
   [what a request declares](access-requirements.md#what-a-request-declares). They catch a request that declares
   nothing, a request whose attributes say something other than what is checked, and a request that says one
@@ -183,6 +186,7 @@ added later:
   [DDD00067](#ddd00067), about [supporting domains](writing-a-supporting-domain.md).
 - [DDD00052](#ddd00052), about a function's name.
 - [DDD00056](#ddd00056), [DDD00057](#ddd00057) and [DDD00107](#ddd00107), about an access behavior.
+- [DDD00110](#ddd00110), about the handlers of a request.
 
 Each of these says what the generator could not do.
 
@@ -2028,8 +2032,8 @@ public interface IBillingRequest<TAnswer> : IRequireAccess;   // DDD00056: has t
 ```
 
 `[AccessRequests]` marks the interface that a module's commands and queries implement to say
-[what they require of their caller](access-requirements.md). In a project that uses the Mediator library, the
-generator writes a pipeline behavior for the interface. The behavior is declared beside the interface and named
+[what they require of their caller](access-requirements.md). The generator writes a pipeline behavior of the
+toolkit's mediator for the interface. The behavior is declared beside the interface and named
 after it. It asks the module's access checks before every handler. For this, the interface must meet these
 rules:
 
@@ -2047,44 +2051,41 @@ public partial interface IBillingRequest : IRequireAccess;
 
 The generator writes no behavior for the interface until it meets these rules, so nothing checks its requests.
 That is why DDD00056 is an error. Fix the interface, or call `AccessChecks<TRequests>.RequireAsync` in front of
-the handlers yourself. The generator checks the interface in the same way in a project that does not use the
-library, where it writes no behavior anyway. So adding the library later brings no new errors.
+the handlers yourself. The generator checks the interface in the same way in a project for netstandard2.0, where it
+writes no behavior anyway.
 
 ## DDD00057
 
-**The Mediator library's pipeline behavior has the shape the generator writes a behavior for.**
+**The mediator's pipeline behavior has the shape the generator writes a behavior for.**
 
-DDD00057 is reported on an `[AccessRequests]` interface, about the version of the Mediator library that the
-project references:
+DDD00057 is reported on an `[AccessRequests]` interface, about the `DTS.DDD.Abstractions` that the project
+references:
 
 ```
-No access behavior is written for 'IBillingRequest': the Mediator library this project references declares
+No access behavior is written for 'IBillingRequest': the DTS.DDD.Abstractions this project references declares
 IPipelineBehavior<,> otherwise than the generator knows it, with a Handle that does not take the message, a
 cancellation token and the delegate that runs the next step, each once.
 ```
 
-The generator implements the library's `IPipelineBehavior<TMessage, TResponse>`. It reads the shape of that
-interface from the library itself:
+The generator implements the mediator's `IPipelineBehavior<TMessage, TResponse>`, and reads the shape of that
+interface from the abstractions the project references:
 
-- one method, `Handle`, that takes the message, a cancellation token and the delegate that runs the next step, in
-  whatever order the referenced version declares them;
-- `Handle` returns a `ValueTask` or a `Task` of the response;
+- one method, `Handle`, that takes the message, the delegate that runs the next step and a cancellation token;
+- `Handle` returns a `ValueTask` of the response;
 - the delegate takes the message and the token, and returns the same.
 
-So the generator follows a version that moves a parameter, without a new release of the toolkit. A version that
-declares the interface in another shape is one that the generator does not know. The generator then writes
-nothing instead of guessing. A behavior that does not compile, or that never asks the checks, would be worse than
-none.
+The analyzers and the abstractions of one version agree on that shape. An abstractions package of another version
+may declare the interface in another shape, one that the generator does not know. The generator then writes nothing
+instead of guessing. A behavior that does not compile, or that never asks the checks, would be worse than none.
 
 The same holds for `IStreamPipelineBehavior<TMessage, TResponse>`, the pipeline of the messages that are answered
-with a stream. Its `Handle` returns an `IAsyncEnumerable` of the response. If the library has this interface, the
-generator writes a second behavior for it. The message names the interface that the generator could not read. If
-either interface is unknown, the generator writes neither behavior. With one behavior and not the other, half of a
-module's messages would be checked, and the module would look fully checked.
+with a stream. Its `Handle` returns an `IAsyncEnumerable` of the response. The message names the interface that the
+generator could not read. If either interface is unknown, the generator writes neither behavior. With one behavior
+and not the other, half of a module's messages would be checked, and the module would look fully checked.
 
 Without the behavior, the requests of the interface reach their handlers unchecked, so DDD00057 is an error.
-Write the behavior by hand against the version you use, and remove `[AccessRequests]` from the interface. The
-interface still names the checks that its requests are held to. Write `Handle` with `async` and `await`, as below.
+Reference the packages of one version. Until then, write the behavior by hand and remove `[AccessRequests]` from the
+interface. The interface still names the checks that its requests are held to. Write `Handle` with `async` and `await`, as below.
 `RequireAsync` puts the request in hand for the flow of work that asked. The handler that `Handle` calls next runs
 in that flow and finds the request in hand ([the request in hand](access-requirements.md#the-request-in-hand)). Run
 the next step inside `BeginWork`, in the same method, so the work a check begins reaches the handler, such as the
@@ -2135,16 +2136,16 @@ public sealed record InvoiceClosed(InvoiceId Invoice) : INotification, IBillingR
 }
 ```
 
-The behavior written for an `[AccessRequests]` interface is part of Mediator's pipeline for commands and queries.
-The second behavior is part of Mediator's pipeline for messages that are answered with a stream. Mediator
+The behavior written for an `[AccessRequests]` interface is part of the mediator's pipeline for commands and
+queries. The second behavior is part of its pipeline for messages that are answered with a stream. The mediator
 publishes a notification to its handlers through neither pipeline. So a notification that implements the
 interface declares a requirement that nothing checks. Every handler of the notification runs for whoever
 published it, while the declaration looks as if it were checked. That is why DDD00058 is an error.
 
 DDD00058 is reported on the type where the notification and the interface are first joined: a class, a struct or
 an interface of your own that is both. It is not reported again on the types that implement or derive from that
-type. A partial type is reported once, at the part that lists what it implements. A project that does not use the
-library has no notifications, and reports nothing.
+type. A partial type is reported once, at the part that lists what it implements. A project for netstandard2.0 has no
+notifications, and reports nothing.
 
 Send what needs a check before it is handled as a command or a query:
 
@@ -2288,7 +2289,7 @@ public sealed class InvoiceReminders(CloseInvoiceHandler handler)
 }
 ```
 
-The behavior written for an `[AccessRequests]` interface asks the module's checks in Mediator's pipeline. A
+The behavior written for an `[AccessRequests]` interface asks the module's checks in the mediator's pipeline. A
 command or a query passes the pipeline when it is sent. A handler called directly passes no pipeline. The handler
 then runs without any check of what the request declares, and nothing at run time notices. Where the database has
 [policies](row-level-security.md), only the policies stand in the way. A policy works per table, so it is coarser
@@ -2299,7 +2300,7 @@ the project.
 So DDD00061 is reported where the call is written. It reports a call to `Handle` with a message that implements a
 marked interface, on one of these:
 
-- one of Mediator's handler interfaces: `ICommandHandler`, `IQueryHandler`, `IRequestHandler` or one of their
+- one of the mediator's handler interfaces: `ICommandHandler`, `IQueryHandler`, `IRequestHandler` or one of their
   stream kinds;
 - a class that implements one of them, or derives from such a class.
 
@@ -2324,7 +2325,7 @@ DDD00061 does not report these cases:
 
 - **Constructing a handler, and injecting one.** The call skips the check, so DDD00061 is reported at the call.
   This includes a call through the interface that the handler was injected as.
-- **Mediator's own dispatch.** It is generated code, and it calls every handler after the pipeline.
+- **Generated code.** It calls a handler only after the pipeline.
 - **`base.Handle`** in a handler that overrides it. It passes on the request that passed the pipeline on its way
   in.
 - **A decorator**: a handler that wraps another handler of the same message, and passes it the message it was
@@ -2333,8 +2334,8 @@ DDD00061 does not report these cases:
 - **A test project**: a project with `IsTestProject` or `IsTestingPlatformApplication` set, as
   `Microsoft.NET.Test.Sdk` and Microsoft.Testing.Platform set them. A test that calls a handler on purpose tests
   the handler alone. A test of what a request may do sends the request.
-- **A project without Mediator.** The generator writes no behavior there. You ask the checks yourself,
-  [in front of every handler](access-requirements.md#asking-the-checks-without-mediator).
+- **A project for netstandard2.0.** It cannot see the mediator, and the generator writes no behavior there. You ask
+  the checks yourself, [in front of every handler](access-requirements.md#asking-the-checks-yourself).
 
 Outside a test project, suppress a call that you mean, where it is made, with the reason beside it:
 
@@ -3170,7 +3171,7 @@ Membership's `[SeenWith<TResourceId>(permission)]` is one. It refuses nobody for
 signed-in caller through, also one that holds nothing, and says what the query's own statement filters by. That
 filter is the check. On a command, the handler would run unchecked.
 
-DDD00082 reports a message of the Mediator library that is not a query and carries such an attribute:
+DDD00082 reports a message of the toolkit's mediator that is not a query and carries such an attribute:
 
 - a command, `ICommand` or `IStreamCommand`;
 - a plain `IRequest` or `IStreamRequest`, which may change as much as a command does.
@@ -4014,18 +4015,17 @@ Code anywhere else needs a using directive, and this includes a class one namesp
 using Shop.Billing.Access;
 ```
 
-**The project of the interface does not reference the Mediator library.** The generator writes the behavior and its
-registration only in a project that references the library. The message names the project of the interface, which can
-differ from the project of the call. Add the package `Mediator.Abstractions` to that project. Or remove the call and
-ask the checks yourself, as [Asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)
-shows.
+**The project of the interface was built without the mediator.** The mediator is declared for .NET 10, so a project
+for netstandard2.0 gets no behavior and no registration. The message names the project of the interface, which can
+differ from the project of the call. Build that project for .NET 10 with `DylansTechStack.DDD`. Or remove the call and
+ask the checks yourself, as [Asking the checks yourself](access-requirements.md#asking-the-checks-yourself) shows.
 
-A project without the library that asks the checks itself writes no such call, so DDD00107 is not reported there. For
+A project without a behavior that asks the checks itself writes no such call, so DDD00107 is not reported there. For
 that reason the diagnostic is on the call and not on the interface.
 
 DDD00107 comes from an analyzer. It is an error because the call does not compile in either case. In a project that
-references the library, an interface without a behavior is [DDD00056](#ddd00056) or [DDD00057](#ddd00057), and DDD00107
-is not reported beside them.
+sees the mediator, an interface without a behavior is [DDD00056](#ddd00056) or [DDD00057](#ddd00057), and DDD00107 is
+not reported beside them.
 
 ## DDD00108
 
@@ -4084,6 +4084,30 @@ the permission and the collection, and nothing more.
 
 A request that also has `[OnResource]` on one id of the same resource is not reported: the marker argument belongs to
 that marker. Remove the marker argument, or send one request for each resource.
+
+## DDD00110
+
+**A request, a command or a query has one handler.**
+
+```csharp
+internal sealed class CloseInvoiceHandler : ICommandHandler<CloseInvoice> { ... }
+
+internal sealed class CloseInvoiceAndLog : ICommandHandler<CloseInvoice> { ... }  // DDD00110: a second handler
+```
+
+The toolkit's mediator sends a request, a command or a query to exactly one handler, and so do the stream kinds. The
+generated `Add{Module}Handlers()` registers each handler, and a second registration for the same message throws when
+the host starts. So the generator reports the second handler of one project, ordered by file and position, and the
+registration keeps the first.
+
+- A notification may have any number of handlers. It is not reported.
+- A class derived from a handler is a handler too. Make the base class abstract, or the derived class file-local, so
+  the registration leaves one of them out.
+- Something that runs around a handler is a pipeline behavior, `IPipelineBehavior<TMessage, TResponse>`, and not a
+  second handler ([Sending requests](event-delivery.md#sending-requests)).
+
+Handlers of one message in two projects are not reported, because neither project sees the other's. The registration
+that comes second throws at start-up and names both handlers.
 
 ## Building the model fails: the owned type must carry the key part
 

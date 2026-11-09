@@ -58,13 +58,13 @@ public partial class Order { }
 | [Failure handling](docs/value-objects.md#failure-handling) | Validating without exceptions, and when to throw anyway |
 | [Entity Framework](docs/entity-framework.md) | Wiring, the generated converters, mapping, concurrency and migrations |
 | [Composite keys](docs/composite-keys.md) | `[KeyPart]`: keying a table on more than the id, and carrying that into every owned table |
-| [Delivering domain events](docs/event-delivery.md) | In-process dispatch or the outbox, and how to choose |
+| [Delivering domain events](docs/event-delivery.md) | In-process dispatch or the outbox, how to choose, and sending requests through the toolkit's mediator |
 | [Row level security](docs/row-level-security.md) | Running a context's queries as the caller, and row access rules written in C# as Postgres policies |
 | [Supabase](docs/supabase.md) | Exporting each module's migrations for `supabase db push`, as part of the build |
 | [Start-up checks](docs/startup-checks.md) | What the registrations check before the host serves anything, run with one call, in a fixed order, and turned off by name |
 | [Modules](docs/modules.md) | `DDD_Module`, `[assembly: Module]` and the boundary the analyzer checks |
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
-| [Access requirements](docs/access-requirements.md) | What a command or a query requires of its caller, the checks that hold it to that before the handler, and the behavior written for Mediator |
+| [Access requirements](docs/access-requirements.md) | What a command or a query requires of its caller, the checks that hold it to that before the handler, and the behavior written for the toolkit's mediator |
 | [How a request is checked](docs/how-a-request-is-checked.md) | One request followed from the attribute on it to the rows it touches: the generated requirement, the module's checks, the statement the access check sends, the caller on the connection and the policies, with a walk-through to click through |
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
@@ -157,7 +157,7 @@ NU1605, a package downgrade, or fails at run time with a `MissingMethodException
 
 | Package | Use it for |
 |---|---|
-| `DylansTechStack.DDD` | Base types, the core generators, and the toolkit's mediator, which hands domain events to their handlers. Start here. |
+| `DylansTechStack.DDD` | Base types, the core generators, and the toolkit's mediator, which hands domain events to their handlers and each request to its one handler. Start here. |
 | `DylansTechStack.DDD.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DylansTechStack.DDD.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#the-module-name-in-generated-code) wants. |
 | `DylansTechStack.DDD.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
 | `DylansTechStack.DDD.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
@@ -204,9 +204,11 @@ not published on nuget.org. Their docs are on this site.
 Requires .NET 10. The generators themselves target `netstandard2.0` and carry no runtime
 dependencies, so they load in any recent SDK.
 
-The core has a mediator of its own for domain events. Every domain event is its `INotification`, the events of the
-supporting packages included, and the generator registers each module's handlers. It depends on no mediator library.
-In-process event delivery is still a delegate, so another library works as well.
+The core has a mediator of its own, for domain events and for requests. Every domain event is its `INotification`,
+the events of the supporting packages included, and the generator registers each module's handlers. Commands and
+queries carry the names of [Mediator](https://github.com/martinothamar/Mediator), so code written for Mediator changes
+only its `using`. The core depends on no mediator library. In-process event delivery is still a delegate, so another
+library works as well.
 [Delivering domain events](docs/event-delivery.md#why-the-toolkit-has-its-own-mediator) says why the toolkit has its
 own, and shows the delegate to write for another library.
 

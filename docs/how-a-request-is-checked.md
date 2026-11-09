@@ -254,8 +254,8 @@ partial interface IProjectsRequest
 No reflection runs, and nothing is looked up when a request is sent. The generator combines the calls of stacked
 attributes and markers with `AccessRequirement.All`, in the order they are written. `[OrOwn]` becomes `Any` of the
 caller's own and the permission
-([The caller's own, or a permission](access-requirements.md#the-callers-own-or-a-permission)). When the project uses
-Mediator, the same file also contains the pipeline behavior. The behavior asks the module's checks before every
+([The caller's own, or a permission](access-requirements.md#the-callers-own-or-a-permission)). The same file also
+contains the pipeline behavior of the toolkit's mediator. The behavior asks the module's checks before every
 handler of the interface. It reads the property, so it works the same for attributes and for the property. Then it
 runs the handler inside the work a check begins for the request, such as the operator work of an operator's command
 ([An operator's request](access-requirements.md#an-operators-request)).
