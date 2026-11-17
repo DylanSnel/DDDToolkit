@@ -642,6 +642,115 @@ Tenancy's own tables, as [TenancyModel.TableOf](#tableofientitytype) names them.
 | `Invitation = 10` | The invitations into a tenant, in a model that maps them with `AddTenancyInvitations`. |
 | `InvitationDigest = 11` | The digests of the invitations' tokens, kept apart from the invitations. |
 
+### `InOrganizationAttribute`
+
+```csharp
+[AttributeUsage(AttributeTargets.Field, Inherited = false)]
+public sealed class InOrganizationAttribute : Attribute
+```
+
+Namespace `DTS.Tenancy`.
+
+Marks a kind of seat, a constant of a [`SeatKindsAttribute`](#seatkindsattribute) class, as a kind inside the organization. A seat of this kind is placed in units, holds organization roles there and reads the tenant's structure.
+
+| Member | Summary |
+|---|---|
+| `bool Default { get; init; }` | Whether a seat added without a kind gets this kind. An application with one kind inside the organization leaves it out, since that kind is the default. An application with several marks exactly one. |
+
+### `OutsideOrganizationAttribute`
+
+```csharp
+[AttributeUsage(AttributeTargets.Field, Inherited = false)]
+public sealed class OutsideOrganizationAttribute : Attribute
+```
+
+Namespace `DTS.Tenancy`.
+
+Marks a kind of seat, a constant of a [`SeatKindsAttribute`](#seatkindsattribute) class, as a kind outside the organization. A seat of this kind has no placement and no organization role. While the catalogue's `NarrowOutsideSeats` is on, it reads its own seats and its tenant, and no unit, role or other seat of the tenant.
+
+### `SeatKinds`
+
+```csharp
+public static class SeatKinds
+```
+
+Namespace `DTS.Tenancy`.
+
+Tenancy's own names for kinds of seat.
+
+| Member | Summary |
+|---|---|
+| `Member = "member"` | The one kind of an application that declares none: inside the organization, and the default. The catalogue gives every seat this kind when `ApplicationCatalogue.SeatKinds` is left out. |
+| `InOrganization = "*in-organization"` | Every kind inside the organization, for a list of kinds such as the one a permission names. No seat has it as its kind: a kind's value starts with a letter. |
+| `OutsideOrganization = "*outside-organization"` | Every kind outside the organization, for a list of kinds such as the one a permission names. No seat has it as its kind: a kind's value starts with a letter. |
+| `MaxLength = 64` | The longest value a kind may have: what a storage keeps a seat's kind in. |
+
+### `SeatKindsAttribute`
+
+```csharp
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class SeatKindsAttribute : Attribute
+```
+
+Namespace `DTS.Tenancy`.
+
+Marks the static partial class that declares the kinds of seat an application's tenants have. Each `public const string` of the class is one kind, marked [`InOrganizationAttribute`](#inorganizationattribute) or [`OutsideOrganizationAttribute`](#outsideorganizationattribute):
+
+```csharp
+[SeatKinds]
+public static partial class HarborSeatKinds
+{
+    [InOrganization] public const string Employee = "employee";
+    [OutsideOrganization] public const string Contractor = "contractor";
+}
+```
+
+Tenancy's generator writes `All` into the class: every kind as a [`SeatKind`](#seatkind), in the order the constants are written. The application hands that list to its catalogue: `new ApplicationCatalogue(SeatKinds: HarborSeatKinds.All)`.
+
+**Remarks**
+
+A value is lowercase letters, digits and dashes, and starts with a letter. An application with one kind inside the organization has that kind as its default. An application with several marks one of them `[InOrganization(Default = true)]`. The generator refuses a class that breaks one of these rules (DDD10001 to DDD10003). An application that declares no kinds has one built-in kind, [`SeatKinds.Member`](#seatkinds), inside the organization.
+
+### `SeatKind`
+
+```csharp
+public sealed record SeatKind
+```
+
+Namespace `DTS.Tenancy.Catalogue`.
+
+One kind of seat the application's tenants have, as the catalogue lists it. The generator writes the list into a class marked [`SeatKindsAttribute`](#seatkindsattribute), and the application hands it to `ApplicationCatalogue.SeatKinds`.
+
+**Remarks**
+
+It is in Tenancy's abstractions, beside the markers, so the Contracts project that declares the kinds compiles the generated list without a reference to the rest of Tenancy.
+
+| Member | Summary |
+|---|---|
+| [`SeatKind(string, bool, bool)`](#seatkindstring-bool-bool) | The primary constructor: the type's summary says what it makes. |
+| `string Name { get; init; }` | The kind as a seat stores it, such as `employee`: lowercase letters, digits and dashes, starting with a letter, at most [`SeatKinds.MaxLength`](#seatkinds) characters. |
+| `bool InOrganization { get; init; }` | Whether a seat of this kind is inside the organization. Such a seat is placed in units and holds organization roles. A seat outside it has neither. |
+| `bool IsDefault { get; init; }` | Whether a seat added without a kind gets this one. Exactly one kind inside the organization is the default. |
+| `static SeatKind Member { get; }` | The one kind of an application that declares none: [`SeatKinds.Member`](#seatkinds), inside the organization, and the default. |
+
+#### `SeatKind(string, bool, bool)`
+
+```csharp
+public SeatKind(string Name, bool InOrganization, bool IsDefault)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `Name`: The kind as a seat stores it, such as `employee`: lowercase letters, digits and dashes, starting with a letter, at most [`SeatKinds.MaxLength`](#seatkinds) characters.
+- `InOrganization`: Whether a seat of this kind is inside the organization. Such a seat is placed in units and holds organization roles. A seat outside it has neither.
+- `IsDefault`: Whether a seat added without a kind gets this one. Exactly one kind inside the organization is the default.
+
+**Remarks**
+
+It is in Tenancy's abstractions, beside the markers, so the Contracts project that declares the kinds compiles the generated list without a reference to the rest of Tenancy.
+
 ## Store
 
 Namespace `DTS.Tenancy.EntityFramework`.
@@ -857,6 +966,7 @@ Where the database keeps the rights and shows a seat only its own ([`TenancyStor
 | [`HoldsAtTenantAsync(TTenantId, TSeatId, string, DateTimeOffset, CancellationToken)`](#holdsattenantasyncttenantid-tseatid-string-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at the root unit of `tenant` at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
 | [`HoldsAtAsync(TTenantId, TSeatId, string, TUnitId, DateTimeOffset, CancellationToken)`](#holdsatasyncttenantid-tseatid-string-tunitid-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at `unit` or at a unit above it at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
 | [`HasUnitAsync(TTenantId, TUnitId, CancellationToken)`](#hasunitasyncttenantid-tunitid-cancellationtoken) | Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over [`ITenancyReadSource.Units`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid). |
+| [`SeatToAdmitAsync(TTenantId, TSeatId, CancellationToken)`](#seattoadmitasyncttenantid-tseatid-cancellationtoken) | The seat `seat` of `tenant` while it is active, read by the storage past what the caller may read of the seats, or `null` when the storage has no such read and the question is worked out over [`ITenancyReadSource.Seats`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid). |
 
 #### `EfTenancyReadSource(DbContext)`
 
@@ -962,6 +1072,27 @@ Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps,
 
 Read with a query compiled once for the context's model, over the same untracked set as [`Units`](#eftenancyreadsourcettenantid-tseatid-tunitid-troleid).
 
+#### `SeatToAdmitAsync(TTenantId, TSeatId, CancellationToken)`
+
+```csharp
+public Task<SeatToAdmit?>? SeatToAdmitAsync(
+    TTenantId tenant,
+    TSeatId seat,
+    CancellationToken cancellationToken)
+```
+
+The seat `seat` of `tenant` while it is active, read by the storage past what the caller may read of the seats, or `null` when the storage has no such read and the question is worked out over [`ITenancyReadSource.Seats`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid). A storage whose policies narrow [`ITenancyReadSource.Seats`](queries.md#itenancyreadsourcettenantid-tseatid-tunitid-troleid) to the caller answers here, so a module admits a seat the caller cannot list. The task answers `null` for a seat of another tenant, one that is not active, and an id no seat has, alike.
+
+**Parameters**
+
+- `tenant`: The caller's tenant.
+- `seat`: The seat asked about.
+- `cancellationToken`: Stops the reading.
+
+**Remarks**
+
+Answered by the database's function, [`TenancyFunctionNames.SeatToAdmit`](#tenancyfunctionnames), where it keeps the rights and the context's model maps the read model, as `AddTenancyReadFunctions` does: there the seats the context reads are the ones the caller may read, and the function reads the one seat asked past them. `null` anywhere else, where the seats the context reads are every seat of the tenant.
+
 ## Read functions
 
 Namespace `DTS.Tenancy.EntityFramework`.
@@ -976,7 +1107,7 @@ The names of Tenancy's database functions: the contract between a package that w
 
 The first six answer the rows of the read model, one each, with the properties' names as the columns' and no parameters. They run as their caller, so what a caller may read of Tenancy's tables decides their rows: a seat its own rights and the rest of its tenant, system work in a tenant all of that tenant. A status is answered as the name of its enum member. They answer access facts only, exactly the columns listed here: none answers what a seat, a unit or a role is called, which Tenancy's managers answer by id.
 
-The next three answer a seat what it may learn of other seats' rights, the one after them what the units it asks about are called, the one after that what the tenants a person has a seat in are called, and the three after that read across tenants, for system work that began in no tenant. These run as their owner, and answer ids, permissions, dates and the names of the units and the tenants asked about only. So does the last, which a database has where the context maps invitations: it reads across tenants too, and answers which invitation a token's digest is for.
+The next three answer a seat what it may learn of other seats' rights, the one after them one seat of its tenant that a module admits as a member, the one after that what the units it asks about are called, the one after that what the tenants a person has a seat in are called, and the three after that read across tenants, for system work that began in no tenant. These run as their owner, and answer ids, permissions, dates, a seat's kind and status, and the names of the units and the tenants asked about only. So does the last, which a database has where the context maps invitations: it reads across tenants too, and answers which invitation a token's digest is for.
 
 | Member | Summary |
 |---|---|
@@ -985,10 +1116,11 @@ The next three answer a seat what it may learn of other seats' rights, the one a
 | `TenantUnits = "tenant_units"` | The units, as rows of [`OrganizationUnitRow<TTenantId, TUnitId>`](queries.md#organizationunitrowttenantid-tunitid): `"Id"`, `"TenantId"`, `"ParentId"` and `"Status"`; never the name, nor a column the application added. |
 | `TenantRoles = "tenant_roles_with_starter_roles"` | The roles, as rows of [`RoleRow<TTenantId, TRoleId>`](queries.md#rolerowttenantid-troleid): `"Id"`, `"TenantId"`, `"FromStarterRole"`, `"Status"` and `"Permissions"`, an array of text however the roles' table stores them; never the name. |
 | `TenantPlacements = "tenant_placements"` | Where seats are placed, as rows of [`PlacementRow<TSeatId, TUnitId>`](queries.md#placementrowtseatid-tunitid): `"SeatId"`, `"UnitId"` and `"IsPrimary"`, with the seat's `"TenantId"`, which the row is kept to its tenant by. |
-| `TenantSeats = "tenant_seats"` | The seats, as rows of [`SeatRow<TTenantId, TSeatId>`](queries.md#seatrowttenantid-tseatid): `"Id"`, `"TenantId"` and `"Status"`; never the identity, nor a field the application adds to its seat class. |
+| `TenantSeats = "tenant_seats_with_kinds"` | The seats, as rows of [`SeatRow<TTenantId, TSeatId>`](queries.md#seatrowttenantid-tseatid): `"Id"`, `"TenantId"`, `"Status"`, `"Kind"` and `"InOrganization"`; never the identity, nor a field the application adds to its seat class. Named after what it answers, since Postgres replaces no function by one that answers other columns: the function of the name before, `tenant_seats`, goes with the next access file. |
 | `TenantAdministrators = "tenant_administrators"` | The tenant's administrators, as rows of `"SeatId"` and `"RoleId"`: no parameters. Answered to a seat that may read the grants at the root: one that manages grants, seats or units there, or roles for the whole tenant. |
 | `PermissionsAUnitMoveChanges = "permissions_a_unit_move_changes"` | The rights a move of a unit changes, as rows of `"UnitId"`, `"Permission"`, `"EndsAt"`, `"Parent"` and `"OfCurrentSeat"`: its parameters are the unit's parent and the parent it would get. Answered to a seat that manages units at both: its own rights, and another seat's only where it reaches one parent and not the other, which is where the move changes it. |
 | `SeatsHoldingPermissionAt = "seats_holding_permission_at"` | The seats that hold a permission at a unit, as rows of `"SeatId"`: its parameters are the permission and the unit. A seat is answered each holder whose grant there it may read: itself, and any other seat at a unit where it manages grants, seats or units, or anywhere when it manages roles for the whole tenant. |
+| `SeatToAdmit = "seat_to_admit"` | One seat of the caller's tenant, as a row of `"Kind"`, `"InOrganization"` and `"Active"`: its parameter is the seat's id. One row, or none for a seat of another tenant and an id no seat has. A calling seat is answered an active seat alone, and scoped system work a seat of its tenant whatever its status. It answers past what the caller reads of the seats, so a module admits a seat as a member that the caller cannot list, and it answers the one id asked, so nobody lists the seats through it. |
 | `UnitsNamed = "units_named"` | What units of the caller's tenant are called, as rows of `"Id"`, `"Name"`, `"Path"` and `"Depth"`: its parameter is the array of the units asked about. The name and path of each of those that is the tenant's, and nothing more of it, whatever the seat reads of the organization: a seat on a project at a unit it is not placed under, or one an application's restrictive rule keeps out of the units, still reads what that unit is called. |
 | `TenantNamesOfIdentity = "identity_tenant_names"` | What the tenants the caller's identity has a seat in are called, whatever the status of the seat or of the tenant, as rows of `"Id"`, `"Slug"` and `"Name"`: no parameters. The tenant picker reads the names through it, before a tenant is chosen, so it names every tenant by its organization's name whatever an application's restrictive rule on the organization lets the caller read of it; it answers nothing more of one. |
 | `RolePermissionsInUse = "role_permissions_in_use"` | The permissions stored on the roles of every tenant, each once, as text: no parameters. One of the three reads across tenants: answered to Tenancy's own system work, begun in no tenant, and to nobody else. |

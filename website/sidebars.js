@@ -97,6 +97,7 @@ const sidebars = {
           items: [
             { type: 'doc', id: 'membership/overview', label: 'Overview' },
             { type: 'doc', id: 'membership/tutorial', label: 'Tutorial' },
+            { type: 'doc', id: 'membership/people-from-outside', label: 'Tutorial: people from outside' },
             {
               type: 'category',
               label: 'Topics',
@@ -125,6 +126,7 @@ const sidebars = {
             },
           ],
         },
+        'package-guarantees',
         'design-principles',
         'writing-a-supporting-domain',
       ],

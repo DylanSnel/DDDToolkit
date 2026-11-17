@@ -29,6 +29,7 @@ One class may mix levels. On a resource, `[On<T>]` also says how the permission 
 | `ManagesMembers` | It manages nothing. | Set `true` on the permission that adds and removes members and gives and takes their roles. The [member manager](resources-and-members.md#the-member-manager) requires it. On Postgres, a policy also lets only callers with this permission write the member rows ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). One permission at most. |
 | `NamesOwner` | It names nobody. | Set `true` on the permission that hands the resource to another owner. The member manager requires it. On Postgres, a trigger also lets only callers with this permission change the owner column. One permission at most. |
 | `FromAbove` | The permission reaches from above, where the rules allow reach from above. | Set `false` when holding it where the resource hangs should give nothing on the resource ([Reach from above](beside-an-organization.md#reach-from-above)). When the rules reach from above, the `EveryMember` permission must keep `FromAbove = true`. |
+| `Kinds` | Only kinds of seat inside the organization may hold it. | List the kinds that may hold it, by their value or as `SeatKinds.InOrganization` and `SeatKinds.OutsideOrganization` for every kind on that side. The list is complete, so list `SeatKinds.InOrganization` too where the kinds inside should keep it ([Kinds of seat and role sets](#kinds-of-seat-and-role-sets)). `Kinds` exists on `[On<T>]` only. |
 
 Every level also takes these settings:
 
@@ -47,6 +48,8 @@ Every level also takes these settings:
 | `[On<T>]` on a type that is not a resource with members, or two permissions marked `EveryMember`, `ManagesMembers` or `NamesOwner` | [DDD00093](../diagnostics.md#ddd00093) |
 | Rules for a resource with no permission declared on it | [DDD00094](../diagnostics.md#ddd00094), where the rules are made |
 | A permission marked `ManagesMembers` or `NamesOwner` that nobody could hold: not the owner, not every member, no role and nothing above | An `ArgumentException` when the rules are made |
+| `Kinds` that is empty, lists a blank entry or one entry twice, or lists a value that is no kind of seat | [DDD11001](../diagnostics.md#ddd11001) |
+| Role sets that do not hold together, such as a kind in two sets or a role that gives what its set's kinds may not hold | An `ArgumentException` when the rules are made ([Kinds of seat and role sets](#kinds-of-seat-and-role-sets)) |
 
 ## Who holds a permission
 
@@ -57,6 +60,9 @@ The five ways a caller holds a permission are listed in the
   `[OnResource]` adds nothing for a permission the owner holds ([DDD00096](../diagnostics.md#ddd00096)).
 - **A role gives the permissions it lists only where a role may give them.** Those are the permissions marked
   `InRoles`, and permissions of other modules that `otherPermissions` lets through.
+- **A member holds a permission only when its kind may hold it.** The kind on the member's row is checked against the
+  permission's `Kinds`, whatever the member's roles give. Reach from above checks the caller's own kind against the
+  same list. The owner counts as inside the organization ([Kinds of seat and role sets](#kinds-of-seat-and-role-sets)).
 - **Refusals come in a fixed order:**
   1. the caller's own refusal, when the caller is nobody;
   2. `not-found` for a resource the caller does not see, the same as for a resource that does not exist;
@@ -111,6 +117,245 @@ return await staff.AddAsync(command.Folder, command.Staff, command.Role, command
   depends on it.
 - **The package adds no rule of this kind.** Neither "no longer than your own hold" nor "never to yourself" is built
   in.
+- **The permission's `Kinds` say which kinds manage members.** A permission marked `ManagesMembers`, or named as a
+  set's `membersManagedWith`, is held by the kinds its `Kinds` lists, as every permission is. Left out, the list holds
+  the kinds inside the organization alone, so only seats inside the organization manage members
+  ([A kind outside the organization that manages members](#a-kind-outside-the-organization-that-manages-members)).
+- **With several role sets, each set has its own permission.** Adding a member, and giving or taking its roles,
+  requires the permission of the set the member's kind is in ([Kinds of seat and role sets](#kinds-of-seat-and-role-sets)).
+
+## Kinds of seat and role sets
+
+With Tenancy, every seat has a kind, inside the organization or outside it
+([Kinds of seat](../tenancy/your-module.md#kinds-of-seat)). Without Tenancy, every member is `member`, inside the
+organization. Membership uses the kind in two ways:
+
+- **A permission lists the kinds that may hold it.** A member whose kind is not in the list does not hold the
+  permission, whatever its roles give.
+- **A role set groups the roles for some kinds.** A member is in the one set its kind is in, and gets only roles of
+  that set. Each set has its own permission that manages its members.
+
+Harbor Works has employees, and invites Mira, a client's site manager, as a `guest`. On the board Crane schedule at
+North, Rhea is the owner and Leo an editor. Mira joins as a visitor in a second role set, Guests. Ada holds her role at
+the root, so she reaches the board from above.
+
+| | view | edit | members.manage | guests.manage |
+|---|---|---|---|---|
+| Rhea (owner) | yes | yes | yes | yes |
+| Leo (`editor`) | yes | yes | no | no |
+| Ada (from above) | yes | yes | yes | yes |
+| Mira (`visitor`) | yes | no | no | no |
+| Mira, with `editor` written by SQL past the application | yes | no | no | no |
+
+The last row is the point of the list on a permission. `boards.edit` lists no kinds, so only kinds inside the
+organization hold it, and Mira's member row says `guest`.
+
+**`Harbor.Boards.Application/Access/BoardPermissions.cs`**
+
+```csharp
+[Permissions]
+public static class BoardPermissions
+{
+    [On<Board>(EveryMember = true, Kinds = [SeatKinds.InOrganization, HarborSeatKinds.Guest], Description = "See a board and who is on it")]
+    public const string View = "boards.view";
+
+    [On<Board>(Description = "Change a board")]                                     // Kinds left out: inside the organization only
+    public const string Edit = "boards.edit";
+
+    [On<Board>(InRoles = false, ManagesMembers = true, Description = "Say who is on a board, and in which role")]
+    public const string ManageMembers = "boards.members.manage";
+
+    [On<Board>(InRoles = false, Description = "Say which guests are on a board")]
+    public const string ManageGuests = "boards.guests.manage";
+
+    [AtTenant(Description = "Make and change the roles of boards")]
+    public const string ManageRoles = "boards.roles.manage";
+}
+```
+
+**`Harbor.Boards.Application/Access/BoardMembership.cs`**
+
+```csharp
+public static class BoardMembership
+{
+    public static MembershipRules Rules { get; } = MembershipRules.For<Board>(
+        Roles.Custom(
+            sets:
+            [
+                RoleSet.Named("Team", kinds: [SeatKinds.InOrganization],
+                    starters: [new("editor", [BoardPermissions.View, BoardPermissions.Edit])]),
+                RoleSet.Named("Guests", kinds: [HarborSeatKinds.Guest],
+                    starters: [new("visitor", [BoardPermissions.View])],
+                    membersManagedWith: BoardPermissions.ManageGuests),
+            ],
+            managedWith: BoardPermissions.ManageRoles));
+}
+```
+
+What the code does:
+
+- **`Kinds`** on `View` lets guests hold it beside the kinds inside the organization. `Edit` lists no kinds, so a
+  guest never holds it. `SeatKinds.InOrganization` and `SeatKinds.OutsideOrganization` stand for every kind on that
+  side. Membership knows these two values and `member`, and nothing else of Tenancy.
+- **`RoleSet.Named`** declares a set with a name, its kinds and its roles: `starters` under `Roles.Custom`, `roles`
+  under `Roles.Fixed(sets: [...])`. Rules that declare no sets have one set, for every kind inside the organization.
+- **The first set** is managed with the permission marked `ManagesMembers`. Every other set names its own permission
+  with `membersManagedWith`. Without a `ManagesMembers` permission, only system work changes the first set's members,
+  in the member manager and on Postgres.
+- **`AddAsync`** reads the member's kind first, finds its set, and requires that set's permission. A role given must be
+  in that set. A kind in no set is refused with `boards.kind-in-no-set`.
+
+Each way of holding a permission is filtered by the kind:
+
+| Way | Filtered by |
+|---|---|
+| Every member (`EveryMember`), and a role | The kind on the caller's member row: the permission's `Kinds` must hold the kind, or its side |
+| Owner | The permission's `Kinds` must hold `SeatKinds.InOrganization`. An owner is always a seat inside the organization. |
+| From above | The caller's own kind: the permission's `Kinds` must hold the kind, or its side. A caller without a kind holds nothing from above. |
+| System work the rules name | Not filtered |
+
+- **The caller's kind comes from `ICurrentMember<TResourceId, TMemberId>.KindOf`.** The join with Tenancy answers the
+  kind of the caller's seat, as tenant selection read it, so the check sends no extra statement. On Postgres the
+  functions ask `seat_to_admit` for the caller's seat, once for each statement
+  ([The caller's kind under reach from above](postgres.md#the-callers-kind-under-reach-from-above)). Without a package
+  that keeps seats, every caller is `member`, inside the organization. An application that resolves its own members
+  and keeps kinds implements `KindOf` beside `Find`.
+- **Tenancy places only seats inside the organization at a unit.** A place of your own may answer a seat outside the
+  organization. Such a seat holds a permission on what hangs there only when the permission's `Kinds` lists its kind
+  or its side.
+
+- **Seeing follows the filter.** A member sees the board only when its kind may hold the permission every member holds.
+  Rules without such a permission keep seeing for every member.
+- **Being a member is not filtered.** `as_member` and the fellow members answer every member, whatever its kind.
+- **A permission of another resource** that a role gives through `otherPermissions` has the `Kinds` that the resource
+  that declares it lists. A permission that no resource with members declares counts as inside the organization only
+  ([A permission of another resource](#a-permission-of-another-resource)).
+
+**Rules the sets follow.** The rules check these when they are made, and throw an `ArgumentException` that names the
+set, the permission or the entry:
+
+- A set name converts as a `[Members]` name does, has at most 64 characters, and is used once.
+- A set lists at least one kind, each once. An entry is `SeatKinds.InOrganization`, `SeatKinds.OutsideOrganization`
+  or a value of lower case letters, digits and dashes that starts with a letter.
+- A kind is in one set at most. The same entry in two sets is refused.
+- A role name is used once across all sets.
+- A role in a set gives only permissions that every kind of the set may hold. The check compares the entries as they
+  are written, so a set of `[employee]` with a permission of `[SeatKinds.InOrganization]` is refused. List the group in
+  the set instead.
+
+**The start-up check.** The rules name kinds by value without knowing them, and cannot tell which side a kind is on.
+With Tenancy, the generated join adds the start-up check `membership.kinds-fit-the-catalogue.<name>`, such as
+`membership.kinds-fit-the-catalogue.boards`. It calls `rules.ProblemsWith(kinds)` with the catalogue's kinds of seat,
+and stops the host for each problem it finds:
+
+- a permission or a set that names a kind the catalogue does not declare;
+- a kind in two sets, through the group of its side in one set and by its value in the other.
+
+### A permission of another resource
+
+A role may give a permission that another resource declares, through `otherPermissions`
+([Changing a role](#changing-a-role)). The rules take the `Kinds` of such a permission from the resource that declares
+it. Harbor's cards hang at their board, and a card is reached from its board from above
+([A resource at several places](beside-an-organization.md#a-resource-at-several-places)). Mira's role on the board,
+`visitor`, also gives `cards.view`. She then sees every card of the board without a member row on any card.
+
+**`Harbor.Cards.Application/Access/CardPermissions.cs`**
+
+```csharp
+[Permissions]
+public static class CardPermissions
+{
+    [On<Card>(EveryMember = true, Kinds = [SeatKinds.InOrganization, HarborSeatKinds.Guest], Description = "See a card")]
+    public const string View = "cards.view";
+
+    [On<Card>(Description = "Move a card")]                                       // Kinds left out: inside the organization only
+    public const string Move = "cards.move";
+}
+```
+
+**`Harbor.Boards.Application/Access/BoardMembership.cs`**
+
+```csharp
+public static class BoardMembership
+{
+    public static MembershipRules Rules { get; } = MembershipRules.For<Board>(
+        Roles.Custom(
+            sets:
+            [
+                RoleSet.Named("Team", kinds: [SeatKinds.InOrganization],
+                    starters: [new("editor", [BoardPermissions.View, BoardPermissions.Edit])]),
+                RoleSet.Named("Guests", kinds: [HarborSeatKinds.Guest],
+                    starters: [new("visitor", [BoardPermissions.View, CardPermissions.View])],
+                    membersManagedWith: BoardPermissions.ManageGuests),
+            ],
+            otherPermissions: OtherPermissions.All,
+            managedWith: BoardPermissions.ManageRoles));
+}
+```
+
+What the code does:
+
+- **The board's rules read the card's list.** `MembershipRules.KindsOf("cards.view")` on the board answers
+  `[SeatKinds.InOrganization, "guest"]`, the list on `[On<Card>]`. Mira's member row on the board says `guest`, so her
+  role gives her `cards.view` on the board. Every card of the board is then reached from above. Reach from above
+  checks her own kind on the card against the same list.
+- **A permission whose `Kinds` leave the kind out stays refused.** `cards.move` lists no kinds, so only kinds inside
+  the organization hold it, on the card and on the board. A starter role of the guests' set that lists it stops the
+  host at start-up. A role a customer makes with it is refused with `boards.permission-not-for-set`. A role row
+  written past the application gives Mira nothing of it, in C# and on Postgres.
+- **The kinds are read when a question asks for them.** The cards' module references the boards' module for the
+  `BoardId`, and the boards' module does not reference the cards'. So the board's rules can be made before the cards'
+  module declares `cards.view`. The rules check a starter role's own permissions when they are made. They check its
+  permissions of another resource in the start-up check `membership.permissions-of-other-resources`, which the
+  registration of every resource adds once, and which the host runs with `services.RunStartupChecks()`.
+- **A permission that no resource with members declares** counts as inside the organization only. So does every
+  permission the rules do not declare where the roles take no permissions of other modules.
+- **Two resources may declare one permission with different `Kinds`.** The board's rules then have two lists for one
+  permission. The start-up check, the export and `KindsOf` refuse it with both lists in the message. Give both
+  declarations the same `Kinds`, or keep the permission from the board's roles with `OtherPermissions.AllBut(...)`.
+- **On Postgres**, the export writes the card's list into the board's functions, beside the board's own lists
+  ([The kind filter in the functions](postgres.md#the-kind-filter-in-the-functions)).
+
+### A kind outside the organization that manages members
+
+A kind outside the organization manages members when the permission that manages them lists that kind. The package
+has no setting for it. You open it with three things you write anyway:
+
+- **The permission lists the kind.** The managing permission's `Kinds` names the kind beside
+  `SeatKinds.InOrganization`. The owner holds it only while the list holds that group. Reach from above gives it to a
+  caller whose own kind is on the list.
+- **A role of the kind's set gives the permission.** A role holds only permissions every kind of its set may hold, so
+  the rules refuse the role while the list leaves the kind out.
+- **Your handler makes the change.** Its request requires the permission with `[OnResource]`, and the handler calls
+  the member manager, which requires the same permission. The tutorial's `AddGuestCommand` is such a request
+  ([Step 5](people-from-outside.md#step-5-mira-on-quay-plan)).
+
+On Harbor's boards, a guest who holds `guest-host` adds other guests:
+
+```csharp
+[On<Board>(Kinds = [SeatKinds.InOrganization, HarborSeatKinds.Guest], Description = "Say which guests are on a board")]
+public const string ManageGuests = "boards.guests.manage";
+
+RoleSet.Named("Guests", kinds: [HarborSeatKinds.Guest],
+    starters: [new("visitor", [BoardPermissions.View]), new("guest-host", [BoardPermissions.View, BoardPermissions.ManageGuests])],
+    membersManagedWith: BoardPermissions.ManageGuests)
+```
+
+- **A guest manages the Guests set alone.** `boards.members.manage` lists no kinds, so a guest never adds a member of
+  Team.
+- **Without `HarborSeatKinds.Guest` in the list, nothing changes.** The rules refuse `guest-host`, and no role gives a
+  guest the permission.
+- **A guest adds a seat it does not read.** While `NarrowOutsideSeats` is on, a guest reads its own seats and the
+  seats of its fellow members alone
+  ([What a seat outside the organization reads](../tenancy/postgres.md#what-a-seat-outside-the-organization-reads)).
+  The member manager reads the new member's one seat by its id, past that. It asks whether the seat is an active seat
+  of the caller's tenant, and its kind, and nothing else.
+- **On Postgres the kind guard asks the same of the database.** `seat_to_admit(seat)` answers the one seat of the
+  caller's tenant, as its owner, so the guard lets a guest's member row through for a seat the guest does not read.
+- **What the guest reads does not change.** Once the new member is on the board, it is a fellow member, so the guest
+  reads its seat from then on.
+- **A guest brings in a new person through your handler.** It issues the invitation as system work, after your own
+  check ([An invitation your own code issues](../tenancy/invitations.md#an-invitation-your-own-code-issues)).
 
 ## Roles a customer makes
 
@@ -137,6 +382,12 @@ for `AddBoardMembershipWithTenancy` ([step 7](tutorial.md#step-7-members)).
   every starter role. A scope with no roles still has resources and owners.
 - **`FromStarterRole` and `PermissionsFromStarterRole` are `[Bookkeeping]`.** A GraphQL type that binds by convention
   leaves them out ([Personal data and bookkeeping](../graphql.md#personal-data-and-bookkeeping-are-left-out)).
+- **A starter role belongs to the set it is declared in.** The role row made from it stores the set in `Set`, which is
+  `null` for the first set and never changes. `Set` is `[Bookkeeping]` too. A starter role that the rules move to another
+  set no longer matches its rows. `FollowStarterRolesAsync` lists such a row in `WithoutTheirStarterRole` and leaves it.
+- **A role a customer makes names its set** in `CustomRoleDraft.Set`, by the set's name. An unknown set is refused with
+  `boards.set-unknown`. A permission that a kind of the set may not hold is refused with `boards.permission-not-for-set`.
+  One `managedWith` permission changes the roles of every set.
 
 ### Starter roles with Tenancy
 
@@ -247,7 +498,8 @@ var archived = await roles.ArchiveAsync(command.Role, cancellationToken);
   `Roles.Custom(starters: [...], otherPermissions: OtherPermissions.AllBut(...))`. This lets them through, except
   the permissions named, the permissions the resource's own classes declare at another level, and the permissions
   marked `InRoles = false` ([`OtherPermissions`](reference/rules.md#otherpermissions)). `OtherPermissions.All` names
-  no permission to leave out.
+  no permission to leave out. The kinds that may hold such a permission come from the resource that declares it
+  ([A permission of another resource](#a-permission-of-another-resource)).
 - **A name is trimmed and has 1 to 120 characters.** A description has at most 1000. Both are refused with
   `boards.role-name-invalid`, which names the field. `RenameAsync` takes both values as they should be, so `null`
   clears the description.

@@ -105,9 +105,9 @@ seat.Rename("Ada"); // the application's own field: a seat has no name in Tenanc
 |---|---|
 | [`NewTenant(TTenantId, ValidTenantSlug, TenantShape, TenancyActor<TSeatId>?)`](#newtenantttenantid-validtenantslug-tenantshape-tenancyactortseatid) | A new tenant, being provisioned, with [`TenantProvisioned<TTenantId, TSeatId>`](#tenantprovisionedttenantid-tseatid) raised. |
 | [`NewOrganization(TTenantId, string, TUnitId, string, TenancyActor<TSeatId>?)`](#neworganizationttenantid-string-tunitid-string-tenancyactortseatid) | A new organization with its root, through the application's own unit class, and [`OrganizationUnitAdded<TTenantId, TUnitId, TSeatId>`](#organizationunitaddedttenantid-tunitid-tseatid) raised for the root. |
-| [`NewSeat(TSeatId, TTenantId, Guid, TenancyActor<TSeatId>?)`](#newseattseatid-ttenantid-guid-tenancyactortseatid) | A new active seat, placed nowhere yet, with [`SeatAdded<TTenantId, TSeatId>`](#seataddedttenantid-tseatid) raised. |
+| [`NewSeat(TSeatId, TTenantId, Guid, SeatKind?, TenancyActor<TSeatId>?)`](#newseattseatid-ttenantid-guid-seatkind-tenancyactortseatid) | A new active seat, placed nowhere yet, with [`SeatAdded<TTenantId, TSeatId>`](#seataddedttenantid-tseatid) raised. |
 | [`NewRole(TRoleId, TTenantId, RoleDraft, TenancyCatalogue, TenancyActor<TSeatId>?)`](#newroletroleid-ttenantid-roledraft-tenancycatalogue-tenancyactortseatid) | A new active role, its permissions expanded from the catalogue, with [`RoleCreated<TTenantId, TRoleId, TSeatId>`](#rolecreatedttenantid-troleid-tseatid) raised. |
-| [`NewInvitation(TInvitationId, TTenantId, string, TUnitId, TRoleId, DateTimeOffset?, DateTimeOffset, DateTimeOffset, TSeatId?, bool, TenancyActor<TSeatId>?)`](#newinvitationtinvitationid-ttenantid-string-tunitid-troleid-datetimeoffset-datetimeoffset-datetimeoffset-tseatid-bool-tenancyactortseatid) | A new open invitation, with [`InvitationIssued<TTenantId, TInvitationId, TUnitId, TRoleId, TSeatId>`](#invitationissuedttenantid-tinvitationid-tunitid-troleid-tseatid) raised. |
+| [`NewInvitation(TInvitationId, TTenantId, string, TUnitId, TRoleId?, DateTimeOffset?, DateTimeOffset, DateTimeOffset, SeatKind?, TSeatId?, bool, TenancyActor<TSeatId>?)`](#newinvitationtinvitationid-ttenantid-string-tunitid-troleid-datetimeoffset-datetimeoffset-datetimeoffset-seatkind-tseatid-bool-tenancyactortseatid) | A new open invitation, with [`InvitationIssued<TTenantId, TInvitationId, TUnitId, TRoleId, TSeatId>`](#invitationissuedttenantid-tinvitationid-tunitid-troleid-tseatid) raised. |
 
 #### `NewTenant(TTenantId, ValidTenantSlug, TenantShape, TenancyActor<TSeatId>?)`
 
@@ -175,13 +175,14 @@ A new organization with its root, through the application's own unit class, and 
 
 - `RefusalException`: `tenancy.name-invalid`, for the tenant's name or the root's.
 
-#### `NewSeat(TSeatId, TTenantId, Guid, TenancyActor<TSeatId>?)`
+#### `NewSeat(TSeatId, TTenantId, Guid, SeatKind?, TenancyActor<TSeatId>?)`
 
 ```csharp
 public static TSeat NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(
     TSeatId id,
     TTenantId tenantId,
     Guid identity,
+    SeatKind? kind = null,
     TenancyActor<TSeatId>? by = null)
     where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
@@ -197,6 +198,7 @@ A new active seat, placed nowhere yet, with [`SeatAdded<TTenantId, TSeatId>`](#s
 - `id`: Its id.
 - `tenantId`: The tenant it is in.
 - `identity`: The verified identity it belongs to: the subject of the person's token.
+- `kind`: Its kind, one of the catalogue's [`TenancyCatalogue.SeatKinds`](catalogue.md#tenancycatalogue), which it keeps; `null` for [`SeatKind.Member`](entity-framework.md#seatkind), the kind of an application that declares none. Nothing here checks it against a catalogue: the managers take it from theirs.
 - `by`: Who makes it, for its creation event; `null` when nobody is named.
 
 **Type parameters**
@@ -247,7 +249,7 @@ A new active role, its permissions expanded from the catalogue, with [`RoleCreat
 
 - `RefusalException`: `tenancy.name-invalid` or `tenancy.unknown-permission`.
 
-#### `NewInvitation(TInvitationId, TTenantId, string, TUnitId, TRoleId, DateTimeOffset?, DateTimeOffset, DateTimeOffset, TSeatId?, bool, TenancyActor<TSeatId>?)`
+#### `NewInvitation(TInvitationId, TTenantId, string, TUnitId, TRoleId?, DateTimeOffset?, DateTimeOffset, DateTimeOffset, SeatKind?, TSeatId?, bool, TenancyActor<TSeatId>?)`
 
 ```csharp
 public static TInvitation NewInvitation<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>(
@@ -255,10 +257,11 @@ public static TInvitation NewInvitation<TInvitation, TInvitationId, TTenantId, T
     TTenantId tenantId,
     string address,
     TUnitId unitId,
-    TRoleId roleId,
+    TRoleId? roleId,
     DateTimeOffset? grantUntil,
     DateTimeOffset issuedAt,
     DateTimeOffset expiresAt,
+    SeatKind? kind = null,
     TSeatId? issuedBy = null,
     bool issuedAsSystem = false,
     TenancyActor<TSeatId>? by = null)
@@ -277,11 +280,12 @@ A new open invitation, with [`InvitationIssued<TTenantId, TInvitationId, TUnitId
 - `id`: Its id.
 - `tenantId`: The tenant it is into.
 - `address`: The address it is for.
-- `unitId`: The unit the seat is placed in.
-- `roleId`: The role the seat is granted there.
+- `unitId`: For a kind inside the organization, the unit the seat is placed in. For a kind outside it, the unit the invitation is issued at, where its issuer holds [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions).
+- `roleId`: The role the seat is granted at the unit, for a kind inside the organization; `null` for a kind outside it, whose seat holds no organization role.
 - `grantUntil`: When that grant ends, later than `expiresAt`, or `null` for no end.
 - `issuedAt`: When it is issued.
 - `expiresAt`: The first moment it can no longer be accepted.
+- `kind`: The kind of the seat it makes; `null` for [`SeatKind.Member`](entity-framework.md#seatkind).
 - `issuedBy`: The seat that issues it, or the seat system work issues it for; `null` for none.
 - `issuedAsSystem`: Whether system work issues it, which is then not held to a seat's rights when it is accepted.
 - `by`: Who makes it, for its creation event; `null` when nobody is named.
@@ -297,7 +301,7 @@ A new open invitation, with [`InvitationIssued<TTenantId, TInvitationId, TUnitId
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.address-invalid` or `tenancy.invitation-grant-ends-first`.
+- `RefusalException`: `tenancy.address-invalid`, `tenancy.invitation-grant-ends-first`, or `tenancy.invitation-kind` for a role that does not fit the kind.
 - `ArgumentException`: `expiresAt` is not after `issuedAt`.
 
 ## Tenant
@@ -1656,6 +1660,8 @@ The identity is the subject of a verified token, set when the seat is made and n
 
 Nor does a seat have a name. No rule of Tenancy reads one, so what a person is shown by is the application's to say: a name per tenant on its own seat class, set in the callback of `SeatManager.AddAsync`; the person's own name, from the identity provider; or a profile of its own, found by [`Identity`](#seat-seataggregatetseatid-ttenantid-tunitid-troleid). The `SeatManager`'s reads return the application's own seat, whole, and the application selects what a screen shows of it.
 
+A seat has a kind, one of the catalogue's, set when it is made and never changed. A seat of a kind outside the organization is placed in no unit, so it holds no organization role either.
+
 Placements and grants are the seat's own: it checks every change to them, and hands them out as read-only views. What a role grants is not the seat's to know; the manager reads the role and passes its [`RoleFacts`](#rolefacts) in.
 
 Every method that changes the seat takes who makes the change, `by`, and puts it on the event it raises; the managers pass the actor of their caller. It is a record of the change and decides nothing: the rules about a seat acting on itself read the seat a placement or a grant keeps, `placedBy` and `grantedBy`.
@@ -1674,6 +1680,8 @@ Every method that changes the seat takes who makes the change, `by`, and puts it
 | `TTenantId TenantId { get; }` | The tenant the seat is in. |
 | `Guid Identity { get; }` | The verified identity the seat belongs to: the subject of its token. Never changes. |
 | `SeatStatus Status { get; }` | Whether the seat's grants count. |
+| `string Kind { get; }` | The kind of seat, one of the catalogue's [`TenancyCatalogue.SeatKinds`](catalogue.md#tenancycatalogue), as its name. Set when the seat is made and never changed: a person who changes kind gets a new account, and so a new seat. |
+| `bool InOrganization { get; }` | Whether the seat's kind is inside the organization, as the catalogue said when the seat was made. Set with [`Kind`](#seat-seataggregatetseatid-ttenantid-tunitid-troleid) and never changed. A seat outside the organization has no placement, and so no organization role. |
 | `IReadOnlyList<Placement<TSeatId, TUnitId, TRoleId>> Placements { get; }` | The units the seat is placed in, with the roles it holds at each. A read-only view. |
 | [`Suspend(TenancyActor<TSeatId>?)`](#suspendtenancyactortseatid) | Stops an active seat for now. |
 | [`Reactivate(TenancyActor<TSeatId>?)`](#reactivatetenancyactortseatid-1) | Makes a suspended seat active again. |
@@ -1768,7 +1776,7 @@ Places the seat in a unit. Whether the unit is an active unit of the organizatio
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.seat-state` when the seat is not active, `tenancy.self-assignment` when it would place itself, `tenancy.duplicate-placement`, `tenancy.second-primary`.
+- `RefusalException`: `tenancy.seat-outside-organization` for a seat of a kind outside the organization, `tenancy.seat-state` when the seat is not active, `tenancy.self-assignment` when it would place itself, `tenancy.duplicate-placement`, `tenancy.second-primary`.
 
 #### `Withdraw(TUnitId, TenancyActor<TSeatId>?)`
 
@@ -2131,6 +2139,33 @@ Not an `InvariantViolation` so that holding is free: this runs for every changed
 
 - `entity`: The object to check. Never `null`.
 
+### `SeatAggregate.OutsideSeatHasNoPlacement`
+
+```csharp
+public sealed class OutsideSeatHasNoPlacement : IInvariant<SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>>
+```
+
+A seat of a kind outside the organization has no placement.
+
+| Member | Summary |
+|---|---|
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
+| [`Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`](#checkseataggregatetseatid-ttenantid-tunitid-troleid-5) | Runs the rule. |
+
+#### `Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>)`
+
+```csharp
+public InvariantFailure? Check(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId> entity)
+```
+
+Runs the rule. Returns `null` when it holds, and otherwise what is wrong in the domain's own words, free to name the values that broke it. A string converts to `InvariantFailure`, so a rule with only a message returns the message; one that names values adds them with `InvariantFailure.With` so the message can be translated.
+
+Not an `InvariantViolation` so that holding is free: this runs for every changed entity on every save, and the happy path returns `null` and allocates nothing. The caller pairs the failure with `IInvariant.Code`, so the code lives in one place.
+
+**Parameters**
+
+- `entity`: The object to check. Never `null`.
+
 ### `OrganizationRoleGranted<TTenantId, TSeatId, TUnitId, TRoleId>`
 
 ```csharp
@@ -2274,15 +2309,16 @@ A seat was added to a tenant.
 
 | Member | Summary |
 |---|---|
-| [`SeatAdded(TTenantId, TSeatId, TenancyActor<TSeatId>?)`](#seataddedttenantid-tseatid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
+| [`SeatAdded(TTenantId, TSeatId, string, TenancyActor<TSeatId>?)`](#seataddedttenantid-tseatid-string-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the seat was added to. |
 | `TSeatId SeatId { get; init; }` | The seat added. |
+| `string Kind { get; init; }` | The seat's kind, as it stores it: one of the catalogue's kinds, which the seat keeps. |
 | `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](access.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
-#### `SeatAdded(TTenantId, TSeatId, TenancyActor<TSeatId>?)`
+#### `SeatAdded(TTenantId, TSeatId, string, TenancyActor<TSeatId>?)`
 
 ```csharp
-public SeatAdded(TTenantId TenantId, TSeatId SeatId, TenancyActor<TSeatId>? By)
+public SeatAdded(TTenantId TenantId, TSeatId SeatId, string Kind, TenancyActor<TSeatId>? By)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -2291,6 +2327,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the seat was added to.
 - `SeatId`: The seat added.
+- `Kind`: The seat's kind, as it stores it: one of the catalogue's kinds, which the seat keeps.
 - `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](access.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `SeatDeactivated<TTenantId, TSeatId>`
@@ -3023,7 +3060,9 @@ It suggests no name for the seat: a seat has none in Tenancy. What the seat is s
 
 The token is not here, and neither is its digest: the store keeps the digest apart from the invitation, so reading invitations never reads it.
 
-What it offers does not change after it was issued: the tenant, the unit, the role, the end of the grant, when it ends itself and who issued it. An issuer's rights are asked again when it is accepted, by the manager.
+It names the kind of seat it makes. An invitation for a kind inside the organization offers a placement at [`UnitId`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid) and the role [`RoleId`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid) there. An invitation for a kind outside it offers a seat with no placement and no role: [`UnitId`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid) is the unit it was issued at, and [`RoleId`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid) is `null`. What such a seat is for is the application's, on its own invitation class.
+
+What it offers does not change after it was issued: the tenant, the kind, the unit, the role, the end of the grant, when it ends itself and who issued it. An issuer's rights are asked again when it is accepted, by the manager.
 
 **Type parameters**
 
@@ -3039,8 +3078,10 @@ What it offers does not change after it was issued: the tenant, the unit, the ro
 | [`InvitationAggregate()`](#invitationaggregate) | Parameterless constructor for persistence frameworks and serializers. |
 | `TTenantId TenantId { get; }` | The tenant the invitation is into. |
 | `string? Address { get; }` | The address the invitation is for, as it was given, while the invitation is open; `null` once it was accepted or cancelled. Not marked `[PersonalData]`, because whoever may read invitations needs it. |
-| `TUnitId UnitId { get; }` | The unit the seat is placed in, as its primary placement. |
-| `TRoleId RoleId { get; }` | The role the seat is granted at that unit. |
+| `string Kind { get; }` | The kind of the seat the invitation makes, one of the catalogue's kinds, as a seat stores it. |
+| `bool InOrganization { get; }` | Whether [`Kind`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid) is inside the organization, as the catalogue said when the invitation was issued: whether it offers a placement and a role. |
+| `TUnitId UnitId { get; }` | For a kind inside the organization, the unit the seat is placed in, as its primary placement. For a kind outside it, the unit the invitation was issued at, where the issuer held [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions); the seat is placed nowhere. |
+| `TRoleId? RoleId { get; }` | The role the seat is granted at [`UnitId`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid), for a kind inside the organization; `null` for a kind outside it. |
 | `DateTimeOffset? GrantUntil { get; }` | When the grant ends, or `null` for no end. Later than [`ExpiresAt`](#invitation-invitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid). |
 | `InvitationState State { get; }` | Whether it is open, accepted or cancelled. |
 | `DateTimeOffset IssuedAt { get; }` | When it was issued. |
@@ -3227,6 +3268,33 @@ Not an `InvariantViolation` so that holding is free: this runs for every changed
 
 - `entity`: The object to check. Never `null`.
 
+### `InvitationAggregate.RoleFitsTheKind`
+
+```csharp
+public sealed class RoleFitsTheKind : IInvariant<InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>>
+```
+
+An invitation for a kind inside the organization offers a role. An invitation for a kind outside it offers no role and no end of a grant.
+
+| Member | Summary |
+|---|---|
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
+| [`Check(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>)`](#checkinvitationaggregatetinvitationid-ttenantid-tunitid-troleid-tseatid-2) | Runs the rule. |
+
+#### `Check(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>)`
+
+```csharp
+public InvariantFailure? Check(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId> entity)
+```
+
+Runs the rule. Returns `null` when it holds, and otherwise what is wrong in the domain's own words, free to name the values that broke it. A string converts to `InvariantFailure`, so a rule with only a message returns the message; one that names values adds them with `InvariantFailure.With` so the message can be translated.
+
+Not an `InvariantViolation` so that holding is free: this runs for every changed entity on every save, and the happy path returns `null` and allocates nothing. The caller pairs the failure with `IInvariant.Code`, so the code lives in one place.
+
+**Parameters**
+
+- `entity`: The object to check. Never `null`.
+
 ### `InvitationAccepted<TTenantId, TInvitationId, TSeatId>`
 
 ```csharp
@@ -3311,27 +3379,29 @@ public sealed record InvitationIssued<TTenantId, TInvitationId, TUnitId, TRoleId
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-An invitation was issued: an offer of a seat, placed in a unit, with a role there.
+An invitation was issued: an offer of a seat of a kind, placed in a unit with a role there for a kind inside the organization, and placed nowhere for a kind outside it.
 
 | Member | Summary |
 |---|---|
-| [`InvitationIssued(TTenantId, TInvitationId, TUnitId, TRoleId, DateTimeOffset, TSeatId?, TenancyActor<TSeatId>?)`](#invitationissuedttenantid-tinvitationid-tunitid-troleid-datetimeoffset-tseatid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
+| [`InvitationIssued(TTenantId, TInvitationId, string, TUnitId, TRoleId?, DateTimeOffset, TSeatId?, TenancyActor<TSeatId>?)`](#invitationissuedttenantid-tinvitationid-string-tunitid-troleid-datetimeoffset-tseatid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the invitation is into. |
 | `TInvitationId InvitationId { get; init; }` | The invitation. |
-| `TUnitId UnitId { get; init; }` | The unit the seat would be placed in. |
-| `TRoleId RoleId { get; init; }` | The role the seat would hold there. |
+| `string Kind { get; init; }` | The kind of the seat it would make. |
+| `TUnitId UnitId { get; init; }` | The unit the seat would be placed in; for a kind outside the organization, the unit the invitation was issued at. |
+| `TRoleId? RoleId { get; init; }` | The role the seat would hold there; `null` for a kind outside the organization. |
 | `DateTimeOffset ExpiresAt { get; init; }` | The first moment it can no longer be accepted. |
 | `TSeatId? IssuedBy { get; init; }` | The seat the invitation keeps as its issuer, whose rights are asked again when it is accepted, or `null` when system work issued it with no seat acting. |
 | `TenancyActor<TSeatId>? By { get; init; }` | Who made the change. |
 
-#### `InvitationIssued(TTenantId, TInvitationId, TUnitId, TRoleId, DateTimeOffset, TSeatId?, TenancyActor<TSeatId>?)`
+#### `InvitationIssued(TTenantId, TInvitationId, string, TUnitId, TRoleId?, DateTimeOffset, TSeatId?, TenancyActor<TSeatId>?)`
 
 ```csharp
 public InvitationIssued(
     TTenantId TenantId,
     TInvitationId InvitationId,
+    string Kind,
     TUnitId UnitId,
-    TRoleId RoleId,
+    TRoleId? RoleId,
     DateTimeOffset ExpiresAt,
     TSeatId? IssuedBy,
     TenancyActor<TSeatId>? By)
@@ -3343,8 +3413,9 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the invitation is into.
 - `InvitationId`: The invitation.
-- `UnitId`: The unit the seat would be placed in.
-- `RoleId`: The role the seat would hold there.
+- `Kind`: The kind of the seat it would make.
+- `UnitId`: The unit the seat would be placed in; for a kind outside the organization, the unit the invitation was issued at.
+- `RoleId`: The role the seat would hold there; `null` for a kind outside the organization.
 - `ExpiresAt`: The first moment it can no longer be accepted.
 - `IssuedBy`: The seat the invitation keeps as its issuer, whose rights are asked again when it is accepted, or `null` when system work issued it with no seat acting.
 - `By`: Who made the change.

@@ -47,6 +47,12 @@ The texts say "member" and "role" and never what the resource is: a resource tha
 | `RoleNameInvalid = "membership.role-name-invalid"` | A role's name is blank or too long, or its description is too long. Arguments: `Min`, `Max`, and `Field`, which is `name` or `description`. |
 | `PermissionNotForMembers = "membership.permission-not-for-members"` | A role would give a permission the resource's rules do not let a member's role give. Arguments: `Permissions`, the permissions refused, and `Field`, which is `permissions`. |
 | `RolePermissionsNotNormalized = "membership.role-permissions-not-normalized"` | A role's permissions are not distinct, not blank and in ordinal order: what a role checks of itself after the fact. |
+| `KindInNoSet = "membership.kind-in-no-set"` | No role set of the resource holds the member's kind of seat, so it is not added. Arguments: `Member`, `Kind`. |
+| `RoleNotInSet = "membership.role-not-in-set"` | The role is in another role set than the member's kind. Arguments: `Member`, `Role`, and `Field`, which is `role`. |
+| `OwnerOutsideOrganization = "membership.owner-outside-organization"` | The one to be named owner, or to open a resource as its owner, is a seat outside the organization. Argument: `Member`. |
+| `PermissionNotForSet = "membership.permission-not-for-set"` | A role would give permissions some kind of its role set may not hold. Arguments: `Permissions`, the permissions refused, `Set`, and `Field`, which is `permissions`. |
+| `SetUnknown = "membership.set-unknown"` | A role names a role set the resource's rules do not declare. Arguments: `Set`, and `Field`, which is `set`. |
+| `MemberKindMissing = "membership.member-kind-missing"` | A member row has no kind of seat: what a member checks of itself after the fact. Argument: `Member`. |
 | `static IReadOnlyCollection<string> Codes { get; }` | Every name, in the order the table lists them. |
 | [`KindOf(string)`](#kindofstring) | The kind of refusal a rule is. |
 | [`TemplateOf(string)`](#templateofstring) | The English text of a rule, as a template: a placeholder such as `{Permission}` is filled from the argument of that name. |

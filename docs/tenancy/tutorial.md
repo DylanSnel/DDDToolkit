@@ -1442,9 +1442,10 @@ may then add units below North. She may not add units below the root or below So
 - **Granting** gives a role to a seat at a unit. It requires `tenancy.grants.manage` at that unit. The seat must be
   placed at that unit, so Rhea's placement at North (step 8) comes first.
 - **Reach**: a grant at North counts at North and at every unit below North ([overview](overview.md#reach-a-grant-covers-the-units-below-it)).
-- **Permissions that manage access** give power over other people's access. Five of Tenancy's six permissions are
-  marked so: `tenancy.settings.manage`, `tenancy.units.manage`, `tenancy.seats.manage`, `tenancy.grants.manage` and
-  `tenancy.roles.manage`. The sixth, `tenancy.history.view`, only reads the access history.
+- **Permissions that manage access** give power over other people's access. Five of Tenancy's permissions are marked
+  so: `tenancy.settings.manage`, `tenancy.units.manage`, `tenancy.seats.manage`, `tenancy.grants.manage` and
+  `tenancy.roles.manage`. The others manage no access. `tenancy.history.view`, for example, only reads the access
+  history ([Tenancy's permissions](roles-and-permissions.md#tenancys-permissions)).
 - **Containment**: a seat may grant a role with a permission that manages access only at a unit where the seat holds
   that permission itself, for at least as long as the grant lasts. A seat never grants such a role to itself
   ([what your application decides](overview.md#what-your-application-decides)). Containment is on unless your

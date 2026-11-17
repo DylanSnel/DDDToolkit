@@ -96,7 +96,7 @@ problem, and the fix.
 | [DDD00094](#ddd00094) | Error | The rules of a resource are made from the permissions declared on it |
 | [DDD00095](#ddd00095) | Error | A module's permissions are declared in a [Permissions] class, not on a list of its own |
 | [DDD00096](#ddd00096) | Warning | [OrOwn] beside a permission the owner of the resource holds already says nothing more |
-| [DDD00097](#ddd00097) | Error | [At] marks the one place an aggregate root hangs at |
+| [DDD00097](#ddd00097) | Error | [At] marks one place of each kind on an aggregate root |
 | [DDD00098](#ddd00098) | Error | Rules that reach a resource from above read where it hangs from its [At] property |
 | [DDD00099](#ddd00099) | Warning | A permission says what it lets somebody do |
 | [DDD00100](#ddd00100) | Error | A restrictive rule narrows a table it can reach |
@@ -109,8 +109,13 @@ problem, and the fix.
 | [DDD00107](#ddd00107) | Error | The registration of an access behavior is written and in scope where it is called |
 | [DDD00108](#ddd00108) | Warning | The migrations make the model the access files are written from |
 | [DDD00109](#ddd00109) | Error | A permission marker on a collection of ids takes no marker argument and no [OrOwn] |
+| [DDD10001](#ddd10001) | Error | A [SeatKinds] class is a static partial class |
+| [DDD10002](#ddd10002) | Error | A kind of seat is a string constant with one marker and a value of its own |
+| [DDD10003](#ddd10003) | Error | The kinds of seat have one default kind inside the organization |
+| [DDD11001](#ddd11001) | Error | The kinds a permission lists are kinds of seat, each once |
 
-The Meaning column is the title the IDE shows for each id.
+The Meaning column is the title the IDE shows for each id. DDD10001 to DDD10003 come from Tenancy's generators, which
+ship in `DylansTechStack.Tenancy.Abstractions`. DDD11001 comes from Membership's generators.
 
 Most of these diagnostics say that a generator could not do what a declaration asks. The others are rules about
 the model. The code they report compiles, reads well, and does something other than what it seems to do. These
@@ -3695,47 +3700,49 @@ resources.
 
 ## DDD00097
 
-**[At] marks the one place an aggregate root hangs at.**
+**[At] marks one place of each kind on an aggregate root.**
 
 ```csharp
 [AggregateRoot<BoardId>]
 public sealed partial class Board
 {
     [At] public OrganizationUnitId UnitId { get; private set; }
-
-    [At] public OrganizationUnitId? FormerUnitId { get; private set; }     // DDD00097: a second, and may be empty
+    [At] public BerthId? BerthId { get; private set; }                    // another kind of place, which may be empty
+    [At] public OrganizationUnitId? FormerUnitId { get; private set; }    // DDD00097: a second place of the kind OrganizationUnitId
 }
 
 [Entity<ColumnId>]
 public sealed partial class Column
 {
-    [At] public OrganizationUnitId UnitId { get; private set; }            // DDD00097: an entity inside an aggregate
+    [At] public OrganizationUnitId UnitId { get; private set; }           // DDD00097: an entity inside an aggregate
 }
 ```
 
-`[At]` marks the property of an aggregate root that says where the aggregate hangs: the unit of an organization that
-a board belongs to, or the bay a crate stands in. This is a fact of the domain. The rules of a resource with members
-read it where they let the resource be reached from above. A permission held at that place, or above it, reaches the
-aggregate ([Beside an organization](membership/beside-an-organization.md#reach-from-above)).
+`[At]` marks a property of an aggregate root that says where the aggregate hangs: the unit of an organization that a
+board belongs to, or the bay a crate stands in. This is a fact of the domain. The type of the property's id is the kind
+of place, and says which tree the place is in. The rules of a resource with members read these properties where they
+let the resource be reached from above. A permission held at a place, or above it, reaches the aggregate
+([A resource at several places](membership/beside-an-organization.md#a-resource-at-several-places)).
 
-So `[At]` goes on one instance property of an aggregate root, on the root itself and never on an entity inside
-it. That property is never empty. An aggregate that hangs nowhere could not be reached from above, and reaching
-from above is what `[At]` is for. DDD00097 refuses each of these, where the property is declared:
+An aggregate hangs at one place of each kind at most. The kind is the type of the id, without the `?` of a nullable
+one, so `OrganizationUnitId` and `OrganizationUnitId?` are one kind. A place may be empty, so a nullable property is
+allowed. An empty place reaches nothing. DDD00097 refuses each of these, where the property is declared:
 
 - a static property;
 - a property on a type that is no aggregate root;
-- a second `[At]` property;
-- a nullable property.
+- a second `[At]` property of the same kind. The first in the order they are written stays, and each later one is
+  reported, with the kind in the message.
 
-Keep one `[At]` property, on the root, of a type that is never empty:
+Keep one `[At]` property of each kind, on the root:
 
 ```csharp
 [AggregateRoot<BoardId>]
 public sealed partial class Board
 {
-    [At] public OrganizationUnitId UnitId { get; private set; }            // the one place, never empty
+    [At] public OrganizationUnitId UnitId { get; private set; }           // the board's unit
+    [At] public BerthId? BerthId { get; private set; }                    // its berth, or none
 
-    public OrganizationUnitId? FormerUnitId { get; private set; }          // a plain property
+    public OrganizationUnitId? FormerUnitId { get; private set; }         // a plain property
 }
 ```
 
@@ -3758,10 +3765,11 @@ public static MembershipRules Rules { get; } = MembershipRules.For<Board>(    //
 
 `reachFromAbove` in the rules of a resource with members says that a permission held where the resource hangs,
 or above it, reaches the resource. Where the resource hangs is a fact of the domain. The resource's class declares
-it with `[At]` on the property that holds it. The mapping and the functions in the database read it from there.
-Rules that reach from above a resource that marks no such property would be refused when the resource is first
-asked about, and when its functions are written. DDD00098 reports the problem earlier, where the rules are made.
-Mark the property `[At]`, or remove `reachFromAbove`.
+it with `[At]` on each property that holds a place. The mapping and the functions in the database read it from there.
+Rules that reach from above a resource that marks no such property would be refused when the resource is
+registered, and when its functions are written. DDD00098 reports the problem earlier, where the rules are made.
+Mark the property that says where it hangs `[At]`, or remove `reachFromAbove`. A literal `reachFromAbove: false` is no
+reach from above, and is not reported.
 
 ## DDD00099
 
@@ -3799,10 +3807,10 @@ description ([A module states its permissions once](tenancy/roles-and-permission
 
 ```csharp
 [RowAccess<Organization>(RowOperations.Read, Restrictive = true)]   // the organization, its units and its tree: fine
-public static partial class OnlyEmployeesReadTheOrganization { ... }
+public static partial class OnlyOnboardedSeatsReadTheOrganization { ... }
 
 [RowAccess<Tenant>(RowOperations.Read, Restrictive = true)]         // DDD00100: a tenant of Tenancy's
-public static partial class OnlyEmployeesReadTheTenant { ... }
+public static partial class OnlyOnboardedSeatsReadTheTenant { ... }
 ```
 
 A restrictive rule (`Restrictive = true`) is AND-ed with every policy that allows rows on its aggregate's table and
@@ -3813,24 +3821,24 @@ restrictive rule can narrow:
 - the seats, with their placements and grants;
 - the roles.
 
-An application narrows these to keep a seat that is not an employee out of the organization. Tenancy reads
-tenants and invitations in its own operations. A person who accepts an invitation reads it before having a seat.
-So a restrictive rule on a tenant or an invitation is refused. Put the rule on one of the other tables, or remove
-`Restrictive` ([Rules that narrow the organization](tenancy/postgres.md#restrictive-rules)).
+An application narrows these to keep some of its seats out of the organization, for example a seat whose onboarding
+is not done. Tenancy reads tenants and invitations in its own operations. A person who accepts an invitation reads it
+before having a seat. So a restrictive rule on a tenant or an invitation is refused. Put the rule on one of the other
+tables, or remove `Restrictive` ([Restrictive rules](tenancy/postgres.md#restrictive-rules)).
 
 ## DDD00101
 
 **`CurrentSeat` answers with the application's seat class.**
 
 ```csharp
-user.CurrentSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
-user.CurrentSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
+user.CurrentSeat<Seat>().Onboarding == OnboardingState.Done   // the class declared with [SeatAggregate]
+user.CurrentSeat<Role>().Name == "Trainee"                    // DDD00101: no seat's row
 ```
 
 `CurrentSeat<TSeat>()` is the calling seat's own row, and a rule reads a field of it. The function behind it answers
-with a row of Tenancy's seats table. So `TSeat` must be the class that this table is mapped to: the class declared
+with a row of Tenancy's seats table. So `TSeat` must be the class that this table is mapped to, the class declared
 with `[SeatAggregate]`. In a rule of a module whose context does not map the seats, use
-`user.CurrentSeatId()` for the seat's id.
+`user.CurrentSeatId()` for the seat's id. For the seat's kind, ask `user.IsInOrganization()` or `user.SeatKind()`.
 
 ## DDD00102
 
@@ -4084,6 +4092,118 @@ the permission and the collection, and nothing more.
 
 A request that also has `[OnResource]` on one id of the same resource is not reported: the marker argument belongs to
 that marker. Remove the marker argument, or send one request for each resource.
+
+## DDD10001
+
+**A `[SeatKinds]` class is a static partial class.**
+
+```csharp
+[SeatKinds]
+public static class HarborSeatKinds                                   // DDD10001: not partial
+{
+    [InOrganization] public const string Employee = "employee";
+}
+```
+
+Tenancy's generator writes the list `All` into the class marked `[SeatKinds]`
+([Kinds of seat](tenancy/your-module.md#kinds-of-seat)). A generated part goes only into a partial class. The class
+holds the constants and the list alone, so it is static. DDD10001 reports a class marked `[SeatKinds]` that:
+
+- is not static;
+- is not partial;
+- has type parameters, or is nested in a type that has them;
+- is nested in a type that is not partial.
+
+The generator writes nothing for such a class. Declare it as a `static partial class`, outside a type or in a partial
+type.
+
+## DDD10002
+
+**A kind of seat is a string constant with one marker and a value of its own.**
+
+```csharp
+[SeatKinds]
+public static partial class HarborSeatKinds
+{
+    [InOrganization] public const string Employee = "employee";
+    public const string Guest = "guest";                                       // DDD10002: no marker
+    [OutsideOrganization] public const string Visitor = "Visitor";             // DDD10002: not lowercase
+    [OutsideOrganization] public const string Client = "employee";             // DDD10002: the value of Employee
+}
+```
+
+Every field of a `[SeatKinds]` class names one kind of seat. DDD10002 reports a field that:
+
+- is not a `const string`;
+- has no marker, or has both `[InOrganization]` and `[OutsideOrganization]`;
+- has a value that is not lowercase letters, digits and dashes starting with a letter, or is longer than 64
+  characters;
+- has a value that starts with `*`. Such a value names a set of kinds in Tenancy's lists, such as
+  `SeatKinds.InOrganization`;
+- has the value of another constant of the class.
+
+The generator leaves the field out of `All`. The value is what a seat stores in its `Kind` column, so fix the value
+before any seat stores it.
+
+## DDD10003
+
+**The kinds of seat have one default kind inside the organization.**
+
+```csharp
+[SeatKinds]
+public static partial class HarborSeatKinds                           // DDD10003: two kinds inside, no default
+{
+    [InOrganization] public const string Employee = "employee";
+    [InOrganization] public const string Trainee = "trainee";
+    [OutsideOrganization] public const string Guest = "guest";
+}
+```
+
+A seat added or invited without a kind gets the default kind. The first seat of a new tenant gets it too. The
+default kind is inside the organization. DDD10003 reports a class that:
+
+- declares no kind marked `[InOrganization]`;
+- declares several kinds inside the organization and marks none of them the default;
+- marks two kinds `Default`.
+
+With one kind inside the organization, that kind is the default. With several, mark one of them
+`[InOrganization(Default = true)]`.
+
+## DDD11001
+
+**The kinds a permission lists are kinds of seat, each once.**
+
+```csharp
+[Permissions]
+public static class BoardPermissions
+{
+    [On<Board>(EveryMember = true, Kinds = [SeatKinds.InOrganization, HarborSeatKinds.Guest])]   // fine
+    public const string View = "boards.view";
+
+    [On<Board>(Kinds = [])]                                                                     // DDD11001: no kind
+    public const string Edit = "boards.edit";
+
+    [On<Board>(Kinds = [HarborSeatKinds.Guest, "Guest"])]                                       // DDD11001: not lowercase
+    public const string Comment = "boards.comment";
+
+    [On<Board>(Kinds = [HarborSeatKinds.Guest, HarborSeatKinds.Guest])]                         // DDD11001: listed twice
+    public const string Pin = "boards.pin";
+}
+```
+
+`Kinds` on `[On<TResource>]` lists the kinds of seat that may hold the permission on the resource
+([Kinds of seat and role sets](membership/permissions-and-roles.md#kinds-of-seat-and-role-sets)). DDD11001 reports a
+list that:
+
+- is empty, so nobody would hold the permission;
+- has a blank entry;
+- has an entry that is no kind of seat. An entry is `SeatKinds.InOrganization`, `SeatKinds.OutsideOrganization`, or a
+  kind's value: a lowercase letter, then lowercase letters, digits and dashes, at most 64 characters;
+- names one entry twice.
+
+Membership does not know the kinds an application declares, so DDD11001 checks only how an entry is written. With
+Tenancy, the join's start-up check refuses a value that the catalogue does not declare. Leave `Kinds` out for the kinds
+inside the organization.
 
 ## Building the model fails: the owned type must carry the key part
 

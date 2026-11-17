@@ -411,7 +411,7 @@ public SeatInScope<TTenantId, TSeatId> RequireSeat()
 
 The tenant the current work acts in, with the seat, for work that a seat does. It reads nothing. A user who is nobody gets the refusal [`Require`](#require) gives.
 
-**Returns**: The tenant and the seat: the user's seat, or for system work in the tenant the seat it acts for, with [`SeatInScope.BySystem`](#seatinscopettenantid-tseatid) set.
+**Returns**: The tenant and the seat: the user's seat with its kind and whether it is inside the organization, or for system work in the tenant the seat it acts for, with [`SeatInScope.BySystem`](#seatinscopettenantid-tseatid) set, no kind, and inside the organization.
 
 **Exceptions**
 
@@ -423,6 +423,15 @@ The tenant the current work acts in, with the seat, for work that a seat does. I
 ```csharp
 var scope = access.CurrentTenant.RequireSeat();
 var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, scope.Seat, clock.GetUtcNow());
+```
+
+A handler that answers a seat outside the organization less:
+
+```csharp
+if (!access.CurrentTenant.RequireSeat().InOrganization)
+{
+    return [];
+}
 ```
 
 ### `TenantInScope<TTenantId, TSeatId>`
@@ -504,15 +513,22 @@ The tenant a caller acts in and its seat, as [`CurrentTenant.RequireSeat`](#requ
 
 | Member | Summary |
 |---|---|
-| [`SeatInScope(TTenantId, TSeatId, bool)`](#seatinscopettenantid-tseatid-bool) | The primary constructor: the type's summary says what it makes. |
+| [`SeatInScope(TTenantId, TSeatId, bool, string?, bool)`](#seatinscopettenantid-tseatid-bool-string-bool) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId Id { get; init; }` | The tenant. |
 | `TSeatId Seat { get; init; }` | The caller's seat, or the seat system work acts for. |
 | `bool BySystem { get; init; }` | Whether this is system work in the tenant rather than a seat. |
+| `string? Kind { get; init; }` | The kind of the caller's seat, as the seat stores it; `null` for system work, which acts as no seat of its own. |
+| `bool InOrganization { get; init; }` | Whether the caller acts inside the organization: a seat of a kind inside it, and system work. False for a seat of a kind outside it. |
 
-#### `SeatInScope(TTenantId, TSeatId, bool)`
+#### `SeatInScope(TTenantId, TSeatId, bool, string?, bool)`
 
 ```csharp
-public SeatInScope(TTenantId Id, TSeatId Seat, bool BySystem)
+public SeatInScope(
+    TTenantId Id,
+    TSeatId Seat,
+    bool BySystem,
+    string? Kind = null,
+    bool InOrganization = true)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -522,6 +538,8 @@ The primary constructor: the type's summary says what it makes.
 - `Id`: The tenant.
 - `Seat`: The caller's seat, or the seat system work acts for.
 - `BySystem`: Whether this is system work in the tenant rather than a seat.
+- `Kind`: The kind of the caller's seat, as the seat stores it; `null` for system work, which acts as no seat of its own.
+- `InOrganization`: Whether the caller acts inside the organization: a seat of a kind inside it, and system work. False for a seat of a kind outside it.
 
 ## Users
 
@@ -551,9 +569,11 @@ Who is asking Tenancy, with the application's ids. Tenancy never takes this from
 | `string? Refusal { get; }` | For [`TenancyUserKind.Nobody`](#tenancyuserkind), the refusal code that says why; otherwise `null`. |
 | `TenancyActor<TSeatId>? Actor { get; }` | Who a change this user makes is recorded as: a seat as itself; system work as the system with its scope, or as the operator or the token [`TenancyWork`](#tenancywork) began it for. `null` for nobody, who changes nothing. An event log's rows, the columns of `RecordsWhoChanged` and Tenancy's own records all read this one answer, so they cannot come to disagree about who acted. |
 | `TTenantId? NamedTenant { get; }` | The tenant an operator's request names, as tenant selection found it: where a command marked `[Operator(Tenant = OperatorTenant.FromRequest)]` acts, and what a `[ForTenant]` member is held to. `null` for every other caller. The operator holds nothing there, and the caller is nobody. |
+| `string? SeatKind { get; }` | The kind of the caller's seat, as the seat stores it, for a seat; `null` for every other caller, system work included. |
+| `bool InOrganization { get; }` | Whether the caller acts inside the organization: a seat of a kind inside it, and system work, which acts inside every part of it. False for a seat of a kind outside it, and for nobody. |
 | [`Nobody(string)`](#nobodystring) | Nobody Tenancy lets in, and why. |
 | [`OperatorNaming(TTenantId)`](#operatornamingttenantid) | One of the application's operators, whose request names `tenant`. |
-| [`InSeat(TTenantId, TSeatId)`](#inseatttenantid-tseatid) | A person, through their seat in a tenant. |
+| [`InSeat(TTenantId, TSeatId, string, bool)`](#inseatttenantid-tseatid-string-bool) | A person, through their seat in a tenant. |
 | [`SystemIn(TTenantId, TSeatId?)`](#systeminttenantid-tseatid) | System work inside one tenant, holding every permission there. |
 | [`SystemIn(TTenantId, TenancyActor<TSeatId>)`](#systeminttenantid-tenancyactortseatid) | System work inside one tenant, holding every permission there, recorded as `actor`: the system in a scope of its own, an operator the work is carried out for, or the token a link carried. |
 | [`SystemBy(TenancyActor<TSeatId>)`](#systembytenancyactortseatid) | System work outside any tenant, recorded as `actor`: an operator a tenant is provisioned for. |
@@ -586,10 +606,14 @@ One of the application's operators, whose request names `tenant`. To Tenancy the
 
 - `tenant`: The tenant the request names.
 
-#### `InSeat(TTenantId, TSeatId)`
+#### `InSeat(TTenantId, TSeatId, string, bool)`
 
 ```csharp
-public static TenancyUser<TTenantId, TSeatId> InSeat(TTenantId tenant, TSeatId seat)
+public static TenancyUser<TTenantId, TSeatId> InSeat(
+    TTenantId tenant,
+    TSeatId seat,
+    string kind = "member",
+    bool inOrganization = true)
 ```
 
 A person, through their seat in a tenant.
@@ -598,6 +622,8 @@ A person, through their seat in a tenant.
 
 - `tenant`: The tenant.
 - `seat`: The person's seat in it.
+- `kind`: The seat's kind, as the seat stores it. Tenant selection passes the stored one. Left out, the kind of an application that declares none, [`SeatKinds.Member`](entity-framework.md#seatkinds).
+- `inOrganization`: Whether the seat's kind is inside the organization, as the seat stores it. Tenant selection passes the stored one.
 
 #### `SystemIn(TTenantId, TSeatId?)`
 
@@ -1404,19 +1430,21 @@ public sealed record SeatOfUser<TTenantId, TSeatId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-A person's seat in one tenant, as the directory finds it for their verified identity when the caller's seat is selected ([`ISeatDirectory.FindAsync`](#findasyncguid-string-cancellationtoken)): the tenant and the seat, each by its id and status, which is all the selection decides by. A tenant picker is answered the application's own seats instead ([`ISeatDirectory.AllOfAsync<TSeat>`](#allofasyncguid-cancellationtoken)).
+A person's seat in one tenant, as the directory finds it for their verified identity when the caller's seat is selected ([`ISeatDirectory.FindAsync`](#findasyncguid-string-cancellationtoken)): the tenant and the seat, each by its id and status, and the seat's kind, which is all the selection decides by and the caller is begun with. A tenant picker is answered the application's own seats instead ([`ISeatDirectory.AllOfAsync<TSeat>`](#allofasyncguid-cancellationtoken)).
 
 | Member | Summary |
 |---|---|
-| [`SeatOfUser(TTenantId, string, string, TenantStatus, TSeatId, SeatStatus)`](#seatofuserttenantid-string-string-tenantstatus-tseatid-seatstatus) | The primary constructor: the type's summary says what it makes. |
+| [`SeatOfUser(TTenantId, string, string, TenantStatus, TSeatId, SeatStatus, string, bool)`](#seatofuserttenantid-string-string-tenantstatus-tseatid-seatstatus-string-bool) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId Tenant { get; init; }` | The tenant's id. |
 | `string Slug { get; init; }` | The slug the tenant is selected by. |
 | `string OrganizationName { get; init; }` | The tenant's name. |
 | `TenantStatus TenantStatus { get; init; }` | Where the tenant is in its life. |
 | `TSeatId Seat { get; init; }` | The seat's id. |
 | `SeatStatus SeatStatus { get; init; }` | Whether the seat counts. |
+| `string Kind { get; init; }` | The seat's kind, as the seat stores it. |
+| `bool InOrganization { get; init; }` | Whether the seat's kind is inside the organization, as the seat stores it. |
 
-#### `SeatOfUser(TTenantId, string, string, TenantStatus, TSeatId, SeatStatus)`
+#### `SeatOfUser(TTenantId, string, string, TenantStatus, TSeatId, SeatStatus, string, bool)`
 
 ```csharp
 public SeatOfUser(
@@ -1425,7 +1453,9 @@ public SeatOfUser(
     string OrganizationName,
     TenantStatus TenantStatus,
     TSeatId Seat,
-    SeatStatus SeatStatus)
+    SeatStatus SeatStatus,
+    string Kind = "member",
+    bool InOrganization = true)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -1438,6 +1468,8 @@ The primary constructor: the type's summary says what it makes.
 - `TenantStatus`: Where the tenant is in its life.
 - `Seat`: The seat's id.
 - `SeatStatus`: Whether the seat counts.
+- `Kind`: The seat's kind, as the seat stores it.
+- `InOrganization`: Whether the seat's kind is inside the organization, as the seat stores it.
 
 ## Requirements
 

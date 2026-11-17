@@ -316,9 +316,10 @@ internal static class Providers
             .Select(static (diagnostic, _) => diagnostic!);
 
     /// <summary>
-    /// DDD00097 for every property marked <c>[At]</c> that is not the one place an aggregate root hangs at: on another
-    /// type, static, a second one, or one that may be empty. The package that declares the marker reports it, and names
-    /// the marker by <paramref name="marker"/>, its metadata name.
+    /// DDD00097 for every property marked <c>[At]</c> that is not a place an aggregate root hangs at: on another type,
+    /// static, or a second one of the same kind of place. The kind is the type of the place's id, without
+    /// <c>Nullable&lt;T&gt;</c>, and a nullable place is allowed. The package that declares the marker reports it, and
+    /// names the marker by <paramref name="marker"/>, its metadata name.
     /// </summary>
     public static IncrementalValuesProvider<DiagnosticInfo> MisplacedPlaces(this IncrementalGeneratorInitializationContext context, string marker)
         => context.SyntaxProvider.ForAttributeWithMetadataName(

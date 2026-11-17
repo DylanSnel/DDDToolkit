@@ -80,6 +80,7 @@ services.AddDDDToolkitLocalization(options => options.AddResource<TenancyFailure
 | `InvitationCancelled = "tenancy.invitation-cancelled"` | The invitation was cancelled before it was accepted. |
 | `InvitationState = "tenancy.invitation-state"` | The invitation's state does not allow the change. Arguments: `State`, the state in lowercase, and `Action`, one of `cancel` and `accept`. |
 | `InvitationUnbacked = "tenancy.invitation-unbacked"` | The seat that issued the invitation may no longer give what it offers: it is not active, or it lacks a permission it needed to issue it, or holds one for too short a time. It names neither the seat nor the permissions: the person it is told to is no member of the tenant. |
+| `SeatOutsideOrganization = "tenancy.seat-outside-organization"` | A seat of a kind outside the organization would be placed in a unit. Such a seat has no placement, and so no organization role either. |
 | `NameInvalid = "tenancy.name-invalid"` | A name is blank, or a name or text is too long. Arguments: `What`, one of `tenant-name`, `unit-name`, `role-name`, `role-description` and `reason`; `Min` and `Max`, the lengths allowed; and `Field`, the input it is about: `name` for the name of a tenant, a unit or a role, `description` or `reason`. A seat has no name in Tenancy, so none is refused here. |
 | `InvalidSlug = "tenancy.invalid-slug"` | A slug does not follow the pattern. Argument: `Field`, which is `slug`. |
 | `InvalidPeriod = "tenancy.invalid-period"` | A grant would end at or before its start. Argument: `Field`, which is `until`. |
@@ -93,6 +94,8 @@ services.AddDDDToolkitLocalization(options => options.AddResource<TenancyFailure
 | `AddressInvalid = "tenancy.address-invalid"` | An invitation is not for one address a message can be sent to. Arguments: `Max`, the most characters an address has, and `Field`, which is `address`. |
 | `InvitationLifetime = "tenancy.invitation-lifetime"` | An invitation would stay open for less or for longer than an invitation may. Arguments: `Min` and `Max`, in minutes, and `Field`, which is `lifetime`. |
 | `InvitationGrantEndsFirst = "tenancy.invitation-grant-ends-first"` | The grant an invitation offers would end before the invitation does, so it could be accepted for a role that is already over. Argument: `Field`, which is `grantUntil`. |
+| `SeatKindUnknown = "tenancy.seat-kind-unknown"` | A seat or an invitation names a kind of seat the catalogue does not declare. Arguments: `Kind`, the kind named, and `Field`, which is `kind`. |
+| `InvitationKind = "tenancy.invitation-kind"` | An invitation's role does not fit its kind of seat: an invitation for a kind inside the organization names a role, and one for a kind outside it names none. `IssueAsync` takes a kind inside the organization, and `IssueOutsideAsync` a kind outside it. Argument: `Field`, which is `kind`. |
 | `static IReadOnlyCollection<string> Codes { get; }` | Every code, in the order the table lists them. |
 | [`KindOf(string)`](#kindofstring) | The kind of refusal a code is. |
 | [`TemplateOf(string)`](#templateofstring) | The English text of a code, as a template: a placeholder such as `{Max}` is filled from the argument of that name. |

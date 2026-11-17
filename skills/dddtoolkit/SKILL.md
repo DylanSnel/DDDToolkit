@@ -384,6 +384,7 @@ composed over several: [references/graphql.md](references/graphql.md). The mista
   goes in its `partial void OnChangingMembers()`, events in `OnMemberAdded` and the other hooks. The member manager
   requires the permission marked `[On<T>(ManagesMembers = true)]` (`NamesOwner = true` to hand a resource on), and a
   role manager the one the rules name, `Roles.Custom(managedWith: ...)`, held for the whole tenant with Tenancy.
+  Without a `ManagesMembers` permission only system work changes the members, in the manager and on Postgres.
 - A row rule takes `IRowUser`, not `ICurrentUser`, and asks a resource with members by its id, which is all a module's
   contracts publish of it: `user.Sees<ProjectId>().Contains(row.ProjectId)`, `user.Holds<ProjectId>(permission)` and
   `user.FellowMembers<ProjectId, SeatId>()`. No rule names the SQL function: the Membership contribution says which of

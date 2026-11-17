@@ -867,15 +867,17 @@ owning it (declared `[On<TResource>]` with `Owner = true`, the default), so the 
 
 Error, at `[At]` (namespace `DTS.Membership`, package
 `DylansTechStack.Membership.Abstractions`), reported by Membership's generator, which ships in
-`DylansTechStack.Membership`: it goes on one instance property of an aggregate root, the place the root
-hangs at, never nullable. Not on an entity inside an aggregate, not on a static property, not twice on one aggregate,
-not on a property that may be empty. Keep one `[At]` property on the root, of a type that is never empty.
+`DylansTechStack.Membership`: it goes on an instance property of an aggregate root, a place the root hangs at, one
+per kind of place. The kind is the type of the place's id without `?`, so `OrganizationUnitId` and
+`OrganizationUnitId?` are one kind. A nullable place is allowed, and an empty one reaches nothing. Not on an entity
+inside an aggregate, not on a static property, not twice for one kind on one aggregate: the first stays, and each
+later one is reported with the kind. Keep one `[At]` property of each kind on the root.
 
 ## DDD00098
 
-Error, at `MembershipRules.For<TResource>(..., reachFromAbove: ...)`: `TResource` marks no property `[At]`. Mark the
-property that holds where it hangs `[At]` (an `OrganizationUnitId` beside Tenancy, a place of your own otherwise),
-or leave `reachFromAbove` out.
+Error, at `MembershipRules.For<TResource>(..., reachFromAbove: true)`: `TResource` marks no property `[At]`. Mark the
+property that says where it hangs `[At]` (an `OrganizationUnitId` beside Tenancy, a place of your own otherwise),
+or leave `reachFromAbove` out. A literal `false` is not reported.
 
 ## DDD00099
 

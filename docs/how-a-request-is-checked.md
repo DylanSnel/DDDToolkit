@@ -568,7 +568,7 @@ SELECT EXISTS (SELECT 1 FROM "tenancy"."OrganizationUnits" AS u WHERE u."TenantI
 ```
 
 ```sql shortened
--- EfMemberQuestions.HoldAsync: the project as the caller sees it, and how the permission is held, approximately
+-- EfMembershipAccess.HoldAsync: the project as the caller sees it, and how the permission is held, approximately
 SELECT p."Version",
        EXISTS (SELECT 1 FROM "projects"."ProjectCrewMembers" AS m                 -- on the crew now,
                WHERE m."ProjectId" = p."Id" AND m."SeatId" = @seat
@@ -587,7 +587,7 @@ LIMIT 1
 ```
 
 ```sql shortened
--- EfMemberQuestions.HoldAsync for system work: every permission, so only the project and its version
+-- EfMembershipAccess.HoldAsync for system work: every permission, so only the project and its version
 SELECT p."Version" FROM "projects"."Projects" AS p WHERE p."Id" = @project LIMIT 1
 ```
 
@@ -662,7 +662,7 @@ using (access.BeginAs(requestUser))                               // access is t
 }
 ```
 
-```sql title="20261106151621_access.tenants.ddd.sql, the caller's seat and tenant, shortened"
+```sql title="20261116201008_access.tenants.ddd.sql, the caller's seat and tenant, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".system_tenant() RETURNS uuid
     LANGUAGE sql STABLE SET search_path = '' AS $function$
 SELECT nullif(pg_catalog.current_setting('tenancy.current_tenant', true), '')::pg_catalog.uuid
@@ -766,7 +766,7 @@ The policies below are copied from the sample's export. The toolkit quotes schem
 insert policy on the units allows a new unit below a parent where the caller holds the permission that manages units.
 This is the same permission at the same unit that the check tested:
 
-```sql title="20261106151621_access.tenants.ddd.sql, the units' insert policy, shortened"
+```sql title="20261116201008_access.tenants.ddd.sql, the units' insert policy, shortened"
 CREATE POLICY "Unit managers add below their units (insert) for authenticated" ON "tenancy"."OrganizationUnits" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT "tenancy".current_tenant())) AND ("ParentId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('tenancy.units.manage')))));
 ```
@@ -784,7 +784,7 @@ In both cases Postgres refuses the statement with 42501, `permission denied`, be
 <details>
 <summary>Show the code: the policies and functions the export writes for the units, the seats, the crew and the audit log</summary>
 
-```sql title="20261106151621_access.tenants.ddd.sql, the units' other policies and the function they ask, shortened"
+```sql title="20261116201008_access.tenants.ddd.sql, the units' other policies and the function they ask, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".units_where_i_hold_permission(permission text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT p."DescendantId" FROM "tenancy"."SeatRights" r
@@ -805,7 +805,7 @@ CREATE POLICY "Closed to anonymous callers (all) for anon" ON "tenancy"."Organiz
     WITH CHECK (false);
 ```
 
-```sql title="20261106151621_access.tenants.ddd.sql, the seats and the name's column rule, shortened"
+```sql title="20261116201008_access.tenants.ddd.sql, the seats and the name's column rule, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".holds_at_tenant(permission text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT EXISTS (SELECT 1 FROM "tenancy"."SeatRights" r
@@ -837,23 +837,23 @@ CREATE TRIGGER seats_displayname_column_rule BEFORE UPDATE OF "DisplayName" ON "
     EXECUTE FUNCTION "tenancy".seats_displayname_column_rule();
 ```
 
-```sql title="20261106151622_access.projects.ddd.sql, the crew and the function it asks, shortened"
+```sql title="20261117130035_access.projects.ddd.sql, the crew and the function it asks, shortened"
 CREATE OR REPLACE FUNCTION "projects".projects_where_i_hold(text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT holding.id FROM "projects".projects_as_member_with($1) AS holding(id)
 UNION
-SELECT joined.id FROM "projects".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'
+SELECT DISTINCT m."ProjectId" FROM "projects"."ProjectCrewMembers" m WHERE $1 = 'projects.view' AND m."SeatId" = (SELECT "tenancy".current_seat()) AND m."StartsAt" <= pg_catalog.now() AND (m."EndsAt" IS NULL OR m."EndsAt" > pg_catalog.now()) AND (m."Kind" IN ('guest') OR m."InOrganization")
 UNION
-SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r."OwnerSeatId" = (SELECT "tenancy".current_seat())
+SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage', 'projects.guests.manage') AND r."OwnerSeatId" = (SELECT "tenancy".current_seat())
 UNION
-SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IS NOT NULL AND r."UnitId" IN (SELECT reached.place FROM "tenancy".units_where_i_hold_permission($1) AS reached(place))
+SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IS NOT NULL AND EXISTS (SELECT 1 FROM "tenancy".seat_to_admit((SELECT "tenancy".current_seat())) c WHERE (EXISTS (SELECT 1 FROM (VALUES ('projects.view', 'guest')) AS listed(permission, kind) WHERE listed.permission = $1 AND listed.kind = c."Kind") OR c."InOrganization")) AND r."UnitId" IN (SELECT reached.place FROM "tenancy".units_where_i_hold_permission($1) AS reached(place))
 UNION
 SELECT r."Id" FROM "projects"."Projects" r WHERE (SELECT auth.role()) = 'ddd_system_in' AND (SELECT auth.jwt() ->> 'scope') IN ('projects') AND $1 IS NOT NULL
 $function$;
 CREATE POLICY "System work in its tenant (insert) for ddd_system_in" ON "projects"."ProjectCrewMembers" FOR INSERT TO ddd_system_in
     WITH CHECK (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".system_tenant())));
 CREATE POLICY "Members change with the permission (insert) for authenticated" ON "projects"."ProjectCrewMembers" AS RESTRICTIVE FOR INSERT TO authenticated
-    WITH CHECK ("ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.crew.manage') AS held(id)) OR "ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.owner.change') AS held(id)));
+    WITH CHECK (CASE WHEN "InOrganization" THEN "ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.crew.manage') AS held(id)) WHEN "Kind" IN ('guest') THEN "ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.guests.manage') AS held(id)) ELSE false END OR "ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.owner.change') AS held(id)));
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "projects"."ProjectCrewMembers" AS RESTRICTIVE FOR ALL TO authenticated
     USING (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".current_tenant())))
     WITH CHECK (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".current_tenant())));
@@ -994,7 +994,7 @@ using (access.BeginSystem())                                      // system work
 }                                                                 // the user before it is current again
 ```
 
-```sql title="20261106151621_access.tenants.ddd.sql, the tenant the provisioning writes, shortened"
+```sql title="20261116201008_access.tenants.ddd.sql, the tenant the provisioning writes, shortened"
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON "tenancy"."Tenants" FOR INSERT TO ddd_system_in
     WITH CHECK (("Id" = (SELECT "tenancy".system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 ```

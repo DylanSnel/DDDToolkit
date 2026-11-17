@@ -19,7 +19,7 @@ Namespace `DTS.Tenancy.Catalogue`.
 public sealed record ApplicationCatalogue
 ```
 
-What the application adds to the catalogue, besides Tenancy's own permissions and what its modules contribute: role starter roles, permissions it owns itself, marks on permissions that manage access, and whether those permissions stay contained. It is data in code, built and checked once by [`TenancyCatalogue.Build`](#buildapplicationcatalogue-ienumerablepermission).
+What the application adds to the catalogue, besides Tenancy's own permissions and what its modules contribute: role starter roles, permissions it owns itself, marks on permissions that manage access, whether those permissions stay contained, the kinds of seat its tenants have, and what a seat outside the organization reads. It is data in code, built and checked once by [`TenancyCatalogue.Build`](#buildapplicationcatalogue-ienumerablepermission).
 
 Every part is optional, and an application that needs none of them leaves the catalogue out: its modules contribute their permissions, every tenant starts with the role of [`TenancyStarterRoles.DefaultAdministrators`](#defaultadministrators), given to its first seat, and the permissions that manage access stay contained. `new ApplicationCatalogue()` is that catalogue, and Tenancy builds it when `TenancyOptions.Catalogue` is not set. Tenancy asks for nothing more, because it decides nothing more with it: what kind of unit a unit is, a region or a site, is the application's to keep, as a field of its own unit class.
 
@@ -31,20 +31,24 @@ public static ApplicationCatalogue Application { get; } = new(
 
 | Member | Summary |
 |---|---|
-| [`ApplicationCatalogue(IReadOnlyList<StarterRole>?, IReadOnlyList<Permission>?, IReadOnlyList<string>?, bool)`](#applicationcatalogueireadonlyliststarterrole-ireadonlylistpermission-ireadonlyliststring-bool) | The primary constructor: the type's summary says what it makes. |
+| [`ApplicationCatalogue(IReadOnlyList<StarterRole>?, IReadOnlyList<Permission>?, IReadOnlyList<string>?, bool, IReadOnlyList<SeatKind>?, bool)`](#applicationcatalogueireadonlyliststarterrole-ireadonlylistpermission-ireadonlyliststring-bool-ireadonlylistseatkind-bool) | The primary constructor: the type's summary says what it makes. |
 | `IReadOnlyList<Permission>? Permissions { get; init; }` | The permissions the application owns itself, besides Tenancy's and the modules' contributions. A module's permissions are stated by the module, next to the code that asks for them, on a list it marks with `TenancyPermissionsAttribute`, and are not listed here. |
 | `IReadOnlyList<string>? AccessManagingPermissions { get; init; }` | Permissions that manage access besides those marked where they are declared ([`Permission.ManagesAccess`](#managesaccess)): the application's own or any module's. Listing a permission that is already marked, Tenancy's included, changes nothing, so a module that starts marking its own permission breaks no application. A listed retired permission counts once it is live again. |
 | [`ContainAccessManagingPermissions`](#containaccessmanagingpermissions) | Whether a seat hands on a permission that manages access only where it holds that permission itself: on unless the application turns it off. |
+| `IReadOnlyList<SeatKind>? SeatKinds { get; init; }` | The kinds of seat the tenants have, as the generator writes them into the class the application marks `[SeatKinds]`: `SeatKinds: HarborSeatKinds.All`. Each kind is inside the organization or outside it. A seat inside it is placed in units and holds organization roles. A seat outside it has neither, and reads what `NarrowOutsideSeats` says. Left out, the tenants have one kind, [`SeatKind.Member`](entity-framework.md#seatkind), inside the organization. The catalogue checks a list given here by the rules the generator checks, so a list written by hand is held to them too. |
+| `bool NarrowOutsideSeats { get; init; }` | Whether a seat outside the organization reads only its own seats and its tenant: on unless the application turns it off. While it is on, such a seat reads no unit, no path of the tree, no placement, no role and no other seat of its tenant. The managers' reads answer so, and on Postgres restrictive policies do, which no read rule of the application's widens. Off, such a seat reads what any seat of the tenant reads. It holds no placement and no organization role either way. The export writes the setting into the access files, and on Postgres a start-up check refuses a database written with the other setting. |
 | `IReadOnlyList<StarterRole> StarterRoles { get; init; }` | The starter roles, none when none are given: what is read is never `null`. |
 
-#### `ApplicationCatalogue(IReadOnlyList<StarterRole>?, IReadOnlyList<Permission>?, IReadOnlyList<string>?, bool)`
+#### `ApplicationCatalogue(IReadOnlyList<StarterRole>?, IReadOnlyList<Permission>?, IReadOnlyList<string>?, bool, IReadOnlyList<SeatKind>?, bool)`
 
 ```csharp
 public ApplicationCatalogue(
     IReadOnlyList<StarterRole>? StarterRoles = null,
     IReadOnlyList<Permission>? Permissions = null,
     IReadOnlyList<string>? AccessManagingPermissions = null,
-    bool ContainAccessManagingPermissions = true)
+    bool ContainAccessManagingPermissions = true,
+    IReadOnlyList<SeatKind>? SeatKinds = null,
+    bool NarrowOutsideSeats = true)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -66,6 +70,8 @@ The primary constructor: the type's summary says what it makes.
   Off, a role or a permission that manages access goes as one that manages none: a seat that holds [`TenancyPermissions.GrantsManage`](#tenancypermissions) at a unit gives every role there, to anyone placed there for as long as it says, and to itself for no longer than it holds that permission there; so in practice whoever holds a permission that manages access administers everything that permission reaches. Roles that manage no access go as they always do, and a move still gives the mover nothing. What keeps the access model sound stays either way: each manager asks its permission where it acts, a tenant keeps an administrator, and a seat keeps its identity and its tenant. Leave it on when the database can be reached without the application's handlers, through Supabase's Data API say.
 
   It is about a seat handing permissions on, not about the application: system work in a tenant holds every permission there and is never held to it. A handler that checked a condition of the application's own, a quiz passed say, gives the role inside `TenancyWork.BeginSystemIn`, with it on, for the calling seat and with a role the application chose, never one the request named. The export writes the setting into the access files, as it writes the marks, and on Postgres a start-up check refuses a database written with the other setting.
+- `SeatKinds`: The kinds of seat the tenants have, as the generator writes them into the class the application marks `[SeatKinds]`: `SeatKinds: HarborSeatKinds.All`. Each kind is inside the organization or outside it. A seat inside it is placed in units and holds organization roles. A seat outside it has neither, and reads what `NarrowOutsideSeats` says. Left out, the tenants have one kind, [`SeatKind.Member`](entity-framework.md#seatkind), inside the organization. The catalogue checks a list given here by the rules the generator checks, so a list written by hand is held to them too.
+- `NarrowOutsideSeats`: Whether a seat outside the organization reads only its own seats and its tenant: on unless the application turns it off. While it is on, such a seat reads no unit, no path of the tree, no placement, no role and no other seat of its tenant. The managers' reads answer so, and on Postgres restrictive policies do, which no read rule of the application's widens. Off, such a seat reads what any seat of the tenant reads. It holds no placement and no organization role either way. The export writes the setting into the access files, and on Postgres a start-up check refuses a database written with the other setting.
 
 #### `ContainAccessManagingPermissions`
 
@@ -235,8 +241,12 @@ Some permissions manage access: they give power over other people's access, and 
 | `IReadOnlyList<StarterRole> StarterRoles { get; }` | The starter roles as built, their permissions expanded. An administrators' starter role that lists no permissions holds [`LivePermissions`](#tenancycatalogue); one that lists permissions holds those, as any other starter role does. When the application declares no administrators' starter role, [`TenancyStarterRoles.DefaultAdministrators`](#defaultadministrators) comes first, holding [`LivePermissions`](#tenancycatalogue). |
 | `bool HasDefaultAdministrators { get; }` | Whether the application declared no administrators' starter role, so that [`StarterRoles`](#tenancycatalogue) holds [`TenancyStarterRoles.DefaultAdministrators`](#defaultadministrators), added by [`Build`](#buildapplicationcatalogue-ienumerablepermission). The starter role of that permission is then the package's, named in the languages the package ships; otherwise every starter role is the application's. |
 | `bool ContainAccessManagingPermissions { get; }` | Whether a seat hands on the permissions of [`AccessManagingPermissions`](#tenancycatalogue) only where it holds them itself, as the application says in [`ApplicationCatalogue.ContainAccessManagingPermissions`](#containaccessmanagingpermissions): on unless it turns it off. The managers ask it before every rule of containment, and the export writes it into the database's access files with the rest of the catalogue. It changes which permissions are marked in nothing: [`AccessManagingPermissions`](#tenancycatalogue) and [`ManagesAccess`](#managesaccessstring) answer the same either way. |
+| `IReadOnlyList<SeatKind> SeatKinds { get; }` | The kinds of seat the tenants have, in the order the application lists them in [`ApplicationCatalogue.SeatKinds`](#applicationcatalogue): [`SeatKind.Member`](entity-framework.md#seatkind) alone when it lists none. Exactly one kind inside the organization has [`SeatKind.IsDefault`](entity-framework.md#seatkind) set, the one the application marks, or its only kind inside the organization. |
+| `SeatKind DefaultSeatKind { get; }` | The kind a seat added or invited without a kind gets: one inside the organization. |
+| `bool NarrowOutsideSeats { get; }` | Whether a seat outside the organization reads only its own seats and its tenant, as the application says in [`ApplicationCatalogue.NarrowOutsideSeats`](#applicationcatalogue): on unless it turns it off. The managers' reads ask it, and the export writes it into the database's access files. |
 | [`Build(IEnumerable<Permission>)`](#buildienumerablepermission) | Builds the catalogue of an application that adds nothing to it, from the modules' contributions alone, as the registration does when `TenancyOptions.Catalogue` is not set: Tenancy's permissions, the modules' permissions, and [`TenancyStarterRoles.DefaultAdministrators`](#defaultadministrators) as the one starter role. |
 | [`Build(ApplicationCatalogue, IEnumerable<Permission>)`](#buildapplicationcatalogue-ienumerablepermission) | Builds the catalogue from the application's part and the modules' contributions, and checks it as a whole. |
+| [`IsInOrganization(string)`](#isinorganizationstring) | Whether a seat of `kind` is inside the organization. |
 | [`Knows(string)`](#knowsstring) | Whether the catalogue declares `permission`, retired or not. |
 | [`IsLive(string)`](#islivestring) | Whether `permission` is declared and not retired. |
 | [`ManagesAccess(string)`](#managesaccessstring) | Whether `permission` manages access: it is declared, not retired, and marked, where it is declared or by the application. |
@@ -280,6 +290,18 @@ Builds the catalogue from the application's part and the modules' contributions,
 **Exceptions**
 
 - [`TenancyCatalogueException`](#tenancycatalogueexception): Something does not hold together; every problem found is listed.
+
+#### `IsInOrganization(string)`
+
+```csharp
+public bool IsInOrganization(string kind)
+```
+
+Whether a seat of `kind` is inside the organization. A kind the catalogue does not know is not.
+
+**Parameters**
+
+- `kind`: The kind, as a seat stores it.
 
 #### `Knows(string)`
 
@@ -371,7 +393,7 @@ Tenancy's own permissions. They are always in the catalogue, and no other module
 
 A permission held at the root holds for the whole tenant; a permission held at a unit holds for that unit and every unit below it. The permissions that manage the tenant itself (settings, adding seats, roles) are asked for at the root.
 
-Every one of them but [`HistoryView`](#tenancypermissions) manages access: a role holding one is given only by a seat that holds it there. Reading what happened changes nobody's rights, so that permission is given like any other.
+Every one of them but [`HistoryView`](#tenancypermissions) and [`ExternalsInvite`](#tenancypermissions) manages access: a role holding one is given only by a seat that holds it there. Reading what happened changes nobody's rights, and a seat outside the organization holds no organization role, so those two permissions are given like any other.
 
 | Member | Summary |
 |---|---|
@@ -381,6 +403,7 @@ Every one of them but [`HistoryView`](#tenancypermissions) manages access: a rol
 | `GrantsManage = "tenancy.grants.manage"` | Give seats organization roles at a unit and take them away. Asked for at the unit. Holding it is enough to give roles: its holder gives any role that manages no access to a seat placed there or below without holding the role's permissions, and to itself for no longer than it holds this permission. A role that manages access it gives only while holding there each of its permissions that do, and never to itself. |
 | `RolesManage = "tenancy.roles.manage"` | The tenant's roles: new ones, their names, their permissions and archiving. Asked for the whole tenant. |
 | `HistoryView = "tenancy.history.view"` | Read the tenant's access history: which seat, role, grant or unit changed, when, and who changed it. Asked for the whole tenant. It manages no access, so a role that holds it is given like any other; an administrators' starter role that lists its permissions holds it, as it holds every permission of Tenancy's. |
+| `ExternalsInvite = "tenancy.externals.invite"` | Invite a person from outside the organization, as a seat of a kind outside it. Asked for at a unit: the invitation keeps the unit it was issued at, and the seat it makes is placed nowhere and holds no organization role. It manages no access, so a role that holds it is given like any other. |
 | `AdministratorPermission = "tenancy.roles.manage"` | The permission that makes a seat an administrator: whoever manages roles can give themselves any permission, so that is the permission the last-administrator rule counts. |
 | `Module = "Tenancy"` | The module Tenancy's permissions are listed under. |
 | `static IReadOnlyList<Permission> All { get; }` | Tenancy's permissions, as the catalogue lists them. |

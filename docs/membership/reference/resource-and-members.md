@@ -59,6 +59,8 @@ A member belongs to the member list of its resource, and nothing else changes it
 | `DateTimeOffset StartsAt { get; }` | The first moment the membership counts. |
 | `DateTimeOffset? EndsAt { get; }` | The first moment it no longer counts, or `null` when it has no end. |
 | `TMemberId? AddedBy { get; }` | The member that added this one, or `null` for system work and for an owner the resource was opened with or that was named owner without being a member. |
+| `string Kind { get; }` | The member's kind of seat, such as `employee` or `stakeholder`, copied from the seat when the member is added and never changed. A seat keeps its kind, so the copy stays right. Empty only on the owner's row of a resource that is not opened yet: the member manager gives it the owner's kind before the save. Where nothing keeps kinds it is `member`. |
+| `bool InOrganization { get; }` | Whether the member's kind is inside the organization, copied with [`Kind`](#member-memberentitytid-tmemberid-troleid). A permission whose kinds name a group is answered from it, without the catalogue of kinds. |
 | `IReadOnlyList<MemberRole<TMemberId, TRoleId>> Roles { get; }` | The roles the member holds on the resource, at most one per role. A read-only view: only the member list changes them. |
 | [`AppliesAt(DateTimeOffset)`](#appliesatdatetimeoffset) | Whether the membership counts at `moment`: it has started, and has not ended. |
 | [`HoldsAt(TRoleId, DateTimeOffset)`](#holdsattroleid-datetimeoffset) | Whether the member holds `role` at `moment`: the role's own period applies then, and so does the membership it is held in. |
@@ -177,6 +179,35 @@ An application declares one member class for each kind of resource it has member
 
 Membership's Entity Framework package maps the resource's collection of this class, through `AddDDDToolkitConventions()`, as `HasMembers` does: the template names that convention. A model that maps the class without that package in the application is refused while it is built.
 
+### `MemberEntity.KindIsGiven`
+
+```csharp
+public sealed class KindIsGiven : IInvariant<MemberEntity<TId, TMemberId, TRoleId>>
+```
+
+A member row has a kind of seat. The member manager gives every row its kind, the owner's row included. A resource saved without the member manager's `OpenAsync` fails here.
+
+It reports the package's own name for the rule, [`MembershipRefusals.MemberKindMissing`](refusals.md#membershiprefusals), and not a code of the resource: a member does not know whose it is.
+
+| Member | Summary |
+|---|---|
+| `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
+| [`Check(MemberEntity<TId, TMemberId, TRoleId>)`](#checkmemberentitytid-tmemberid-troleid) | Runs the rule. |
+
+#### `Check(MemberEntity<TId, TMemberId, TRoleId>)`
+
+```csharp
+public InvariantFailure? Check(MemberEntity<TId, TMemberId, TRoleId> entity)
+```
+
+Runs the rule. Returns `null` when it holds, and otherwise what is wrong in the domain's own words, free to name the values that broke it. A string converts to `InvariantFailure`, so a rule with only a message returns the message; one that names values adds them with `InvariantFailure.With` so the message can be translated.
+
+Not an `InvariantViolation` so that holding is free: this runs for every changed entity on every save, and the happy path returns `null` and allocates nothing. The caller pairs the failure with `IInvariant.Code`, so the code lives in one place.
+
+**Parameters**
+
+- `entity`: The object to check. Never `null`.
+
 ### `MemberEntity.OneHoldPerRole`
 
 ```csharp
@@ -190,7 +221,7 @@ It reports the package's own name for the rule, [`MembershipRefusals.RoleHeld`](
 | Member | Summary |
 |---|---|
 | `string Code { get; }` | A stable machine-readable identifier for this rule, so a caller can branch on it without matching on text and without the message becoming part of your API. It is also what `DTS.DDD.Analyzers` reads to report two rules on one entity sharing a code. |
-| [`Check(MemberEntity<TId, TMemberId, TRoleId>)`](#checkmemberentitytid-tmemberid-troleid) | Runs the rule. |
+| [`Check(MemberEntity<TId, TMemberId, TRoleId>)`](#checkmemberentitytid-tmemberid-troleid-1) | Runs the rule. |
 
 #### `Check(MemberEntity<TId, TMemberId, TRoleId>)`
 
@@ -271,12 +302,13 @@ Whether a member or a role may go on the list at all cannot be told from the lis
 |---|---|
 | [`MemberList(List<TMember>, TMemberId, MembershipCodes)`](#memberlistlisttmember-tmemberid-membershipcodes) | The member list of one resource, over the collection its aggregate keeps. |
 | [`Open(DateTimeOffset)`](#opendatetimeoffset) | Opens the list of a new resource: puts its owner on it, from `now` on and with no end, holding no role, since the owner holds what it holds by owning the resource. |
-| [`Add(TMemberId, MemberPeriod, DateTimeOffset, TMemberId?)`](#addtmemberid-memberperiod-datetimeoffset-tmemberid) | Adds a member for `period`, with no role yet: what else it may do comes with the roles it is given ([`GiveRole`](#giveroletmemberid-troleid-memberperiod-datetimeoffset-tmemberid)). |
-| [`Add(TMemberId, TRoleId, MemberPeriod, DateTimeOffset, TMemberId?)`](#addtmemberid-troleid-memberperiod-datetimeoffset-tmemberid) | Adds a member for `period` and gives it `role` for the same period, in one change. |
+| [`GiveOwnerKind(MemberKind)`](#giveownerkindmemberkind) | Gives the owner's row of a new resource its kind of seat, once. |
+| [`Add(TMemberId, MemberKind, MemberPeriod, DateTimeOffset, TMemberId?)`](#addtmemberid-memberkind-memberperiod-datetimeoffset-tmemberid) | Adds a member for `period`, with no role yet: what else it may do comes with the roles it is given ([`GiveRole`](#giveroletmemberid-troleid-memberperiod-datetimeoffset-tmemberid)). |
+| [`Add(TMemberId, MemberKind, TRoleId, MemberPeriod, DateTimeOffset, TMemberId?)`](#addtmemberid-memberkind-troleid-memberperiod-datetimeoffset-tmemberid) | Adds a member for `period` and gives it `role` for the same period, in one change. |
 | [`GiveRole(TMemberId, TRoleId, MemberPeriod, DateTimeOffset, TMemberId?)`](#giveroletmemberid-troleid-memberperiod-datetimeoffset-tmemberid) | Gives a member a role for `period`, next to whatever roles it holds already. |
 | [`TakeRole(TMemberId, TRoleId)`](#takeroletmemberid-troleid) | Takes a role from a member, who stays a member with whatever else it holds. |
 | [`Remove(TMemberId)`](#removetmemberid) | Takes a member off the list, with every role it holds. |
-| [`NameOwner(TMemberId, FormerOwner<TRoleId>, DateTimeOffset)`](#nameownertmemberid-formerownertroleid-datetimeoffset) | Names another owner: a member from now on and with no end, added when not a member yet, holding no role. |
+| [`NameOwner(TMemberId, MemberKind, FormerOwner<TRoleId>, DateTimeOffset)`](#nameownertmemberid-memberkind-formerownertroleid-datetimeoffset) | Names another owner: a member from now on and with no end, added when not a member yet, holding no role. |
 | [`OneMembershipPerMember()`](#onemembershippermember) | The rule that a member is on the list once, checked after the fact: for an invariant of the aggregate to call, under the aggregate's own code for [`MembershipRefusals.AlreadyMember`](refusals.md#membershiprefusals). |
 | [`OwnerStays()`](#ownerstays) | The rule that the owner is a member with no end, holding no role, checked after the fact: for an invariant of the aggregate to call, under the aggregate's own code for [`MembershipRefusals.OwnerProtected`](refusals.md#membershiprefusals). |
 
@@ -312,10 +344,33 @@ Opens the list of a new resource: puts its owner on it, from `now` on and with n
 
 - `InvalidOperationException`: The list has members already: a resource is opened once.
 
-#### `Add(TMemberId, MemberPeriod, DateTimeOffset, TMemberId?)`
+#### `GiveOwnerKind(MemberKind)`
 
 ```csharp
-public TMember Add(TMemberId member, MemberPeriod period, DateTimeOffset now, TMemberId? by = null)
+public TMember GiveOwnerKind(MemberKind kind)
+```
+
+Gives the owner's row of a new resource its kind of seat, once. A row that has the same kind keeps it. The member manager calls it when it opens the resource, from what it read of the owner.
+
+**Parameters**
+
+- `kind`: The owner's kind.
+
+**Returns**: The owner's membership.
+
+**Exceptions**
+
+- `InvalidOperationException`: The owner is not on the list, or its row has another kind already.
+
+#### `Add(TMemberId, MemberKind, MemberPeriod, DateTimeOffset, TMemberId?)`
+
+```csharp
+public TMember Add(
+    TMemberId member,
+    MemberKind kind,
+    MemberPeriod period,
+    DateTimeOffset now,
+    TMemberId? by = null)
 ```
 
 Adds a member for `period`, with no role yet: what else it may do comes with the roles it is given ([`GiveRole`](#giveroletmemberid-troleid-memberperiod-datetimeoffset-tmemberid)). A member is on the list once: a membership it still has at `now`, one that runs or one that is still to start, is refused, whenever the new one would start. One that has ended by `now` is replaced, with the roles that were held in it, whatever start the new one is given.
@@ -323,6 +378,7 @@ Adds a member for `period`, with no role yet: what else it may do comes with the
 **Parameters**
 
 - `member`: The member; the member manager has checked it may be one.
+- `kind`: The member's kind of seat, which its row keeps.
 - `period`: When the membership counts.
 - `now`: When the member is added: what a membership it had before is judged by. Not the period's start, which may lie ahead: a membership that runs today is not over because another is to start next month.
 - `by`: Who adds it, or `null` for system work.
@@ -333,11 +389,12 @@ Adds a member for `period`, with no role yet: what else it may do comes with the
 
 - `RefusalException`: `invalid-period`, `already-member`, under the resource's codes.
 
-#### `Add(TMemberId, TRoleId, MemberPeriod, DateTimeOffset, TMemberId?)`
+#### `Add(TMemberId, MemberKind, TRoleId, MemberPeriod, DateTimeOffset, TMemberId?)`
 
 ```csharp
 public TMember Add(
     TMemberId member,
+    MemberKind kind,
     TRoleId role,
     MemberPeriod period,
     DateTimeOffset now,
@@ -349,6 +406,7 @@ Adds a member for `period` and gives it `role` for the same period, in one chang
 **Parameters**
 
 - `member`: The member; the member manager has checked it may be one.
+- `kind`: The member's kind of seat, which its row keeps.
 - `role`: The role; the member manager has checked it may go to a member.
 - `period`: When the membership, and the role, count.
 - `now`: When the member is added: what a membership it had before is judged by.
@@ -424,11 +482,12 @@ Takes a member off the list, with every role it holds. The owner stays until som
 
 - `RefusalException`: `member-not-found`, `owner-protected`, under the resource's codes.
 
-#### `NameOwner(TMemberId, FormerOwner<TRoleId>, DateTimeOffset)`
+#### `NameOwner(TMemberId, MemberKind, FormerOwner<TRoleId>, DateTimeOffset)`
 
 ```csharp
 public OwnerNamed<TMemberId, TRoleId> NameOwner(
     TMemberId member,
+    MemberKind kind,
     FormerOwner<TRoleId> formerOwner,
     DateTimeOffset now)
 ```
@@ -440,6 +499,7 @@ The list does not keep who the owner is: the aggregate does, and keeps the answe
 **Parameters**
 
 - `member`: The member that is to own the resource; the member manager has checked it may be one.
+- `kind`: The new owner's kind of seat, which its row keeps when it is not on the list yet.
 - `formerOwner`: What the owner before becomes: [`FormerOwner.StaysAs<TRoleId>`](#staysastroleid) a role, which the member manager has checked may go to a member, or [`FormerOwner.Leaves`](#formerowner).
 - `now`: When the owner is named.
 
@@ -964,7 +1024,7 @@ public sealed class AtAttribute : Attribute
 
 Namespace `DTS.Membership`.
 
-Marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs to, the bay a crate stands in. It is a fact about what the aggregate is, said in the domain beside its `[Owner]`. It is no rule about who may do what with it:
+Marks a property of an aggregate root that says where it hangs: the unit of an organization a board belongs to, the bay a crate stands in. It is a fact about what the aggregate is, said in the domain beside its `[Owner]`. It is no rule about who may do what with it:
 
 ```csharp
 [AggregateRoot<BoardId>]
@@ -972,21 +1032,24 @@ public sealed partial class Board
 {
     [Owner] public SeatId OwnerSeatId { get; private set; }
 
-    [At] public OrganizationUnitId UnitId { get; private set; }
+    [At] public OrganizationUnitId UnitId { get; private set; }   // a unit of the organization
+    [At] public BerthId? BerthId { get; private set; }            // a berth of the harbor's own, which may be empty
 }
 ```
 
-Whether a permission held there reaches the aggregate is the policy's to say. The rules of a resource with members say it with `reachFromAbove`, and read where it hangs from this property. The name pairs with the level a permission is held at, `[AtUnit]`. A permission held at a unit reaches what hangs at it.
+Whether a permission held there reaches the aggregate is the policy's to say. The rules of a resource with members say it with `reachFromAbove`, and read where the resource hangs from these properties. The name pairs with the level a permission is held at, `[AtUnit]`. A permission held at a unit reaches what hangs at it.
 
 **Remarks**
 
-One per aggregate root, on the root itself, of the id of the place. It is never nullable, since an aggregate that hangs nowhere could not be reached from above. Two, or a nullable one, is DDD00097. Rules that reach a resource from above whose class marks none are DDD00098. Membership's generator reports both, and ships in Membership's package.
+An aggregate root marks one property `[At]` for each kind of place it hangs at. The kind is the type of the place's id, without `Nullable<T>`, so `OrganizationUnitId` and `OrganizationUnitId?` are one kind. The kind says which tree the place is in, and who answers where a caller holds a permission there.
+
+A nullable property is allowed. An empty place reaches nothing. Two properties of one kind are DDD00097. Rules that reach a resource from above whose class marks none are DDD00098. Membership's generator reports both, and ships in Membership's package.
 
 The marker is in a package of its own, with no Entity Framework and nothing else of Membership's. Membership's own package references it, so a project with Membership has the marker as well.
 
 | Member | Summary |
 |---|---|
-| [`Fixed`](#fixed) | `Fixed = true` keeps the aggregate where it was added. |
+| [`Fixed`](#fixed) | `Fixed = true` keeps the aggregate at the place it was added at. |
 
 #### `Fixed`
 
@@ -994,13 +1057,13 @@ The marker is in a package of its own, with no Entity Framework and nothing else
 public bool Fixed { get; set; }
 ```
 
-`Fixed = true` keeps the aggregate where it was added. The place decides who reaches the aggregate from above, so an application with no command that moves it can fix the place:
+`Fixed = true` keeps the aggregate at the place it was added at. A place decides who reaches the aggregate from above, so an application with no command that moves it can fix the place:
 
 ```csharp
 [At(Fixed = true)] public OrganizationUnitId UnitId { get; private set; }
 ```
 
-Membership's mapping then fixes the column once the row exists, as `IsFixedAfterInsert()` does in a context. Entity Framework throws on a save that changes it. The privileges a Postgres export writes leave the column out of `UPDATE`. The default is false, so an aggregate can be moved unless the domain says otherwise.
+It holds for the property it is on, and for no other place of the aggregate. Membership's mapping fixes the column once the row exists, as `IsFixedAfterInsert()` does in a context. Entity Framework throws on a save that changes it. A nullable fixed place keeps the value it was inserted with, an empty one included. The privileges a Postgres export writes leave the column out of `UPDATE`. The default is false, so an aggregate can be moved unless the domain says otherwise.
 
 ## Custom role
 
@@ -1015,7 +1078,7 @@ public abstract class CustomRoleAggregate<TRoleId> : AggregateRoot<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-A role of one kind of resource, kept as a row: a name, what it is for, and the permissions it gives a member that holds it. The application declares its own class with [`CustomRoleAttribute<TRoleId, TResource>`](#customroleattributetroleid-tresource), for a resource whose rules say a customer makes its roles ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions-string)): roles a customer makes for itself, where fixed roles are the same for everybody.
+A role of one kind of resource, kept as a row: a name, what it is for, and the permissions it gives a member that holds it. The application declares its own class with [`CustomRoleAttribute<TRoleId, TResource>`](#customroleattributetroleid-tresource), for a resource whose rules say a customer makes its roles ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset)): roles a customer makes for itself, where fixed roles are the same for everybody.
 
 A role is made, renamed, given permissions and archived, and the role says each change that changed something to a hook of the application's class: the partial methods `OnRenamed()`, `OnPermissionsSet(set)` and `OnArchived()`, which the package's generator declares on the class. The application raises its own events there, under its own names: the role raises none. The role manager the generator writes for the class, `BoardRoleManager`, makes each change, and asks first whether the caller may: the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)).
 
@@ -1037,6 +1100,7 @@ The class is the application's. Whose a role is, a customer's say, is a property
 | `MaxDescriptionLength = 1000` | The longest description a role may have. |
 | [`CustomRoleAggregate(TRoleId, CustomRoleDraft, MembershipRules)`](#customroleaggregatetroleid-customroledraft-membershiprules) | Makes a role from `draft`, in use. |
 | [`CustomRoleAggregate()`](#customroleaggregate) | Parameterless constructor for persistence frameworks and serializers. |
+| `string? Set { get; }` | The role set the role is in, as a role row stores it: `null` for the first set, and the set's code, such as `stakeholders`, for every other. Set when the role is made and never after. A member holds only roles of the set its kind is in. |
 | `string Name { get; }` | The role's name, with no white space around it. |
 | `string Description { get; }` | What the role is for; empty when nobody said. |
 | `IReadOnlyList<string> Permissions { get; }` | The permissions the role holds: distinct and in ordinal order. What it gives a member is asked of [`Gives`](#givesstring-membershiprules). |
@@ -1075,8 +1139,8 @@ public PlotRole(PlotRoleId id, GardenId garden, CustomRoleDraft draft) : base(id
 **Exceptions**
 
 - `ArgumentNullException`: `draft` or `rules` is null.
-- `ArgumentException`: The rules do not say the resource's roles are kept, or the draft names a starter role the rules do not declare.
-- `RefusalException`: `role-name-invalid` for a name that is blank or too long, or a description that is too long; `permission-not-for-members` for a permission the rules do not let a member's role give. Under the resource's codes.
+- `ArgumentException`: The rules do not say the resource's roles are kept, the draft names a starter role the rules do not declare, or the draft's set is not the starter role's set.
+- `RefusalException`: `role-name-invalid` for a name that is blank or too long, or a description that is too long; `set-unknown` for a set the rules do not declare; `permission-not-for-members` for a permission the rules do not let a member's role give; `permission-not-for-set` for a permission some kind of the role's set may not hold. Under the resource's codes.
 
 #### `CustomRoleAggregate()`
 
@@ -1241,7 +1305,7 @@ public sealed partial class PlotRole
 }
 ```
 
-A role is an aggregate of its own, beside the resource: it is made, renamed, given permissions and archived by itself, and a member of the resource holds it by its id (`[Member<PlotGardenerId, UserId, PlotRoleId, Plot>]`). The resource's rules say that its roles are made this way ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions-string)).
+A role is an aggregate of its own, beside the resource: it is made, renamed, given permissions and archived by itself, and a member of the resource holds it by its id (`[Member<PlotGardenerId, UserId, PlotRoleId, Plot>]`). The resource's rules say that its roles are made this way ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset)).
 
 The second type is the resource the roles are of. The role itself has no use for it: it is how the roles of a resource are found where its members are asked about, so an application with plots and with sheds declares a role class for each, and neither's roles are the other's. So the template may be declared more than once in a project.
 
@@ -1268,20 +1332,22 @@ What a new role of a resource is made from.
 
 | Member | Summary |
 |---|---|
-| [`CustomRoleDraft(string, string?, IReadOnlyCollection<string>, string?)`](#customroledraftstring-string-ireadonlycollectionstring-string) | The primary constructor: the type's summary says what it makes. |
+| [`CustomRoleDraft(string, string?, IReadOnlyCollection<string>, string?, string?)`](#customroledraftstring-string-ireadonlycollectionstring-string-string) | The primary constructor: the type's summary says what it makes. |
 | `string Name { get; init; }` | The role's name, 1 to [`CustomRoleAggregate.MaxNameLength`](#customrole-customroleaggregatetroleid) characters; white space around it is dropped. |
 | `string? Description { get; init; }` | What the role is for, at most [`CustomRoleAggregate.MaxDescriptionLength`](#customrole-customroleaggregatetroleid) characters, or nothing. |
 | `IReadOnlyCollection<string> Permissions { get; init; }` | The permissions it gives: each one a permission the resource's rules let a member's role give. |
 | `string? FromStarterRole { get; init; }` | The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync` and `FollowStarterRolesAsync`); a draft made from what a customer entered leaves it out. |
+| `string? Set { get; init; }` | The role set the role is in, by its name, such as `Stakeholders`, or `null` for the first set. A draft made from a starter role carries the starter role's set. |
 
-#### `CustomRoleDraft(string, string?, IReadOnlyCollection<string>, string?)`
+#### `CustomRoleDraft(string, string?, IReadOnlyCollection<string>, string?, string?)`
 
 ```csharp
 public CustomRoleDraft(
     string Name,
     string? Description,
     IReadOnlyCollection<string> Permissions,
-    string? FromStarterRole = null)
+    string? FromStarterRole = null,
+    string? Set = null)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -1292,6 +1358,7 @@ The primary constructor: the type's summary says what it makes.
 - `Description`: What the role is for, at most [`CustomRoleAggregate.MaxDescriptionLength`](#customrole-customroleaggregatetroleid) characters, or nothing.
 - `Permissions`: The permissions it gives: each one a permission the resource's rules let a member's role give.
 - `FromStarterRole`: The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync` and `FollowStarterRolesAsync`); a draft made from what a customer entered leaves it out.
+- `Set`: The role set the role is in, by its name, such as `Stakeholders`, or `null` for the first set. A draft made from a starter role carries the starter role's set.
 
 ### `RolePermissionsSet`
 

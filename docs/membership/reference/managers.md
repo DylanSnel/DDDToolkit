@@ -55,7 +55,7 @@ Each change takes the resource, or its id. Both do the same: the manager loads t
 | Member | Summary |
 |---|---|
 | `MostResources = 200` | The most resources one list of several is asked about. |
-| [`MemberManager(MembershipAccessManager<TResource>, IMemberStore<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?)`](#membermanagermembershipaccessmanagertresource-imemberstoretresource-tresourceid-tmemberid-icurrentuser-timeprovider-imemberrolestresourceid-troleid-imemberdirectorytresourceid-tmemberid-imemberrolepolicytresourceid-troleid-iownplaceworktresourceid-tmemberid) | The member manager of one kind of resource. |
+| [`MemberManager(MembershipAccessManager<TResource>, IMemberStore<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?, IMemberKinds<TResourceId, TMemberId>?)`](#membermanagermembershipaccessmanagertresource-imemberstoretresource-tresourceid-tmemberid-icurrentuser-timeprovider-imemberrolestresourceid-troleid-imemberdirectorytresourceid-tmemberid-imemberrolepolicytresourceid-troleid-iownplaceworktresourceid-tmemberid-imemberkindstresourceid-tmemberid) | The member manager of one kind of resource. |
 | `MembershipRules Rules { get; }` | The rules of the resource, with the codes it refuses under. |
 | [`OpenAsync(TResource, CancellationToken)`](#openasynctresource-cancellationtoken) | Opens a new resource: the owner its constructor put on its member list is admitted, and the resource is added and saved. |
 | [`AddAsync(TResourceId, TMemberId, TRoleId?, DateTimeOffset?, CancellationToken, long?)`](#addasynctresourceid-tmemberid-troleid-datetimeoffset-cancellationtoken-long) | Adds a member, from now until `until` or for good, with `role` for the same period where one is given. |
@@ -74,7 +74,7 @@ Each change takes the resource, or its id. Both do the same: the manager loads t
 | [`ListAsync(TResource, CancellationToken)`](#listasynctresource-cancellationtoken) | The members of a resource, as [`ListAsync`](#listasynctresourceid-cancellationtoken) answers them with the resource's id. |
 | [`ListAsync(IReadOnlyCollection<TResourceId>, CancellationToken)`](#listasyncireadonlycollectiontresourceid-cancellationtoken) | The members of each of `resources` the caller sees, in one statement whatever their number, each list in the order [`ListAsync`](#listasynctresourceid-cancellationtoken) answers in. |
 
-#### `MemberManager(MembershipAccessManager<TResource>, IMemberStore<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?)`
+#### `MemberManager(MembershipAccessManager<TResource>, IMemberStore<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?, IMemberKinds<TResourceId, TMemberId>?)`
 
 ```csharp
 public MemberManager(
@@ -85,7 +85,8 @@ public MemberManager(
     IMemberRoles<TResourceId, TRoleId>? roles = null,
     IMemberDirectory<TResourceId, TMemberId>? directory = null,
     IMemberRolePolicy<TResourceId, TRoleId>? policy = null,
-    IOwnPlaceWork<TResourceId, TMemberId>? ownPlace = null)
+    IOwnPlaceWork<TResourceId, TMemberId>? ownPlace = null,
+    IMemberKinds<TResourceId, TMemberId>? kinds = null)
 ```
 
 The member manager of one kind of resource. The container makes it; the generated class has the same constructor.
@@ -100,6 +101,7 @@ The member manager of one kind of resource. The container makes it; the generate
 - `directory`: Who may be made a member, or `null` when everybody may.
 - `policy`: Which roles may go to a member, or `null` when every one may.
 - `ownPlace`: How the save of a change to the caller's own place begins, or `null` for system work in the resource's scope.
+- `kinds`: The kind of seat of a member, or `null` where every member is [`MemberKind.Member`](rules.md#memberkind).
 
 #### `OpenAsync(TResource, CancellationToken)`
 
@@ -118,7 +120,7 @@ Opens a new resource: the owner its constructor put on its member list is admitt
 
 **Exceptions**
 
-- `RefusalException`: `member-not-active` for an owner the application's directory does not admit.
+- `RefusalException`: `member-not-active` for an owner the application's directory does not admit; `owner-outside-organization` for an owner whose kind is outside the organization; `kind-in-no-set` for an owner whose kind no role set holds.
 
 **Example**
 
@@ -153,8 +155,12 @@ Adds a member, from now until `until` or for good, with `role` for the same peri
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, `member-not-active`, `role-not-for-members`, what the resource's guard refuses, `invalid-period` and `already-member`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members of the member's role set, `member-not-active`, `kind-in-no-set`, `role-not-for-members`, `role-not-in-set`, what the resource's guard refuses, `invalid-period` and `already-member`, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+**Remarks**
+
+The member's role set follows from its kind of seat. With one set, the caller's permission is asked first. With several, the set decides which permission manages the member, so the member and its kind are asked first.
 
 **Example**
 
@@ -189,8 +195,12 @@ Adds a member, as [`AddAsync`](#addasynctresourceid-tmemberid-troleid-datetimeof
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, `member-not-active`, `role-not-for-members`, what the resource's guard refuses, `invalid-period` and `already-member`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members of the member's role set, `member-not-active`, `kind-in-no-set`, `role-not-for-members`, `role-not-in-set`, what the resource's guard refuses, `invalid-period` and `already-member`, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+**Remarks**
+
+The member's role set follows from its kind of seat. With one set, the caller's permission is asked first. With several, the set decides which permission manages the member, so the member and its kind are asked first.
 
 **Example**
 
@@ -225,7 +235,7 @@ Gives a member a role, from now until `until` or for good, next to whatever role
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, `role-not-for-members`, what the resource's guard refuses, `invalid-period`, `member-not-found`, `role-held`, and `owner-protected` for the owner, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members of the role's set, `role-not-for-members`, `role-not-in-set` for a role of another set than the member's, what the resource's guard refuses, `invalid-period`, `member-not-found`, `role-held`, and `owner-protected` for the owner, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
 
 #### `GiveRoleAsync(TResource, TMemberId, TRoleId, DateTimeOffset?, CancellationToken, long?)`
@@ -255,7 +265,7 @@ Gives a member a role, as [`GiveRoleAsync`](#giveroleasynctresourceid-tmemberid-
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, `role-not-for-members`, what the resource's guard refuses, `invalid-period`, `member-not-found`, `role-held`, and `owner-protected` for the owner, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members of the role's set, `role-not-for-members`, `role-not-in-set` for a role of another set than the member's, what the resource's guard refuses, `invalid-period`, `member-not-found`, `role-held`, and `owner-protected` for the owner, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
 
 #### `TakeRoleAsync(TResourceId, TMemberId, TRoleId, CancellationToken, long?)`
@@ -283,7 +293,7 @@ Takes a role from a member, who stays a member with whatever else it holds. Any 
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, what the resource's guard refuses, `member-not-found` and `role-not-held`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members of the member's role set, what the resource's guard refuses, `member-not-found` and `role-not-held`, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
 
 #### `TakeRoleAsync(TResource, TMemberId, TRoleId, CancellationToken, long?)`
@@ -311,7 +321,7 @@ Takes a role from a member, as [`TakeRoleAsync`](#takeroleasynctresourceid-tmemb
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, what the resource's guard refuses, `member-not-found` and `role-not-held`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members of the member's role set, what the resource's guard refuses, `member-not-found` and `role-not-held`, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
 
 #### `RemoveAsync(TResourceId, TMemberId, CancellationToken, long?)`
@@ -337,7 +347,7 @@ Takes a member off the resource, with every role it holds. The owner stays until
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, what the resource's guard refuses, `member-not-found` and `owner-protected`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members of the member's role set, what the resource's guard refuses, `member-not-found` and `owner-protected`, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
 
 #### `RemoveAsync(TResource, TMemberId, CancellationToken, long?)`
@@ -363,7 +373,7 @@ Takes a member off the resource, as [`RemoveAsync`](#removeasynctresourceid-tmem
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, what the resource's guard refuses, `member-not-found` and `owner-protected`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members of the member's role set, what the resource's guard refuses, `member-not-found` and `owner-protected`, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
 
 #### `LeaveAsync(TResourceId, CancellationToken, long?)`
@@ -439,7 +449,7 @@ Names another owner: a member from now on and with no end, added when not a memb
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that names the owner, `member-not-active` for the new owner, `role-not-for-members` for the role the owner before stays in, what the resource's guard refuses, and `already-owner`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that names the owner, `member-not-active` for the new owner, `owner-outside-organization` and `kind-in-no-set` for the new owner's kind, `role-not-for-members` and `role-not-in-set` for the role the owner before stays in, what the resource's guard refuses, and `already-owner`, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
 
 #### `NameOwnerAsync(TResource, TMemberId, FormerOwner<TRoleId>, CancellationToken, long?)`
@@ -467,7 +477,7 @@ Names another owner, as [`NameOwnerAsync`](#nameownerasynctresourceid-tmemberid-
 
 **Exceptions**
 
-- `RefusalException`: `not-found`, `not-permitted` without the permission that names the owner, `member-not-active` for the new owner, `role-not-for-members` for the role the owner before stays in, what the resource's guard refuses, and `already-owner`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that names the owner, `member-not-active` for the new owner, `owner-outside-organization` and `kind-in-no-set` for the new owner's kind, `role-not-for-members` and `role-not-in-set` for the role the owner before stays in, what the resource's guard refuses, and `already-owner`, under the resource's codes.
 - `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
 
 #### `ListAsync(TResourceId, CancellationToken)`
@@ -1726,7 +1736,7 @@ How a caller holds a permission on a resource. An application that shows it has 
 | Member | Summary |
 |---|---|
 | `Members = 0` | Through the resource's members: the caller is a member now and holds a role there, now, that gives the permission; or the permission is one that being a member gives by itself; or the caller is the owner, who holds the permissions on the resource that its owner holds. |
-| `Above = 1` | From above the resource: the caller holds the permission where the resource sits, or above it, and does not hold it as one of the resource's members, which comes first. Only a resource whose rules say it is reached from above ([`MembershipRules.ReachFromAbove`](rules.md#membershiprules)) is reached this way. |
+| `Above = 1` | From above the resource: the caller holds the permission at one of the places the resource hangs at, or above it, and does not hold it as one of the resource's members, which comes first. Only a resource whose rules say it is reached from above ([`MembershipRules.ReachFromAbove`](rules.md#reachfromabove)) is reached this way. It does not say which place. |
 | `System = 2` | The application's own work, which holds every permission. |
 
 ### `MemberReach<TResource>`
@@ -1805,7 +1815,7 @@ public interface IMembershipStorage<TResource, TResourceId>
 
 What a storage package answers about one kind of resource, for the current caller: the part of the access manager that reads where the resources are kept. An application never takes it: it takes the access manager of the resource, [`MembershipAccessManager<TResource>`](#membershipaccessmanagertresource), which a storage package registers over this ([`MembershipAccessManager.Over<TResource, TResourceId>`](#overimembershipstoragetresource-tresourceid)).
 
-A caller holds a permission on a resource through its members: it is a member now, and holds a role there, now, that gives the permission. A role counts only inside its membership, and only for the permissions a member's role can give ([`MembershipRules.RolePermissions`](rules.md#membershiprules)). Being a member gives one permission by itself, when the rules name one ([`MembershipRules.EveryMemberPermission`](rules.md#membershiprules)). The owner of a resource holds the permissions marked `Owner` ([`MembershipRules.OwnerPermissions`](rules.md#membershiprules)), by owning it, and nothing through a role, and the application's own work holds every permission: the application itself, and its work in a scope the rules name ([`MembershipRules.IsOwnWork`](rules.md#isownworkcurrentusersnapshot)). Where the rules say so ([`MembershipRules.ReachFromAbove`](rules.md#membershiprules)), a permission held where the resource sits, or above it, is held on the resource as well, by a caller that is no member of it. A resource the caller reaches in no way does not exist for it.
+A caller holds a permission on a resource through its members: it is a member now, and holds a role there, now, that gives the permission. A role counts only inside its membership, and only for the permissions a member's role can give ([`MembershipRules.RolePermissions`](rules.md#membershiprules)). Being a member gives one permission by itself, when the rules name one ([`MembershipRules.EveryMemberPermission`](rules.md#membershiprules)). The owner of a resource holds the permissions marked `Owner` ([`MembershipRules.OwnerPermissions`](rules.md#membershiprules)), by owning it, and nothing through a role, and the application's own work holds every permission: the application itself, and its work in a scope the rules name ([`MembershipRules.IsOwnWork`](rules.md#isownworkcurrentusersnapshot)). Where the rules say so ([`MembershipRules.ReachFromAbove`](rules.md#reachfromabove)), a permission held where the resource sits, or above it, is held on the resource as well, by a caller that is no member of it. A resource the caller reaches in no way does not exist for it.
 
 The storage answers, because whether a membership and a role apply now is compared where the rows are, inside one statement. What is refused, and in which order, is not the storage's: the access manager decides that over [`HoldAsync`](#holdasynctresourceid-string-cancellationtoken), the same for every storage.
 
@@ -1914,6 +1924,37 @@ The permissions of `permissions` the caller holds on each of `resources` it sees
 **Exceptions**
 
 - `ArgumentException`: More than [`MembershipAccessManager.MostResources`](#membershipaccessmanager) different resources are asked about.
+
+### `IFellowMembers<TResourceId, TMemberId>`
+
+```csharp
+public interface IFellowMembers<TResourceId, TMemberId>
+    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+    where TMemberId : struct, IEntityId, IEquatable<TMemberId>
+```
+
+The members now of every resource of one kind that the caller is a member of now: the caller's fellow members, as the resource's `fellow_members()` function answers them in the database. A package that keeps seats reads them to let a seat outside the organization read the seats it works beside.
+
+**Type parameters**
+
+- `TResourceId`: The id of the kind of resource.
+- `TMemberId`: What a member is known by.
+
+| Member | Summary |
+|---|---|
+| [`OfCallerAsync(CancellationToken)`](#ofcallerasynccancellationtoken) | The caller's fellow members, each once, the caller among them where it is a member of one. |
+
+#### `OfCallerAsync(CancellationToken)`
+
+```csharp
+Task<IReadOnlyList<TMemberId>> OfCallerAsync(CancellationToken cancellationToken)
+```
+
+The caller's fellow members, each once, the caller among them where it is a member of one.
+
+**Parameters**
+
+- `cancellationToken`: Cancels the query.
 
 ## Requirements
 

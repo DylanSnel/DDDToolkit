@@ -15,7 +15,7 @@ defines the words.
 | Package | What it contains | Where it goes |
 |---|---|---|
 | `DylansTechStack.Tenancy` | The model, its rules, its managers and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
-| `DylansTechStack.Tenancy.Abstractions` | Tenancy's markers for domain classes: `[OfTenant]`, on the property that says which tenant a row belongs to ([Keeping tenants apart](keeping-tenants-apart.md)). No Entity Framework. `DTS.Tenancy` references it. | The domain project of another module, which sees only Tenancy's ids |
+| `DylansTechStack.Tenancy.Abstractions` | Tenancy's markers for domain classes: `[OfTenant]`, on the property that says which tenant a row belongs to ([Keeping tenants apart](keeping-tenants-apart.md)). The markers of the kinds of seat: `[SeatKinds]`, `[InOrganization]` and `[OutsideOrganization]` ([Kinds of seat](#kinds-of-seat)). Tenancy's generators, which every project that references the package gets. No Entity Framework. `DTS.Tenancy` references it. | The domain project of another module, which sees only Tenancy's ids. The contracts project that declares the kinds of seat. |
 | `DylansTechStack.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, and Tenancy's queries as Entity Framework queries. It works with every provider. | The infrastructure project, which has the context |
 | `DylansTechStack.Tenancy.Postgres` | Tenancy's queries as SQL functions, and row level security (RLS) policies, written by the [export](../supabase.md). It references the Entity Framework package. | The infrastructure project, on Postgres |
 
@@ -29,9 +29,9 @@ their names can still change.
 |---|---|---|
 | **Tenant** | Its slug, status and shape | A tenant goes from provisioned to active. It can be suspended and reactivated. A closed tenant stays closed. The shape changes only from flat to hierarchical. |
 | **Organization** | The tree of **OrganizationUnits** | One root, no cycles, a depth of at most 32. A unit is archived and never deleted. |
-| **Seat** | A person in a tenant, with **Placements** at units and **RoleGrants** at each placement | One placement per unit, and one primary placement. Only active roles are granted. The seat's identity never changes. |
+| **Seat** | A person in a tenant, of one **kind**, with **Placements** at units and **RoleGrants** at each placement | One placement per unit, and one primary placement. Only active roles are granted. The seat's identity and kind never change. A seat of a kind outside the organization has no placements. |
 | **Role** | A name and its **Permissions** | Only permissions from the catalogue. The permissions they imply are added. |
-| **Catalogue** | The permissions and the **starter roles** (`StarterRole`) | One administrators' starter role per shape. Tenancy adds its own when you declare none. A permission is retired and never deleted. Permissions that manage access are marked. |
+| **Catalogue** | The permissions, the **starter roles** (`StarterRole`) and the **kinds of seat** (`SeatKind`) | One administrators' starter role per shape. Tenancy adds its own when you declare none. A permission is retired and never deleted. Permissions that manage access are marked. One kind of seat inside the organization is the default. |
 
 - Tenant, Organization, Seat and Role are aggregates. They refer to each other by id.
 - The catalogue is not an aggregate. It is data in code: Tenancy's permissions, your modules' permissions, and an
@@ -64,6 +64,7 @@ What a module needs, in order:
 | Your tables kept to a tenant, with `[OfTenant]` | | [Keeping tenants apart](keeping-tenants-apart.md) |
 | Queries in your modules | [Steps 7-8](tutorial.md#step-7-who-am-i) | [Who may do what](who-may-do-what.md), [names](names-and-languages.md#names) |
 | Requests through which people manage access | [Step 9](tutorial.md#step-9-a-role-at-a-unit) | [Who may give a role](roles-and-permissions.md#who-may-give-a-role) |
+| People from outside the organization, such as a client's site manager | | [Kinds of seat](#kinds-of-seat), [invitations from outside the organization](invitations.md#invitations-from-outside-the-organization) |
 | Other features | | [Invitations](invitations.md), [languages](names-and-languages.md#languages), [operators](operators-and-history.md#operators), [who changed a row](operators-and-history.md#who-changed-a-row), [access history](operators-and-history.md#access-history), [starter roles you change later](roles-and-permissions.md#starter-roles-after-provisioning) |
 | Row level security on Postgres | Steps 1-5 | [Setup steps](postgres.md#setup-steps) |
 
@@ -231,6 +232,86 @@ public sealed partial class ShopTenant
 
 The package's rules run for your classes before your rules. Entity Framework maps your classes, written or declared
 ([Writing your own supporting domain](../writing-a-supporting-domain.md)).
+
+## Kinds of seat
+
+A kind of seat says what a person is to the tenant. Each kind is inside the organization or outside it:
+
+- A seat of a kind **inside the organization** is placed at units and holds roles there. It reads the tenant's units,
+  roles and seats.
+- A seat of a kind **outside the organization** is placed at no unit and holds no role of the organization. While
+  `NarrowOutsideSeats` is on, the seat reads its own seats and its tenant, and no unit, role or other seat
+  ([What a seat outside the organization reads](postgres.md#what-a-seat-outside-the-organization-reads)).
+- A seat gets its kind when it is added, and keeps it. A person who changes kind gets a new seat.
+
+An application that declares no kinds has one kind, `member` (`SeatKinds.Member`), inside the organization.
+
+Harbor Works has employees: Ada, Rhea and Leo. It also works with the site managers of its clients. Mira manages a
+site for one of Harbor's clients. She gets a seat of the kind `guest`, outside the organization. She reads her own seat
+and her tenant, and nothing of Harbor's units, roles or other people.
+
+Declare the kinds in a static partial class marked `[SeatKinds]`, in the contracts project of the module that holds
+Tenancy:
+
+**`Harbor.Tenancy.Contracts/HarborSeatKinds.cs`**
+
+```csharp
+using DTS.Tenancy;
+
+namespace Harbor.Tenancy.Contracts;
+
+[SeatKinds]
+public static partial class HarborSeatKinds
+{
+    [InOrganization] public const string Employee = "employee";
+
+    [OutsideOrganization] public const string Guest = "guest";
+}
+```
+
+- Each `public const string` is one kind. Its value is what the seat stores: lowercase letters, digits and dashes,
+  starting with a letter, at most 64 characters.
+- Each constant has one marker, `[InOrganization]` or `[OutsideOrganization]`.
+- The **default kind** is the kind a seat gets when `AddAsync` or `IssueAsync` names none. The first seat of a new
+  tenant gets it too. With one kind inside the organization, that kind is the default. With several, mark one of them
+  `[InOrganization(Default = true)]`.
+- The generator writes `All` into the class. `All` lists every kind as a `SeatKind`, in the order of the constants.
+- The build reports a class the generator cannot read: [DDD10001](../diagnostics.md#ddd10001) for the class,
+  [DDD10002](../diagnostics.md#ddd10002) for a constant, and [DDD10003](../diagnostics.md#ddd10003) for the default.
+- The markers and the generator are in `DylansTechStack.Tenancy.Abstractions`. A contracts project that references
+  only that package gets `All`.
+
+Give `All` to the catalogue:
+
+```csharp
+public static class HarborCatalogue
+{
+    [TenancyCatalogue]
+    public static ApplicationCatalogue Application { get; } = new(SeatKinds: HarborSeatKinds.All);
+}
+```
+
+- `TenancyCatalogue.Build` checks the list again, so a list written by hand follows the same rules.
+- On Postgres, the export writes the kinds into the access file. The start-up check refuses a database written with
+  other kinds ([What a seat outside the organization reads](postgres.md#what-a-seat-outside-the-organization-reads)).
+
+Add a seat of a kind with `kind`:
+
+```csharp
+var mira = await seats.AddAsync(identity, cancellationToken, kind: HarborSeatKinds.Guest);
+```
+
+- A kind the catalogue does not declare is refused with `tenancy.seat-kind-unknown`.
+- `PlaceAsync` refuses a seat outside the organization with `tenancy.seat-outside-organization`. A grant needs a
+  placement, so a seat outside the organization holds no role of the organization.
+- A person from outside the organization usually arrives through an invitation
+  ([Invitations from outside the organization](invitations.md#invitations-from-outside-the-organization)).
+- A handler reads the caller's kind from `access.CurrentTenant.RequireSeat()`, which has `Kind` and `InOrganization`.
+  A row access rule asks `user.IsInOrganization()` or `user.SeatKind()`
+  ([The caller's kind of seat](who-may-do-what.md#the-callers-kind-of-seat)).
+- The seats and the invitations tables have the columns `Kind`, at most 64 characters, and `InOrganization`. A
+  database with seats from before needs a migration that gives those rows your default kind and `InOrganization` true.
+  The sample's migration `SeatKinds` does this.
 
 ## How a new id is made
 

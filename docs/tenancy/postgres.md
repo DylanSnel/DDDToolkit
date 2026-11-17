@@ -240,7 +240,7 @@ app.Use(async (context, next) =>
 
 The access file writes `current_seat()` like this:
 
-**20261106151621_access.tenants.ddd.sql**
+**20261116201008_access.tenants.ddd.sql**
 
 ```sql
 CREATE OR REPLACE FUNCTION "tenancy".current_seat() RETURNS uuid
@@ -299,9 +299,10 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tenancy TO analyst_role;
 ## Who reads Tenancy's tables
 
 Only Tenancy's context reads Tenancy's tables. Every other reader calls a function. A function that runs as its
-owner reads past the policies. Most of these functions return only ids, permissions and dates. Three return more,
-and only about the caller. `current_seat_row()` returns the row of the caller's seat. `identity_tenant_names()`
-returns the names of the caller's tenants. `units_named(ids)` returns the names of units in the caller's tenant.
+owner reads past the policies. Most of these functions return only ids, permissions and dates. Four return more.
+`current_seat_row()` returns the row of the caller's seat. `identity_tenant_names()` returns the names of the caller's
+tenants. `units_named(ids)` returns the names of units in the caller's tenant. `seat_to_admit(seat)` returns the kind of
+one seat of the caller's tenant. To a signed-in user it returns an active seat alone.
 
 | Reader | Reads through |
 |---|---|
@@ -326,8 +327,8 @@ Replace a default with a read rule on your class. Write it like any
 
 | Table | Default for a signed-in user | Replaced by a rule on | Stays, whatever your rule says |
 |---|---|---|---|
-| Seats | The tenant's seats, and the person's own seats in every tenant. | Your seat class. | The person's own seats, because the tenant picker and the history need them. A seat that manages seats, grants or units anywhere, or roles for the whole tenant, reads every seat of the tenant, because the managers and policies load them. |
-| Invitations | The invitations at a unit where the seat manages seats. | Your invitation class. | The same invitations. Your rule can only add readers. |
+| Seats | The tenant's seats, and the person's own seats in every tenant. | Your seat class. | The person's own seats, because the tenant picker and the history need them. A seat that manages seats, grants or units anywhere, or roles for the whole tenant, reads every seat of the tenant, because the managers and policies load them. While `NarrowOutsideSeats` is on, a seat outside the organization reads only its own seats and the seats of its fellow members, whatever your rule says ([What a seat outside the organization reads](#what-a-seat-outside-the-organization-reads)). |
+| Invitations | The invitations at a unit where the seat manages seats. An invitation from outside the organization, also at a unit where the seat holds `tenancy.externals.invite`, and for its issuer. | Your invitation class. | The same invitations. Your rule can only add readers. |
 | Tenants, Organizations, Roles and the rest | As [What the policies check](#what-the-policies-check) says. | None. The export refuses a read rule here. | The tenant picker reads the tenants. Tenancy's queries read the roles as their caller. The other tables hold an organization's rows, a seat's rows, or Tenancy's own rows. |
 
 - The export writes a rule on your seat or invitation class as a policy that allows `Read`. That policy replaces the
@@ -340,9 +341,9 @@ Replace a default with a read rule on your class. Write it like any
 
 | Your rule changes | Your rule leaves unchanged |
 |---|---|
-| Your queries, the seats that `SeatManager` reads, `tenant_seats()` and `ITenancyQueries.Seats()`. | Tenancy's queries about the caller and about rights (`current_seat`, `seats_in_my_units`, `seats_holding_permission_at` …). These functions run as their owner. |
+| Your queries, the seats that `SeatManager` reads, `tenant_seats_with_kinds()` and `ITenancyQueries.Seats()`. | Tenancy's queries about the caller and about rights (`current_seat`, `seats_in_my_units`, `seats_holding_permission_at` …). These functions run as their owner. |
 | Your entities on the seat class. | Placements and grants. Every member still reads every seat's id and units. Your rule hides the seat's row (the identity and your fields), and other members still see that the seat exists. |
-| Checks that read the seats. [Membership](../membership/overview.md)'s member manager refuses a seat outside your rule with `member-not-active`, the same as a seat that does not exist. A module's rule on `tenant_seats()` does the same. | Writes, which stay Tenancy's. A [column rule](#who-may-change-a-seats-columns) still guards your fields. System work and operators. |
+| A module's rule on `tenant_seats_with_kinds()`. It refuses a seat outside your rule as it refuses a seat that does not exist. | Writes, which stay Tenancy's. A [column rule](#who-may-change-a-seats-columns) still guards your fields. System work and operators. [Membership](../membership/overview.md)'s member manager and kind guard, which read the one seat they admit through `seat_to_admit(seat)`. |
 
 <details>
 <summary>Show the code: two read rules, their building blocks, and the policy the export writes</summary>
@@ -379,8 +380,9 @@ because the generator needs the row's type to name its columns.
 |---|---|
 | In the caller's tenant | `seat.TenantId == user.CurrentTenant()` |
 | The caller itself | `seat.Id == user.CurrentSeatId()` |
-| A field of the caller's own seat | `user.CurrentSeat<Seat>().Kind == SeatKind.Employee` |
-| The people on the projects the caller is on | `user.FellowMembers<ProjectId, SeatId>().Contains(seat.Id)` ([below](#restrictive-rules)) |
+| A field of the caller's own seat | `user.CurrentSeat<Seat>().Onboarding == OnboardingState.Done` |
+| The caller's kind of seat | `user.IsInOrganization()`, `user.SeatKind() == HarborSeatKinds.Guest` ([The caller's kind of seat](who-may-do-what.md#the-callers-kind-of-seat)) |
+| The people on the projects the caller is on | `user.FellowMembers<ProjectId, SeatId>().Contains(seat.Id)` ([A rule that asks a module](../row-level-security.md#asking-about-a-resource-by-its-id)) |
 | The person's own seats, in every tenant | `seat.Identity == user.Id` |
 | The seats placed at or below the caller's units (for a seat at the root, every placed seat) | `user.SeatsInMyUnits().Contains(seat.Id)` |
 | Where the caller holds a permission | `user.UnitsWhereIHold(permission).Contains(invitation.UnitId)` |
@@ -410,42 +412,41 @@ seat or role class. The export joins its policy with Tenancy's policy by AND
 ([Rules that only narrow](../row-level-security.md#restrictive-rules)). A row passes only where both
 policies allow it.
 
-Example: a tenant has employees and external people. External people work on one project, and should not read the
-rest of the organization. A field on your seat class says which kind a seat is. A restrictive rule lets
-only employees read the organization:
+Example: Harbor Works shows its organization to a new employee only after the employee's onboarding. A field on your
+seat class records the onboarding. A restrictive rule lets only seats that finished it read the organization:
 
 | A signed-in user | Tenancy's policy | Your rule | Reads the units |
 |---|---|---|---|
-| An employee of the tenant | Yes | Yes | Yes |
-| An external seat of the tenant | Yes | No | No |
+| A seat of the tenant that finished its onboarding | Yes | Yes | Yes |
+| A seat of the tenant in its onboarding | Yes | No | No |
 | A seat of another tenant | No | Yes | No |
 
 ```csharp
-public enum SeatKind { Employee, External }
+public enum OnboardingState { Started, Done }
 
 [SeatAggregate<SeatId>]
 public sealed partial class Seat
 {
-    public SeatKind Kind { get; private set; }
+    public OnboardingState Onboarding { get; private set; }
 
-    public void MarkExternal() => Kind = SeatKind.External;
+    public void FinishOnboarding() => Onboarding = OnboardingState.Done;
 }
 
 [RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
-public static partial class OnlyEmployeesReadTheOrganization
+public static partial class OnlyOnboardedSeatsReadTheOrganization
 {
     public static bool Allows(Organization organization, IRowUser user)
-        => user.CurrentSeat<Seat>().Kind == SeatKind.Employee;
+        => user.CurrentSeat<Seat>().Onboarding == OnboardingState.Done;
 }
 ```
 
-The export writes `OnlyEmployeesReadTheOrganization` like this, shortened:
+The export writes `OnlyOnboardedSeatsReadTheOrganization` like this, shortened:
 
 **`*_access.tenants.ddd.sql`**
 
 ```sql
-CREATE POLICY "Only employees read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
-    USING ((SELECT q1."Kind" FROM "tenancy".current_seat_row() q1) = 0);
+CREATE POLICY "Only onboarded seats read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
+    USING ((SELECT q1."Onboarding" FROM "tenancy".current_seat_row() q1) = 1);
 -- and the same on "tenancy"."OrganizationUnits" and on "tenancy"."OrganizationUnitPaths"
 ```
 
@@ -461,31 +462,128 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
   another class than your seat class gives [DDD00101](../diagnostics.md#ddd00101). In a module that does not map the
   seats, use `CurrentSeatId` for the id alone.
 - **System work and owner-run functions are not narrowed.** The restrictive policy applies to signed-in users, and
-  owner-run functions read past every policy. The package's tests run every manager method under the rule above.
+  owner-run functions read past every policy. The package's tests run every manager method under such a rule.
 - **A seat that the rule keeps out still reads:**
   - the name, path and depth of its own units and of the units it asks for (`units_named()`, which
-    `UnitsByIdAsync` and `WhoAmIAsync` call). So an external seat can show the name of its project's unit;
+    `UnitsByIdAsync` and `WhoAmIAsync` call). So a seat in its onboarding can show the name of the unit it is placed
+    at;
   - the name of every tenant it has a seat in, in the tenant picker (`identity_tenant_names()`).
 
   `ListUnitsAsync` returns no units to that seat.
+- **A person from outside the organization** needs no rule of yours. Declare a kind of seat outside the organization
+  for that person ([What a seat outside the organization reads](#what-a-seat-outside-the-organization-reads)).
 
-Add a [read rule on your seat class](#default-read-policies-for-seats-and-invitations) too, and an external seat
-reads only the people on its projects. A rule asks for that set by the project's id, from the projects'
-[Membership](../membership/postgres.md) members:
+## What a seat outside the organization reads
 
-```csharp
-// Tenants.Infrastructure: a read rule on the seats that replaces the default
-[RowAccess<Seat>(RowOperations.Read)]
-public static partial class EmployeesReadEveryoneExternalsTheirProjects
-{
-    public static bool Allows(Seat seat, IRowUser user)
-        => user.CurrentSeat<Seat>().Kind == SeatKind.Employee || user.FellowMembers<ProjectId, SeatId>().Contains(seat.Id);
-}
+A seat of a kind outside the organization ([Kinds of seat](your-module.md#kinds-of-seat)) reads less of its tenant
+while `NarrowOutsideSeats` is on, the default. Mira, the site manager of a client, has a seat of the kind `guest` in
+Harbor Works. Her seat reads:
+
+| Table or function | A seat outside the organization reads |
+|---|---|
+| Seats | Its own seats, in every tenant, and the seats of its fellow members: the members now of every resource with members it is a member of now. |
+| SeatPlacements, SeatRoleGrants, SeatRights | Nothing. The seat has none of its own. |
+| Organizations, OrganizationUnits, OrganizationUnitPaths | Nothing. |
+| Roles | Nothing. |
+| Invitations, the access history | Nothing. The seat holds no permission. |
+| Tenants, TenancyAccessRevisions | The same rows as any seat. The tenant picker and the access revision need them. |
+| `units_named(ids)`, `seats_in_my_units()` | No row. |
+| `seat_to_admit(seat)` | The same row as any seat: the kind of that one active seat of its tenant. A resource's member manager admits a seat through it. |
+| `identity_tenant_names()`, `current_seat_row()` | The same rows as any seat. |
+
+- The export writes a restrictive policy named "Outside seats read only themselves" on Organizations,
+  OrganizationUnits, OrganizationUnitPaths, SeatPlacements and Roles. It asks `current_seat_in_organization()`, once
+  per statement.
+- On Seats, the same restrictive policy also lets through the person's own seats, `"Identity" = auth.uid()`.
+- The policies are restrictive, so a read rule of yours cannot widen them. They apply to `SELECT`. A write needs a
+  permission, and a seat outside the organization holds none.
+- `current_seat_in_organization()` runs as its owner. It returns true for system work and for a seat of a kind inside
+  the organization.
+- In C#, the managers and `db.Tenancy()` return the same, also on a database without RLS. `ListUnitsAsync`,
+  `RoleManager.ListAsync` and `RoleManager.ByIdAsync` return nothing. `SeatManager.ListAsync` and
+  `SeatManager.ByIdAsync` return the caller's own seat and its fellow members. `OverviewAsync` of a fellow member
+  returns the seat alone. `OverviewAsync` of any other seat is refused with `tenancy.seat-not-found`.
+  `UnitsByIdAsync` returns no unit. `ITenancyQueries.Seats()` returns the caller's own seat only.
+- Membership's member manager admits a new member through `ITenancyQueries.SeatToAdmitAsync`, which reads that one
+  seat by its id whatever the caller reads. A seat outside the organization whose role manages a resource's members
+  adds a seat it does not read. Once that seat is a member, the fellow-seat rule shows it to the caller
+  ([A kind outside the organization that manages members](../membership/permissions-and-roles.md#a-kind-outside-the-organization-that-manages-members)).
+- In C#, a fellow member's seat comes without its placements and grants, on every database. The overview of a fellow
+  has no unit paths, roles or permissions. On Postgres, the restrictive policies hold the same rows back.
+
+**Fellow members.** A seat outside the organization works with the people on its resources, such as Mira with the crew
+of a project she is on. Tenancy reads those seats through a function of the resource's package, so neither package
+references the other:
+
+- The join of a package with resources whose members are seats, Membership's, writes a `[TenancyFellowSeats]` mark per
+  resource, a static property that names the resource's id type
+  ([Kinds of seat and fellow members](../membership/beside-an-organization.md#kinds-of-seat-and-fellow-members)). You
+  mark nothing yourself.
+- In C#, the join registers an `ISeatFellows<SeatId>` per resource. `SeatManager` asks each one once per read, before it
+  reads the seats.
+- On Postgres, the export writes `fellow_seats()` from the marks. Its body reads each resource's `fellow_members`
+  function as the caller. It is written with `check_function_bodies` off, because Tenancy's access file runs before the
+  resource's file that makes those functions.
+- The same statements widen the restrictive policy on the seats with `ALTER POLICY`. A read of the seats fails until the
+  resource's access file has run, so apply both files in one migration step.
+- With no mark, the body of `fellow_seats()` returns no row.
+- While `NarrowOutsideSeats` is off, neither the function nor the wider policy is written.
+- The start-up check `EnsurePoliciesAreInPlaceAsync` reads the body of `fellow_seats()`. It refuses a database whose
+  function reads other resources than the registered ones.
+
+**`20261116201008_access.tenants.ddd.sql`, shortened**
+
+```sql
+SET check_function_bodies = off;
+CREATE OR REPLACE FUNCTION "tenancy".fellow_seats() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SET search_path = '' AS $function$
+SELECT f.id FROM "projects".projects_fellow_members() AS f(id)
+$function$;
+RESET check_function_bodies;
+ALTER POLICY "Outside seats read only themselves (select) for authenticated" ON "tenancy"."Seats"
+    USING ((SELECT "tenancy".current_seat_in_organization()) OR "Identity" = (SELECT auth.uid()) OR "Id" = ANY (ARRAY(SELECT "tenancy".fellow_seats())));
 ```
 
-Tenancy's access file runs before the projects' access file, which creates the function the rule calls. So the
-export writes the rule through a function of Tenancy's that calls the projects' function at run time
-([A rule that asks a module that asks back](../row-level-security.md#asking-about-a-resource-by-its-id)).
+The policy on the units, as the export writes it:
+
+**`*_access.tenants.ddd.sql`**
+
+```sql
+CREATE POLICY "Outside seats read only themselves (select) for authenticated" ON "tenancy"."OrganizationUnits" AS RESTRICTIVE FOR SELECT TO authenticated
+    USING ((SELECT "tenancy".current_seat_in_organization()));
+```
+
+**Turning it off.** Set `NarrowOutsideSeats: false` on your catalogue:
+
+```csharp
+[TenancyCatalogue]
+public static ApplicationCatalogue Application { get; } = new(SeatKinds: HarborSeatKinds.All, NarrowOutsideSeats: false);
+```
+
+- The export then writes the body of `current_seat_in_organization()` as `SELECT true`. A seat outside the
+  organization reads what every seat of the tenant reads.
+- The seat still has no placements and no grants. The trigger `tenancy_outside_seat_is_placed_nowhere` refuses a
+  placement for every setting.
+- `user.IsInOrganization()` and `user.SeatKind()` return the seat's kind for every setting.
+
+**The kinds in the database.** The export writes the kinds from your catalogue:
+
+- `seat_kind_in_organization(kind)` returns true for a kind inside the organization, false for a kind outside it,
+  and null for a kind the catalogue does not declare.
+- `tenant_seats_with_kinds()` returns each seat's `Kind` and `InOrganization`, for the seats the caller reads.
+- `seat_to_admit(seat)` returns one seat's `Kind`, `InOrganization` and `Active`, for a seat of the caller's tenant.
+  It runs as its owner, so it answers whatever seats the caller reads. A signed-in user gets an active seat alone, and
+  scoped system work gets a seat of its tenant whatever its status. Membership's kind guard reads it, as
+  `TenancyFunctions.SeatToAdmit` ([The kind guard](../membership/postgres.md#the-kind-guard)).
+- The trigger `tenancy_seat_kind_is_known` runs before a seat is inserted. It sets `InOrganization` from
+  `seat_kind_in_organization`, whatever the statement says. It refuses a kind the catalogue does not declare.
+- The trigger `tenancy_seat_kind_is_fixed` refuses a change of a seat's `Kind` or `InOrganization`, for every role,
+  system work included.
+- The trigger `tenancy_outside_seat_is_placed_nowhere` refuses a placement of a seat outside the organization, for
+  every role, system work and the tables' owner included.
+- The start-up check `EnsurePoliciesAreInPlaceAsync` compares `seat_kind_in_organization` and
+  `current_seat_in_organization` in the database with your catalogue. It refuses a database written with other kinds,
+  or with the other setting. Export the access files again after you change either.
 
 ## Tenancy's SQL functions
 
@@ -504,6 +602,11 @@ The policies and your rules call these SQL functions:
 | `current_seat()` | The seat of the caller's identity in the tenant that the setting names, while the seat and the tenant are active. Otherwise null. | Owner | The policies, to find again the seat that `TenantSelection` picked. Also `CurrentSeatId`. |
 | `current_tenant()` | The tenant of that seat. Otherwise null. | Owner | `CurrentTenant` |
 | `current_seat_row()` | The row of that seat, with every column your seat class maps. No row without a seat. | Owner | `CurrentSeat<Seat>()` |
+| `is_in_organization()` | Whether that seat's kind is inside the organization, for every setting of `NarrowOutsideSeats`. Null without a seat. | Owner | `IsInOrganization` |
+| `seat_kind()` | That seat's kind. Null without a seat. | Owner | `SeatKind` |
+| `current_seat_in_organization()` | Whether the caller reads the tenant's structure and its other seats. True for system work and for a seat of a kind inside the organization. Always true while `NarrowOutsideSeats` is off. | Owner | The restrictive policies "Outside seats read only themselves", `units_named` |
+| `seat_kind_in_organization(kind)` | Whether your catalogue puts the kind inside the organization. Null for a kind it does not declare. | Caller | The seats' triggers |
+| `fellow_seats()` | The seats of the members now of every resource the caller is a member of now, read from each marked resource's `fellow_members` function. Only signed-in users may run it. Written only while `NarrowOutsideSeats` is on. | Caller | The restrictive policy on the seats ([Fellow members](#what-a-seat-outside-the-organization-reads)) |
 | `system_tenant()` | The tenant that the setting names. For the scoped system role, this is the tenant of its work. For a signed-in user, it is the tenant where the access revision and the [access history](operators-and-history.md#access-history) are written. | Caller | `access.BeginSystemIn` |
 | `units_where_i_hold_permission(permission)` | The units where the seat holds the permission live, and every unit below. | Owner | `UnitsWhereIHold` |
 | `readable_units()` | The units where the seat is placed, and every unit below. | Owner | `ReadableUnits` |
@@ -514,7 +617,8 @@ The policies and your rules call these SQL functions:
 | `identity_tenants()` | Every tenant where the caller's identity has a seat, of any status. | Owner | The seat directory |
 | `identity_tenant_names()` | The ids, slugs and organization names of those tenants. Only signed-in users may run it. | Owner | The tenant picker, a seat's overview |
 | `unit_parent(unit)` | A unit's parent as it was before the statement. | Owner | The units' policies |
-| `units_named(ids)` | The units of the seat's tenant among the ids, with name, path from the root and depth. Only signed-in users may run it. | Owner | `OrganizationManager.UnitsByIdAsync` |
+| `units_named(ids)` | The units of the seat's tenant among the ids, with name, path from the root and depth. No row for a seat outside the organization while `NarrowOutsideSeats` is on. Only signed-in users may run it. | Owner | `OrganizationManager.UnitsByIdAsync` |
+| `seat_to_admit(seat)` | The seat of the caller's tenant with that id: its kind, whether the kind is inside the organization, and whether the seat is active. No row for a seat of another tenant or an id no seat has. A signed-in user gets an active seat alone, so a seat that is not active gives no row either. The scoped system role gets a seat of the tenant of its work, whatever its status. It answers one id, so it lists no seats. | Owner | `ITenancyQueries.SeatToAdmitAsync`, Membership's member manager and kind guard |
 | `permission_manages_access(permission)` | Whether your catalogue marks the permission as managing access. | Caller | `TenancyCatalogue.ManagesAccess` |
 | `permission_is_contained(permission)` | Whether a seat hands the permission on only where it holds it. True for permissions that manage access, while [containment](roles-and-permissions.md#containment-on-or-off) is on. | Caller | `ContainAccessManagingPermissions` |
 | `starter_role_permissions(starter_role)` | The permissions a copy of that starter role holds, implied ones included. Null for an unknown starter role. | Caller | `TenancyCatalogue.StarterRoles` |
@@ -574,8 +678,12 @@ public async Task<List<string>> VisibleProjectsAsync(CancellationToken cancellat
 | `tenant_units()` | The tenant's units. | `"Id"`, `"TenantId"`, `"ParentId"`, `"Status"` |
 | `tenant_roles_with_starter_roles()` | The tenant's roles, with the permissions as an array of text. | `"Id"`, `"TenantId"`, `"FromStarterRole"`, `"Status"`, `"Permissions"` |
 | `tenant_placements()` | Where the tenant's seats are placed. | `"SeatId"`, `"UnitId"`, `"IsPrimary"`, `"TenantId"` |
-| `tenant_seats()` | The seats the caller may read. That is every seat, or only the seats that a [read rule of yours](#default-read-policies-for-seats-and-invitations) lets through. | `"Id"`, `"TenantId"`, `"Status"` |
+| `tenant_seats_with_kinds()` | The seats the caller may read. That is every seat, or only the seats that a [read rule of yours](#default-read-policies-for-seats-and-invitations) lets through. | `"Id"`, `"TenantId"`, `"Status"`, `"Kind"`, `"InOrganization"` |
 
+- **`tenant_seats_with_kinds()` replaces `tenant_seats()`.** Postgres cannot replace a function with one that returns
+  other columns, so the function with the kinds has a new name. An access file drops `tenant_seats()` once no policy
+  calls it. A rule that names the function by hand names the new one, through
+  `TenancyFunctionNames.TenantSeats`.
 - **They run as their caller.** The functions have no `SECURITY DEFINER` and no condition of their own, so the
   [policies](#what-the-policies-check) decide which rows come back. Signed-in users and the scoped system role may
   run them, and `anon` may not. Postgres inlines them into the calling query and plans them over Tenancy's tables
@@ -664,9 +772,12 @@ managers. A signed-in user writes where the manager requires the permission:
 | Roles | The tenant's roles. | `tenancy.roles.manage` for the whole tenant. A copy of a starter role, also with `tenancy.settings.manage`. |
 | TenancyAccessRevisions | The tenant's revision. Any person with a seat in the tenant reads it, whatever the seat's status. | That person. Every change of access updates the revision. |
 | The access history, where mapped | The tenant's rows, with `tenancy.history.view` for the whole tenant. | Add: rows about the person's own seat. Change or remove: nobody ([Access history](operators-and-history.md#access-history)). |
-| Invitations, where mapped | With `tenancy.seats.manage` at the invitation's unit, or as your read rule adds. Nobody reads the digests of the tokens. | Add: a seat that could add the seat and make the grant itself. Change: only to cancelled ([Invitations](invitations.md)). |
+| Invitations, where mapped | With `tenancy.seats.manage` at the invitation's unit, or as your read rule adds. An invitation from outside the organization, also with `tenancy.externals.invite` at its unit, and by its issuer. Nobody reads the digests of the tokens. | Add: a seat that could add the seat and make the grant itself. From outside the organization: a seat with `tenancy.externals.invite` at the unit, with no role. Change: only to cancelled, by a seat that may read the invitation through `tenancy.seats.manage` or `tenancy.externals.invite` ([Invitations](invitations.md#invitations-from-outside-the-organization)). |
 
 - **No signed-in user deletes** a tenant, an organization, a unit, a seat or a role. Tenancy's system work may.
+- **A seat outside the organization** reads its own seats, its tenant and the revision while `NarrowOutsideSeats` is
+  on, and none of the other rows above
+  ([What a seat outside the organization reads](#what-a-seat-outside-the-organization-reads)).
 - **A seat takes away its own grants and placements** without the permissions the managers require. Taking away
   never gives access. The same save removes the seat's permissions before the rows that need them.
 
@@ -737,7 +848,7 @@ their owner, and only signed-in users may run them. A seat that does not match t
 
 ### The triggers
 
-Besides the rights trigger, seven triggers check every role, the tables' owner included. A manager trips trigger 1
+Besides the rights trigger, nine triggers check every role, the tables' owner included. A manager trips trigger 1
 only in a race, and trigger 6 only when the caller loses a permission between check and save. A manager never trips
 the others.
 
@@ -750,12 +861,14 @@ the others.
 | 5. A seat's identity is fixed (`tenancy_seat_identity_is_fixed`) | Only Tenancy's system work in the seat's tenant changes the seat's id, identity and tenant. | As the row changes |
 | 6. A seat's status is managed (`tenancy_seat_status_is_managed`) | Only a seat with `tenancy.seats.manage` for the whole tenant changes the status. With containment on, that seat also holds every access-managing permission of each unended grant's role, at the grant's unit. Its own grants count. The rights follow the status, so this matches the rule for giving and taking away those grants. | As the row changes |
 | 7. A role follows its starter role (`tenancy_role_follows_its_starter_role`) | No seat changes what a role's starter role gave the role. Otherwise a sync could add what the starter role never gave. | As the row changes |
+| 8. A seat's kind is known and fixed (`tenancy_seat_kind_is_known`, `tenancy_seat_kind_is_fixed`) | A new seat is of a kind the catalogue declares, and its `InOrganization` is what the catalogue says of that kind. A seat keeps its kind. | As the row is inserted or changes |
+| 9. A seat outside the organization is placed nowhere (`tenancy_outside_seat_is_placed_nowhere`) | No placement belongs to a seat of a kind outside the organization. | As the row is inserted or changes |
 
 Triggers 6 and 7 check seats only. System work and the tables' owner pass, so a migration can fill the
 `FromStarterRole` column of older rows.
 
-- Triggers 1 to 4 enforce what may never happen, and raise `check_violation`. A manager that trips one of them has
-  a bug. The store turns trigger 1 into the refusal `tenancy.last-admin`, because a race can trip it.
+- Triggers 1 to 4, 8 and 9 enforce what may never happen, and raise `check_violation`. A manager that trips one of
+  them has a bug. The store turns trigger 1 into the refusal `tenancy.last-admin`, because a race can trip it.
 - Triggers 5 to 7 are access guards. They raise `42501` with the toolkit's hint, the same as a policy refusal.
 
 Two more triggers are described on other pages. One keeps an invitation's terms fixed ([Invitations](invitations.md)).
@@ -785,6 +898,7 @@ has its own guard:
 | Column | Who may change it | Guarded by |
 |---|---|---|
 | Id, identity, tenant | Only Tenancy's system work in the seat's tenant. Its policies keep that work to that tenant. No seat, no system work without a scope, and no tables' owner (in a migration or the SQL editor) may change them. | Trigger 5. Where the export [writes the privileges](../row-level-security.md#privileges-from-the-policies), the key columns and the tenant are not updatable at all. |
+| Kind, in organization | Nobody, after the insert. The insert takes `InOrganization` from the catalogue. | Trigger 8 |
 | Status | A seat with `tenancy.seats.manage` for the whole tenant and the access-managing permissions of the seat's grants. | Trigger 6 |
 | Version | Whoever may change the row. | The row's policy |
 | Your columns | Whoever may change the row, unless your column rule says more. | Your [column rule](../row-level-security.md#column-rules) |
@@ -825,19 +939,20 @@ public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 
 The access file writes `seat_identity_is_fixed` like this, shortened:
 
-**20261106151621_access.tenants.ddd.sql**
+**20261116201008_access.tenants.ddd.sql**
 
 ```sql
 CREATE OR REPLACE FUNCTION "tenancy".seat_identity_is_fixed() RETURNS trigger
     LANGUAGE plpgsql SET search_path = '' AS $body$      -- runs as its caller, so CURRENT_USER is the statement's role
 BEGIN
-    IF CURRENT_USER IS DISTINCT FROM 'ddd_system_in' THEN
+    -- ... the checks of the kind (trigger 8) come first
+    IF (OLD."Id", OLD."TenantId", OLD."Identity") IS DISTINCT FROM (NEW."Id", NEW."TenantId", NEW."Identity") AND CURRENT_USER IS DISTINCT FROM 'ddd_system_in' THEN
         RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tenancy_seat_identity_is_fixed', HINT = 'ddd:access.refused', ...;
     END IF;
     RETURN NEW;
 END
 $body$;
-CREATE TRIGGER tenancy_seat_identity_is_fixed BEFORE UPDATE OF "Id", "TenantId", "Identity" ON "tenancy"."Seats" ...
+CREATE TRIGGER tenancy_seat_identity_is_fixed BEFORE UPDATE OF "Id", "TenantId", "Identity", "Kind", "InOrganization" ON "tenancy"."Seats" ...
 ```
 
 A one-off that links a seat to another identity. `access` is your `TenancyAccessManager`:

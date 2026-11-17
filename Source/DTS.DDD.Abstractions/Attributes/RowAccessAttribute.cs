@@ -70,10 +70,10 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// and a permissive policy both say yes. It never grants anything a permissive policy does not.
     /// <code>
     /// [RowAccess&lt;Organization&gt;(RowOperations.Read, Restrictive = true)]
-    /// public static partial class OnlyEmployeesReadTheOrganization
+    /// public static partial class OnlyOnboardedSeatsReadTheOrganization
     /// {
     ///     public static bool Allows(Organization organization, IRowUser user)
-    ///         =&gt; user.CurrentSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
+    ///         =&gt; user.CurrentSeat&lt;Seat&gt;().Onboarding == OnboardingState.Done;
     /// }
     /// </code>
     /// So a rule written without it, about a table where a package's default already lets every member read, has no

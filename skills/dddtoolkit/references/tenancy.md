@@ -10,7 +10,8 @@ Their names can change while they are 0.x; read the project's references before 
 
 Packages: `DTS.Tenancy` (the model, its rules, a manager per aggregate, the access manager, no
 database), `DTS.Tenancy.Abstractions` (`[OfTenant]`, the marker of a row's tenant, for a module's
-domain project that sees only Tenancy's ids; the first package references it),
+domain project that sees only Tenancy's ids; `[SeatKinds]`, `[InOrganization]` and `[OutsideOrganization]` for the
+contracts project that declares the kinds of seat; Tenancy's generators ship in it; the first package references it),
 `DTS.Tenancy.EntityFramework` (`AddTenancy()`, the read model, the queries as `db.Tenancy()`, the
 convention that maps `[OfTenant]`) and `DTS.Tenancy.Postgres` (the same queries as SQL functions
 and row level security).
@@ -198,6 +199,33 @@ public sealed partial class ShopSeat
   **catalogue**.
 - A permission held at a unit holds for every unit below it. A grant counts from its start to its end, compared
   when the question is asked: nothing is written when one runs out.
+- **Kinds of seat.** Every seat has a kind, set when it is added and never changed. Each kind is inside the
+  organization or outside it. A seat inside is placed at units and holds roles there. A seat outside (a client's
+  site manager, say) is placed nowhere and holds no role of the organization; `PlaceAsync` refuses it with
+  `tenancy.seat-outside-organization`. An application that declares no kinds has one, `member`, inside. Declare them
+  in the contracts project of the module that holds Tenancy, which needs only `DTS.Tenancy.Abstractions`:
+
+  ```csharp
+  [SeatKinds]
+  public static partial class HarborSeatKinds          // DDD10001 to DDD10003 for a shape the generator cannot read
+  {
+      [InOrganization] public const string Employee = "employee";   // the one kind inside, so the default
+      [OutsideOrganization] public const string Guest = "guest";
+  }
+  ```
+
+  The generator writes `All`; give it to the catalogue, `new ApplicationCatalogue(SeatKinds: HarborSeatKinds.All)`.
+  With several kinds inside, mark one `[InOrganization(Default = true)]`: a seat added or invited without a kind, and
+  a new tenant's first seat, get the default. `seats.AddAsync(identity, ct, kind: HarborSeatKinds.Guest)`; an unknown
+  kind is `tenancy.seat-kind-unknown`. While `ApplicationCatalogue.NarrowOutsideSeats` is on (the default), a seat
+  outside the organization reads its own seats and its tenant and no unit, role or other seat, in the managers' reads,
+  in `db.Tenancy()` and, on Postgres, through restrictive policies no rule of yours widens. It also reads the seats of
+  its fellow members on the resources it is a member of, without their placements and grants: Membership's join marks
+  each such resource `[TenancyFellowSeats]`, Tenancy's managers ask `ISeatFellows`, and on Postgres `fellow_seats()`
+  widens the seats policy. A handler reads the
+  caller's kind from `access.CurrentTenant.RequireSeat()` (`Kind`, `InOrganization`); a row rule asks
+  `user.IsInOrganization()` or `user.SeatKind()`. The seats and invitations tables get `Kind` and `InOrganization`:
+  add a migration that gives the rows stored before the default kind and `InOrganization` true.
 - Tenancy's queries are about the organization and nothing else, `db.Tenancy()` over a context. The module that
   owns a resource decides who may open it, with what they return and what it knows itself (a project's crew, say).
 
@@ -223,8 +251,9 @@ public sealed partial class ShopSeat
   `OrganizationManager.UnitInTree` (the unit, its `Path`, its `Depth`), `roles.ListAsync(ct)` and
   `roles.ByIdAsync(ids, ct)` its `Role`s (`roles.ManagesAccess(role)` for whether one manages access), all untracked;
   `organization.UnitsByIdAsync(ids, ct)` names units alone, as `NamedUnit` (`Id`, `Name`, `Path`, `Depth`),
-  through a function that runs as its owner on Postgres, so a seat kept out of the organization still reads what
-  its project's unit is called. The operators' `tenants.ListAsync(after, size, ct)` returns a
+  through a function that runs as its owner on Postgres, so a seat that a restrictive rule of yours keeps out of the
+  organization still reads what its unit is called. A seat of a kind outside the organization reads no unit name
+  while `NarrowOutsideSeats` is on. The operators' `tenants.ListAsync(after, size, ct)` returns a
   `TenantManager.TenantPage` of `TenantListing(Tenant, Name, ActiveSeats)`. Whoever wants fewer fields selects
   them. `seats.WhoAmIAsync(ct)` returns a `SeatManager.SeatOverview`: the `Seat` with its placements and grants,
   and only what is not on it (`Tenant`, `TenantName`, `Units` by path, `Roles` its grants name, `Permissions`,
@@ -280,7 +309,12 @@ public sealed partial class ShopSeat
 - **Who acted** is a seat, an operator, the system or a token, on every event of Tenancy's (`By`) and on a
   row that `RecordsWhoChanged()`. Never put whoever work acts for into the toolkit's `ICurrentUser`.
 - **Invitations** are optional (`AddTenancyInvitations`). The token is a bearer credential: show it once,
-  store its digest, keep it out of logs and query strings. A seat is linked to a verified identity, never
+  store its digest, keep it out of logs and query strings. `invitations.IssueOutsideAsync(address, kind, unit,
+  lifetime, ct, configure:)` invites a person of a kind outside the organization: it takes
+  `tenancy.externals.invite` at the unit (a permission that manages no access), offers no role, and accepting makes a
+  seat with no placement and no grant. What the invitation is for is a field of your invitation class, set in
+  `configure` and kept fixed by a column rule of yours. A seat with `tenancy.externals.invite` at the unit lists and
+  cancels such invitations, beside the seats that manage seats there. A seat is linked to a verified identity, never
   found by an e-mail address. The account a person signs in with is asked for through `IIdentityAccounts`,
   after the invitation is issued; to have the provider's mail carry the token, pass the accept page's
   address with the token after the `#` as the redirect.
@@ -306,18 +340,22 @@ or invitation class, `[RowAccess<Seat>(RowOperations.Read)]` (without `To` it is
 default is), takes the place of one, held to the tenant, beside what Tenancy's own work reads (a person's own seats;
 every seat of the tenant to a seat that manages seats, grants or units anywhere, or roles for the whole tenant),
 which no rule takes away. Write it with the questions Tenancy adds to the rule's `IRowUser` (`user.CurrentSeatId()`, `user.CurrentTenant()`,
-`user.UnitsWhereIHold(permission)`, `user.SeatsInMyUnits()`: the seats placed at or below the caller's units; `user.CurrentSeat<Seat>().Kind`, a
-field of the caller's own seat), or `user.FellowMembers<ProjectId, SeatId>()`, the people on the caller's projects. It changes what a read of the
-seats returns, a direct read, the managers' reads, `tenant_seats()` and `db.Tenancy().Seats()`, so Membership's
-member manager then admits only seats the caller reads (`member-not-active` otherwise); never Tenancy's queries about
-the caller and rights, the placements (every member still reads each seat's id and units), or who writes. A read
+`user.UnitsWhereIHold(permission)`, `user.SeatsInMyUnits()`: the seats placed at or below the caller's units; `user.CurrentSeat<Seat>().Onboarding`, a
+field of the caller's own seat; `user.IsInOrganization()` and `user.SeatKind()`, the caller's kind of seat), or `user.FellowMembers<ProjectId, SeatId>()`, the people on the caller's projects. It changes what a read of the
+seats returns, a direct read, the managers' reads, `tenant_seats_with_kinds()` and `db.Tenancy().Seats()`; never Tenancy's
+queries about the caller and rights, the placements (every member still reads each seat's id and units), or who writes.
+Membership's member manager and its kind guard admit a seat by its id past the rule, through `db.Tenancy().SeatToAdmitAsync(seat)`
+and `seat_to_admit(seat)`, which answer an active seat of the caller's tenant and its kind alone (`member-not-active` otherwise). A read
 rule on any other class of Tenancy's is refused.
 To take away what Tenancy allows, write a restrictive rule, `[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]`:
-AND-ed with Tenancy's policies, it narrows and never grants (`CurrentSeat<Seat>().Kind == SeatKind.Employee` keeps an
-external seat out of the organization, its units and its tree). It goes on the organization, seat or role class;
-a tenant or invitation is DDD00100. Tenancy's own work and its owner-run functions keep working.
-See `tenancy/postgres.md` ("Row level security on Postgres"): "Default read policies for seats and invitations",
-"Restrictive rules", "Who reads which grants" and "Who may change a seat's columns".
+AND-ed with Tenancy's policies, it narrows and never grants (`CurrentSeat<Seat>().Onboarding == OnboardingState.Done`
+keeps a seat whose onboarding is not done out of the organization, its units and its tree). It goes on the
+organization, seat or role class; a tenant or invitation is DDD00100. Tenancy's own work and its owner-run functions
+keep working. A person from outside the organization needs no such rule: give that person a kind of seat outside
+it, and Tenancy's own restrictive policies "Outside seats read only themselves" keep the seat out while
+`NarrowOutsideSeats` is on. See `tenancy/postgres.md` ("Row level security on Postgres"): "Default read policies for
+seats and invitations", "Restrictive rules", "What a seat outside the organization reads", "Who reads which grants"
+and "Who may change a seat's columns".
 
 ## A module on Tenancy, as the sample lays it out
 

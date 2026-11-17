@@ -122,6 +122,10 @@ confirms. The entries are grouped by stage.
   property. The type of the property is one that the toolkit can compare with the caller's own value. The
   generator lists the ids that the assemblies of the request interfaces ask about. The check keeps what it finds
   for the requests ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)).
+- **`membership.permissions-of-other-resources`** (`MembershipEntityFrameworkChecks.PermissionsOfOtherResourcesCheck`),
+  from the registration of each resource with members, `Add{Resource}Membership`. Every starter role lists only permissions of other resources whose `Kinds` hold every kind
+  of its set. A permission that a role may give is not declared by two other resources with different `Kinds`
+  ([A permission of another resource](membership/permissions-and-roles.md#a-permission-of-another-resource)).
 - **`postgres.row-level-security-wired`** (`PostgresRowAccessChecks.RowLevelSecurityWiredCheck`), from
   `AddPostgresRowLevelSecurity` and `AddSupabaseRowLevelSecurity`. Every context on Postgres runs its commands as
   the caller. A context built with `UseDDDToolkitCore` alone is the exception. It runs as the login role on

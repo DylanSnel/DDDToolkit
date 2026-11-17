@@ -840,17 +840,17 @@ internal static class DiagnosticDescriptors
 
     public static readonly DiagnosticDescriptor PlaceMisdeclared = Create(
         id: "DDD00097",
-        title: "[At] marks the one place an aggregate root hangs at",
+        title: "[At] marks one place of each kind on an aggregate root",
         messageFormat: "'{0}' {1}",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "[At] marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs to, the bay a crate stands in. A fact of the domain, which the rules of a resource with members read where they let it be reached from above: a key held at that place, or above it, reaches the aggregate. So it goes on one instance property of an aggregate root, the root itself and never an entity inside it, and that property is never empty: an aggregate that hangs nowhere could not be reached from above, which is what [At] says. A static property, one of another type, a second one and a nullable one are each refused.");
+        description: "[At] marks a property of an aggregate root that says where it hangs. The type of the property's id is the kind of place, and says which tree the place is in. An aggregate hangs at one place of each kind at most. A place may be empty, so a nullable property is allowed, and an empty place reaches nothing. A static property, a property on a type that is no aggregate root, and a second property of the same kind are refused.");
 
     public static readonly DiagnosticDescriptor ReachFromAboveWithoutPlace = Create(
         id: "DDD00098",
         title: "Rules that reach a resource from above read where it hangs from its [At] property",
-        messageFormat: "MembershipRules.For<{0}> says reachFromAbove, and '{0}' marks no property [At]: reachFromAbove needs the place the resource hangs at: mark one property [At]",
+        messageFormat: "MembershipRules.For<{0}> says reachFromAbove, and '{0}' marks no property [At]: reachFromAbove needs the place the resource hangs at: mark the property that says where it hangs [At]",
         category: Membership,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -880,7 +880,7 @@ internal static class DiagnosticDescriptors
         category: Tenancy,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A restrictive row access rule, Restrictive = true, narrows what the permissive policies allow on its aggregate's table and the tables of its entities. On Tenancy's tables it reaches the organization with its units and the closure of its tree, the seats with their placements and grants, and the roles: what an application narrows to keep a seat that is not an employee out of the organization. A tenant and an invitation are read by Tenancy's own work and by the person accepting an invitation, who has no seat yet, so a rule there is refused.");
+        description: "A restrictive row access rule, Restrictive = true, narrows what the permissive policies allow on its aggregate's table and the tables of its entities. On Tenancy's tables it reaches the organization with its units and the closure of its tree, the seats with their placements and grants, and the roles. An application narrows these to keep some of its seats out of the organization, for example a seat whose onboarding is not done. Tenancy's own work reads the tenants and the invitations, and so does a person who accepts an invitation before having a seat. So a restrictive rule on a tenant or an invitation is refused.");
 
     public static readonly DiagnosticDescriptor CurrentSeatOfAnotherType = Create(
         id: "DDD00101",
@@ -889,7 +889,7 @@ internal static class DiagnosticDescriptors
         category: Tenancy,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "user.CurrentSeat<TSeat>() is the calling seat's own row, read by a rule through the fields of the application's seat class: user.CurrentSeat<Seat>().Kind == SeatKind.Employee. The function answers with the row of Tenancy's seats table, which the seat class is mapped to, so TSeat is that class, the one declared with [SeatAggregate]. For the seat's id in a rule of a module whose context does not map the seats, ask user.CurrentSeatId().");
+        description: "user.CurrentSeat<TSeat>() is the calling seat's own row. A rule reads it through the fields of the application's seat class, for example user.CurrentSeat<Seat>().Onboarding == OnboardingState.Done. The function answers with the row of Tenancy's seats table, which the seat class is mapped to, so TSeat is that class, the one declared with [SeatAggregate]. For the seat's id in a rule of a module whose context does not map the seats, ask user.CurrentSeatId(). For the seat's kind, ask user.IsInOrganization() or user.SeatKind().");
 
     public static readonly DiagnosticDescriptor RequirementArgumentOutOfPlace = Create(
         id: "DDD00102",

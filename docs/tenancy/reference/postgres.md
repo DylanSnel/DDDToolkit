@@ -29,11 +29,13 @@ public static ApplicationCatalogue Application { get; } = new(StarterRoles: [...
 public static IReadOnlyList<string> OperatorTokenRoles { get; } = ["operator"];
 ```
 
-The catalogue is the one the application runs with, the application's part and every module's permissions: its marks decide which roles manage access, its [`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions) whether the policies contain the grants of those roles, and its starter roles which roles a settings manager may add. When any of them changes, a permission added to a starter role or to the administrators' starter role included, the next export writes the access file again. The export makes the class before the application starts, so it builds the catalogue as the host's registration does, without the application's services: from the member marked [`TenancyCatalogueAttribute`](catalogue.md#tenancycatalogueattribute), or `new ApplicationCatalogue()` where none is, and the lists every module the exporting project references marks with `TenancyPermissionsAttribute` ([`TenancyRowAccessContribution`](#tenancyrowaccesscontributionienumerableienumerablepermission-applicationcatalogue-ireadonlycollectionstring)). A script written by hand, or a test, makes it with the catalogue built ([`TenancyRowAccessContribution`](#tenancyrowaccesscontributiontenancycatalogue-ireadonlycollectionstring)).
+The catalogue is the one the application runs with, the application's part and every module's permissions: its marks decide which roles manage access, its [`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions) whether the policies contain the grants of those roles, and its starter roles which roles a settings manager may add. When any of them changes, a permission added to a starter role or to the administrators' starter role included, the next export writes the access file again. The export makes the class before the application starts, so it builds the catalogue as the host's registration does, without the application's services: from the member marked [`TenancyCatalogueAttribute`](catalogue.md#tenancycatalogueattribute), or `new ApplicationCatalogue()` where none is, and the lists every module the exporting project references marks with `TenancyPermissionsAttribute` ([`TenancyRowAccessContribution`](#tenancyrowaccesscontributionienumerableienumerablepermission-applicationcatalogue-ireadonlycollectionstring-ienumerabletype)). A script written by hand, or a test, makes it with the catalogue built ([`TenancyRowAccessContribution`](#tenancyrowaccesscontributiontenancycatalogue-ireadonlycollectionstring-ienumerabletype)).
 
 **Remarks**
 
 For the context that maps Tenancy's tables, in its default schema: the functions `current_seat`, `current_tenant`, `system_tenant`, `units_where_i_hold_permission`, `readable_units`, `seats_in_my_units`, `roles_with_permission`, `holds_permission`, `holds_at_tenant`, `identity_tenants`, `unit_parent`, `permission_manages_access`, `permission_is_contained` and `starter_role_permissions`, executable by signed-in users and by system work in a tenant; the policies on Tenancy's tables, which only this contribution writes; and the triggers that keep an administrator in every active or suspended tenant, every right backed by a grant, the closure of the tree exact, and fixed what a seat, a placement and a grant are about.
+
+The kinds of seat come from the catalogue as well. `seat_kind_in_organization` answers which kinds it declares and which of them are inside the organization. A trigger gives a new seat what it says of the seat's kind, refuses a kind it does not declare, and keeps a seat's kind for every role. Another trigger keeps a seat outside the organization placed nowhere, for every role. `is_in_organization` and `seat_kind` answer the row questions about the calling seat's kind. While [`ApplicationCatalogue.NarrowOutsideSeats`](catalogue.md#applicationcatalogue) is on, `current_seat_in_organization` answers false to a seat outside the organization, and restrictive policies on the organizations, the units, the tree, the placements and the roles keep such a seat from reading them, and on the seats from reading any seat but the person's own and its fellow members'. The fellow members are the members of every resource the application marks with [`TenancyFellowSeatsAttribute`](queries.md#tenancyfellowseatsattribute) that the seat is a member of: `fellow_seats()` reads them from each resource's `fellow_members` function, and a statement widens the policy on the seats with it. `units_named` answers such a seat nothing. With the setting off the function answers true to every caller, and `fellow_seats()` is not written. An invitation for a kind outside the organization is added by a seat that holds `tenancy.externals.invite` at its unit, with no role. A seat that holds that permission there reads it and cancels it, and its issuer reads it.
 
 Who reads the seats, and who besides the seats managers at its unit reads an invitation, are defaults (`ContributedDefault`), since what people may see of each other is the application's choice: a `[RowAccess]` rule of the application's on its seat class, or on its invitation class, that allows `Read` to signed-in users takes the place of the default, held to the calling seat's tenant. What Tenancy's own work reads stays whatever the rule says: a person's own seats, every seat of the tenant to a seat that manages seats, grants or units anywhere or roles for the whole tenant, and an invitation to the seats managers at its unit. The functions that answer about the caller and about rights run as their owner and are no read of a table, so a rule changes nothing they answer; `tenant_seats`, which runs as its caller, answers the seats the rule lets the caller read. Every other read, and every write, stays this contribution's.
 
@@ -61,22 +63,24 @@ A signed-in user is found as the active seat of the verified identity in the ten
 
 | Member | Summary |
 |---|---|
-| [`TenancyRowAccessContribution(IEnumerable<IEnumerable<Permission>>, ApplicationCatalogue?, IReadOnlyCollection<string>?)`](#tenancyrowaccesscontributionienumerableienumerablepermission-applicationcatalogue-ireadonlycollectionstring) | The contribution as the Supabase export makes it, in the project that runs the export, from what the application marks: the catalogue built from `application` and `modules`, as the host's registration builds it from `TenancyOptions.Catalogue` and the modules' permissions it registers. |
-| [`TenancyRowAccessContribution(TenancyCatalogue, IReadOnlyCollection<string>?)`](#tenancyrowaccesscontributiontenancycatalogue-ireadonlycollectionstring) | A contribution for an application whose catalogue is `catalogue`, as a script written by hand makes it. |
+| [`TenancyRowAccessContribution(IEnumerable<IEnumerable<Permission>>, ApplicationCatalogue?, IReadOnlyCollection<string>?, IEnumerable<Type>?)`](#tenancyrowaccesscontributionienumerableienumerablepermission-applicationcatalogue-ireadonlycollectionstring-ienumerabletype) | The contribution as the Supabase export makes it, in the project that runs the export, from what the application marks: the catalogue built from `application` and `modules`, as the host's registration builds it from `TenancyOptions.Catalogue` and the modules' permissions it registers. |
+| [`TenancyRowAccessContribution(TenancyCatalogue, IReadOnlyCollection<string>?, IEnumerable<Type>?)`](#tenancyrowaccesscontributiontenancycatalogue-ireadonlycollectionstring-ienumerabletype) | A contribution for an application whose catalogue is `catalogue`, as a script written by hand makes it. |
 | `TenancyCatalogue Catalogue { get; }` | The catalogue the functions are written from. |
 | `IReadOnlyList<string> OperatorTokenRoles { get; }` | The token roles of the application's operators, each once, in ordinal order. |
+| `IReadOnlyList<Type> FellowSeatsOf { get; }` | The ids of the resources whose members are seats, each once, in the order of their names. |
 | `string Owner { get; }` | The owner of the functions it defines, lower case letters, digits and `-`: their logical names are `owner/name`, which rules and other contributions ask them by. |
 | [`Contribute(DbContext, RowAccessExport)`](#contributedbcontext-rowaccessexport) | What this contribution writes for `context`, or `null` when the context is none of its business. |
 | [`CurrentUserAs(DbContext, Type)`](#currentuserasdbcontext-type) | The function that answers who the caller is as an `id`, without parameters, or `null` where this keeps no such id in the model of `context`. |
 | [`PlacesWhereCurrentUserHolds(DbContext, Type)`](#placeswherecurrentuserholdsdbcontext-type) | The function that answers, for a key given as text, the places of type `place` the caller's hold of it reaches, or `null` where this keeps no such place in the model of `context`. |
 
-#### `TenancyRowAccessContribution(IEnumerable<IEnumerable<Permission>>, ApplicationCatalogue?, IReadOnlyCollection<string>?)`
+#### `TenancyRowAccessContribution(IEnumerable<IEnumerable<Permission>>, ApplicationCatalogue?, IReadOnlyCollection<string>?, IEnumerable<Type>?)`
 
 ```csharp
 public TenancyRowAccessContribution(
     IEnumerable<IEnumerable<Permission>> modules,
     ApplicationCatalogue? application = null,
-    IReadOnlyCollection<string>? operatorTokenRoles = null)
+    IReadOnlyCollection<string>? operatorTokenRoles = null,
+    IEnumerable<Type>? fellowSeatsOf = null)
 ```
 
 The contribution as the Supabase export makes it, in the project that runs the export, from what the application marks: the catalogue built from `application` and `modules`, as the host's registration builds it from `TenancyOptions.Catalogue` and the modules' permissions it registers.
@@ -86,6 +90,7 @@ The contribution as the Supabase export makes it, in the project that runs the e
 - `modules`: Every list of permissions a module marks with `TenancyPermissionsAttribute`, as the host registers them with `AddTenancyPermissionsOfModules()`: those of every project the exporting project references.
 - `application`: The application's part of the catalogue, the member it marks with [`TenancyCatalogueAttribute`](catalogue.md#tenancycatalogueattribute); `new ApplicationCatalogue()` when it marks none, as when `TenancyOptions.Catalogue` is left unset.
 - `operatorTokenRoles`: The token roles of the application's operators, the member it marks with [`TenancyOperatorsAttribute`](managers.md#tenancyoperatorsattribute); none when it marks none, and then nothing is written for operators.
+- `fellowSeatsOf`: The ids of the resources whose members are seats, the members each marks with [`TenancyFellowSeatsAttribute`](queries.md#tenancyfellowseatsattribute): a seat outside the organization reads the seats of its fellow members on each. The join of the package that keeps those resources writes the marks. None when nothing is marked.
 
 **Exceptions**
 
@@ -93,12 +98,13 @@ The contribution as the Supabase export makes it, in the project that runs the e
 - [`TenancyCatalogueException`](catalogue.md#tenancycatalogueexception): The catalogue does not hold together; every problem found is listed.
 - `ArgumentException`: An operator token role has no name.
 
-#### `TenancyRowAccessContribution(TenancyCatalogue, IReadOnlyCollection<string>?)`
+#### `TenancyRowAccessContribution(TenancyCatalogue, IReadOnlyCollection<string>?, IEnumerable<Type>?)`
 
 ```csharp
 public TenancyRowAccessContribution(
     TenancyCatalogue catalogue,
-    IReadOnlyCollection<string>? operatorTokenRoles = null)
+    IReadOnlyCollection<string>? operatorTokenRoles = null,
+    IEnumerable<Type>? fellowSeatsOf = null)
 ```
 
 A contribution for an application whose catalogue is `catalogue`, as a script written by hand makes it.
@@ -111,6 +117,7 @@ A contribution for an application whose catalogue is `catalogue`, as a script wr
   ```csharp
   var tenancy = new TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All), ["operator"]);
   ```
+- `fellowSeatsOf`: The ids of the resources whose members are seats, whose fellow members a seat outside the organization reads. None when left out, and then such a seat reads its own seats alone.
 
 **Exceptions**
 
