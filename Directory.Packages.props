@@ -56,8 +56,6 @@
     <FluentValidationVersion>12.0.0</FluentValidationVersion>
     <!-- 13.0.1 is the first release without the stack-overflow advisory GHSA-5crp-9r3c-p9vr. -->
     <NewtonsoftJsonVersion>13.0.1</NewtonsoftJsonVersion>
-    <!-- 3.0.0 was never published. -->
-    <MediatorVersion>3.0.1</MediatorVersion>
     <!-- The generators are compiled against the oldest Roslyn that understands C# 13 partial properties. -->
     <RoslynVersion>4.12.0</RoslynVersion>
   </PropertyGroup>
@@ -76,7 +74,6 @@
     <HotChocolateVersion>16.6.9</HotChocolateVersion>
     <FluentValidationVersion>12.1.1</FluentValidationVersion>
     <NewtonsoftJsonVersion>13.0.4</NewtonsoftJsonVersion>
-    <MediatorVersion>3.0.2</MediatorVersion>
     <!--
       Tests and examples compile and run the generators on Roslyn 5. Not the newest: with transitive
       pinning on, this must be exactly the version Microsoft.EntityFrameworkCore.Design pins through
@@ -154,7 +151,6 @@
     <PackageVersion Include="HotChocolate.Fusion.Connectors.InMemory" Version="$(HotChocolateVersion)" />
     <PackageVersion Include="FluentValidation" Version="$(FluentValidationVersion)" />
     <PackageVersion Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
-    <PackageVersion Include="Mediator.Abstractions" Version="$(MediatorVersion)" />
     <!-- Wolverine and MassTransit are transports for DTS.DDD.Messaging.Wolverine and .MassTransit. -->
     <!-- MassTransit 8: the last major version under Apache 2.0. 9 is commercial; see the package README. -->
     <PackageVersion Include="MassTransit" Version="$(MassTransitVersion)" />
@@ -163,15 +159,6 @@
     <PackageVersion Include="WolverineFx.RabbitMQ" Version="$(WolverineVersion)" />
     <!-- Wolverine compiles its handler code at start-up; since 6.x that compiler is a package of its own. -->
     <PackageVersion Include="WolverineFx.RuntimeCompilation" Version="$(WolverineVersion)" />
-  </ItemGroup>
-
-  <ItemGroup Label="Composition roots">
-    <!--
-      Mediator generates its implementation, its handler registrations and AddMediator into the
-      assembly the generator runs in, so this belongs in the composition root only: the Mediator test project,
-      which runs its requests on it.
-    -->
-    <PackageVersion Include="Mediator.SourceGenerator" Version="$(MediatorVersion)" />
   </ItemGroup>
 
   <ItemGroup Label="Examples">

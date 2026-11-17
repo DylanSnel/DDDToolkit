@@ -18,7 +18,7 @@ public class AccessRequirementsDocsExampleTests
 {
     private const string Page = "access-requirements.md";
 
-    private static readonly string[] ExampleHeadings = ["What a request declares", "What answers it", "Asking the checks without Mediator"];
+    private static readonly string[] ExampleHeadings = ["What a request declares", "What answers it", "Asking the checks yourself"];
 
     /// <summary>What the page leaves out: the usings, and a namespace of the application's own.</summary>
     private const string Header =

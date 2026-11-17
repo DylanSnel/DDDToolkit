@@ -87,8 +87,8 @@ public sealed class AccessBehaviorCheckTests
     [Fact]
     public void A_host_that_lists_its_behaviors_and_leaves_the_one_for_streams_out_is_told_to_list_it()
     {
-        // As the Mediator library registers what a host lists: closed over each message that meets the behavior's
-        // constraints. The generated registration would put the first behavior in a second time, so it is not named.
+        // As a host registers a behavior closed over each message that meets its constraints. The generated
+        // registration would put the first behavior in a second time, so it is not named.
         var services = new ServiceCollection()
             .Handles<PlantTree>()
             .HandlesStreamed<GardenBeds>()
@@ -100,7 +100,7 @@ public sealed class AccessBehaviorCheckTests
         check.Should().Throw<InvalidOperationException>().Which.Message.Should().Be(
             "GardenAccessStreamBehavior<TMessage, TResponse>, the behavior the toolkit wrote to ask the access checks of IGardenRequest of a query answered with a stream, is not in the pipeline of streams: "
             + "every such query that implements IGardenRequest is streamed with nothing asking what it requires. "
-            + "The host lists its behaviors for the Mediator library: list typeof(GardenAccessStreamBehavior<,>) among its StreamPipelineBehaviors as well.");
+            + "The host registers its behaviors closed over their messages: add services.AddStreamPipelineBehavior(typeof(GardenAccessStreamBehavior<,>)), which puts it in front of every message of the pipeline.");
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public sealed class AccessBehaviorCheckTests
         FluentActions.Invoking(() => AccessBehaviorChecks.EnsureBehaviorsAreRegistered(one)).Should().Throw<InvalidOperationException>().Which.Message.Should().Be(
             "PondAccessBehavior<TMessage, TResponse>, the pipeline behavior the toolkit wrote to ask the access checks of IPondRequest, is in the pipeline of some of its messages and not of CountFish: "
             + "that one reaches its handler with nothing asking what it requires, held only by what the database checks. "
-            + "The host lists its behaviors for the Mediator library: list typeof(PondAccessBehavior<,>) among its PipelineBehaviors as well.");
+            + "The host registers its behaviors closed over their messages: add services.AddPipelineBehavior(typeof(PondAccessBehavior<,>)), which puts it in front of every message of the pipeline.");
 
         // Under a permission, or as itself, it is none the pipeline asks the container for.
         var keyed = Pond().AddKeyedScoped<IPipe<FeedFish, int>, PondAccessBehavior<FeedFish, int>>("pond");

@@ -3,11 +3,10 @@ using DTS.DDD.Analyzers.Tests.Generation;
 namespace DTS.DDD.Analyzers.Tests.Diagnostics;
 
 /// <summary>
-/// DDD00056 and DDD00057: an interface marked <c>[AccessRequests]</c> that no behavior can be written for, and
-/// a Mediator library whose behavior the generator does not know. Each stops the behavior of the interface it is
-/// reported on, without a crash, and leaves the others alone: a behavior that was written wrong, or one that
-/// never ran the checks, would be worse than none. And DDD00058: a notification that implements such an
-/// interface, which no behavior ever sees.
+/// DDD00056: an interface marked <c>[AccessRequests]</c> that no behavior can be written for. It stops the behavior
+/// of the interface it is reported on, without a crash, and leaves the others alone: a behavior that was written
+/// wrong, or one that never ran the checks, would be worse than none. And DDD00058: a notification that implements
+/// such an interface, which no behavior ever sees.
 /// </summary>
 public class AccessRequestsDiagnosticTests
 {
@@ -138,10 +137,11 @@ public class AccessRequestsDiagnosticTests
     }
 
     [Fact]
-    public void A_misshapen_interface_is_reported_where_no_library_is_referenced_too()
+    public void A_misshapen_interface_is_reported_where_the_service_collection_is_not_seen_too()
     {
         // The attribute says the interface is a module's request interface. One that is not shaped as such is a
-        // mistake whether or not a behavior would be written, and adding the library later brings no surprise.
+        // mistake whether or not its registration would be written, and adding the service collection later brings
+        // no surprise.
         var result = GeneratorTestHost.Create(Usings +
             """
             [AccessRequests]
@@ -151,142 +151,13 @@ public class AccessRequestsDiagnosticTests
         result.ShouldHaveExactlyDiagnostics("DDD00056");
     }
 
-    // ------------------------------------------------------------------ DDD00057
-
-    [Theory]
-    [InlineData(
-        "ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken); void Reset();",
-        "more to implement than the one method Handle")]
-    [InlineData(
-        "ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next);",
-        "does not take the message, a cancellation token and the delegate")]
-    [InlineData(
-        "ValueTask<TResponse> Handle(TMessage message, TMessage again, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-        "does not take the message, a cancellation token and the delegate")]
-    [InlineData(
-        "ValueTask<TResponse> Handle(in TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-        "does not take the message, a cancellation token and the delegate")]
-    [InlineData(
-        "ValueTask<TResponse> Run(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-        "more to implement than the one method Handle")]
-    [InlineData(
-        "ValueTask<TResponse> Handle<TOther>(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-        "more to implement than the one method Handle")]
-    public void A_behavior_declared_otherwise_than_the_generator_knows_it_reports_DDD00057(string handle, string says)
-    {
-        var result = GeneratorTestHost.Create(AccessBehaviorGenerationTests.Billing)
-            .WithDependencyInjection()
-            .WithReferencedAssembly(AccessBehaviorGenerationTests.LibraryDeclaring(handle: handle), "Mediator.Abstractions")
-            .RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00057");
-        result.ShouldHaveDiagnostic("DDD00057", at: "IBillingRequest").GetMessage()
-            .Should().Contain("declares IPipelineBehavior<,> otherwise than the generator knows it").And.Contain(says)
-            .And.Contain("AccessChecks<IBillingRequest>.RequireAsync(message, cancellationToken)", "it says what to write by hand")
-            .And.Contain("its Handle is async", "the check a request passed is kept with the flow of the method that awaited it, for the handler");
-        result.GeneratedSources.Should().BeEmpty("nothing is written rather than guessed");
-        result.ShouldNotCrash();
-    }
-
-    [Theory]
-    [InlineData("TMessage message", "ValueTask<TResponse>")]
-    [InlineData("TMessage message, CancellationToken cancellationToken, int attempt", "ValueTask<TResponse>")]
-    [InlineData("TMessage message, CancellationToken cancellationToken", "Task<TResponse>")]
-    public void A_next_step_declared_otherwise_reports_DDD00057(string next, string answers)
-    {
-        var result = GeneratorTestHost.Create(AccessBehaviorGenerationTests.Billing)
-            .WithDependencyInjection()
-            .WithReferencedAssembly(AccessBehaviorGenerationTests.LibraryDeclaring(next: next, answers: answers), "Mediator.Abstractions")
-            .RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00057");
-        result.ShouldHaveDiagnostic("DDD00057", at: "IBillingRequest").GetMessage()
-            .Should().Contain("a next step that does not take the message and a cancellation token and answer what Handle answers");
-        result.GeneratedSources.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void A_behavior_that_answers_no_task_of_the_response_reports_DDD00057()
-    {
-        var result = GeneratorTestHost.Create(AccessBehaviorGenerationTests.Billing)
-            .WithDependencyInjection()
-            .WithReferencedAssembly(
-                AccessBehaviorGenerationTests.LibraryDeclaring(
-                    handle: "IAsyncEnumerable<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-                    answers: "IAsyncEnumerable<TResponse>"),
-                "Mediator.Abstractions")
-            .RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00057");
-        result.ShouldHaveDiagnostic("DDD00057", at: "IBillingRequest").GetMessage().Should().Contain("does not answer a ValueTask or a Task of the response");
-        result.GeneratedSources.Should().BeEmpty();
-    }
-
-    [Theory]
-    [InlineData(
-        "ValueTask<TResponse> Handle(TMessage message, StreamHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-        "ValueTask<TResponse>",
-        "does not answer an IAsyncEnumerable of the response")]
-    [InlineData(
-        "ValueTask<TResponse> Handle(TMessage message, StreamHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken);",
-        "IAsyncEnumerable<TResponse>",
-        "a next step that does not take the message and a cancellation token and answer what Handle answers")]
-    [InlineData(
-        "IAsyncEnumerable<TResponse> Handle(TMessage message, StreamHandlerDelegate<TMessage, TResponse> next);",
-        "IAsyncEnumerable<TResponse>",
-        "does not take the message, a cancellation token and the delegate")]
-    [InlineData(
-        "IAsyncEnumerable<TResponse> Handle(TMessage message, StreamHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken); void Reset();",
-        "IAsyncEnumerable<TResponse>",
-        "more to implement than the one method Handle")]
-    public void A_stream_behavior_declared_otherwise_reports_DDD00057_and_stops_both_behaviors(string handle, string answers, string says)
-    {
-        // The behavior for ordinary messages could be written here. It is not: half of a module's messages held
-        // and the other half not would look, from the registration, like all of them were.
-        var result = GeneratorTestHost.Create(AccessBehaviorGenerationTests.Billing)
-            .WithDependencyInjection()
-            .WithReferencedAssembly(AccessBehaviorGenerationTests.LibraryDeclaring() + AccessBehaviorGenerationTests.StreamsDeclaring(handle: handle, answers: answers), "Mediator.Abstractions")
-            .RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00057");
-        result.ShouldHaveDiagnostic("DDD00057", at: "IBillingRequest").GetMessage()
-            .Should().Contain("declares IStreamPipelineBehavior<,> otherwise than the generator knows it").And.Contain(says);
-        result.GeneratedSources.Should().BeEmpty("nothing is written rather than guessed");
-        result.ShouldNotCrash();
-    }
-
-    [Fact]
-    public void An_unknown_library_is_reported_for_each_interface_and_a_misshapen_interface_for_its_own_mistake()
-    {
-        var result = GeneratorTestHost.Create(Usings +
-                """
-                [AccessRequests]
-                public interface IBillingRequest : IRequireAccess;
-
-                [AccessRequests]
-                public interface IShippingRequest : IRequireAccess;
-
-                [AccessRequests]
-                public interface IPayrollRequest;
-                """)
-            .WithDependencyInjection()
-            .WithReferencedAssembly(AccessBehaviorGenerationTests.LibraryDeclaring(handle: "void Handle();"), "Mediator.Abstractions")
-            .RunCore();
-
-        result.ShouldHaveExactlyDiagnostics("DDD00056", "DDD00057", "DDD00057");
-        result.ShouldHaveDiagnostic("DDD00057", at: "IBillingRequest");
-        result.ShouldHaveDiagnostic("DDD00057", at: "IShippingRequest");
-        result.ShouldHaveDiagnostic("DDD00056", at: "IPayrollRequest");
-        result.GeneratedSources.Should().BeEmpty();
-    }
-
     // ------------------------------------------------------------------ DDD00058
 
     private const string BillingModule =
         """
         using DTS.DDD.Abstractions.Attributes;
         using DTS.DDD.Access;
-        using Mediator;
+        using DTS.DDD.Mediator;
 
         namespace Shop.Billing;
 
@@ -322,7 +193,7 @@ public class AccessRequestsDiagnosticTests
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics("DDD00058");
         result.ShouldHaveDiagnostic("DDD00058", at: "InvoiceClosed").GetMessage().Should()
-            .StartWith("'InvoiceClosed' implements 'IBillingRequest', which is marked [AccessRequests], and is a notification of the Mediator library.")
+            .StartWith("'InvoiceClosed' implements 'IBillingRequest', which is marked [AccessRequests], and is a notification of the toolkit's mediator.")
             .And.Contain("published to its handlers through no pipeline")
             .And.Contain("AccessChecks<IBillingRequest>.RequireAsync");
         result.ShouldHaveGenerated("BillingAccessBehavior.");
@@ -422,7 +293,7 @@ public class AccessRequestsDiagnosticTests
     }
 
     [Fact]
-    public void Without_the_library_nothing_is_a_notification_and_nothing_is_reported()
+    public void A_notification_of_another_library_is_none_of_the_mediator_s_and_nothing_is_reported()
     {
         var result = GeneratorTestHost.Create(Usings +
                 """

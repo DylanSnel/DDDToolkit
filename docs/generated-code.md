@@ -314,9 +314,8 @@ declared twice. [A module named by its folder](modules.md#a-module-named-by-its-
 
 ## The access behavior
 
-The core generator writes one file only in a project that references
-[Mediator](https://github.com/martinothamar/Mediator). For an interface marked `[AccessRequests]`, it writes a pipeline
-behavior and the call that registers it. The behavior runs the access check, which checks each request of the
+For an interface marked `[AccessRequests]`, the core generator writes a pipeline behavior of the toolkit's mediator
+and the call that registers it. The behavior runs the access check, which checks each request of the
 interface against [what the request requires of its caller](access-requirements.md):
 
 ```csharp
@@ -357,7 +356,7 @@ Both classes are declared in the namespace of `IShopRequest`. Code outside that 
 call `AddShopAccessBehavior()`. Without it the call is CS1061, and [DDD00107](diagnostics.md#ddd00107) names the
 namespace.
 
-Mediator sends a message that is answered with a stream through a separate pipeline. So the same file holds a second
+The mediator sends a message that is answered with a stream through a separate pipeline. So the same file holds a second
 class for such messages, and `AddShopAccessBehavior()` registers that class too:
 
 **ShopAccessBehavior.g.cs, shortened**
@@ -377,9 +376,8 @@ public sealed class ShopAccessStreamBehavior<TMessage, TResponse> : IStreamPipel
 }
 ```
 
-The toolkit references no dispatcher. The generator recognizes Mediator by its types, and it reads how to implement
-the behaviors from the Mediator version the project references. A project that does not reference Mediator gets none
-of these classes.
+The generator recognizes the mediator by its types, which `DylansTechStack.DDD.Abstractions` declares for .NET 10. A
+project for netstandard2.0 gets none of these classes.
 
 The file starts with an assembly attribute that lists what the file contains: the interface, both behaviors, and the
 call that registers them. When the host registers the interface's checks, the registration reads this attribute and
@@ -391,8 +389,8 @@ without the behavior in its pipeline ([When nothing asks the checks](access-requ
 A request can declare who may send it with an attribute, or with a permission marker on the member where a permission
 is held. The marker's argument is the permission. For such a request, the generator writes one line in the same file,
 inside the interface, which is declared `partial` for this purpose. The line is the call of each attribute and marker,
-written out. The generator writes the line with or without Mediator, because any code that runs the access
-check reads it ([What a request declares](access-requirements.md#what-a-request-declares)):
+written out. The generator writes the line in a project for netstandard2.0 too, because any code that runs the
+access check reads it ([What a request declares](access-requirements.md#what-a-request-declares)):
 
 ```csharp
 [AccessRequests]

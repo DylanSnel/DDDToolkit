@@ -4,18 +4,21 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace DTS.DDD.Mediator;
 
 /// <summary>
-/// Registers the toolkit's mediator: the scoped <see cref="IPublisher"/>, the handlers of each notification type
-/// and the behaviors around them.
+/// Registers the toolkit's mediator: the scoped <see cref="ISender"/>, <see cref="IPublisher"/> and
+/// <see cref="IMediator"/>, the handlers of each message type and the behaviors around them.
 /// <para>
-/// An application rarely calls these methods itself. The toolkit's generator writes <c>Add{Module}Handlers()</c>
-/// into every project that has handlers, with one <see cref="AddNotificationHandler{TNotification, THandler}"/> per
-/// handler and notification type. <c>AddDDDToolkitEntityFramework</c> registers the publisher.
+/// An application rarely registers a handler itself. The toolkit's generator writes <c>Add{Module}Handlers()</c>
+/// into every project that has handlers, with one registration per handler and message type, such as
+/// <see cref="AddNotificationHandler{TNotification, THandler}"/> and
+/// <see cref="AddCommandHandler{TCommand, TResponse, THandler}"/>. <c>AddDDDToolkitEntityFramework</c> registers the
+/// mediator.
 /// </para>
 /// </summary>
-public static class MediatorServiceCollectionExtensions
+public static partial class MediatorServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the scoped <see cref="IPublisher"/>. Calling it again changes nothing.
+    /// Registers the scoped <see cref="ISender"/>, <see cref="IPublisher"/> and <see cref="IMediator"/>. Calling it
+    /// again changes nothing.
     /// </summary>
     /// <param name="services">The container.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
@@ -25,6 +28,10 @@ public static class MediatorServiceCollectionExtensions
 
         services.TryAddSingleton<NotificationRoutes>();
         services.TryAddScoped<IPublisher, Publisher>();
+        services.TryAddSingleton<RequestRoutes>();
+        services.TryAddScoped<Sender>();
+        services.TryAddScoped<ISender>(static provider => provider.GetRequiredService<Sender>());
+        services.TryAddScoped<IMediator>(static provider => provider.GetRequiredService<Sender>());
         return services;
     }
 

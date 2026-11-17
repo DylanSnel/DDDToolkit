@@ -36,7 +36,7 @@ namespace DTS.DDD.Analyzers.Common;
 /// <para>
 /// <b>Not in the project that writes it.</b> There the same holds for the class itself: it is a generator's output,
 /// so another generator of that project does not see it, in an attribute or in a method's signature, whose types
-/// it reads from the code as written. Mediator's writes the name as it is spelled, which compiles; HotChocolate's
+/// it reads from the code as written. A generator that writes the name as it is spelled compiles; HotChocolate's
 /// does not know the type, and writes <c>typeof(SeatManager.SeatOverview?)</c> for a resolver that may answer
 /// nothing, which does not. A module split by layer names the records in such code in its API project, above the
 /// domain project, where all is well. A module of one project keeps an alias of exactly that name there,

@@ -555,8 +555,9 @@ your persisted queries before you deploy ([GraphQL](graphql.md)).
 
 MediatR has a commercial license from version 13, so the repository stayed on 12.x. In 3.0 the examples published
 through [Mediator](https://github.com/martinothamar/Mediator), which is MIT licensed and source generated, with the
-toolkit's Mediator package. From 0.1.0 the core package has a mediator of its own for domain events, and that package
-is gone. `DispatchWithMediator()` now publishes to the handlers of the toolkit's mediator:
+toolkit's Mediator package. From 0.1.0 the core package has a mediator of its own, for domain events and for
+requests, and that package is gone. `DispatchWithMediator()` now publishes to the handlers of the toolkit's
+mediator:
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
@@ -581,6 +582,17 @@ If you move, three differences matter:
   `DbContext`. Call that method where the module registers its services.
 - Every domain event is a notification, and an event without a handler is published to nobody. See
   [Dispatching with the toolkit's mediator](event-delivery.md#dispatching-with-the-toolkits-mediator).
+
+Requests, commands and queries that ran on Mediator move by their `using`. The interfaces have Mediator's names and
+signatures, in `DTS.DDD.Mediator`:
+
+- Change `using Mediator;` to `using DTS.DDD.Mediator;`, and remove the packages `Mediator.Abstractions` and
+  `Mediator.SourceGenerator`.
+- Replace `AddMediator(...)` with the generated `Add{Module}Handlers()` of each module, which registers its request
+  handlers too.
+- Register each behavior of `MediatorOptions.PipelineBehaviors` with `services.AddPipelineBehavior(typeof(...))`, in
+  the same order, and each stream behavior with `AddStreamPipelineBehavior`.
+- See [Sending requests](event-delivery.md#sending-requests) for what differs.
 
 ## 14. Optional: make your identifiers structs
 

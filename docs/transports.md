@@ -537,11 +537,7 @@ toolkit does not name, such as `Fault<T>`, keep MassTransit's names.
 message when the consumer returns. When a handler throws, MassTransit retries as the endpoint configures, and then
 moves the message to the endpoint's error queue.
 
-MassTransit has its own `AddMediator` on `IServiceCollection`. In a file that imports the `MassTransit` namespace,
-the [Mediator](https://github.com/martinothamar/Mediator) source generator no longer reads the options of your
-`AddMediator` call. The process then stops at start-up with a message that the code was generated for another
-lifetime. Configure MassTransit in a separate file, as `Examples/Microservices.MassTransit` does in each service's
-`RabbitMq.cs`.
+Each service of `Examples/Microservices.MassTransit` configures MassTransit in a file of its own, `RabbitMq.cs`.
 
 ## The GraphQL subscription sink
 

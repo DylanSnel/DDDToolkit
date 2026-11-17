@@ -28,7 +28,7 @@ namespace DTS.DDD.Analyzers.CodeFixes;
 /// handler answers.
 /// </summary>
 /// <remarks>
-/// The sender is the Mediator library's <c>ISender</c>, or anything that is one, <c>IMediator</c> say, held by a local
+/// The sender is the toolkit's mediator's <c>ISender</c>, or anything that is one, <c>IMediator</c> say, held by a local
 /// declared before the call, a parameter, or a field or property of the class, in that order of preference, and by
 /// name within each. Only one the call can use counts: a static member reaches no field, property or parameter of
 /// the primary constructor, and a static lambda or local function reaches no local or parameter of the code around
@@ -45,7 +45,7 @@ public sealed class SendThroughSenderCodeFixProvider : CodeFixProvider
     // assembly is not referenced here, so it is repeated.
     private const string SendWithProperty = "SendWith";
 
-    private const string Sender = "Mediator.ISender";
+    private const string Sender = "DTS.DDD.Mediator.ISender";
 
     private const string EquivalenceKey = "DTS.DDD.SendThroughSender";
 
