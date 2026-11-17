@@ -635,10 +635,12 @@ services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator().
 - The outbox's processor delivers the event after the change committed. A handler that throws fails the delivery, and
   the processor delivers the event again. Write the handler so that a second delivery finds nothing left to do.
 - The processor hands the event over with nobody begun. On a host that requires an explicit current user, the
-  handler begins the caller it works as, such as system work in the event's tenant. A module with several such
-  handlers begins it once, in an `INotificationBehavior`
+  handler begins the caller it works as, such as system work in the event's tenant with the module's own scope.
+- Each handler begins that work itself. A notification behavior is no place for it: it runs around the handlers of
+  every module that handles the event, so it cannot tell whose scope to begin
   ([Notification behaviors](../event-delivery.md#notification-behaviors)).
 - The handler saves its own work. The processor saves only its own bookkeeping.
+
 ### Publishing an event
 
 To let another module receive one of Tenancy's events, map the event in the outbox of your Tenancy context, before
