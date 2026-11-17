@@ -25,8 +25,8 @@ namespace DTS.DDD.Abstractions.Attributes;
 /// The convention is named by its assembly-qualified name, because the marker's assembly does not reference the
 /// convention's. It has a public constructor that takes nothing, and it implements Entity Framework's
 /// <c>IModelFinalizingConvention</c>. The class itself may be internal to its package, since the toolkit makes it by its
-/// name. A model with a marked class is refused while it is built when the convention's assembly is not in the
-/// application, with a message that names the assembly to reference.
+/// name. When the convention's assembly is not in the application, the model is built without the convention, and a
+/// warning on Entity Framework's model logger names the assembly to reference.
 /// </remarks>
 /// <param name="convention">The convention's assembly-qualified name, as <c>"Namespace.Convention, Assembly"</c>.</param>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]

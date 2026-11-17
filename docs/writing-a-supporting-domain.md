@@ -383,21 +383,27 @@ How the convention runs:
   without the part is then refused at its first save
   ([Code the package writes for the application](#code-the-package-writes-for-the-application)).
 
-**A missing convention refuses the model.** The marker names the convention by its assembly-qualified name, as text,
+**A missing convention gives a warning.** The marker names the convention by its assembly-qualified name, as text,
 because the marker's assembly does not reference Entity Framework. A module whose infrastructure project lacks the
-package's Entity Framework assembly cannot load that name. The toolkit then refuses the model while it is built, at
-the context's first use, in `dotnet ef` and in the Supabase export. The message names the class, the marker and the
-assembly to reference:
+package's Entity Framework assembly cannot load that name. The toolkit then builds the model without the convention,
+and logs a warning on Entity Framework's model logger (`Microsoft.EntityFrameworkCore.Model`). The warning names the
+class, the marker and the assembly to reference:
 
 ```text
-System.InvalidOperationException: 'Delivery.SubscriptionId' is marked [OfSubscription], which
-Acme.Subscriptions.EntityFramework maps, and the application does not have it. Reference
-Acme.Subscriptions.EntityFramework from the project of the context, or remove the marker.
+warn: Microsoft.EntityFrameworkCore.Model
+      'Delivery.SubscriptionId' is marked [OfSubscription], which Acme.Subscriptions.EntityFramework maps, and the
+      application does not have it. The marker maps nothing in this model. Reference
+      Acme.Subscriptions.EntityFramework from the project of the context, or remove the marker.
 ```
 
-A skipped convention would leave the marker mapping nothing, and no message would say so. For Tenancy's
-`[OfTenant]`, a skipped convention would give a module whose reads see the rows of every tenant. So the toolkit refuses
-the model before any row is read.
+A model without the convention can still be built and tested, for example with the in-memory provider before the
+package's Entity Framework assembly is in the project. The marker then maps nothing. For Tenancy's `[OfTenant]`, a
+skipped convention gives a context whose reads see the rows of every tenant. On Postgres, row level security still
+keeps the rows to their tenant. On another provider, nothing does. Treat the warning as a fault before the
+application goes to production.
+
+A marker that names a class which is no convention still refuses the model while it is built. That is a fault of
+the package that declares the marker.
 
 A context that leaves `AddDDDToolkitConventions()` out runs no convention at all, and the toolkit cannot see that from
 the marker. A package whose mapping must be there checks it where it can. Tenancy's save check refuses a context whose

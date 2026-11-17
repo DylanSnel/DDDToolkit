@@ -3,6 +3,8 @@ using System.Reflection;
 using DTS.DDD.Abstractions.Attributes;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DTS.DDD.EntityFramework.Conventions;
 
@@ -18,14 +20,18 @@ namespace DTS.DDD.EntityFramework.Conventions;
 /// names the convention, and every class declared with it over any type arguments runs that convention.
 /// </para>
 /// <para>
-/// A model whose classes carry no such marker is not touched. A convention the application does not have refuses the
-/// model while it is built, naming the class, the marker and the assembly to reference. Without it the marker would
-/// map nothing, and nothing would say so. The conventions are found from the classes the model maps and from nothing
-/// registered, so <c>dotnet ef</c> builds the model the application runs with.
+/// A model whose classes carry no such marker is not touched. A convention the application does not have is skipped,
+/// and a warning names the class, the marker and the assembly to reference. The marker then maps nothing in that model.
+/// A marker that names a class which is no convention refuses the model while it is built. The conventions are found
+/// from the classes the model maps and from nothing registered, so <c>dotnet ef</c> builds the model the application
+/// runs with.
 /// </para>
 /// </summary>
-public sealed class MarkerConvention : IModelFinalizingConvention
+/// <param name="logger">Where the warning for a missing convention goes: Entity Framework's model logger.</param>
+public sealed class MarkerConvention(ILogger? logger = null) : IModelFinalizingConvention
 {
+    private readonly ILogger _logger = logger ?? NullLogger.Instance;
+
     /// <summary>The convention each attribute names, or <see langword="null"/> for one that names none: read once per attribute.</summary>
     private static readonly ConcurrentDictionary<Type, string?> Named = new();
 
@@ -50,7 +56,7 @@ public sealed class MarkerConvention : IModelFinalizingConvention
 
         foreach (var (convention, place) in conventions)
         {
-            Make(convention, place).ProcessModelFinalizing(modelBuilder, context);
+            Make(convention, place)?.ProcessModelFinalizing(modelBuilder, context);
         }
     }
 
@@ -83,17 +89,22 @@ public sealed class MarkerConvention : IModelFinalizingConvention
             attribute,
             static type => (type.IsConstructedGenericType ? type.GetGenericTypeDefinition() : type).GetCustomAttribute<ModelConventionAttribute>(inherit: false)?.Convention);
 
-    /// <summary>The convention <paramref name="convention"/> names, made; throws where the application does not have it.</summary>
-    private static IModelFinalizingConvention Make(string convention, string place)
+    /// <summary>
+    /// The convention <paramref name="convention"/> names, made. Logs a warning and returns <see langword="null"/> where
+    /// the application does not have it, and throws where the name is no convention.
+    /// </summary>
+    private IModelFinalizingConvention? Make(string convention, string place)
     {
         var type = Type.GetType(convention, throwOnError: false);
         if (type is null)
         {
             var comma = convention.IndexOf(',', StringComparison.Ordinal);
             var assembly = comma < 0 ? "the assembly of " + convention : convention[(comma + 1)..].Trim();
-            throw new InvalidOperationException(
-                place + ", which " + assembly + " maps, and the application does not have it. Reference " + assembly
-                + " from the project of the context, or remove the marker.");
+            _logger.LogWarning(
+                "{Place}, which {Assembly} maps, and the application does not have it. The marker maps nothing in this model. "
+                + "Reference {Assembly} from the project of the context, or remove the marker.",
+                place, assembly, assembly);
+            return null;
         }
 
         if (!typeof(IModelFinalizingConvention).IsAssignableFrom(type) || type.GetConstructor(Type.EmptyTypes) is null)

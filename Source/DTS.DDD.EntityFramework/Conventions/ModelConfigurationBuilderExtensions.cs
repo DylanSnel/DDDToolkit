@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DTS.DDD.EntityFramework.Conventions;
 
@@ -23,7 +25,7 @@ public static class ModelConfigurationBuilderExtensions
     ///   <item><see cref="ReadOnlyCollectionConvention"/>: generated <c>IReadOnlyList&lt;T&gt;</c> properties of primitives and value-converted ids are mapped as primitive collections, with the element converter applied.</item>
     ///   <item><see cref="InternalMemberConvention"/>: members marked <c>[Internal]</c> are never mapped.</item>
     ///   <item><see cref="KeyPartConvention"/>: properties marked <c>[KeyPart]</c> join the primary key ahead of <c>Id</c>, and the foreign key of every owned type below it. Types without key parts are not touched.</item>
-    ///   <item><see cref="MarkerConvention"/>: a class marked with an attribute that names a package's convention (<c>[ModelConvention]</c>), on the class or on a property, is mapped by that convention, as a property marked <c>[OfTenant]</c> is by Tenancy's and a class declared with <c>[Member&lt;…&gt;]</c> by Membership's. Models without such markers are not touched. It runs before the key parts, as a context's own calls do, and before the index check, so an index a package adds is checked.</item>
+    ///   <item><see cref="MarkerConvention"/>: a class marked with an attribute that names a package's convention (<c>[ModelConvention]</c>), on the class or on a property, is mapped by that convention, as a property marked <c>[OfTenant]</c> is by Tenancy's and a class declared with <c>[Member&lt;…&gt;]</c> by Membership's. Models without such markers are not touched. A convention the application does not have is skipped with a warning on Entity Framework's model logger. It runs before the key parts, as a context's own calls do, and before the index check, so an index a package adds is checked.</item>
     ///   <item><see cref="IndexRefusalConvention"/>: an index that says what it refuses with (<c>RefusesAs</c>) is checked: it is unique, and its message names only properties the entity type maps.</item>
     /// </list>
     /// The converters stay a separate, generated call because they are produced per assembly; the
@@ -35,7 +37,7 @@ public static class ModelConfigurationBuilderExtensions
 
         configurationBuilder.Conventions.Add(static _ => new InternalMemberConvention());
         configurationBuilder.Conventions.Add(static _ => new ReadOnlyCollectionConvention());
-        configurationBuilder.Conventions.Add(static _ => new MarkerConvention());
+        configurationBuilder.Conventions.Add(static services => new MarkerConvention(services.GetService<IDiagnosticsLogger<DbLoggerCategory.Model>>()?.Logger));
         configurationBuilder.Conventions.Add(static _ => new AggregateRootVersionConvention());
         configurationBuilder.Conventions.Add(static _ => new KeyPartConvention());
         configurationBuilder.Conventions.Add(static _ => new IndexRefusalConvention());

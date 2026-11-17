@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
+using Microsoft.Extensions.Logging;
 
 namespace DTS.DDD.EntityFramework.Tests.Conventions;
 
@@ -12,8 +13,8 @@ namespace DTS.DDD.EntityFramework.Tests.Conventions;
 /// A marker of a package names the convention that maps it, and <c>AddDDDToolkitConventions()</c> runs that convention
 /// in every model with a marked class: once per model, for a marker on a class or on a property, and not at all where
 /// nothing is marked. Every class the model maps counts: one reached only through a navigation, one the model owns, also
-/// where two owners share it, and one declared with a generic marker. A convention the application does not have
-/// refuses the model, naming what to reference.
+/// where two owners share it, and one declared with a generic marker. A convention the application does not have is
+/// skipped with a warning that names what to reference.
 /// </summary>
 public sealed class MarkerConventionTests : IDisposable
 {
@@ -73,12 +74,16 @@ public sealed class MarkerConventionTests : IDisposable
     }
 
     [Fact]
-    public void A_convention_the_application_does_not_have_refuses_the_model_naming_what_to_reference()
+    public void A_convention_the_application_does_not_have_is_skipped_with_a_warning_naming_what_to_reference()
     {
-        using var context = new LostContext(_db.Options<LostContext>());
+        var warnings = new WarningRecorder();
+        using var factory = LoggerFactory.Create(logging => logging.AddProvider(warnings));
+        using var context = new LostContext(_db.Options<LostContext>(options => options.UseLoggerFactory(factory)));
 
-        FluentActions.Invoking(() => context.Model).Should().Throw<InvalidOperationException>().WithMessage(
+        context.Model.FindEntityType(typeof(Lost)).Should().NotBeNull("the model is built without the convention");
+        warnings.Messages.Should().ContainSingle().Which.Should().Be(
             "'Lost.Label' is marked [Elsewhere], which Nowhere.EntityFramework maps, and the application does not have it. "
+            + "The marker maps nothing in this model. "
             + "Reference Nowhere.EntityFramework from the project of the context, or remove the marker.");
     }
 
@@ -227,6 +232,35 @@ public sealed class MarkerConventionTests : IDisposable
 
         [NotAConvention]
         public string Label { get; set; } = string.Empty;
+    }
+
+    /// <summary>Keeps the message of every warning that a logger receives.</summary>
+    private sealed class WarningRecorder : ILoggerProvider
+    {
+        private readonly List<string> _messages = [];
+
+        public IReadOnlyList<string> Messages => _messages;
+
+        public ILogger CreateLogger(string categoryName) => new Logger(_messages);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Logger(List<string> messages) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (logLevel == LogLevel.Warning)
+                {
+                    messages.Add(formatter(state, exception));
+                }
+            }
+        }
     }
 
     /// <summary>A context with the toolkit's conventions; each test's own maps the classes it is about.</summary>
