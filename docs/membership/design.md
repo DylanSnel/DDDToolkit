@@ -39,7 +39,7 @@ The package reads only these lines of [the document example](resources-and-membe
 
 ## Limits
 
-The [overview](overview.md#what-it-does-not-do) lists what the package does not do. Two consequences follow:
+The [overview](overview.md#what-it-does-not-do) lists what the package does not do. These consequences follow:
 
 - **The roles the package keeps belong to one resource** and count on that resource alone. An organization's roles
   stay in the organization: in [Tenancy](beside-an-organization.md#with-tenancy), or in
@@ -47,3 +47,16 @@ The [overview](overview.md#what-it-does-not-do) lists what the package does not 
 - **There is no access through another resource.** A member is one id. When access to a thing depends on another
   resource, the thing's code asks the access manager of that other resource, such as
   `MembershipAccessManager<Folder>`.
+- **On Postgres one marked function answers a kind of place of your own for every resource at it.** A crate and a
+  pallet in bays share one function. Two resources at the same kind of place cannot be answered by two functions. In
+  C# each resource has its own `IPlacesReached` ([A resource at several places](beside-an-organization.md#a-resource-at-several-places)).
+- **`Via` says `Above`, not which place.** A resource reached from two places says the same for both. An application
+  that shows the place asks its own question.
+- **The check of a role against its set compares the entries as they are written.** Membership does not know which side
+  of the organization a kind is on. So a set of `[employee]` with a permission whose `Kinds` is
+  `[SeatKinds.InOrganization]` is refused, although `employee` is inside. List the group in the set instead. The check
+  never lets a role give what a kind of its set may not hold.
+- **A kind in two sets through a group is found only when the host starts.** A set of `[SeatKinds.OutsideOrganization]`
+  and a set of `[guest]` overlap only if `guest` is outside, which the catalogue says. The rules refuse the same entry
+  in two sets when they are made. The join's start-up check refuses the rest
+  ([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)).

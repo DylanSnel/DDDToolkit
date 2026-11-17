@@ -26,7 +26,7 @@ the roles a new tenant starts with.
 ## What it does
 
 - **Tenants and their organization**: a tree of **units** (Harbor Works → North → North Coast).
-- **Seats**: one per person per tenant, placed at units.
+- **Seats**: one per person per tenant, placed at units. Each seat has a kind, inside or outside the organization.
 - **Roles**, and which seat holds which role at which unit.
 - **The check before a handler**: does the caller hold this permission here? If not, the handler does not run.
 - **Tenants kept apart**: a query filter returns only rows of the caller's tenant. A save into another tenant is
@@ -49,7 +49,8 @@ The classes Tenancy keeps, and how they connect. Read it from the top:
 - a tenant has one organization, a tree of units;
 - a person has one seat per tenant;
 - a seat is placed at one or more units;
-- at each placement, the seat gets roles.
+- at each placement, the seat gets roles;
+- a seat of a kind outside the organization has no placements and no roles.
 
 `Identity` (grey) is the user from your sign-in. Tenancy does not store it.
 
@@ -72,6 +73,7 @@ classDiagram
     }
     class Seat {
         Identity
+        Kind
         Status
     }
     class Placement {
@@ -107,6 +109,7 @@ classDiagram
 | **Unit** (`OrganizationUnit`) | A place in that structure. Units form a tree. The unit at the top is the **root**. | Harbor Works, North, North Coast, South Bay |
 | **Identity** | The user id from your sign-in. A seat points at it. | Tove's user id |
 | **Seat** | One person in one tenant. A person in two tenants has two seats. | Ada's seat in Harbor Works, and Tove's seat in Meadow Gardens |
+| **Kind of seat** (`Kind`) | What the person is to the tenant. Your application declares the kinds. Each kind is inside the organization or outside it. A seat outside the organization has no placements and no roles. A seat keeps its kind. | Ada, Rhea and Leo are employees. Mira, the site manager of a client, is a guest. |
 | **Placement** | A unit a seat is placed at. A seat has one or more placements. | Rhea's seat, placed at North |
 | **Permission** | One thing a caller may do, as a string. A request requires one; a role contains several. | `projects.edit` |
 | **Role** | A named set of permissions. Each tenant has its own roles. A new tenant starts with copies of your starter roles. Your application decides whether a tenant may also make its own ([below](#what-your-application-decides)). | Area manager |
@@ -182,6 +185,8 @@ Every choice has a default. An application that changes none of them works.
 | Giving a permission that manages access | A seat can only give such a permission where it holds that permission itself. Rhea manages grants at North, so she cannot give herself the right to manage roles for the whole tenant. | Turn this off with `ContainAccessManagingPermissions: false` on your catalogue ([Containment](roles-and-permissions.md#containment-on-or-off)). |
 | The shape of a tenant | Chosen when the tenant is created: flat (only the root) or hierarchical (a tree of units). | A flat tenant can become hierarchical later. A hierarchical tenant cannot become flat again, because its units would have to be deleted. |
 | Who may read which seats | Tenancy's default read rule. | Your own read rule on your `Seat` class ([Who reads the seats](postgres.md#default-read-policies-for-seats-and-invitations)). |
+| The kinds of seat | One kind, `member`, inside the organization. | Declare your kinds in a `[SeatKinds]` class, each one inside or outside the organization ([Kinds of seat](your-module.md#kinds-of-seat)). |
+| What a seat outside the organization reads | `NarrowOutsideSeats` is on. The seat reads its own seats and its tenant, and no unit, role or other seat. | Set `NarrowOutsideSeats: false` on your catalogue. The seat then reads what every seat of the tenant reads ([What a seat outside the organization reads](postgres.md#what-a-seat-outside-the-organization-reads)). |
 | Invitations | Off. | Declare an invitation class ([Invitations](invitations.md)). |
 | The database | Any database Entity Framework supports. Every check runs in C#. | On Postgres, the database also checks the same rules, with row level security ([Postgres](postgres.md)). |
 
@@ -189,8 +194,8 @@ Every choice has a default. An application that changes none of them works.
 
 - **Build it:** the [tutorial](tutorial.md), step by step.
 - **Look something up:** one page per topic, with every detail:
-  - [Your tenancy module](your-module.md): the packages, the model, your classes and ids, the registration, the
-    managers and the access manager.
+  - [Your tenancy module](your-module.md): the packages, the model, your classes and ids, the kinds of seat, the
+    registration, the managers and the access manager.
   - [Roles and permissions](roles-and-permissions.md): the catalogue, starter roles, who may give a role,
     containment.
   - [Who may do what](who-may-do-what.md): the queries a module runs, and what a request requires of its caller.

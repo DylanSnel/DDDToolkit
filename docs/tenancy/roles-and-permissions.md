@@ -26,12 +26,30 @@ The **catalogue** is every permission the application knows. It combines Tenancy
 | `Permissions` | Permissions that belong to no module | None |
 | `AccessManagingPermissions` | Permissions declared elsewhere, for example by a module, that manage access in your application | Only the permissions marked where they are declared ([Which permissions manage access](#which-permissions-manage-access)) |
 | `ContainAccessManagingPermissions` | Whether a seat may give a permission that manages access only where the seat holds that permission | On ([Containment, on or off](#containment-on-or-off)) |
+| `SeatKinds` | The kinds of seat, each inside or outside the organization, usually the `All` of your `[SeatKinds]` class | One kind, `member`, inside the organization ([Kinds of seat](your-module.md#kinds-of-seat)) |
+| `NarrowOutsideSeats` | Whether a seat of a kind outside the organization reads only its own seats and its tenant | On ([What a seat outside the organization reads](postgres.md#what-a-seat-outside-the-organization-reads)) |
 
 - To use no catalogue, leave `options.Catalogue` unset. Tenancy then builds `new ApplicationCatalogue()`.
 - The Postgres export builds the catalogue without starting the host. It uses the part you mark `[TenancyCatalogue]`,
   or `new ApplicationCatalogue()` when you mark none ([The row access contribution](postgres.md#the-row-access-contribution)).
 - A unit's kind plays no part in access. Keep the kind [on your unit class](your-module.md#the-kind-of-a-unit).
 - [`ApplicationCatalogue`](reference/catalogue.md#applicationcatalogue) lists every member.
+
+### Tenancy's permissions
+
+Tenancy's permissions are always in the catalogue. No module may declare a permission that starts with `tenancy.`.
+
+| Permission | Lets a seat | Held | Manages access |
+|---|---|---|---|
+| `tenancy.settings.manage` | Change the organization's name, and turn a flat tenant into a tree. | For the whole tenant | Yes |
+| `tenancy.units.manage` | Create units below a unit, and rename, move or archive them. | At a unit | Yes |
+| `tenancy.seats.manage` | Add seats, and suspend, reactivate or deactivate them, for the whole tenant. Place a seat at a unit, or withdraw it, at that unit. | For the whole tenant, or at a unit | Yes |
+| `tenancy.grants.manage` | Give roles to seats at a unit, and take them away. | At a unit | Yes |
+| `tenancy.roles.manage` | Make roles, and change their names, permissions and status. | For the whole tenant | Yes |
+| `tenancy.history.view` | Read the [access history](operators-and-history.md#access-history). | For the whole tenant | No |
+| `tenancy.externals.invite` | Invite a person from outside the organization at a unit ([Invitations from outside the organization](invitations.md#invitations-from-outside-the-organization)). | At a unit | No |
+
+`TenancyPermissions` has a constant for each one, such as `TenancyPermissions.ExternalsInvite`.
 
 ## Declaring a module's permissions
 
@@ -433,8 +451,9 @@ catch (RefusalException refusal) when (refusal.Code == TenancyRefusals.GrantExce
 
 ### Which permissions manage access
 
-- All of Tenancy's permissions manage access, except `tenancy.history.view`, which reads the
-  [access history](operators-and-history.md#access-history).
+- All of Tenancy's permissions manage access, except two. `tenancy.history.view` reads the
+  [access history](operators-and-history.md#access-history). `tenancy.externals.invite` invites a person from outside
+  the organization, whose seat holds no role of the organization.
 - Mark a permission you own with `ManagesAccess: true`. Mark any other permission, including a module's, in
   `AccessManagingPermissions`:
 

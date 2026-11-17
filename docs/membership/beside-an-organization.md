@@ -17,7 +17,7 @@ others:
 |---|---|---|
 | **Who a member is** | It follows from the member id: the user id for an id over a `Guid`, the seat for [Tenancy's seat id](#with-tenancy). | `members: MemberSource.Resolved(...)` takes an id you resolve for the caller. You implement `ICurrentMember<TResourceId, TMemberId>`. |
 | **Where the roles come from** | The rules always declare it. | `Roles.Fixed` or [`Roles.Custom`](permissions-and-roles.md#roles-a-customer-makes) need nothing from you. `Roles.External(...)` takes roles from rows you keep. You implement `IRolesWithPermission<TResourceId, TRoleId>` and `IMemberRoles<TResourceId, TRoleId>`. |
-| **Whether something above reaches the resource** | Nothing above reaches it. Only the members and the owner hold permissions on it. | `reachFromAbove: ...`, a permission marked `EveryMember`, and `[At]` on the property that says where the resource hangs. You implement `IPlacesReached<TResourceId, TPlaceId>`. |
+| **Whether something above reaches the resource** | Nothing above reaches it. Only the members and the owner hold permissions on it. | `reachFromAbove: true`, a permission marked `EveryMember`, and `[At]` on each property that says where the resource hangs, one per kind of place. You implement an `IPlacesReached<TResourceId, TPlaceId>` for each kind you answer. |
 
 ## Reach from above
 
@@ -28,9 +28,9 @@ each resource. It also keeps a resource reachable after its owner has left, so s
 
 - **The permission every member holds is the one that sees from above.** A caller who holds that permission where
   the resource hangs, or above, sees the resource the way its members do. That caller also holds, on the resource,
-  every other permission it holds above, except the permissions marked `FromAbove = false`. Rules that reach from
-  above without an `EveryMember` permission are refused when they are made. So are rules whose `EveryMember`
-  permission is marked `FromAbove = false`.
+  every other permission it holds above. A permission marked `FromAbove = false` is reached from no place. Rules that
+  reach from above without an `EveryMember` permission are refused when they are made. So are rules whose
+  `EveryMember` permission is marked `FromAbove = false`.
 - **`WhereIHold` and a reach cover one permission, and ignore whether the caller sees the resource.** A caller who
   holds `boards.edit` above a board, without the permission that sees, is inside `db.Boards.WhereIHold(BoardPermissions.Edit)`
   and still does not see the board. The access manager's `HoldAsync` and `PermissionsOnAsync`, and the pairs of
@@ -40,18 +40,143 @@ each resource. It also keeps a resource reachable after its owner has left, so s
   a resource, and can hand it on.
 - **Members come first.** For a caller who holds the permission both as a member and from above, `Via` is
   `Members`.
-- **`[At]`** marks the one property that says where the aggregate root hangs. The marker comes from the package
-  `DTS.Membership.Abstractions`, which the Membership package references. Its namespace is
-  `DTS.Membership`. The property is never nullable ([DDD00097](../diagnostics.md#ddd00097)). Reach
-  from above on a class without `[At]` is [DDD00098](../diagnostics.md#ddd00098).
+- **`[At]`** marks a property that says where the aggregate root hangs. The marker comes from the package
+  `DTS.Membership.Abstractions`, which the Membership package references. Its namespace is `DTS.Membership`.
+  - A root marks one place of each kind. The kind is the type of the place's id, without the `?` of a nullable one.
+    A second place of the same kind is [DDD00097](../diagnostics.md#ddd00097).
+  - A place may be nullable. An empty place reaches nothing.
+  - The kind decides who answers where a caller holds a permission there. Tenancy answers its unit id. You answer a
+    kind of your own. A place that nothing answers reaches nothing.
+  - Reach from above on a class without `[At]` is [DDD00098](../diagnostics.md#ddd00098).
+  - [A resource at several places](#a-resource-at-several-places) shows a board at a unit and at a berth.
 - **`[At(Fixed = true)]`** fixes the place once the row exists. Entity Framework throws on a save that changes it.
-  The privileges a Postgres export writes leave the column out of `UPDATE`. `Fixed` is false by default, so a resource
-  marked `[At]` alone can move to another place.
+  The privileges a Postgres export writes leave the column out of `UPDATE`. `Fixed` holds for the property it is on.
+  A nullable fixed place keeps what it was inserted with, an empty one included. `Fixed` is false by default, so a
+  resource marked `[At]` alone can move to another place.
 - **A permission held from above lasts as long as the caller sees the resource.** The organization keeps the end of
   that permission, outside Membership. So `MemberHold.Until` is `null` for a caller who sees the resource from
   above. For a caller who sees the resource only as a member, `Until` is the end of the membership.
 - **Reach from above still runs in one statement.** What you return is a query over rows your context maps
   ([on the context the query runs on](checks-and-saves.md#the-context-a-question-runs-on)).
+
+## A resource at several places
+
+A resource can hang at places of several kinds, one place of each kind. Each kind of place is a tree of its own. A
+permission held at a place, or above it, reaches every resource that hangs there.
+
+Harbor Works has its organization, with North and North Coast below the root. Beside it, the harbor keeps its own
+berths: Quay 1, with Berth 4 below it. The board Crane schedule hangs at North and at Berth 4. The board Quay plan
+hangs at North Coast and at no berth. Sam is the berth master of Quay 1. He holds `boards.view` there, in the
+harbor's berth table, and nothing in the organization. Rhea holds `boards.view` at North. Leo is a member of Crane
+schedule and holds nothing above it.
+
+```mermaid
+flowchart TD
+    root["<b>Harbor Works</b>"]
+    north["<b>North</b>"]
+    coast["<b>North Coast</b>"]
+    quay1["<b>Quay 1</b><br/><small>Sam: boards.view</small>"]
+    berth4["<b>Berth 4</b>"]
+    crane("<b>Crane schedule</b><br/><small>at North and at Berth 4</small>")
+    plan("<b>Quay plan</b><br/><small>at North Coast, at no berth</small>")
+    root --> north --> coast
+    quay1 --> berth4
+    north -.- crane
+    berth4 -.- crane
+    coast -.- plan
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    class crane strong
+    class quay1,berth4 good
+    class plan muted
+```
+
+The board marks both places. The berth is nullable, because a board may hang at no berth:
+
+```csharp
+// A berth of the harbor's own: a second kind of place, beside the units of the organization
+[EntityId<Guid>]
+public readonly partial record struct BerthId;
+
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [At] public OrganizationUnitId UnitId { get; private set; }   // Tenancy answers the unit
+    [At] public BerthId? BerthId { get; private set; }            // the harbor answers the berth, where there is one
+
+    public void MoveTo(BerthId? berth) => BerthId = berth;
+}
+```
+
+The rules say only that the board is reached from above. They name no place and no function:
+
+```csharp
+public static class BoardMembership
+{
+    public static MembershipRules Rules { get; } = MembershipRules.For<Board>(
+        Roles.Custom(starters: [new("editor", [BoardPermissions.View, BoardPermissions.Edit])]),
+        reachFromAbove: true);
+}
+```
+
+The harbor answers its berths in C# with an `IPlacesReached<BoardId, BerthId>`. It returns each berth where the
+caller holds the permission, and every berth below:
+
+```csharp
+public sealed class BerthsOfTheHarbor : IPlacesReached<BoardId, BerthId>
+{
+    public IQueryable<BerthId> PlacesReached(DbContext context, CurrentUserSnapshot user, string permission)
+    {
+        var id = user.Id;
+        return from hold in context.Set<BerthHold>()
+               where hold.UserId == id && hold.Permission == permission
+               join path in context.Set<BerthPath>() on hold.BerthId equals path.AboveId
+               select path.BerthId;
+    }
+}
+```
+
+On Postgres the harbor marks the function that answers its berths, once for the kind. Every resource that hangs at
+a berth is reached through it:
+
+```csharp
+public static class HarborFunctions
+{
+    [PlacesWhereIHold]
+    public static PlacesWhereIHold Berths { get; } = PlacesWhereIHold.Of<BerthId>(new("harbor", "berths_where_i_hold"));
+}
+```
+
+| Person | Holds | Sees Crane schedule | Sees Quay plan | Why |
+|---|---|---|---|---|
+| Rhea | `boards.view` at North | yes | yes | Both units are at North or below it. |
+| Sam | `boards.view` at Quay 1, in the berth table | yes | no | Berth 4 is below Quay 1. Quay plan hangs at no berth. |
+| Leo | nothing above | yes, as a member | no | He is a member of Crane schedule only, and holds nothing in the organization or in the berth table. |
+
+The rules say whether something above reaches the board. The kind of each place says who answers:
+
+- **Tenancy answers its unit id**, through the class the generator writes ([What the generated class does](#what-the-generated-class-does)).
+- **You answer a kind of your own**, in C# with an `IPlacesReached<TResourceId, TPlaceId>` for each resource, and on
+  Postgres with one marked function for the kind ([Your functions on Postgres](#your-functions-on-postgres)).
+- **A place that nothing answers reaches nothing**, and nothing is said about it. Rules that reach from above a
+  resource none of whose places is answered are refused, at registration and when the access files are written.
+- **An empty place reaches nothing.** Quay plan is reached from North Coast alone.
+- **`FromAbove = false` keeps a permission from every place.**
+- **`Via` is `Above` from any place.** It does not say which place. `MemberHold.Until` is `null` from any place.
+
+### Registering the answer of a place
+
+Register each answer before the resource. The registration counts the kinds answered when it runs, and an answer
+registered after it is not counted:
+
+```csharp
+services.AddScoped<IPlacesReached<BoardId, BerthId>, BerthsOfTheHarbor>();
+services.AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules);
+```
+
+C# and Postgres must reach a resource from the same places. The start-up check compares them, and refuses a database
+written for other places than C# reaches from ([The start-up check](postgres.md#the-start-up-check)).
 
 ## With Tenancy
 
@@ -81,10 +206,13 @@ project roles that each tenant makes from three starter roles.
   through. So Tenancy's own work, in the `tenancy` scope, holds nothing on a board
   ([System work](checks-and-saves.md#system-work)).
 - **A new member's seat must be active in the caller's tenant.** Otherwise the member manager refuses with
-  `boards.member-not-active`. The class reads the seats the caller can read. That is every seat of the tenant, unless
-  a [read rule on your seat class](../tenancy/postgres.md#default-read-policies-for-seats-and-invitations) narrows them.
-- **A permission held at the resource's unit or above reaches the resource**, with `Via` set to `Above`. Only a
-  permission in Tenancy's catalogue can be held there. A module's `[Permissions]` classes are part of the catalogue
+  `boards.member-not-active`. The class reads that one seat by its id, through Tenancy's `SeatToAdmitAsync`. It reads
+  the seat whatever seats the caller reads, so a [read rule on your seat class](../tenancy/postgres.md#default-read-policies-for-seats-and-invitations)
+  and `NarrowOutsideSeats` leave it as it is. A seat of another tenant, one that is not active and an id no seat has
+  get the same refusal.
+- **A permission held at the resource's unit or above reaches the resource**, with `Via` set to `Above`. Tenancy
+  answers the place of its unit kind, the property marked `[At]` whose type is the unit id, nullable or not. A place of
+  another kind is answered by something else, or by nothing. Only a permission in Tenancy's catalogue can be held there. A module's `[Permissions]` classes are part of the catalogue
   ([Declaring a module's permissions](../tenancy/roles-and-permissions.md#declaring-a-modules-permissions)).
   Asking about a permission marked `FromAbove = false` is not an error. Nobody holds such a permission from above.
 - **A role given for a limited time** reaches the resource until the role ends. The hold does not name that moment,
@@ -101,6 +229,33 @@ project roles that each tenant makes from three starter roles.
   `MemberSource.Claim(...)`. A seat id is over the same type of value as a user id, so the registration would read a
   user id as a seat id.
 - **A port you registered earlier is kept.**
+
+### Kinds of seat and fellow members
+
+The generated class implements two more ports, so the two packages share what a seat's kind decides:
+
+- **`IMemberKinds<TResourceId, SeatId>`** answers a seat's kind and whether it is inside the organization, from
+  Tenancy's read of that one seat. The member manager copies both onto the member row
+  ([The member's kind](resources-and-members.md#the-members-kind)).
+- **Tenancy's `ISeatFellows<SeatId>`** forwards to Membership's `IFellowMembers`. It answers the members now of every
+  resource the caller is a member of now. Tenancy's `SeatManager` reads those seats for a seat outside the organization
+  ([What a seat outside the organization reads](../tenancy/postgres.md#what-a-seat-outside-the-organization-reads)).
+
+The generator also writes a public class of marks per resource, such as `GeneratedBoardMembershipMarks`, which the
+export finds without a line of yours:
+
+| Mark | Property | Read by |
+|---|---|---|
+| `[TenancyFellowSeats]` | `FellowSeatsOf`, the resource's id type | Tenancy's contribution, which lets a seat outside the organization read the seats of its fellow members |
+| `[MemberKindSource]` | `Kinds`, a `MemberKindSource` that names the member class and `seat_to_admit` | Membership's contribution, which writes the kind guard on Postgres ([The kind guard](postgres.md#the-kind-guard)) |
+
+The registration also adds the start-up check `membership.kinds-fit-the-catalogue.<name>`. It refuses rules that name a
+kind the catalogue does not declare, or a kind in two role sets
+([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)).
+
+A member class that holds the tenant's roles (`Roles.External`) has one role set, for the kinds inside the
+organization. A seat outside the organization is not added there, and the member manager refuses it with
+`kind-in-no-set`.
 
 ### Resource roles and tenant roles
 
@@ -155,7 +310,7 @@ roles instead:
   | Postgres with `AddTenancyPostgres()`, which keeps the rights in the database | `modelBuilder.AddTenancyReadFunctions("tenancy")`, which the generator writes from the `TenancyIds` line. Without the line, the call names the four ids: `AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy")` ([Read functions for modules](../tenancy/postgres.md#read-functions-for-modules)). `AddTenancyReadModel` is refused there. |
   | a database that does not keep the rights, such as SQLite | `AddTenancyReadModel<...>(...)`, which maps views over Tenancy's tables |
 
-- **Where a resource hangs.** Put `[At]` on its unit property.
+- **Where a resource hangs.** Put `[At]` on its unit property, and on one property for each other kind of place it hangs at.
 - **The tenant on your rows.** Membership stores no tenant. Mark the tenant property of the resource and of your role
   class `[OfTenant]`, from `Supporting.Tenancy.Abstractions`. Tenancy's convention keeps both classes inside their
   tenant, and Membership's mapping gives the role class its two unique indexes per tenant
@@ -199,18 +354,22 @@ public static class CratePermissions
     [On<Crate>(Description = "Scrap a crate")] public const string Scrap = "crates.scrap";
 }
 
-// The depot's functions in the database, each named once, by its logical name
+// The depot's functions in the database, each named once, by its logical name. The one that answers the bays is
+// marked once for the bay's kind: every resource that stands in a bay is reached through it.
 public static class DepotFunctions
 {
     public static DatabaseFunction CurrentPorter { get; } = new("depot", "current_porter");
     public static DatabaseFunction RolesWithPermission { get; } = new("depot", "roles_with_permission");
     public static DatabaseFunction BaysWhereIHold { get; } = new("depot", "bays_where_i_hold");
+
+    [PlacesWhereIHold]
+    public static PlacesWhereIHold Bays { get; } = PlacesWhereIHold.Of<BayId>(BaysWhereIHold);
 }
 
 public static MembershipRules Rules { get; } = MembershipRules.For<Crate>(
     Roles.External(DepotFunctions.RolesWithPermission, otherPermissions: OtherPermissions.AllBut("depot.manage")),   // the depot's roles, without the depot's own permission
     members: MemberSource.Resolved(DepotFunctions.CurrentPorter),
-    reachFromAbove: DepotFunctions.BaysWhereIHold);
+    reachFromAbove: true);                                       // the bay's kind says who answers it
 
 // The context's AddDDDToolkitConventions() maps the porters. Where a crate stands comes from its [At] property.
 
@@ -244,9 +403,9 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
                select path.BayId;
     }
 
-    // Whether a role exists. The member manager calls this before a role is given.
-    public async ValueTask<bool> ExistsAsync(DepotRoleId role, CancellationToken cancellationToken)
-        => await db.Roles.AnyAsync(kept => kept.Id == role && kept.InUse, cancellationToken);
+    // The role, where it exists, in the first role set. The member manager calls this before a role is given.
+    public async ValueTask<FoundRole?> FindAsync(DepotRoleId role, CancellationToken cancellationToken)
+        => await db.Roles.AnyAsync(kept => kept.Id == role && kept.InUse, cancellationToken) ? new FoundRole(null) : null;
 }
 ```
 
@@ -264,12 +423,16 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
 
 ### Your functions on Postgres
 
-The five functions call yours, each by the `DatabaseFunction` the rules name (`owner/name`). You write three
-functions:
+The five functions call yours by their logical names (`owner/name`). The rules name two of them. The third answers a
+kind of place, and you mark it once for that kind. You write three functions:
 
 - one without parameters that returns the caller's member id, or `NULL`;
 - one that takes a permission and returns the role ids;
-- one that takes a permission and returns the places.
+- one that takes a permission and returns the places, marked `[PlacesWhereIHold]` for its kind of place.
+
+One marked function answers a kind of place of your own for every resource that hangs at a place of that kind. A crate
+and a pallet that both stand in bays share `depot/bays_where_i_hold`. In C# each resource keeps its own
+`IPlacesReached<TResourceId, BayId>` beside it.
 
 Define them in [a contribution of your own](../row-level-security.md#policies-a-package-ships). The project that runs
 the export lists it with `[assembly: UseRowAccessContribution(typeof(DepotRowAccess))]`. The example is shortened to
@@ -305,14 +468,16 @@ public sealed class DepotRowAccess : IRowAccessContribution
 }
 ```
 
-- **Name each function once**, as a `DatabaseFunction` that the rules and the contribution both read. The export
+- **Name each function once**, as a `DatabaseFunction` that the rules, the mark and the contribution read. The export
   refuses a name that nothing defines. The start-up check refuses functions written from rules that name other
   functions.
+- **Mark one function for each kind of place.** The export refuses two marks for a kind that a resource's place has.
+  It refuses a mark for a kind that a package answers as well, such as Tenancy's unit id. A mark for a kind that no
+  resource hangs at is not used.
 - **Grant your functions to nobody.** The five functions run as their owner, so no caller needs yours. Without a
   grant, no caller can ask who it is or which roles give what.
 - **Select the caller's rows with a condition of your own**, such as the caller's id or a claim. Do not rely on a
   policy. The five functions call yours as their owner, past your tables' policies, so a policy that limits rows to
   the caller has no effect there. The two functions that take a permission are never called without one.
-- **On a database without Membership's functions, the rules name no function.** Write `MemberSource.Resolved()`,
-  `Roles.External()` and `reachFromAbove: true`. With `true` on Postgres, the place function follows from the type
-  of the place. Only a package that keeps the places, such as Tenancy, provides that function.
+- **On a database without Membership's functions, the rules name no function.** Write `MemberSource.Resolved()` and
+  `Roles.External()`. The rules always say `reachFromAbove: true`, and a mark does nothing in C#.

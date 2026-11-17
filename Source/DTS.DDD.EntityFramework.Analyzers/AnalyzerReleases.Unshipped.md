@@ -94,7 +94,7 @@ DDD00093 | DTS.DDD.Membership | Error | A permission's level fits what it is ask
 DDD00094 | DTS.DDD.Membership | Error | The rules of a resource are made from the permissions declared on it
 DDD00095 | DTS.DDD.Tenancy | Error | A module's permissions are declared in a [Permissions] class, not on a list of its own
 DDD00096 | DTS.DDD.Access | Warning | [OrOwn] beside a permission the owner of the resource holds already says nothing more
-DDD00097 | DTS.DDD.Access | Error | [At] marks the one place an aggregate root hangs at
+DDD00097 | DTS.DDD.Access | Error | [At] marks one place of each kind on an aggregate root
 DDD00098 | DTS.DDD.Membership | Error | Rules that reach a resource from above read where it hangs from its [At] property
 DDD00099 | DTS.DDD.Access | Warning | A permission says what it lets somebody do
 DDD00100 | DTS.DDD.Tenancy | Error | A restrictive rule narrows a table it can reach

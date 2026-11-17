@@ -54,16 +54,17 @@ What it registers is asked for by the resource, so there is one for each kind of
 - What the queries on the resource's own set ask, `db.Documents.WhereIHold(permission)` ([`MemberQueryableExtensions`](#memberqueryableextensions)): they find it in the services the context was made with.
 - The managers the generator wrote for the resource, per scope: the member manager, `DocumentShareManager` for the member class `DocumentShare`, and the role manager of the role class kept for the resource, where there is one. Each is read off the resource, which names them, and each loads and saves on the request's own context, through the store registered beside it. The member manager asks the application's [`IMemberDirectory<TResourceId, TMemberId>`](managers.md#imemberdirectorytresourceid-tmemberid) and [`IMemberRolePolicy<TResourceId, TRoleId>`](managers.md#imemberrolepolicytresourceid-troleid) where it registered them, and answers which roles there are from the rules, from the rows of the roles kept for the resource, or from what the application answers for roles kept elsewhere.
 - A [`MembershipRegistration`](#membershipregistration), which a start-up check reads.
+- The start-up check `membership.permissions-of-other-resources`, once for the host, which a host runs with `services.RunStartupChecks()`. A starter role may list a permission that another resource declares, and the module that declares it may load after the rules are made. The check compares the starter roles of every registered resource with the kinds of those permissions, and refuses a permission that two resources declare with different kinds (`MembershipRules.ProblemsWithOtherResources`).
 - The `MemberHoldInterceptor`, one for every resource registered, which nothing uses until a context asks for the expert hold with [`MemberHoldDbContextOptionsExtensions.UseMemberHolds`](#usememberholdsdbcontextoptionsbuilder-iserviceprovider).
 - The package's texts for what the resource refuses with, in English and Dutch, under the resource's own codes ([`MembershipCodes.TextKeys`](refusals.md#membershipcodes)): offered to the application's failure localizer, so an application that localizes its failures (`AddDDDToolkitLocalization`) adds no line for them, and one that does not is given nothing. A text of the application's own for one of these codes is asked first, wherever it was added.
 
 The rules say three things apart from each other, and what they say decides what the application has to answer. Rules that need an answer nobody registered are refused here, when the application starts, with what to register, rather than read as something they are not:
 
 - **Who a member is.** The caller's user id ([`MemberSource.CurrentUserId`](rules.md#membersource)), for a member id over a `Guid`; a claim of its token ([`MemberSource.Claim`](rules.md#claimstring)), for one over a text; or what the application resolves for the caller ([`MemberSource.Resolved`](rules.md#resolveddatabasefunction)), which needs an [`ICurrentMember<TResourceId, TMemberId>`](rules.md#icurrentmembertresourceid-tmemberid).
-- **Where the roles come from.** The rules declare them, and a member holds them as [`NamedRole`](resource-and-members.md#namedrole); or a customer makes them ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions-string)), as rows of the application's role class, which needs nothing registered: the context maps that class with `IsCustomRole`, and the roles are read from there; or they are kept elsewhere ([`Roles.External`](rules.md#externaldatabasefunction-otherpermissions)), which needs an [`IRolesWithPermission<TResourceId, TRoleId>`](#iroleswithpermissiontresourceid-troleid) for which roles give a permission and an [`IMemberRoles<TResourceId, TRoleId>`](rules.md#imemberrolestresourceid-troleid) for which roles there are.
-- **Whether a resource is reached from above** ([`MembershipRules.ReachFromAbove`](rules.md#membershiprules)), which needs an [`IPlacesReached<TResourceId, TPlaceId>`](#iplacesreachedtresourceid-tplaceid) for where a caller holds a permission, and the resource marking where it hangs `[At]`.
+- **Where the roles come from.** The rules declare them, and a member holds them as [`NamedRole`](resource-and-members.md#namedrole); or a customer makes them ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset)), as rows of the application's role class, which needs nothing registered: the context maps that class with `IsCustomRole`, and the roles are read from there; or they are kept elsewhere ([`Roles.External`](rules.md#externaldatabasefunction-otherpermissions)), which needs an [`IRolesWithPermission<TResourceId, TRoleId>`](#iroleswithpermissiontresourceid-troleid) for which roles give a permission and an [`IMemberRoles<TResourceId, TRoleId>`](rules.md#imemberrolestresourceid-troleid) for which roles there are.
+- **Whether a resource is reached from above** ([`MembershipRules.ReachFromAbove`](rules.md#reachfromabove)), which needs the resource to mark where it hangs `[At]`, one place of each kind, and an [`IPlacesReached<TResourceId, TPlaceId>`](#iplacesreachedtresourceid-tplaceid) for at least one of those kinds. The resource is reached from each place whose kind is answered ([`MembershipRegistration.PlacesAnswered`](#membershipregistration)), and from no other.
 
-The application registers what it answers before it registers the resource, or hands the class that answers to the registration that takes one: [`AddMembership<TMember, TId, TMemberId, TRoleId, TContext, TResource, TResourceId, TPorts>`](#addmembershipiservicecollection-membershiprules-1).
+The application registers what it answers before it registers the resource, or hands the class that answers to the registration that takes one: [`AddMembership<TMember, TId, TMemberId, TRoleId, TContext, TResource, TResourceId, TPorts>`](#addmembershipiservicecollection-membershiprules-1). An answer registered after the resource is not counted.
 
 The questions read on a context of their own, from the context's factory (`IDbContextFactory<TContext>`), where the application registered one, a pooled one with `AddScopedFromPool` say, since the questions of one request may be asked side by side; otherwise on the request's own context. Where the resource, or the role class of a resource whose roles are kept, has a query filter that reads a member of the context it runs on, the questions read on the request's own context wherever the scope has one, as the member manager does: a rule kept on the request's context applies to both alike, and questions asked side by side then each take a scope of their own. A filter that reads what is around the work, and no member of its context, holds on every context. A `TimeProvider` and an `ICurrentUser` registered before stay; otherwise the system clock and the toolkit's `CurrentUser` are used.
 
@@ -226,6 +227,18 @@ It is no part that a registration brings and `UseDDDToolkit` puts on every conte
 - `ArgumentNullException`: `optionsBuilder` or `serviceProvider` is null.
 - `InvalidOperationException`: No resource with members is registered in `serviceProvider`, or neither `UseDDDToolkit` nor `UseDDDToolkitCore` was called on `optionsBuilder` before: the hold would then run before the domain event handlers, and what they change in the same save would be held to nothing.
 
+### `MembershipEntityFrameworkChecks`
+
+```csharp
+public static class MembershipEntityFrameworkChecks
+```
+
+The names of the start-up checks that the registration of a resource with members adds.
+
+| Member | Summary |
+|---|---|
+| `PermissionsOfOtherResourcesCheck = "membership.permissions-of-other-resources"` | The start-up check of the permissions of other resources that the roles of every registered resource give (`MembershipRules.ProblemsWithOtherResources`). The first `Add{Resource}Membership` of a host registers it, once. |
+
 ### `MembershipRegistration`
 
 ```csharp
@@ -237,11 +250,13 @@ One kind of resource with members, as its registration added it: which context m
 | Member | Summary |
 |---|---|
 | [`MembershipRegistration(Type, Type, Type, Type, MembershipRules)`](#membershipregistrationtype-type-type-type-membershiprules) | The primary constructor: the type's summary says what it makes. |
+| [`MembershipRegistration(Type, Type, Type, Type, MembershipRules, IReadOnlyList<Type>)`](#membershipregistrationtype-type-type-type-membershiprules-ireadonlylisttype) | The resource, with the kinds of its places that something answers in C#. |
 | `Type Context { get; init; }` | The context that maps the resource and its members. |
 | `Type Resource { get; init; }` | The resource's aggregate. |
 | `Type ResourceIdType { get; init; }` | The type of the resource's id, which its access questions are asked for by. |
 | `Type Member { get; init; }` | The application's member class. |
 | `MembershipRules Rules { get; init; }` | The rules the resource was registered with. |
+| `IReadOnlyList<Type> PlacesAnswered { get; init; }` | The kinds of the resource's places for which an [`IPlacesReached<TResourceId, TPlaceId>`](#iplacesreachedtresourceid-tplaceid) was registered, not keyed, when the resource was registered. Each kind is the type of the place's id, without `Nullable<T>`, in the order of the places' names. C# reaches the resource from above from these places alone. An answer registered after the resource is not counted. |
 
 #### `MembershipRegistration(Type, Type, Type, Type, MembershipRules)`
 
@@ -263,6 +278,33 @@ The primary constructor: the type's summary says what it makes.
 - `ResourceIdType`: The type of the resource's id, which its access questions are asked for by.
 - `Member`: The application's member class.
 - `Rules`: The rules the resource was registered with.
+
+#### `MembershipRegistration(Type, Type, Type, Type, MembershipRules, IReadOnlyList<Type>)`
+
+```csharp
+public MembershipRegistration(
+    Type context,
+    Type resource,
+    Type resourceIdType,
+    Type member,
+    MembershipRules rules,
+    IReadOnlyList<Type> placesAnswered)
+```
+
+The resource, with the kinds of its places that something answers in C#.
+
+**Parameters**
+
+- `context`: The context that maps the resource and its members.
+- `resource`: The resource's aggregate.
+- `resourceIdType`: The type of the resource's id.
+- `member`: The application's member class.
+- `rules`: The rules the resource was registered with.
+- `placesAnswered`: The kinds of the resource's places for which an `IPlacesReached` is registered.
+
+**Exceptions**
+
+- `ArgumentNullException`: `placesAnswered` is null.
 
 ## Mapping
 
@@ -300,7 +342,7 @@ modelBuilder.Entity<Document>().HasMembers(document => document.Shares);
 
 The resource stays the application's aggregate, mapped as it always was; this adds its members to it, so they are loaded and saved with it, under its one version. Nothing is written by hand for the member class: the member, its periods and its roles are the package's, and what the application added to its class is mapped by the conventions, as on any entity.
 
-What the resource says of itself in the domain is read off its class: its owner, the property it marks `[Owner]`, of what a member is known by, and where it hangs, the property it marks `[At]`, where it has one. Both become columns of the resource whatever else the application says about them. Where it hangs is what a permission held from above is compared with: a resource whose rules let it be reached from above ([`MembershipRules.ReachFromAbove`](rules.md#membershiprules)) is held by a caller that holds the permission at that place, or above it, as the application answers where that is ([`IPlacesReached<TResourceId, TPlaceId>`](#iplacesreachedtresourceid-tplaceid)). The package keeps no places: it reads that column, and nothing of what is above it. A place marked `[At(Fixed = true)]` is fixed once the row exists (`IsFixedAfterInsert`).
+What the resource says of itself in the domain is read off its class: its owner, the property it marks `[Owner]`, of what a member is known by, and where it hangs, the properties it marks `[At]`, one for each kind of place. Each becomes a column of the resource whatever else the application says about it. A nullable place is a nullable column. Where the resource hangs is what a permission held from above is compared with. A resource whose rules let it be reached from above ([`MembershipRules.ReachFromAbove`](rules.md#reachfromabove)) is held by a caller that holds the permission at one of its places, or above it, as the application answers where that is ([`IPlacesReached<TResourceId, TPlaceId>`](#iplacesreachedtresourceid-tplaceid)). The package keeps no places. It reads those columns, and nothing of what is above them. A place marked `[At(Fixed = true)]` is fixed once the row exists (`IsFixedAfterInsert`), and the others are not.
 
 The type arguments are inferred from the collection. The member class's own id, what a member is known by and what its roles are known by are read from the class when the model is built.
 
@@ -330,7 +372,7 @@ It leaves a mark on the resource's entity type ([`MembershipModel`](#membershipm
 **Exceptions**
 
 - `ArgumentNullException`: `resource` or `members` is null.
-- `ArgumentException`: `TMember` was not declared with the member template; the resource marks no property `[Owner]`, or one that is not of what the members are known by; it marks two properties `[At]`, or a nullable one; or `members` is not a property of the resource.
+- `ArgumentException`: `TMember` was not declared with the member template; the resource marks no property `[Owner]`, or one that is not of what the members are known by; it marks two properties `[At]` of the same kind of place; or `members` is not a property of the resource.
 - `InvalidOperationException`: The resource has members already: it has one member list.
 
 #### `IsCustomRole(EntityTypeBuilder<TRole>)`
@@ -428,7 +470,7 @@ A model may map several kinds of resource with members, each marked on its own e
 |---|---|
 | `MembersAnnotation = "DDDToolkit:Membership:Members"` | The annotation `HasMembers` leaves on a resource's entity type: the name of the property that holds its members. |
 | `OwnerAnnotation = "DDDToolkit:Membership:Owner"` | The annotation `HasMembers` leaves on a resource's entity type: the name of the property that holds its owner. |
-| `AtAnnotation = "DDDToolkit:Membership:At"` | The annotation `HasMembers` leaves on the entity type of a resource that says where it sits: the name of the property that holds the place. |
+| `PlacesAnnotation = "DDDToolkit:Membership:Places"` | The annotation `HasMembers` leaves on the entity type of a resource that says where it hangs: the names of the properties it marks `[At]`, one for each kind of place, ordered by name, as a `string` array. |
 | `RoleOfAnnotation = "DDDToolkit:Membership:RoleOf"` | The annotation `IsCustomRole` leaves on the entity type of a role class: the full name of the resource the roles are of, as its template names it. |
 | [`MembersOf(IEntityType)`](#membersofientitytype) | The members of `resource`, as `HasMembers` mapped them, or `null` for an entity type it was not called on. |
 | [`For(IModel, Type)`](#forimodel-type) | The resource whose members are of `memberClass`, with those members, or `null` when `model` maps no such resource: a context of another module. |
@@ -473,21 +515,22 @@ The resource whose members are of `memberClass`, with those members, or `null` w
 public sealed record MemberMapping
 ```
 
-A resource with its members, as one model maps them with `HasMembers`: the resource's own entity type, the table of its members and the table of the roles they hold, where the resource keeps its owner, where it sits, for one that says so, and its role class, for one whose roles are kept. What works from the model reads the tables and columns from here, so it follows whatever the application calls them.
+A resource with its members, as one model maps them with `HasMembers`: the resource's own entity type, the table of its members and the table of the roles they hold, where the resource keeps its owner, the places it hangs at, and its role class, for one whose roles are kept. What works from the model reads the tables and columns from here, so it follows whatever the application calls them.
 
 | Member | Summary |
 |---|---|
-| [`MemberMapping(IEntityType, INavigation, IProperty, IEntityType, IEntityType, IProperty?, IEntityType?)`](#membermappingientitytype-inavigation-iproperty-ientitytype-ientitytype-iproperty-ientitytype) | The primary constructor: the type's summary says what it makes. |
+| [`MemberMapping(IEntityType, INavigation, IProperty, IEntityType, IEntityType, IReadOnlyList<IProperty>, IEntityType?)`](#membermappingientitytype-inavigation-iproperty-ientitytype-ientitytype-ireadonlylistiproperty-ientitytype) | The primary constructor: the type's summary says what it makes. |
 | `IEntityType Resource { get; init; }` | The resource's entity type: the application's aggregate. |
 | `INavigation Navigation { get; init; }` | The resource's collection of members. |
 | `IProperty Owner { get; init; }` | The resource's property that holds its owner, as a member is known. |
 | `IEntityType Members { get; init; }` | The members' entity type, in a table of its own, owned by the resource. |
 | `IEntityType Roles { get; init; }` | The entity type of the roles members hold, in a table of its own, owned by the member. |
-| `IProperty? At { get; init; }` | The resource's property that holds where it sits, for a resource mapped with `at:`, or `null`: what a permission held from above is compared with. |
+| `IReadOnlyList<IProperty> Places { get; init; }` | The resource's properties that say where it hangs, the ones its class marks `[At]`, one for each kind of place, ordered by name. Empty for a resource that marks none. A permission held from above is compared with them. |
 | `IEntityType? RoleClass { get; init; }` | The entity type of the application's role class for this resource, mapped with `IsCustomRole`, or `null` when the model maps none: the rows a role's permissions are read from, for a resource whose roles are kept. |
 | `Type MemberClass { get; }` | The application's member class. |
+| [`PlaceOf(Type)`](#placeoftype) | The place of the kind `kind`: the property whose type, without `Nullable<T>`, is `kind`. |
 
-#### `MemberMapping(IEntityType, INavigation, IProperty, IEntityType, IEntityType, IProperty?, IEntityType?)`
+#### `MemberMapping(IEntityType, INavigation, IProperty, IEntityType, IEntityType, IReadOnlyList<IProperty>, IEntityType?)`
 
 ```csharp
 public MemberMapping(
@@ -496,7 +539,7 @@ public MemberMapping(
     IProperty Owner,
     IEntityType Members,
     IEntityType Roles,
-    IProperty? At = null,
+    IReadOnlyList<IProperty> Places,
     IEntityType? RoleClass = null)
 ```
 
@@ -509,8 +552,24 @@ The primary constructor: the type's summary says what it makes.
 - `Owner`: The resource's property that holds its owner, as a member is known.
 - `Members`: The members' entity type, in a table of its own, owned by the resource.
 - `Roles`: The entity type of the roles members hold, in a table of its own, owned by the member.
-- `At`: The resource's property that holds where it sits, for a resource mapped with `at:`, or `null`: what a permission held from above is compared with.
+- `Places`: The resource's properties that say where it hangs, the ones its class marks `[At]`, one for each kind of place, ordered by name. Empty for a resource that marks none. A permission held from above is compared with them.
 - `RoleClass`: The entity type of the application's role class for this resource, mapped with `IsCustomRole`, or `null` when the model maps none: the rows a role's permissions are read from, for a resource whose roles are kept.
+
+#### `PlaceOf(Type)`
+
+```csharp
+public IProperty? PlaceOf(Type kind)
+```
+
+The place of the kind `kind`: the property whose type, without `Nullable<T>`, is `kind`. `null` where the resource hangs at no place of that kind.
+
+**Parameters**
+
+- `kind`: The kind of place: the type of the place's id, with or without `Nullable<T>`.
+
+**Exceptions**
+
+- `ArgumentNullException`: `kind` is null.
 
 ## Queries
 
@@ -798,7 +857,7 @@ public interface IPlacesReached<TResourceId, TPlaceId>
     where TPlaceId : struct, IEntityId, IEquatable<TPlaceId>
 ```
 
-Where a caller holds a permission, for one kind of resource that is reached from above ([`MembershipRules.ReachFromAbove`](rules.md#membershiprules)): the places a hold of the permission reaches, which a resource that sits at one of them is then held on. An application implements it over whatever keeps who holds what where, the units of an organization say, and registers it with the resource.
+Where a caller holds a permission, for one kind of resource that is reached from above ([`MembershipRules.ReachFromAbove`](rules.md#reachfromabove)) and one kind of place it hangs at: the places a hold of the permission reaches, which a resource whose place of that kind is one of them is then held on. An application implements it over whatever keeps who holds what where, the units of an organization say, and registers it before the resource. A resource that hangs at places of several kinds is reached from each kind that has one registered, and from no other.
 
 It answers a query, not a list: the access questions put it into their own statement, where it becomes a subquery next to the resource's row, so what a caller holds stays one statement. It is therefore asked with the context that statement runs on, and answers over rows that context maps:
 
@@ -817,9 +876,9 @@ public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot us
 
 The questions of one request may be asked side by side, each on a context of its own, so it keeps nothing between two questions and reads on no context but the one it is handed.
 
-It is asked about every signed-in caller, a member of the resource or not, and also about one the application answered nobody for as a member ([`ICurrentMember.Find`](rules.md#findcurrentusersnapshot)): reach from above is for callers that are on no member list. So whether the caller still counts is asked here as well, of the same rows or the same fact the application answers who a member is from. An application that answers from the caller's id alone lets somebody it no longer counts keep what they held.
+It is asked about every signed-in caller whose kind may hold the permission ([`ICurrentMember.KindOf`](rules.md#kindofcurrentusersnapshot)), a member of the resource or not. A caller without a kind is not asked about. It is also asked about one the application answered nobody for as a member ([`ICurrentMember.Find`](rules.md#findcurrentusersnapshot)): reach from above is for callers that are on no member list. So whether the caller still counts is asked here as well, of the same rows or the same fact the application answers who a member is from. An application that answers from the caller's id alone lets somebody it no longer counts keep what they held.
 
-What is above what is the application's to know: the package compares where a resource sits (the property its class marks `[At]`) with what this answers, and keeps no places and no tree of them. A permission answered here is held whatever the rules say a member's role gives: that list is about members.
+What is above what is the application's to know: the package compares where a resource hangs (its property marked `[At]` of the kind `TPlaceId`) with what this answers, and keeps no places and no tree of them. An empty place is in no answer, so it reaches nothing. A permission answered here is held whatever the rules say a member's role gives: that list is about members. The permission's `Kinds` still hold, by the caller's own kind.
 
 **Type parameters**
 

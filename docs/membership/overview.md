@@ -40,7 +40,7 @@ members.
   and which permissions the caller holds on several boards. Use it for a rule of your own or for the buttons of a
   screen.
 - **Reach from above**, with an organization: a permission held at the unit where a board hangs, or above it, counts
-  on the board.
+  on the board. A board can hang at places of several kinds, one of each, such as a unit and a berth of your own.
 - **On Postgres**: functions that your row level security (RLS) policies call, and a lock on the member rows.
 
 ## What it does not do
@@ -108,6 +108,8 @@ classDiagram
     }
     class BoardMember {
         MemberId, a seat
+        Kind
+        InOrganization
         StartsAt
         EndsAt
         AddedBy
@@ -123,15 +125,22 @@ classDiagram
         Permissions
         FromStarterRole
         PermissionsFromStarterRole
+        Set
     }
     class BoardPermissions {
         on a board: view, edit, members.manage
         at a unit: create
         for the tenant: roles.manage
+        Kinds, on each permission
     }
     class MembershipRules {
         where the roles come from
         reach from above
+    }
+    class RoleSet {
+        Name
+        Kinds
+        MembersManagedWith
     }
     class MembershipAccessManager~Board~ {
         HoldAsync()
@@ -146,6 +155,7 @@ classDiagram
     BoardMemberManager ..> MembershipAccessManager : asks the caller's permission
     BoardRoleManager ..> BoardRole : makes and changes
     MembershipRules ..> BoardPermissions : reads
+    MembershipRules *-- RoleSet : one or more role sets
     MembershipAccessManager ..> MembershipRules : answers by
     class Board:::strong
     class BoardMemberManager:::good
@@ -163,13 +173,15 @@ classDiagram
 | **Hook** | A `partial` method the generator declares on your aggregate. The member manager calls it, for a guard of yours before a change or an event of yours after one. | none: Harbor needs no hook |
 | **Owner** (`[Owner]`) | One per resource, and always a member. The owner holds no role. The owner holds every permission marked for the owner. | Rhea |
 | **Role** | A named set of permissions, given to a member on one resource. | editor |
+| **Kind of member** (`Kind`, `InOrganization`) | The kind of the member's seat, copied onto the member row when the member is added, and never changed. Without Tenancy, every member is `member`, inside the organization. | Harbor's tutorial declares no kinds, so Leo's row stores `member`. With kinds, Mira, a client's site manager, would be a `guest`. |
+| **Role set** (`RoleSet`) | A group of roles for the members of some kinds. A member is in the one set its kind is in, and each set has its own permission that manages its members. Rules that declare no sets have one set, for every kind inside the organization. | Harbor's boards have one set |
 | **Role hold** (`MemberRole`) | One role held by one member. It starts at a set time, and ends at a set time or never. It counts only while the membership lasts. | Leo holds editor on Crane schedule |
 | **Custom role** (`BoardRole`) | A role stored as a row of the tenant. The tenant can rename it and change its permissions. A **starter role** is one every tenant gets a copy of, and the copy follows it. | The tenant's editor, made from the starter role `editor` |
 | **Role manager** (`BoardRoleManager`) | The class your handlers make and change custom roles through. It requires the permission the rules name in `managedWith`. The generator writes it, named after the role class. | `ListAsync()`, for the roles of Harbor Works |
 | **Permission** and its **level** | One thing a caller may do, as a string, with the level where the check asks for it: on one resource (`[On<Board>]`), at a unit (`[AtUnit]`), or for the whole tenant (`[AtTenant]`). | `boards.edit` on a board, `boards.create` at North |
 | **Rules** (`MembershipRules`) | One declaration per kind of resource: where the roles come from, and whether a permission held above reaches the resource. The C# check and the database functions read the same rules. | `BoardMembership.Rules` |
 | **Access manager** (`MembershipAccessManager<Board>`) | The service your handlers ask what the current caller holds on one kind of resource. Each question takes the resource, or its id. | `PermissionsOnAsync([board], ...)`, for the buttons of a board's screen |
-| **Reach from above** | A permission held at the unit where a resource hangs (`[At]`), or above it, counts on the resource for a caller who is not a member. | Ada's Administrator role at the root reaches every board |
+| **Reach from above** | A permission held at a place where a resource hangs (`[At]`), or above it, counts on the resource for a caller who is not a member. A resource hangs at one place of each kind. | Ada's Administrator role at the root reaches every board |
 | **The permission that manages the members** | The permission you mark `ManagesMembers`. The member manager requires it for every change to the members. A permission marked `NamesOwner` does the same for handing a resource on. | `boards.members.manage` |
 | **Lock** | A database check: only a caller who holds the permission you mark can change a member row or the owner column. | Only a caller with `boards.members.manage` can write Crane schedule's member rows |
 
@@ -187,6 +199,11 @@ A caller holds a permission on a board in five cases. One query checks all five:
 
 A caller who holds none of these does not see the board, and gets `boards.not-found`, the same answer as for a
 board that does not exist. A caller who sees the board but lacks the permission gets `boards.not-permitted`.
+
+Each permission also lists the kinds of seat that may hold it (`Kinds`). Left out, only kinds inside the organization
+may. A member whose kind is not in the list does not hold the permission, whatever its roles give. Reach from above
+checks the caller's own kind against the same list. The owner counts as inside the organization
+([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)).
 
 <div data-interactive="BoardAccessExplorer">
 
@@ -232,12 +249,15 @@ Most choices have a default. The smallest application decides only where the rol
 |---|---|---|
 | Where the roles come from | No default: the rules must say it. | `Roles.Fixed([...])`: roles in code, the same for every tenant. `Roles.Custom(starters: [...])`: rows the tenant keeps and changes, as in the tutorial. `Roles.External(...)`: roles stored elsewhere, such as Tenancy's ([Beside an organization](beside-an-organization.md#three-settings-of-the-rules)). |
 | Who may add a member, give a role or name an owner | Only system work, because no permission is marked for it. | `ManagesMembers = true` and `NamesOwner = true` on a permission on the board, such as the tutorial's `boards.members.manage`. Write further rules in the handler ([Who may give a role](permissions-and-roles.md#who-may-give-a-role)). |
+| Which kinds of seat may hold a permission | Only kinds inside the organization. | `Kinds = [...]` on the permission's `[On<Board>]` lists the kinds, such as `[SeatKinds.InOrganization, HarborSeatKinds.Guest]` ([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)). |
+| Role sets | One set, for every kind inside the organization. A seat outside the organization cannot be added. | `Roles.Custom(sets: [RoleSet.Named(...), ...])` or `Roles.Fixed(sets: [...])`. Each set names its kinds and its roles. |
+| Who manages the members of each set | The permission marked `ManagesMembers`, for the first set. Only kinds inside the organization hold it. | `membersManagedWith:` on every other set names its own permission. The permission's `Kinds` may list a kind outside the organization, which then manages members through a role of its set ([A kind outside the organization that manages members](permissions-and-roles.md#a-kind-outside-the-organization-that-manages-members)). |
 | Who may change the custom roles | Only system work. | `Roles.Custom(managedWith: ...)` names the permission. With Tenancy, the caller holds it for the whole tenant ([The role manager](resources-and-members.md#the-role-manager)). |
 | What the owner holds | Every permission on the board. | Mark a permission `Owner = false` to keep it from the owner. |
 | What every member holds | Nothing. | Mark one permission `EveryMember = true`, usually the one that shows the board. Reach from above needs it. |
 | What a role may give | Every permission on the board. | `InRoles = false` keeps a permission out of every role. `otherPermissions` lets permissions of other modules in. |
 | The lock on the member rows and the owner | Off. Any caller your row rules let change a board can write them, and the start-up check warns. | The same two marks. On Postgres they also lock the member rows and the owner column ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). |
-| Reach from above | Off. Only the members and the owner have access. | `reachFromAbove: true`, and `[At]` on the property that holds the board's unit. |
+| Reach from above | Off. Only the members and the owner have access. | `reachFromAbove: true`, and `[At]` on the property that holds the board's unit, and on one property for each other kind of place ([A resource at several places](beside-an-organization.md#a-resource-at-several-places)). |
 | How the caller's member id is found | From the member id's type: the caller's seat for Tenancy's seat id, the user id for an id over a `Guid`. | `members: MemberSource.Claim(...)` reads a claim of the token. `MemberSource.Resolved(...)` uses an id you resolve. |
 | System work | System work in the module's scope, `boards`, holds every permission on every board. | `systemScopes: [...]` names other scopes, `[]` none ([System work](checks-and-saves.md#system-work)). |
 | The name in refusal codes and functions | The class name in the plural: `boards.not-found`, `boards_i_see`. | `[Members("...")]` on the class ([Names](resources-and-members.md#names)). |

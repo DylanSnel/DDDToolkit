@@ -1031,30 +1031,33 @@ Postgres has two kinds of policy:
 Every rule above is permissive. `Restrictive = true` makes a rule restrictive. A restrictive rule narrows what the
 other policies allow, yours and a package's alike. It allows nothing by itself.
 
-For example, a package's policy lets every seat of a tenant read the tenant's organization. An application lets only
-its employees read the organization:
+For example, a package's policy lets every seat of a tenant read the tenant's organization. An application shows the
+organization to a new seat only after its onboarding. A field of the application's seat class records the onboarding:
 
-| Who reads | The package's policy, permissive | The rule, restrictive: an employee | Reads the organization |
+| Who reads | The package's policy, permissive | The rule, restrictive: onboarding done | Reads the organization |
 |---|---|---|---|
-| an employee of the tenant | yes | yes | yes |
-| an external seat of the same tenant | yes | no | no |
+| a seat of the tenant that finished its onboarding | yes | yes | yes |
+| a seat of the same tenant in its onboarding | yes | no | no |
 | a seat of another tenant | no | yes | no. A restrictive rule allows nothing by itself. |
 
 ```csharp
 [RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
-public static partial class OnlyEmployeesReadTheOrganization
+public static partial class OnlyOnboardedSeatsReadTheOrganization
 {
     public static bool Allows(Organization organization, IRowUser user)
-        => user.CurrentSeat<Seat>().Kind == SeatKind.Employee;
+        => user.CurrentSeat<Seat>().Onboarding == OnboardingState.Done;
 }
 ```
 
 ```sql
--- Only employees read the organization (select) for authenticated is the restrictive rule 'Only employees read the organization': a row passes only where it allows it as well as a permissive policy, so it never allows more.
-CREATE POLICY "Only employees read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
-    USING ((SELECT q1."Kind" FROM "tenancy".current_seat_row() q1) = 0);
+-- Only onboarded seats read the organization (select) for authenticated is the restrictive rule 'Only onboarded seats read the organization': a row passes only where it allows it as well as a permissive policy, so it never allows more.
+CREATE POLICY "Only onboarded seats read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
+    USING ((SELECT q1."Onboarding" FROM "tenancy".current_seat_row() q1) = 1);
 -- and the same on the units, and on the closure of the tree, which follows the organization
 ```
+
+Tenancy itself keeps a seat of a kind outside the organization out of the organization, with a restrictive policy of
+its own ([What a seat outside the organization reads](tenancy/postgres.md#what-a-seat-outside-the-organization-reads)).
 
 - **A separate policy.** A script never merges a restrictive rule with your other rules. Each command and role gets
   a policy named after the restrictive rule, next to the permissive policy.
@@ -1564,7 +1567,9 @@ public static partial class Questions
   that model. A rule of another context is refused when its script is written.
 - When the function returns no row, every field is null, and the caller passes no condition built on a field.
 - Tenancy offers one such question, the calling seat's row:
-  `user.CurrentSeat<Seat>().Kind == SeatKind.Employee`.
+  `user.CurrentSeat<Seat>().Onboarding == OnboardingState.Done`. For the seat's kind, Tenancy has two scalar
+  questions, `user.IsInOrganization()` and `user.SeatKind()`
+  ([The caller's kind of seat](tenancy/who-may-do-what.md#the-callers-kind-of-seat)).
 
 ### Function names relative to the module
 

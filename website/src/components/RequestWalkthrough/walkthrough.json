@@ -1675,7 +1675,7 @@
     "statement.member-hold": {
       "language": "sql",
       "lines": [
-        "-- EfMemberQuestions.HoldAsync: the project as the caller sees it, and how the permission is held, approximately",
+        "-- EfMembershipAccess.HoldAsync: the project as the caller sees it, and how the permission is held, approximately",
         "SELECT p.\"Version\",",
         "       EXISTS (SELECT 1 FROM \"projects\".\"ProjectCrewMembers\" AS m                 -- on the crew now,",
         "               WHERE m.\"ProjectId\" = p.\"Id\" AND m.\"SeatId\" = @seat",
@@ -1696,7 +1696,7 @@
     "statement.member-hold-system": {
       "language": "sql",
       "lines": [
-        "-- EfMemberQuestions.HoldAsync for system work: every permission, so only the project and its version",
+        "-- EfMembershipAccess.HoldAsync for system work: every permission, so only the project and its version",
         "SELECT p.\"Version\" FROM \"projects\".\"Projects\" AS p WHERE p.\"Id\" = @project LIMIT 1"
       ]
     },
@@ -1788,17 +1788,17 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Members change with the permission (insert) for authenticated\" ON \"projects\".\"ProjectCrewMembers\" AS RESTRICTIVE FOR INSERT TO authenticated",
-        "    WITH CHECK (\"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.crew.manage') AS held(id)) OR \"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.owner.change') AS held(id)));",
+        "    WITH CHECK (CASE WHEN \"InOrganization\" THEN \"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.crew.manage') AS held(id)) WHEN \"Kind\" IN ('guest') THEN \"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.guests.manage') AS held(id)) ELSE false END OR \"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.owner.change') AS held(id)));",
         "",
         "CREATE OR REPLACE FUNCTION \"projects\".projects_where_i_hold(text) RETURNS SETOF uuid",
         "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$",
         "SELECT holding.id FROM \"projects\".projects_as_member_with($1) AS holding(id)",
         "UNION",
-        "SELECT joined.id FROM \"projects\".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'",
+        "SELECT DISTINCT m.\"ProjectId\" FROM \"projects\".\"ProjectCrewMembers\" m WHERE $1 = 'projects.view' AND m.\"SeatId\" = (SELECT \"tenancy\".current_seat()) AND m.\"StartsAt\" <= pg_catalog.now() AND (m.\"EndsAt\" IS NULL OR m.\"EndsAt\" > pg_catalog.now()) AND (m.\"Kind\" IN ('guest') OR m.\"InOrganization\")",
         "UNION",
-        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r.\"OwnerSeatId\" = (SELECT \"tenancy\".current_seat())",
+        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage', 'projects.guests.manage') AND r.\"OwnerSeatId\" = (SELECT \"tenancy\".current_seat())",
         "UNION",
-        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IS NOT NULL AND r.\"UnitId\" IN (SELECT reached.place FROM \"tenancy\".units_where_i_hold_permission($1) AS reached(place))",
+        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IS NOT NULL AND EXISTS (SELECT 1 FROM \"tenancy\".seat_to_admit((SELECT \"tenancy\".current_seat())) c WHERE (EXISTS (SELECT 1 FROM (VALUES ('projects.view', 'guest')) AS listed(permission, kind) WHERE listed.permission = $1 AND listed.kind = c.\"Kind\") OR c.\"InOrganization\")) AND r.\"UnitId\" IN (SELECT reached.place FROM \"tenancy\".units_where_i_hold_permission($1) AS reached(place))",
         "UNION",
         "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE (SELECT auth.role()) = 'ddd_system_in' AND (SELECT auth.jwt() ->> 'scope') IN ('projects') AND $1 IS NOT NULL",
         "$function$;"

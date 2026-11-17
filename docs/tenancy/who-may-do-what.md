@@ -59,6 +59,10 @@ Who the caller is, and in which tenant, comes from `TenancyAccessManager`: `acce
 - A permission that is not in the catalogue throws an `ArgumentException`. A typo fails at the first call.
 - System work in a tenant holds every permission in that tenant. A query from system work outside any tenant throws
   an `InvalidOperationException`.
+- While `NarrowOutsideSeats` is on, a caller of a kind outside the organization gets no units, paths or roles from
+  these queries, and no seat but its own. `SeatManager` also returns the seats of its fellow members, without their
+  placements and grants
+  ([What a seat outside the organization reads](postgres.md#what-a-seat-outside-the-organization-reads)).
 
 Tenancy has no rule about projects. The module that owns projects decides who may open a project, from Tenancy's
 query results and the teams it stores. A module with work under a project queries the projects module. In the
@@ -79,6 +83,40 @@ flowchart LR
     classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
     class projects strong
 ```
+
+### The caller's kind of seat
+
+Every seat has a kind, inside the organization or outside it ([Kinds of seat](your-module.md#kinds-of-seat)). Mira,
+the site manager of a client, has a seat of the kind `guest` in Harbor Works. A module reads the kind in two places:
+
+- **In a handler**, `access.CurrentTenant.RequireSeat()` returns the caller's seat with `Kind` and `InOrganization`:
+
+  ```csharp
+  var seat = access.CurrentTenant.RequireSeat();
+  if (!seat.InOrganization)
+  {
+      return [];   // a guest gets no list of the tenant's sites
+  }
+  ```
+
+- **In a row access rule**, two questions of `TenancyRowAccess` read the calling seat's row once per statement:
+
+  ```csharp
+  [RowAccess<SiteReport>(RowOperations.Read, To = [RowAccessRoles.User])]
+  public static partial class EmployeesReadTheSiteReports
+  {
+      public static bool Allows(SiteReport report, IRowUser user) => user.IsInOrganization();
+  }
+  ```
+
+| Question | Returns | In SQL |
+|---|---|---|
+| `user.IsInOrganization()` | Whether the calling seat's kind is inside the organization. Null for a caller without a seat. | `is_in_organization()` |
+| `user.SeatKind()` | The calling seat's kind, such as `guest`. Null for a caller without a seat. | `seat_kind()` |
+
+- Both questions return the seat's kind whatever `NarrowOutsideSeats` says.
+- A rule compares `user.SeatKind()` with a constant of your kinds class: `user.SeatKind() == HarborSeatKinds.Guest`.
+- [`TenancyRowAccess`](reference/queries.md#tenancyrowaccess) lists every question.
 
 ### Mapping the read model
 
@@ -348,7 +386,7 @@ The read model has six row types, all access facts. A module's model can map not
 | `OrganizationUnitRow` | id, tenant, parent, status | the name, and the fields of your unit class |
 | `RoleRow` | id, tenant, the starter role it was copied from, status, permissions | the name |
 | `PlacementRow` | seat, unit, whether it is the primary placement | |
-| `SeatRow` | id, tenant, status | the identity, and the fields of your seat class, such as a name |
+| `SeatRow` | id, tenant, status, kind, whether the kind is inside the organization | the identity, and the fields of your seat class, such as a name |
 
 No row holds text that people see, and no access rule needs text. A module returns ids and gets the
 [names](names-and-languages.md#names) from Tenancy.

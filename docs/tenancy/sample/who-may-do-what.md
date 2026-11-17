@@ -152,6 +152,7 @@ not reach. It refuses nobody for seeing nothing.
 | `CloseProject`, `ReopenProject` | `projects.close` on the project. | |
 | `AddCrewMember`, `GiveCrewRole` | `projects.crew.manage` on the project. | The crew manager checks that a new member's seat is active, and that a role is one of the tenant's project roles in use. An end that has passed is `projects.invalid-period`. |
 | `TakeCrewRole`, `RemoveCrewMember` | `projects.crew.manage` on the project. | When a seat changes its own place on the crew, the crew manager saves the change as the module's work. |
+| `AddGuest`, `RemoveGuest` | `projects.guests.manage` on the project. | The crew manager takes the set from the seat's kind and asks that set's permission again. A team role for a guest is `projects.role-not-in-set`. |
 | `ChangeProjectOwner` | `projects.owner.change` on the project. | The new owner's seat is active. The old owner stays on the crew in the project role that `FormerOwnerRole` names, or leaves the crew. |
 | `MakeProjectRole`, `RenameProjectRole`, `SetProjectRolePermissions`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant. | The role manager asks the same permission, the one the projects' rules name in `managedWith`. |
 
@@ -188,6 +189,7 @@ declared, and then its own rules. The table names each manager's method. The ref
 | `SeatGrants` | `tenancy.seats.manage` for the whole tenant, or at the unit asked about (`?unit=`). | `SeatManager.OverviewAsync` |
 | `CreateTenantRole`, `SetRolePermissions`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant. | `RoleManager.CreateAsync`, `SetPermissionsAsync`, `ArchiveAsync` |
 | `InvitePerson`, `CancelInvitation` | `InvitePerson` declares `tenancy.seats.manage` for the whole tenant. A cancel declares only "in a tenant". | `InvitationManager.IssueAsync`, `CancelAsync` |
+| `InviteGuest` | `tenancy.externals.invite` at the unit. | `InvitationManager.IssueOutsideAsync`, with the kind `guest` |
 | `AcceptInvitation` | Signed in, with no seat yet. | `InvitationManager.AcceptAsync` |
 | `RenameSeat` | The caller's own seat, or `tenancy.seats.manage` for the whole tenant (`[OrOwn]`). | No manager. The rule is the sample's own ([How a seat is shown](../names-and-languages.md#how-a-seat-is-shown)). A column rule enforces it in the database. |
 | `MarkTenantAsDemo` | In a tenant. No route sends it. | No manager. The handler accepts only system work in the tenant it marks. Anyone else gets `access.system-only`. |
@@ -255,9 +257,9 @@ for the tenant's shape.
 | Starter role | Permissions | Manages access | Seeded for |
 |---|---|---|---|
 | Tenant admin | None listed, which means all. It is the administrators' starter role of a flat tenant. | yes | flat |
-| Access admin | Tenancy's six, `projects.owner.change`, `projects.crew.manage` and `projects.view`. It is the administrators' starter role of a hierarchical tenant. | yes | hierarchical |
-| Area manager | `projects.view`, `projects.open`, `projects.edit`, `projects.close`, `projects.crew.manage`, `projects.owner.change`, `inspections.record`, `tenancy.units.manage`, `tenancy.seats.manage` and `tenancy.grants.manage` | yes | hierarchical |
-| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage` and `inspections.record`. Granted at a unit, it leads every crew there. | yes | every shape |
+| Access admin | Tenancy's seven, `projects.owner.change`, `projects.crew.manage`, `projects.guests.manage` and `projects.view`. It is the administrators' starter role of a hierarchical tenant. | yes | hierarchical |
+| Area manager | `projects.view`, `projects.open`, `projects.edit`, `projects.close`, `projects.crew.manage`, `projects.guests.manage`, `projects.owner.change`, `inspections.record`, `tenancy.units.manage`, `tenancy.seats.manage` and `tenancy.grants.manage` | yes | hierarchical |
+| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `projects.guests.manage` and `inspections.record`. Granted at a unit, it leads every crew there. | yes | every shape |
 | Surveyor | `projects.view` and `inspections.record` | no | every shape |
 | Observer | `projects.view` | no | every shape |
 | People office | `tenancy.grants.manage` | yes | every shape |
@@ -269,12 +271,13 @@ for the tenant's shape.
 - An administrators' starter role that lists its permissions must hold every access-managing permission. Otherwise the host
   does not start.
 
-**Which permissions manage access.** All of Tenancy's permissions except `tenancy.history.view`, and two of
-Projects' permissions that the host marks (`AccessManagingPermissions` in
+**Which permissions manage access.** All of Tenancy's permissions except `tenancy.history.view` and
+`tenancy.externals.invite`, and three of Projects' permissions that the host marks (`AccessManagingPermissions` in
 `SampleCatalogue.cs`):
 
 - `projects.owner.change`, because the owner leads the crew until the organization names another owner.
 - `projects.crew.manage`, because at a unit it puts anyone on every crew there, in any role, the holder included.
+- `projects.guests.manage`, because at a unit it decides which guests see every project there.
 
 So a seat can give Crew lead or Area manager only when it holds the role's access-managing permissions at the unit,
 for at least as long. Nobody can give either role to themselves ([Who may give a role](../roles-and-permissions.md#who-may-give-a-role)).
@@ -330,10 +333,12 @@ flowchart LR
 | `POST /projects/{id}/crew/{seatId}/roles` | `{ roleId, until? }` | `GiveCrewRole` |
 | `DELETE /projects/{id}/crew/{seatId}/roles/{roleId}` | | `TakeCrewRole`. The member stays on the crew. |
 | `DELETE /projects/{id}/crew/{seatId}` | | `RemoveCrewMember`, with every role the member holds there. |
+| `POST /projects/{id}/guests` | `{ seatId, roleId?, until? }` | `AddGuest`. The seat is a guest's, and a named role is one of the guests' roles. |
+| `DELETE /projects/{id}/guests/{seatId}` | | `RemoveGuest`, with every role the guest holds there. |
 
 - Each of these routes returns 204.
-- `GET /projects/{id}/crew` returns the crew to anyone who sees the project. Each member's roles are returned only to
-  a caller with `projects.crew.manage` on the project. For anyone else, `roles` is `null`. The query's SQL statement
+- `GET /projects/{id}/crew` returns the crew to anyone who sees the project, each member with its `kind`. Each
+  member's roles are returned only to a caller with `projects.crew.manage` on the project. For anyone else, `roles` is `null`. The query's SQL statement
   makes this check (`CrewOverview.RolesPermission`).
 
 **Project roles** are the crews' roles. The [Membership package](../../membership/overview.md) keeps them, and the
@@ -341,11 +346,12 @@ sample is that package's worked example.
 
 | Starter role | Permissions |
 |---|---|
-| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage` and `inspections.record`. These are all the permissions a crew can give. |
+| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `projects.guests.manage` and `inspections.record`. These are all the permissions a crew can give. |
 | Surveyor | `projects.view` and `inspections.record` |
 | Observer | `projects.view` |
+| Client contact | `projects.view`, in the role set Guests |
 
-- A tenant has the three starter project roles right after it is provisioned, as system work in that tenant. The host's
+- A tenant has the four starter project roles right after it is provisioned, as system work in that tenant. The host's
   `SyncStarterRoles()` makes one a tenant lacks, and makes the rest follow what the application declares at every start.
 - `ProjectsInfrastructure` gives the roles their names and descriptions through `makeRole`, and the seeding gives them fixed
   ids through `DemoData.ProjectRoleIdOf`.
@@ -385,6 +391,20 @@ So a seat that holds `projects.crew.manage` on a project can make itself the pro
 whether the permission comes from the crew or from a role at the unit or above. A membership lasts until the end date
 its giver set. It does not end when the giver's own grant ends. Give `projects.crew.manage` only to someone who may
 lead those crews.
+
+**Guests.** A guest is a seat of the kind `guest`, from outside the organization. Mira, a client's site manager, is a
+guest on HQ refit as its client contact.
+
+- The crew has two role sets. Team holds the kinds inside the organization and is managed with
+  `projects.crew.manage`. Guests holds `guest` and is managed with `projects.guests.manage`.
+- The seat's kind decides the set. The crew manager asks the set's permission, whichever command adds the seat.
+- `projects.view` lists guests in its `Kinds`. Every other permission on a project stays inside the organization, so
+  a guest sees the project and its crew and changes nothing.
+- A guest reads its own seat and the seats of its fellow crew members. It reads no unit and no role of the
+  organization. It reads the project's inspections, because the Inspections module shows them to whoever sees the
+  project.
+- Ada invites a guest at a unit with `POST /tenancy/invitations/guests`. Accepting puts the guest on no project.
+  Whoever holds `projects.guests.manage` on a project adds the guest there.
 
 ## What `GET /projects` returns
 
@@ -529,6 +549,7 @@ The Tenants module turns [invitations](../invitations.md) on, in its own feature
 | Route | Sends | Returns |
 |---|---|---|
 | `POST /tenancy/invitations` | `InvitePerson` | The id, the end time, and the token. The token is returned this one time only. |
+| `POST /tenancy/invitations/guests` | `InviteGuest` | The same, for a guest's seat. The invitation offers no role, and its `kind` is `guest`. |
 | `GET /tenancy/invitations` | `OpenInvitations` | The open invitations into units where the caller manages seats |
 | `DELETE /tenancy/invitations/{id}` | `CancelInvitation` | The invitation, cancelled. The token stops working. |
 | `POST /invitations/accept` | `AcceptInvitation` | The tenant and the new seat. The next request names the tenant by its `slug`. The body is `{ token, displayName }`. |

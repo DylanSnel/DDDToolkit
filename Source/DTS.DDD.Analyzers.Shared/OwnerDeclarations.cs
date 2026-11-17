@@ -180,8 +180,10 @@ internal static class OwnerDeclarations
 
     /// <summary>
     /// DDD00097 for a property marked <c>[At]</c> where it is declared: an instance property of an aggregate root, the
-    /// one it marks, that is never empty. <see langword="null"/> where it is all of these. The marker is the package's
-    /// that declares it, named by <paramref name="marker"/>, so the toolkit's own generators name no package.
+    /// first it marks of its kind of place. The kind is the type of the place's id, without <c>Nullable&lt;T&gt;</c>, so a
+    /// nullable place is allowed and is of the same kind as one that is never empty. <see langword="null"/> where it is all
+    /// of these. The marker is the package's that declares it, named by <paramref name="marker"/>, so the toolkit's own
+    /// generators name no package.
     /// </summary>
     /// <param name="context">The marked property.</param>
     /// <param name="marker">The marker's metadata name.</param>
@@ -206,22 +208,24 @@ internal static class OwnerDeclarations
                 "is marked [At], and '" + type.Name + "' is no aggregate root: what is reached from above is an aggregate, by the place its root hangs at, so mark the property on an [AggregateRoot<TId>]");
         }
 
-        var marked = MarkedIn(type, marker);
-        if (marked.Count > 1 && !SymbolEqualityComparer.Default.Equals(First(marked), property))
+        // An aggregate hangs at one place of each kind. The kind is the type of the place's id, so a nullable property is of
+        // the same kind as one that is never empty. The first of them in the order they are written is the one.
+        var kind = KindOfPlace(property.Type);
+        var sameKind = MarkedIn(type, marker).Where(each => SymbolEqualityComparer.Default.Equals(KindOfPlace(each.Type), kind)).ToList();
+        if (sameKind.Count > 1 && !SymbolEqualityComparer.Default.Equals(First(sameKind), property))
         {
+            var others = sameKind.Where(each => !SymbolEqualityComparer.Default.Equals(each, property)).ToList();
             return DiagnosticInfo.Create(DiagnosticDescriptors.PlaceMisdeclared, location, at,
-                "is marked [At] beside " + DefinitionFactory.Listed(marked.Where(each => !SymbolEqualityComparer.Default.Equals(each, property)).Select(static each => "'" + each.Name + "'"))
-                + ": an aggregate hangs at one place, so keep the one that says it");
-        }
-
-        if (property.Type.NullableAnnotation == NullableAnnotation.Annotated || property.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T })
-        {
-            return DiagnosticInfo.Create(DiagnosticDescriptors.PlaceMisdeclared, location, at,
-                "is marked [At], and may be empty: an aggregate that hangs nowhere is reached from above by nobody, which is what [At] is for. Mark the property of where it always hangs, of a type that is never empty");
+                "is marked [At] beside " + DefinitionFactory.Listed(others.Select(static each => "'" + each.Name + "'"))
+                + (others.Count == 1 ? ", a place of the same kind, " : ", places of the same kind, ") + kind.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                + ". An aggregate hangs at one place of each kind. Keep the one that says where it hangs.");
         }
 
         return null;
     }
+
+    /// <summary>The kind of a place: the type of its id, without the <c>?</c> of a nullable one.</summary>
+    private static ITypeSymbol KindOfPlace(ITypeSymbol type) => Unwrapped(type).WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 
     /// <summary>The properties of <paramref name="type"/> and the classes it derives from marked with <paramref name="attribute"/>, each once.</summary>
     private static List<IPropertySymbol> MarkedIn(INamedTypeSymbol type, string attribute)

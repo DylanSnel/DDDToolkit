@@ -19,7 +19,7 @@ beside Tenancy.
 | Package | What it holds |
 |---|---|
 | `DylansTechStack.Membership` | The templates, the member list, the managers' base classes and the generator that writes the list and the managers, the rules, the access manager (`MembershipAccessManager<TResource>`) and the requirements. It has no database code. |
-| `DylansTechStack.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on the property that says where a resource hangs, in the namespace `DTS.Membership`. No Entity Framework. `DTS.Membership` references it. |
+| `DylansTechStack.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on each property that says where a resource hangs, one per kind of place, nullable where a place may be empty, in the namespace `DTS.Membership`. No Entity Framework. `DTS.Membership` references it. |
 | `DylansTechStack.Membership.EntityFramework` | The mapping by convention, with `HasMembers()` and `IsCustomRole()` for names of your own, the registrations, the stores the managers load and save through, and `WhereIHold` for your own queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
 | `DylansTechStack.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
 
@@ -327,6 +327,8 @@ What a change checks, in this order:
    mark no such permission lets only system work make the change.
 2. **Who may go on the list.** An active member, where you registered an `IMemberDirectory`. A role that exists for
    the resource and that a member may hold. With Tenancy, the join answers both ([With Tenancy](beside-an-organization.md#with-tenancy)).
+   The member's kind comes from `IMemberKinds`, which the join registers too, and decides the member's role set
+   ([The member's kind](#the-members-kind)).
 3. **The load**, at the version named. A resource at another version is a 409.
 4. **The change.** Your guard, `OnChangingMembers()`, runs first. Then the member list applies its
    [rules](#rules-of-the-member-list), and the hook of the change runs.
@@ -344,6 +346,35 @@ The hooks are `partial` methods that the generator declares on the resource. Imp
 | `OnOwnerNamed(named)` | after another owner was named, with every change it made |
 
 Raise your own domain events from the hooks. The package raises none.
+
+### The member's kind
+
+Every member row stores the kind of the member's seat, in `Kind`, and whether that kind is inside the organization, in
+`InOrganization`. The member manager copies both from `IMemberKinds` when it adds the member, and the row never
+changes them. A seat keeps its kind, so the copy stays right.
+
+- **Without Tenancy**, nothing answers the kind. Every member is `member`, inside the organization.
+- **With Tenancy**, the join reads the seat's kind ([With Tenancy](beside-an-organization.md#with-tenancy)). Mira, a
+  client's site manager, is stored as a `guest`, outside the organization.
+- **`AddAsync` chooses the role set from the kind.** With one set, the caller's permission is checked first, as before.
+  With several sets, the manager reads the member's kind first, finds the set the kind is in, and then requires that
+  set's permission ([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)).
+- **`GiveRoleAsync`** requires the permission of the role's set. The role must be in the member's set.
+- **`TakeRoleAsync` and `RemoveAsync`**, with several sets, first require that the caller sees the resource, and then
+  require the permission of the member's set.
+- **`OpenAsync` and `NameOwnerAsync`** take only an owner inside the organization.
+- **`OnMemberAdded(member)`** receives the member row with its kind, so an event of yours can carry it.
+- **A member type in GraphQL** shows `kind` and `inOrganization`. A role's `Set` is `[Bookkeeping]` and stays out of the
+  schema.
+
+| Code | When |
+|---|---|
+| `documents.kind-in-no-set` | No role set of the rules takes the member's kind. The `Kind` argument names the kind. |
+| `documents.role-not-in-set` | The role given is in another set than the member's kind is in. The `Field` argument is `role`. |
+| `documents.owner-outside-organization` | The owner named, or the one that opens the resource, is a seat outside the organization. |
+| `documents.set-unknown` | A role draft names a set the rules do not declare. The `Field` argument is `set`. |
+| `documents.permission-not-for-set` | A role lists permissions that a kind of its set may not hold. The `Field` argument is `permissions`. |
+| `membership.member-kind-missing` | A member row has no kind. A resource saved without `OpenAsync`, or a list changed another way, reports it from the invariant `KindIsGiven`. |
 
 ### The caller's own place
 
@@ -395,6 +426,9 @@ refusal.
 - **A period ends after it starts.** A period that ends at or before its start is refused
   (`documents.invalid-period`).
 - **A member holds each role once, for a period of its own.** A role counts only while the membership counts.
+- **Every member row has a kind.** `Add` and `NameOwner` take the member's kind. `Members.Open(now)` puts the owner on
+  the list without a kind, and the member manager gives it one with `GiveOwnerKind(kind)` before the save. The invariant
+  `KindIsGiven` reports a row without a kind (`membership.member-kind-missing`).
 - **A resource has one owner.** `Members.Open(now)` puts the owner on the list, with no end and no role. The owner
   cannot be removed and cannot get a role (`documents.owner-protected`) until somebody else is named owner.
 - **`NameOwnerAsync(resource, owner, formerOwner)` names a new owner.** The new owner is a member from now on, with no

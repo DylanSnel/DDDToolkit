@@ -751,7 +751,7 @@ The units the caller reads, by path: for a seat, the units it is placed in and e
 
 - `cancellationToken`: Cancels the read.
 
-**Returns**: The units, each with its path and depth, by path. A seat that reads no unit of the organization gets none.
+**Returns**: The units, each with its path and depth, by path. A seat that reads no unit of the organization gets none, and so does a seat outside it while the catalogue narrows such seats ([`ApplicationCatalogue.NarrowOutsideSeats`](catalogue.md#applicationcatalogue)).
 
 **Exceptions**
 
@@ -775,7 +775,7 @@ public Task<IReadOnlyList<NamedUnit<TUnitId>>> UnitsByIdAsync(
     CancellationToken cancellationToken)
 ```
 
-What the units among `ids` that are the caller's tenant's are called, by path, whichever of them the caller is placed under: a seat that works on something at a unit it is not placed under still reads what that unit is called, and so does one an application's restrictive rule keeps out of the organization. So the answer is each unit's name, path and depth, and nothing more of it: on a database that keeps its own policies it comes from Tenancy's function that runs as its owner and answers the ids asked alone. An id of another tenant, or of no unit, is left out without a word.
+What the units among `ids` that are the caller's tenant's are called, by path, whichever of them the caller is placed under: a seat that works on something at a unit it is not placed under still reads what that unit is called, and so does one an application's restrictive rule keeps out of the organization. So the answer is each unit's name, path and depth, and nothing more of it: on a database that keeps its own policies it comes from Tenancy's function that runs as its owner and answers the ids asked alone. An id of another tenant, or of no unit, is left out without a word. A seat outside the organization gets none, while the catalogue narrows such seats ([`ApplicationCatalogue.NarrowOutsideSeats`](catalogue.md#applicationcatalogue)).
 
 **Parameters**
 
@@ -859,15 +859,17 @@ Each command takes the domain objects, `GrantAsync(seat, role, at, ...)`, or the
 
 Holding [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) at a unit is enough to give roles there. Its holder gives any active role of the tenant that manages no access to a seat placed there or below, and takes any such role away, without holding the role's permissions: to another seat for as long as it says, to itself for no longer than it holds [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) there. A role that manages access (see [`TenancyCatalogue.AccessManagingPermissionsOf`](catalogue.md#accessmanagingpermissionsofrolefacts)) stays contained: a seat gives it, and takes it away, only while holding there each of its permissions that manage access, for at least as long as the grant runs, and never gives it to itself. Withdrawing a placement takes its grants away, by the same rule, and so does suspending or deactivating a seat, while reactivating one gives its grants back by that rule too. System work in a tenant is not held to any of that. When the application turns containment off ([`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions)), a role that manages access goes as one that manages none: a grants manager gives every role, to another seat for as long as it says and to itself for no longer than it holds [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) there, and the permission a command asks where it acts is all a seat's status takes. Nothing leaves a tenant that has an administrator without one, whoever asks, and that is decided before the seat changes, so a refused command leaves nothing for a later save to write. A seat of another tenant is not found.
 
-Nothing here names a seat: a seat has no name in Tenancy. What the application keeps on its seat class, a name it is shown by among it, it sets in the callback of [`AddAsync`](#addasyncguid-cancellationtoken-tseatid-actiontseat), and changes with a use case of its own, under a rule of its own.
+A seat has a kind, one of the catalogue's, set as it is added and never changed. A seat of a kind outside the organization is placed in no unit, so it holds no organization role. While the catalogue narrows such seats ([`ApplicationCatalogue.NarrowOutsideSeats`](catalogue.md#applicationcatalogue)), the reads answer one of them its own seat alone.
+
+Nothing here names a seat: a seat has no name in Tenancy. What the application keeps on its seat class, a name it is shown by among it, it sets in the callback of [`AddAsync`](#addasyncguid-cancellationtoken-tseatid-actiontseat-string), and changes with a use case of its own, under a rule of its own.
 
 The reads answer seats as the application's own class, whole: the seat with its identity, its placements and their grants and every field the application added. Each is read for the answer and tracked by nobody, so nothing done to one is saved, by the read or by a save later in the same unit of work. Whoever works in a tenant reads it: a seat of it, or system work in it. No permission is asked, so the request that asks says who may: what another seat holds where, above all, is a choice of the application's. On Postgres a read rule of the application's on its seat class may narrow which seats the caller reads.
 
 | Member | Summary |
 |---|---|
 | `MostIds = 200` | How many ids one question by id takes. |
-| [`SeatManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`](#seatmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider) | The primary constructor: the type's summary says what it makes. |
-| [`AddAsync(Guid, CancellationToken, TSeatId?, Action<TSeat>?)`](#addasyncguid-cancellationtoken-tseatid-actiontseat) | Adds a seat for a verified identity, placed nowhere yet. |
+| [`SeatManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, IEnumerable<ISeatFellows<TSeatId>>?)`](#seatmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider-ienumerableiseatfellowstseatid) | The primary constructor: the type's summary says what it makes. |
+| [`AddAsync(Guid, CancellationToken, TSeatId?, Action<TSeat>?, string?)`](#addasyncguid-cancellationtoken-tseatid-actiontseat-string) | Adds a seat for a verified identity, placed nowhere yet, of a kind the catalogue declares. |
 | [`PlaceAsync(TSeatId, TUnitId, bool, CancellationToken)`](#placeasynctseatid-tunitid-bool-cancellationtoken) | Places a seat in an active unit. |
 | [`PlaceAsync(TSeat, TUnit, bool, CancellationToken)`](#placeasynctseat-tunit-bool-cancellationtoken) | Places a seat in an active unit, as [`PlaceAsync`](#placeasynctseatid-tunitid-bool-cancellationtoken) does with their ids. |
 | [`WithdrawAsync(TSeatId, TUnitId, CancellationToken)`](#withdrawasynctseatid-tunitid-cancellationtoken) | Withdraws a seat from a unit, revoking every role it holds there. |
@@ -890,13 +892,14 @@ The reads answer seats as the application's own class, whole: the seat with its 
 | [`ListAsync(CancellationToken)`](#listasynccancellationtoken) | The tenant's seats, the application's own class, each whole and in the order of their ids: a seat has nothing of Tenancy's a person would order it by, so a screen orders what it shows by what it shows. |
 | [`ByIdAsync(IReadOnlyCollection<TSeatId>, CancellationToken)`](#byidasyncireadonlycollectiontseatid-cancellationtoken) | The seats among `ids` that are in the caller's tenant, as [`ListAsync`](#listasynccancellationtoken) answers them: the application's own, whole, in the order of their ids. |
 
-#### `SeatManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`
+#### `SeatManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, IEnumerable<ISeatFellows<TSeatId>>?)`
 
 ```csharp
 public SeatManager(
     ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> store,
     TenancyCatalogue catalogue,
-    TimeProvider clock)
+    TimeProvider clock,
+    IEnumerable<ISeatFellows<TSeatId>>? fellows = null)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -906,18 +909,20 @@ The primary constructor: the type's summary says what it makes.
 - `store`: Where seats and roles are loaded and saved.
 - `catalogue`: The permissions asked for, and which permissions are live.
 - `clock`: What "now" is.
+- `fellows`: The seats a seat outside the organization works with on a resource of another package, one source for each such resource. The reads answer those seats beside the caller's own while the catalogue narrows such seats. None when left out.
 
-#### `AddAsync(Guid, CancellationToken, TSeatId?, Action<TSeat>?)`
+#### `AddAsync(Guid, CancellationToken, TSeatId?, Action<TSeat>?, string?)`
 
 ```csharp
 public Task<TSeat> AddAsync(
     Guid identity,
     CancellationToken cancellationToken,
     TSeatId? id = null,
-    Action<TSeat>? configure = null)
+    Action<TSeat>? configure = null,
+    string? kind = null)
 ```
 
-Adds a seat for a verified identity, placed nowhere yet.
+Adds a seat for a verified identity, placed nowhere yet, of a kind the catalogue declares.
 
 **Parameters**
 
@@ -925,12 +930,13 @@ Adds a seat for a verified identity, placed nowhere yet.
 - `cancellationToken`: Cancels the work.
 - `id`: Its id, for imports and seeding; a new one otherwise. An id that is already a seat's is a mistake in the import, which the save reports.
 - `configure`: Sets the fields the application added to its seat class, such as the name it is shown by, on the new seat once the caller is checked and before the seat is handed to the store, so they are saved in the same transaction and the class's own rules judge them there. When it throws, the seat is not added: nothing is saved, by this call or by a later save in the same scope.
+- `kind`: The seat's kind, one of the catalogue's [`TenancyCatalogue.SeatKinds`](catalogue.md#tenancycatalogue); `null` for its [`TenancyCatalogue.DefaultSeatKind`](catalogue.md#tenancycatalogue). The seat keeps it. A seat of a kind outside the organization is placed in no unit.
 
 **Returns**: The new seat.
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) for the whole tenant, `tenancy.identity-has-seat`, `tenancy.identity-required`.
+- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) for the whole tenant, `tenancy.seat-kind-unknown`, `tenancy.identity-has-seat`, `tenancy.identity-required`.
 
 **Example**
 
@@ -938,6 +944,12 @@ A seat for Leo, with the name the application's seat class keeps:
 
 ```csharp
 var leo = await seats.AddAsync(command.Identity, cancellationToken, configure: seat => seat.Rename("Leo"));
+```
+
+A seat for a contractor, outside the organization:
+
+```csharp
+var seat = await seats.AddAsync(command.Identity, cancellationToken, kind: HarborSeatKinds.Contractor);
 ```
 
 #### `PlaceAsync(TSeatId, TUnitId, bool, CancellationToken)`
@@ -963,7 +975,7 @@ Places a seat in an active unit.
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) at the unit, `tenancy.seat-not-found`, `tenancy.unit-not-found`, `tenancy.unit-not-active`, and what the seat refuses: placing itself, a second placement in the unit, a second primary.
+- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) at the unit, `tenancy.seat-not-found`, `tenancy.unit-not-found`, `tenancy.unit-not-active`, and what the seat refuses: `tenancy.seat-outside-organization` for a seat of a kind outside the organization, placing itself, a second placement in the unit, a second primary.
 
 **Example**
 
@@ -994,7 +1006,7 @@ Places a seat in an active unit, as [`PlaceAsync`](#placeasynctseatid-tunitid-bo
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) at the unit, `tenancy.seat-not-found`, `tenancy.unit-not-found`, `tenancy.unit-not-active`, and what the seat refuses: placing itself, a second placement in the unit, a second primary.
+- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) at the unit, `tenancy.seat-not-found`, `tenancy.unit-not-found`, `tenancy.unit-not-active`, and what the seat refuses: `tenancy.seat-outside-organization` for a seat of a kind outside the organization, placing itself, a second placement in the unit, a second primary.
 
 **Example**
 
@@ -1444,7 +1456,7 @@ Any seat of the caller's tenant and what it may do where, as [`WhoAmIAsync`](#wh
 
 **Exceptions**
 
-- `RefusalException`: The caller is nobody, with its own code; or `tenancy.seat-not-found` for a seat the caller does not read: one of another tenant, one that does not exist, or one a read rule of the application's leaves out, which the answer does not tell apart.
+- `RefusalException`: The caller is nobody, with its own code; or `tenancy.seat-not-found` for a seat the caller does not read: one of another tenant, one that does not exist, one a read rule of the application's leaves out, or, for a seat outside the organization while the catalogue narrows such seats, any seat but its own and its fellow members' ([`ISeatFellows<TSeatId>`](queries.md#iseatfellowstseatid)), which the answer does not tell apart.
 - `InvalidOperationException`: The caller is system work outside any tenant.
 
 **Remarks**
@@ -1481,7 +1493,7 @@ Any seat of the caller's tenant and what it may do where, as [`OverviewAsync`](#
 
 **Exceptions**
 
-- `RefusalException`: The caller is nobody, with its own code; or `tenancy.seat-not-found` for a seat the caller does not read: one of another tenant, one that does not exist, or one a read rule of the application's leaves out, which the answer does not tell apart.
+- `RefusalException`: The caller is nobody, with its own code; or `tenancy.seat-not-found` for a seat the caller does not read: one of another tenant, one that does not exist, one a read rule of the application's leaves out, or, for a seat outside the organization while the catalogue narrows such seats, any seat but its own and its fellow members' ([`ISeatFellows<TSeatId>`](queries.md#iseatfellowstseatid)), which the answer does not tell apart.
 - `InvalidOperationException`: The caller is system work outside any tenant.
 
 **Remarks**
@@ -1523,6 +1535,8 @@ One statement, which reads every seat with its identity, its placements and thei
 
 No permission is asked, and only a database's own read rules narrow what of another seat is read: on Postgres, Tenancy's policies answer another seat's grants only where the caller may read them, and elsewhere, or in a context without row level security, every seat comes with all its placements and grants. Where another seat's grants are shown, the request that asks says who may see them, as a request that answers from [`OverviewAsync`](#overviewasynctseatid-cancellationtoken) does; select a list's seats into what every member may see.
 
+A seat outside the organization reads its own seat and the seats of its fellow members on a resource of another package ([`ISeatFellows<TSeatId>`](queries.md#iseatfellowstseatid)), on every database, while the catalogue narrows such seats ([`ApplicationCatalogue.NarrowOutsideSeats`](catalogue.md#applicationcatalogue)). Each source of fellows is one statement before the seats are read. Each seat it reads comes without placements and grants, which are the organization's.
+
 **Example**
 
 ```csharp
@@ -1553,7 +1567,7 @@ The seats among `ids` that are in the caller's tenant, as [`ListAsync`](#listasy
 
 **Remarks**
 
-Each seat comes with its placements and grants as [`ListAsync`](#listasynccancellationtoken) reads them, narrowed by the database's own read rules alone: select what the caller is shown.
+Each seat comes with its placements and grants as [`ListAsync`](#listasynccancellationtoken) reads them, narrowed by the database's own read rules alone: select what the caller is shown. A seat outside the organization reads each seat without placements and grants while the catalogue narrows such seats.
 
 **Example**
 
@@ -2018,7 +2032,7 @@ The tenant's roles, the application's own class, the active ones first, each by 
 
 - `cancellationToken`: Cancels the read.
 
-**Returns**: The roles, archived ones included.
+**Returns**: The roles, archived ones included. None for a seat outside the organization, while the catalogue narrows such seats ([`ApplicationCatalogue.NarrowOutsideSeats`](catalogue.md#applicationcatalogue)).
 
 **Exceptions**
 
@@ -2145,19 +2159,23 @@ Invitations into a tenant: issuing one for an address, listing the open ones, ca
 
 An invitation offers what adding a seat, placing it and granting it a role would give, so issuing one takes what those take: [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) for the whole tenant, as adding a seat does, and [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) at the unit, with the rule for giving a role there. A role that manages no access is offered freely, and may outlast the issuer's own grants. A role that manages access is offered only by a seat that holds each of its permissions that do at the unit, until at least the end of the grant, unless the application turns containment off ([`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions)), and then as freely as any other. Nobody invites themself into one: an identity that has a seat in the tenant cannot accept.
 
+A person from outside the organization is invited with [`IssueOutsideAsync`](#issueoutsideasyncstring-string-tunitid-timespan-cancellationtoken-tinvitationid-actiontinvitation), which takes [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions) at a unit. The seat it makes is of a kind outside the organization, placed nowhere and with no organization role. The invitation keeps the unit it was issued at. A seat that holds the same permission there lists such invitations and cancels them.
+
 An invitation never gives more than its issuer could give at the moment it is used. Accepting asks the issuer's rights again, as they are then, with the role as it is then, and an invitation whose issuer has lost them is refused with one answer that says nothing of which. System work is not held to a seat, and neither is an invitation it issued.
 
-The token is returned once, by [`IssueAsync`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid), and kept nowhere: the store holds its digest. It is in no event, no refusal and no log of the package. Sending it to the address is the application's to do.
+The token is returned once, by [`IssueAsync`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid-string), and kept nowhere: the store holds its digest. It is in no event, no refusal and no log of the package. Sending it to the address is the application's to do.
 
 | Member | Summary |
 |---|---|
 | [`InvitationManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>, TenancyCatalogue, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyInvitationOptions<TInvitationId>, ICurrentUser, TimeProvider)`](#invitationmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-iinvitationstoretinvitation-tinvitationid-ttenantid-tunitid-troleid-tseatid-tenancycatalogue-tenancyoptionsttenantid-tseatid-tunitid-troleid-tenancyinvitationoptionstinvitationid-icurrentuser-timeprovider) | The primary constructor: the type's summary says what it makes. |
-| [`IssueAsync(string, TUnitId, TRoleId, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?)`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid) | Issues an invitation for an address: a seat placed in `unit` as its primary placement, with `role` there until `grantUntil`, for whoever accepts it with the token this returns. |
-| [`IssueAsync(string, TUnit, TRole, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?)`](#issueasyncstring-tunit-trole-datetimeoffset-timespan-cancellationtoken-tinvitationid) | Issues an invitation for an address, as [`IssueAsync`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid) does with the ids of the unit and the role. |
+| [`IssueAsync(string, TUnitId, TRoleId, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?, string?)`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid-string) | Issues an invitation for an address: a seat placed in `unit` as its primary placement, with `role` there until `grantUntil`, for whoever accepts it with the token this returns. |
+| [`IssueOutsideAsync(string, string, TUnitId, TimeSpan?, CancellationToken, TInvitationId?, Action<TInvitation>?)`](#issueoutsideasyncstring-string-tunitid-timespan-cancellationtoken-tinvitationid-actiontinvitation) | Issues an invitation for an address to a person from outside the organization: a seat of `kind`, placed nowhere and with no organization role, for whoever accepts it with the token this returns. |
+| [`IssueOutsideAsync(string, string, TUnit, TimeSpan?, CancellationToken, TInvitationId?, Action<TInvitation>?)`](#issueoutsideasyncstring-string-tunit-timespan-cancellationtoken-tinvitationid-actiontinvitation) | Issues an invitation to a person from outside the organization, as [`IssueOutsideAsync`](#issueoutsideasyncstring-string-tunitid-timespan-cancellationtoken-tinvitationid-actiontinvitation) does with the unit's id. |
+| [`IssueAsync(string, TUnit, TRole, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?, string?)`](#issueasyncstring-tunit-trole-datetimeoffset-timespan-cancellationtoken-tinvitationid-string) | Issues an invitation for an address, as [`IssueAsync`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid-string) does with the ids of the unit and the role. |
 | [`CancelAsync(TInvitationId, CancellationToken)`](#cancelasynctinvitationid-cancellationtoken) | Cancels an open invitation, so its token no longer works. |
 | [`CancelAsync(TInvitation, CancellationToken)`](#cancelasynctinvitation-cancellationtoken) | Cancels an open invitation, as [`CancelAsync`](#cancelasynctinvitationid-cancellationtoken) does with its id. |
-| [`AcceptAsync(string, string?, CancellationToken, TSeatId?, Action<TSeat>?)`](#acceptasyncstring-string-cancellationtoken-tseatid-actiontseat) | Accepts the invitation `token` is for, as the signed-in identity that is calling: in one save it makes that identity's seat in the invitation's tenant, places it in the invitation's unit as its primary placement, grants it the invitation's role there, and marks the invitation as accepted. |
-| [`ListOpenAsync(CancellationToken)`](#listopenasynccancellationtoken) | The tenant's invitations that can still be accepted, the soonest to end first, the application's own class: for a seat, those into the units where it holds [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions), which may be none; for system work in the tenant, all of them. |
+| [`AcceptAsync(string, string?, CancellationToken, TSeatId?, Action<TSeat>?)`](#acceptasyncstring-string-cancellationtoken-tseatid-actiontseat) | Accepts the invitation `token` is for, as the signed-in identity that is calling: in one save it makes that identity's seat of the invitation's kind in the invitation's tenant, places it in the invitation's unit as its primary placement, grants it the invitation's role there, and marks the invitation as accepted. |
+| [`ListOpenAsync(CancellationToken)`](#listopenasynccancellationtoken) | The tenant's invitations that can still be accepted, the soonest to end first, the application's own class: for a seat, those into the units where it holds [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions), which may be none, the invitations from outside the organization at the units where it holds [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions), and those from outside it issued itself; for system work in the tenant, all of them. |
 
 #### `InvitationManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>, TenancyCatalogue, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyInvitationOptions<TInvitationId>, ICurrentUser, TimeProvider)`
 
@@ -2184,7 +2202,7 @@ The primary constructor: the type's summary says what it makes.
 - `user`: Who is calling, as the toolkit's current user answers: the signed-in identity that accepts.
 - `clock`: What "now" is.
 
-#### `IssueAsync(string, TUnitId, TRoleId, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?)`
+#### `IssueAsync(string, TUnitId, TRoleId, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?, string?)`
 
 ```csharp
 public Task<IssuedInvitation> IssueAsync(
@@ -2194,7 +2212,8 @@ public Task<IssuedInvitation> IssueAsync(
     DateTimeOffset? grantUntil,
     TimeSpan? lifetime,
     CancellationToken cancellationToken,
-    TInvitationId? id = null)
+    TInvitationId? id = null,
+    string? kind = null)
 ```
 
 Issues an invitation for an address: a seat placed in `unit` as its primary placement, with `role` there until `grantUntil`, for whoever accepts it with the token this returns. Nothing is made but the invitation.
@@ -2208,12 +2227,13 @@ Issues an invitation for an address: a seat placed in `unit` as its primary plac
 - `lifetime`: How long the invitation stays open, within [`TenancyInvitationOptions.MinLifetime`](#tenancyinvitationoptionstinvitationid) and [`TenancyInvitationOptions.MaxLifetime`](#tenancyinvitationoptionstinvitationid), or `null` for [`TenancyInvitationOptions.DefaultLifetime`](#tenancyinvitationoptionstinvitationid).
 - `cancellationToken`: Cancels the work.
 - `id`: Its id, for imports and seeding; a new one otherwise.
+- `kind`: The kind of the seat it makes, one of the catalogue's kinds inside the organization; `null` for [`TenancyCatalogue.DefaultSeatKind`](catalogue.md#tenancycatalogue). A kind outside the organization is invited with [`IssueOutsideAsync`](#issueoutsideasyncstring-string-tunitid-timespan-cancellationtoken-tinvitationid-actiontinvitation).
 
 **Returns**: The new invitation, and its token, which is shown this once.
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) for the whole tenant or [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) at the unit, `tenancy.invitation-lifetime`, `tenancy.tenant-inactive`, `tenancy.role-not-found`, `tenancy.grant-exceeds-own` for a role that manages access the caller could not give there for that long, while containment is on ([`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions)), `tenancy.unit-not-found`, `tenancy.unit-not-active`, `tenancy.role-not-active`, `tenancy.address-invalid`, `tenancy.invitation-grant-ends-first`.
+- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) for the whole tenant or [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) at the unit, `tenancy.seat-kind-unknown`, `tenancy.invitation-kind` for a kind outside the organization, `tenancy.invitation-lifetime`, `tenancy.tenant-inactive`, `tenancy.role-not-found`, `tenancy.grant-exceeds-own` for a role that manages access the caller could not give there for that long, while containment is on ([`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions)), `tenancy.unit-not-found`, `tenancy.unit-not-active`, `tenancy.role-not-active`, `tenancy.address-invalid`, `tenancy.invitation-grant-ends-first`.
 
 **Example**
 
@@ -2222,7 +2242,87 @@ var issued = await invitations.IssueAsync(command.Address, command.Unit, command
 // Send issued.Token to the address. Tenancy keeps only its digest.
 ```
 
-#### `IssueAsync(string, TUnit, TRole, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?)`
+#### `IssueOutsideAsync(string, string, TUnitId, TimeSpan?, CancellationToken, TInvitationId?, Action<TInvitation>?)`
+
+```csharp
+public Task<IssuedInvitation> IssueOutsideAsync(
+    string address,
+    string kind,
+    TUnitId at,
+    TimeSpan? lifetime,
+    CancellationToken cancellationToken,
+    TInvitationId? id = null,
+    Action<TInvitation>? configure = null)
+```
+
+Issues an invitation for an address to a person from outside the organization: a seat of `kind`, placed nowhere and with no organization role, for whoever accepts it with the token this returns. Nothing is made but the invitation. What the seat is for, a project say, is the application's: fields of its own invitation class, set in `configure`, and its handler of the acceptance.
+
+**Parameters**
+
+- `address`: The address the invitation is for. The package sends nothing to it.
+- `kind`: The kind of the seat it makes, one of the catalogue's kinds outside the organization.
+- `at`: The unit the invitation is issued at, which must be active: the caller holds [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions) there, and the invitation keeps it. The seat is not placed there.
+- `lifetime`: How long the invitation stays open, within [`TenancyInvitationOptions.MinLifetime`](#tenancyinvitationoptionstinvitationid) and [`TenancyInvitationOptions.MaxLifetime`](#tenancyinvitationoptionstinvitationid), or `null` for [`TenancyInvitationOptions.DefaultLifetime`](#tenancyinvitationoptionstinvitationid).
+- `cancellationToken`: Cancels the work.
+- `id`: Its id, for imports and seeding; a new one otherwise.
+- `configure`: Sets the fields the application added to its invitation class, such as the project the person is invited to, on the new invitation before it is handed to the store, so they are saved in the same transaction. When it throws, nothing is issued.
+
+**Returns**: The new invitation, and its token, which is shown this once.
+
+**Exceptions**
+
+- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions) at the unit, `tenancy.seat-kind-unknown`, `tenancy.invitation-kind` for a kind inside the organization, `tenancy.invitation-lifetime`, `tenancy.tenant-inactive`, `tenancy.unit-not-found`, `tenancy.unit-not-active`, `tenancy.address-invalid`.
+
+**Example**
+
+A contractor invited at North:
+
+```csharp
+var issued = await invitations.IssueOutsideAsync("rhea@example.com", HarborSeatKinds.Contractor, north, lifetime: null, cancellationToken);
+// Send issued.Token to the address. Tenancy keeps only its digest.
+```
+
+#### `IssueOutsideAsync(string, string, TUnit, TimeSpan?, CancellationToken, TInvitationId?, Action<TInvitation>?)`
+
+```csharp
+public Task<IssuedInvitation> IssueOutsideAsync(
+    string address,
+    string kind,
+    TUnit at,
+    TimeSpan? lifetime,
+    CancellationToken cancellationToken,
+    TInvitationId? id = null,
+    Action<TInvitation>? configure = null)
+```
+
+Issues an invitation to a person from outside the organization, as [`IssueOutsideAsync`](#issueoutsideasyncstring-string-tunitid-timespan-cancellationtoken-tinvitationid-actiontinvitation) does with the unit's id.
+
+**Parameters**
+
+- `address`: The address the invitation is for. The package sends nothing to it.
+- `kind`: The kind of the seat it makes, one of the catalogue's kinds outside the organization.
+- `at`: The unit the invitation is issued at, which must be active: the caller holds [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions) there, and the invitation keeps it. The seat is not placed there.
+- `lifetime`: How long the invitation stays open, within [`TenancyInvitationOptions.MinLifetime`](#tenancyinvitationoptionstinvitationid) and [`TenancyInvitationOptions.MaxLifetime`](#tenancyinvitationoptionstinvitationid), or `null` for [`TenancyInvitationOptions.DefaultLifetime`](#tenancyinvitationoptionstinvitationid).
+- `cancellationToken`: Cancels the work.
+- `id`: Its id, for imports and seeding; a new one otherwise.
+- `configure`: Sets the fields the application added to its invitation class, such as the project the person is invited to, on the new invitation before it is handed to the store, so they are saved in the same transaction. When it throws, nothing is issued.
+
+**Returns**: The new invitation, and its token, which is shown this once.
+
+**Exceptions**
+
+- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions) at the unit, `tenancy.seat-kind-unknown`, `tenancy.invitation-kind` for a kind inside the organization, `tenancy.invitation-lifetime`, `tenancy.tenant-inactive`, `tenancy.unit-not-found`, `tenancy.unit-not-active`, `tenancy.address-invalid`.
+
+**Example**
+
+A contractor invited at North:
+
+```csharp
+var issued = await invitations.IssueOutsideAsync("rhea@example.com", HarborSeatKinds.Contractor, north, lifetime: null, cancellationToken);
+// Send issued.Token to the address. Tenancy keeps only its digest.
+```
+
+#### `IssueAsync(string, TUnit, TRole, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?, string?)`
 
 ```csharp
 public Task<IssuedInvitation> IssueAsync(
@@ -2232,10 +2332,11 @@ public Task<IssuedInvitation> IssueAsync(
     DateTimeOffset? grantUntil,
     TimeSpan? lifetime,
     CancellationToken cancellationToken,
-    TInvitationId? id = null)
+    TInvitationId? id = null,
+    string? kind = null)
 ```
 
-Issues an invitation for an address, as [`IssueAsync`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid) does with the ids of the unit and the role.
+Issues an invitation for an address, as [`IssueAsync`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid-string) does with the ids of the unit and the role.
 
 **Parameters**
 
@@ -2246,12 +2347,13 @@ Issues an invitation for an address, as [`IssueAsync`](#issueasyncstring-tunitid
 - `lifetime`: How long the invitation stays open, within [`TenancyInvitationOptions.MinLifetime`](#tenancyinvitationoptionstinvitationid) and [`TenancyInvitationOptions.MaxLifetime`](#tenancyinvitationoptionstinvitationid), or `null` for [`TenancyInvitationOptions.DefaultLifetime`](#tenancyinvitationoptionstinvitationid).
 - `cancellationToken`: Cancels the work.
 - `id`: Its id, for imports and seeding; a new one otherwise.
+- `kind`: The kind of the seat it makes, one of the catalogue's kinds inside the organization; `null` for [`TenancyCatalogue.DefaultSeatKind`](catalogue.md#tenancycatalogue). A kind outside the organization is invited with [`IssueOutsideAsync`](#issueoutsideasyncstring-string-tunitid-timespan-cancellationtoken-tinvitationid-actiontinvitation).
 
 **Returns**: The new invitation, and its token, which is shown this once.
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) for the whole tenant or [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) at the unit, `tenancy.invitation-lifetime`, `tenancy.tenant-inactive`, `tenancy.role-not-found`, `tenancy.grant-exceeds-own` for a role that manages access the caller could not give there for that long, while containment is on ([`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions)), `tenancy.unit-not-found`, `tenancy.unit-not-active`, `tenancy.role-not-active`, `tenancy.address-invalid`, `tenancy.invitation-grant-ends-first`.
+- `RefusalException`: `tenancy.not-permitted` without [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) for the whole tenant or [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) at the unit, `tenancy.seat-kind-unknown`, `tenancy.invitation-kind` for a kind outside the organization, `tenancy.invitation-lifetime`, `tenancy.tenant-inactive`, `tenancy.role-not-found`, `tenancy.grant-exceeds-own` for a role that manages access the caller could not give there for that long, while containment is on ([`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions)), `tenancy.unit-not-found`, `tenancy.unit-not-active`, `tenancy.role-not-active`, `tenancy.address-invalid`, `tenancy.invitation-grant-ends-first`.
 
 **Example**
 
@@ -2267,7 +2369,7 @@ var issued = await invitations.IssueAsync("tove@example.com", northCoast, survey
 public Task<TInvitation> CancelAsync(TInvitationId invitation, CancellationToken cancellationToken)
 ```
 
-Cancels an open invitation, so its token no longer works. A seat needs [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) at the invitation's unit, whoever issued it; an invitation into a unit where it does not manage seats is not found, as it is not among the ones it lists.
+Cancels an open invitation, so its token no longer works. A seat needs [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) at the invitation's unit, whoever issued it. An invitation from outside the organization a seat also cancels with [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions) at its unit, the permission it is issued with. An invitation the seat may not cancel is not found, as it is not among the ones it lists.
 
 **Parameters**
 
@@ -2322,7 +2424,7 @@ public Task<AcceptedInvitation> AcceptAsync(
     Action<TSeat>? configure = null)
 ```
 
-Accepts the invitation `token` is for, as the signed-in identity that is calling: in one save it makes that identity's seat in the invitation's tenant, places it in the invitation's unit as its primary placement, grants it the invitation's role there, and marks the invitation as accepted.
+Accepts the invitation `token` is for, as the signed-in identity that is calling: in one save it makes that identity's seat of the invitation's kind in the invitation's tenant, places it in the invitation's unit as its primary placement, grants it the invitation's role there, and marks the invitation as accepted. A seat of a kind outside the organization is placed nowhere and granted nothing.
 
 The caller is the toolkit's current user, read here and never handed in: a signed-in user with a verified identity, whose token role may hold a seat, and who did not sign in anonymously. It names no tenant and needs no seat: the token says which invitation, and so which tenant. Nothing is found by an address.
 
@@ -2342,7 +2444,7 @@ Accepting again as the same identity answers the same seat. Two acceptances at t
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.identity-required` for a caller that is no signed-in identity that may hold a seat; `tenancy.invitation-not-found`, for a text that is no token too; `tenancy.invitation-cancelled`; `tenancy.invitation-used` when somebody else accepted it; `tenancy.invitation-lapsed` when its time ran out; `tenancy.address-mismatch`; `tenancy.tenant-inactive`; `tenancy.identity-has-seat`; `tenancy.unit-not-found` and `tenancy.unit-not-active`; `tenancy.role-not-found` and `tenancy.role-not-active`; `tenancy.invitation-unbacked` when its issuer may no longer give what it offers.
+- `RefusalException`: `tenancy.identity-required` for a caller that is no signed-in identity that may hold a seat; `tenancy.invitation-not-found`, for a text that is no token too; `tenancy.invitation-cancelled`; `tenancy.invitation-used` when somebody else accepted it; `tenancy.invitation-lapsed` when its time ran out; `tenancy.address-mismatch`; `tenancy.tenant-inactive`; `tenancy.identity-has-seat`; `tenancy.unit-not-found` and `tenancy.unit-not-active`; `tenancy.role-not-found` and `tenancy.role-not-active`; `tenancy.seat-kind-unknown` for a kind the catalogue no longer declares, and `tenancy.invitation-kind` for one that is now on the other side of the organization; `tenancy.invitation-unbacked` when its issuer may no longer give what it offers.
 - `ConcurrencyConflictException`: Another change of access in the tenant, another acceptance included, was saved first.
 
 **Example**
@@ -2360,7 +2462,7 @@ var accepted = await invitations.AcceptAsync(command.Token, verifiedAddress: nul
 public Task<IReadOnlyList<TInvitation>> ListOpenAsync(CancellationToken cancellationToken)
 ```
 
-The tenant's invitations that can still be accepted, the soonest to end first, the application's own class: for a seat, those into the units where it holds [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions), which may be none; for system work in the tenant, all of them. They are read for the answer, and tracked by nobody. An invitation holds no token: the store keeps its digest apart.
+The tenant's invitations that can still be accepted, the soonest to end first, the application's own class: for a seat, those into the units where it holds [`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions), which may be none, the invitations from outside the organization at the units where it holds [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions), and those from outside it issued itself; for system work in the tenant, all of them. They are read for the answer, and tracked by nobody. An invitation holds no token: the store keeps its digest apart.
 
 **Parameters**
 
@@ -2479,7 +2581,7 @@ The project that declares the application's classes, and every project above it 
 | [`FindOrganizationAsync(TTenantId, CancellationToken)`](#findorganizationasyncttenantid-cancellationtoken) | The tenant's organization with all its units, or `null` when it is not the current caller's. |
 | [`ReadOrganizationAsync(TTenantId, CancellationToken)`](#readorganizationasyncttenantid-cancellationtoken) | The tenant's organization with all its units, for the managers' reads to answer, or `null` when it is not the current caller's. |
 | [`FindSeatAsync(TSeatId, CancellationToken)`](#findseatasynctseatid-cancellationtoken) | The seat, or `null` when it is not in the current caller's tenant. |
-| [`ListSeatsAsync(TTenantId, IReadOnlyCollection<TSeatId>?, CancellationToken)`](#listseatsasyncttenantid-ireadonlycollectiontseatid-cancellationtoken) | The tenant's seats, for the managers' reads to answer: all of them, or those among `only`; an id that is no seat of the tenant is simply not among the answer. |
+| [`ListSeatsAsync(TTenantId, IReadOnlyCollection<TSeatId>?, bool, CancellationToken)`](#listseatsasyncttenantid-ireadonlycollectiontseatid-bool-cancellationtoken) | The tenant's seats, for the managers' reads to answer: all of them, or those among `only`; an id that is no seat of the tenant is simply not among the answer. |
 | [`IdentityHasSeatAsync(TTenantId, Guid, CancellationToken)`](#identityhasseatasyncttenantid-guid-cancellationtoken) | Whether the identity already has a seat in the tenant. |
 | [`FindRoleAsync(TRoleId, CancellationToken)`](#findroleasynctroleid-cancellationtoken) | The role, or `null` when it is not in the current caller's tenant. |
 | [`ListRolesAsync(TTenantId, CancellationToken)`](#listrolesasyncttenantid-cancellationtoken) | Every role of the tenant, archived ones included. |
@@ -2543,7 +2645,7 @@ The tenant's organization with all its units, or `null` when it is not the curre
 Task<TOrganization?> ReadOrganizationAsync(TTenantId id, CancellationToken cancellationToken)
 ```
 
-The tenant's organization with all its units, for the managers' reads to answer, or `null` when it is not the current caller's. Read as the application's own classes, with every field it added to its unit class, since the reads hand the units to the application; and read only, never for a save, as [`ListSeatsAsync`](#listseatsasyncttenantid-ireadonlycollectiontseatid-cancellationtoken) reads seats: a change made to a unit is not written, by this unit of work or another.
+The tenant's organization with all its units, for the managers' reads to answer, or `null` when it is not the current caller's. Read as the application's own classes, with every field it added to its unit class, since the reads hand the units to the application; and read only, never for a save, as [`ListSeatsAsync`](#listseatsasyncttenantid-ireadonlycollectiontseatid-bool-cancellationtoken) reads seats: a change made to a unit is not written, by this unit of work or another.
 
 **Parameters**
 
@@ -2558,12 +2660,13 @@ Task<TSeat?> FindSeatAsync(TSeatId id, CancellationToken cancellationToken)
 
 The seat, or `null` when it is not in the current caller's tenant. A storage that keeps grants to the seats that may read them, as Tenancy's policies on Postgres do, loads it with the grants the caller may read: all of its own seat's, and another seat's at the units where the caller manages grants, seats or units, or every one when it manages roles for the whole tenant. Each command acts only on grants at a unit where it asked one of those permissions first, or for the whole tenant, so they are among them.
 
-#### `ListSeatsAsync(TTenantId, IReadOnlyCollection<TSeatId>?, CancellationToken)`
+#### `ListSeatsAsync(TTenantId, IReadOnlyCollection<TSeatId>?, bool, CancellationToken)`
 
 ```csharp
 Task<IReadOnlyList<TSeat>> ListSeatsAsync(
     TTenantId tenant,
     IReadOnlyCollection<TSeatId>? only,
+    bool withPlacements,
     CancellationToken cancellationToken)
 ```
 
@@ -2573,6 +2676,7 @@ The tenant's seats, for the managers' reads to answer: all of them, or those amo
 
 - `tenant`: The tenant, which is the current caller's.
 - `only`: The seats asked about, or `null` for every seat of the tenant.
+- `withPlacements`: Whether each seat comes with its placements and their grants. `false` answers each seat with none, as a seat outside the organization reads another seat while the catalogue narrows such seats.
 - `cancellationToken`: Cancels the read.
 
 #### `IdentityHasSeatAsync(TTenantId, Guid, CancellationToken)`

@@ -94,6 +94,7 @@ public partial class Order { }
 | [Tenancy API: Postgres](docs/tenancy/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
 | [Membership](docs/membership/overview.md) | The second supporting domain: access to one thing through the people on it, what it does and does not do, how its pieces connect, and what the application decides |
 | [Membership: the tutorial](docs/membership/tutorial.md) | Membership built into the Harbor application step by step: a board with its members, owner and roles, its database rules, and reach from above |
+| [Membership: people from outside the organization](docs/membership/people-from-outside.md) | The Harbor application continued: kinds of seat, inviting a guest, a permission open to guests, role sets, and a guest on one board |
 | [Membership: resources and members](docs/membership/resources-and-members.md) | The packages, a whole resource with members and no Tenancy, the member list written for you, names, what the member list keeps, and several kinds of resource |
 | [Membership: permissions and roles](docs/membership/permissions-and-roles.md) | The settings of a permission, who holds one, who may give a role, and roles a customer makes: starter roles, changing a role, whose a role is |
 | [Membership: from the check to the save](docs/membership/checks-and-saves.md) | Requirements that combine, what holds a change from the check to the save, `MembershipAccessManager` and the queries inside your own statements, system work, and the expert hold |
@@ -106,6 +107,7 @@ public partial class Order { }
 | [Membership API: refusals](docs/membership/reference/refusals.md) | Generated from the code: every refusal code, the codes of one resource, and their texts |
 | [Membership API: Entity Framework](docs/membership/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
 | [Membership API: Postgres](docs/membership/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
+| [What the packages guarantee](docs/package-guarantees.md) | Each rule of Tenancy and Membership about kinds of seat, role sets and places, with the test class that proves it |
 | [Design principles](docs/design-principles.md) | The rules the toolkit's packages follow, each with its reason: what the application writes, how a package plugs in, the domain, access and names |
 | [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |

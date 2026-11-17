@@ -30,9 +30,9 @@ Made through the resource's type, which says its name and its codes ([`IMembersh
 
 They say who holds a permission: the owner by owning the resource, a member by being one and through its roles. They also name the permission that manages the members and the one that names the owner (`ManagesMembers`, `NamesOwner`), which the resource's member manager requires, and, where a customer makes the roles, the permission that manages those roles ([`Roles.ManagedWith`](#roles-1)). A rule of the application's own beyond those, such as that nobody gives a role for longer than they hold the permission, it writes itself.
 
-It is data, checked once when it is made, so everything that decides access reads the same thing: the questions asked in C# before a handler runs, the functions that answer the same questions in the database, and whatever writes those functions. Declare one per kind of resource. Nothing here is shared between two resources, so an application with documents and folders declares two, and neither touches the other.
+It is data, checked once when it is made, so everything that decides access reads the same thing: the questions asked in C# before a handler runs, the functions that answer the same questions in the database, and whatever writes those functions. Declare one per kind of resource. Nothing here is shared between two resources, so an application with documents and folders declares two, and neither touches the other. The one thing read from another resource is the kinds of a permission it declares that a role here gives ([`KindsOf`](#kindsofstring)), which the host checks when it starts.
 
-Three things are said apart from each other, and any of the one goes with any of the others. Who a member is: what follows from the member id, the caller's seat for the seat id of a package that keeps an organization's seats and the caller's user id for one over a Guid, or a claim of its token, or an id the application resolves for the caller ([`Members`](#membershiprules)). Where the roles come from: in code, made by a customer, or kept elsewhere ([`Roles`](#membershiprules)). And whether a permission held where the resource sits, or above it, reaches the resource ([`ReachFromAbove`](#membershiprules)). So a resource beside an organization can have the organization's people as members with roles of its own, in code or made by a customer, or with the organization's roles, with reach from above or without.
+Three things are said apart from each other, and any of the one goes with any of the others. Who a member is: what follows from the member id, the caller's seat for the seat id of a package that keeps an organization's seats and the caller's user id for one over a Guid, or a claim of its token, or an id the application resolves for the caller ([`Members`](#membershiprules)). Where the roles come from: in code, made by a customer, or kept elsewhere ([`Roles`](#membershiprules)). And whether a permission held where the resource sits, or above it, reaches the resource ([`ReachFromAbove`](#reachfromabove)). So a resource beside an organization can have the organization's people as members with roles of its own, in code or made by a customer, or with the organization's roles, with reach from above or without.
 
 | Member | Summary |
 |---|---|
@@ -42,15 +42,17 @@ Three things are said apart from each other, and any of the one goes with any of
 | `MembershipFunctions Functions { get; }` | The names of the resource's set functions in the database, which follow from its name. |
 | `MemberSource Members { get; }` | Who the caller is as a member. |
 | `Roles Roles { get; }` | Where the roles a member holds come from, and the roles declared in code. |
-| `ReachFromAbove? ReachFromAbove { get; }` | Says that a permission held where the resource hangs, or above it, reaches the resource, or `null` when a resource is reached through its members and by its owner alone. |
+| [`ReachFromAbove`](#reachfromabove) | Whether a resource is reached from above as well as through its members. |
 | `IReadOnlyList<ResourcePermission> Permissions { get; }` | The permissions on the resource, each once, as they are declared: every permission asked about on a resource of this kind. |
 | `IReadOnlyList<string> OwnerPermissions { get; }` | The permissions the owner holds by owning the resource, those marked `Owner`, in the order they are declared. The owner holds no role, so this is all it holds by owning it. |
-| `string? EveryMemberPermission { get; }` | The permission every member holds by being one, whatever roles it holds, or `null`: usually the one that sees the resource. Without one a resource is still seen by its members, and by its owner, and that is all membership alone gives. Where a resource is reached from above ([`ReachFromAbove`](#membershiprules)) it is the permission that sees it from there as well. |
+| `string? EveryMemberPermission { get; }` | The permission every member holds by being one, whatever roles it holds, or `null`: usually the one that sees the resource. Without one a resource is still seen by its members, and by its owner, and that is all membership alone gives. Where a resource is reached from above ([`ReachFromAbove`](#reachfromabove)) it is the permission that sees it from there as well. |
 | `RolePermissions RolePermissions { get; }` | Which permissions a member's role can give on the resource, wherever the roles come from. |
 | [`ManagesMembersPermission`](#managesmemberspermission) | The permission that manages the members of a resource, the one marked `ManagesMembers`, or `null`. |
 | [`NamesOwnerPermission`](#namesownerpermission) | The permission that names the owner of a resource, the one marked `NamesOwner`, or `null`. |
 | `IReadOnlyList<string> SystemScopes { get; }` | The scopes whose work is the application's own for this resource: work that runs as `CurrentUserSnapshot.SystemIn` in one of them holds every permission on every resource of this kind, as `CurrentUserSnapshot.System` does. The module's own scope unless the rules say otherwise; work in any other scope holds nothing on a resource, since a scope is a module's own and another module's work is not above this resource's rules. |
-| [`For(Roles, MemberSource?, ReachFromAbove?, IReadOnlyList<string>?)`](#forroles-membersource-reachfromabove-ireadonlyliststring) | The rules of the resource `TResource`. |
+| `IReadOnlyList<RoleSet> Sets { get; }` | The role sets, at least one, in the order they are declared. The first is the resource's own. |
+| `RoleSet FirstSet { get; }` | The first role set: the resource's own, managed with the permission marked `ManagesMembers`. |
+| [`For(Roles, MemberSource?, bool, IReadOnlyList<string>?)`](#forroles-membersource-bool-ireadonlyliststring) | The rules of the resource `TResource`. |
 | [`MembershipGives(string)`](#membershipgivesstring) | Whether being a member gives `permission` by itself, whatever roles the member holds: so for [`EveryMemberPermission`](#membershiprules), and for nothing else. |
 | [`OwnerHolds(string)`](#ownerholdsstring) | Whether a resource's owner holds `permission` on it by being its owner: so for every one of [`OwnerPermissions`](#membershiprules), and for no other permission, with no end. |
 | [`MembersHold(string)`](#membersholdstring) | Whether a member can hold `permission` on the resource at all, by being a member or through a role: [`EveryMemberPermission`](#membershiprules), and every permission within [`RolePermissions`](#membershiprules). |
@@ -59,6 +61,45 @@ Three things are said apart from each other, and any of the one goes with any of
 | [`RolesWith(string)`](#roleswithstring) | The fixed roles that give `permission` on the resource: those that list it, when a member's role can give it at all, in the order they are declared. |
 | [`PermissionsOf(NamedRole)`](#permissionsofnamedrole) | The permissions `role` gives a member on the resource: the permissions it lists that a member's role can give. |
 | [`Knows(NamedRole)`](#knowsnamedrole) | Whether `role` is one of the roles declared in code: a fixed role, or a starter role a customer's roles are made from. |
+| [`KindsOf(string)`](#kindsofstring) | The kinds of seat that may hold `permission` on the resource ([`OnAttribute.Kinds`](#kinds)). |
+| [`MayHold(string, MemberKind)`](#mayholdstring-memberkind) | Whether a member of `kind` may hold `permission`: the list holds the kind's value, or the group of its side. |
+| [`MayHoldInside(string)`](#mayholdinsidestring) | Whether `permission`'s list holds `SeatKinds.InOrganization`. |
+| [`MayHoldOutside(string)`](#mayholdoutsidestring) | Whether `permission`'s list holds `SeatKinds.OutsideOrganization`: every kind outside the organization may hold it. |
+| [`KindValuesOf(string)`](#kindvaluesofstring) | The kinds `permission`'s list names by their value, such as `stakeholder`, without the two groups. |
+| [`SetNamed(string?)`](#setnamedstring) | The set named `name`, by its name or its code; the first set for `null` or the first set's name. |
+| [`SetOf(NamedRole)`](#setofnamedrole) | The set a fixed or starter role is declared in, or `null` for a role the rules do not declare. |
+| [`SetFor(MemberKind)`](#setformemberkind) | The one set whose kinds hold `kind`, by its value or the group of its side, or `null`. |
+| [`MembersManagedWith(RoleSet)`](#membersmanagedwithroleset) | The permission that manages the members of `set`: the one marked `ManagesMembers` for the first set, and the set's own for every other. |
+| [`ProblemsWith(IReadOnlyCollection<MemberKind>)`](#problemswithireadonlycollectionmemberkind) | What of these rules does not fit the kinds of seat an application declares, one sentence per problem; none when they fit. |
+
+#### `ReachFromAbove`
+
+```csharp
+public bool ReachFromAbove { get; }
+```
+
+Whether a resource is reached from above as well as through its members. A resource hangs at places, the properties its class marks `[At]`, one of each kind. A caller that holds a permission at one of those places, or above it, holds the permission on the resource without being a member of it. `false` when a resource is reached through its members and by its owner alone.
+
+```csharp
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [At] public OrganizationUnitId UnitId { get; private set; }   // a unit of the organization
+    [At] public BerthId? BerthId { get; private set; }            // a berth of the harbor's own, or none
+}
+
+MembershipRules.For<Board>(Roles.Custom(...), reachFromAbove: true)
+```
+
+Two pictures. Beside an organization, Ada holds the administrators' role at its root, and reaches every board of the organization without being on one. Ben holds `boards.edit` at Pier 7, and edits the boards that hang at Pier 7, and no other. In a harbor of the application's own, Sam holds `boards.view` at Quay 1, and sees every board that hangs at a berth below Quay 1.
+
+Whoever runs a part of an organization sees and acts on what hangs there, without being added to each resource. A resource whose owner has left is still reached by somebody, who can hand it to a new owner. Through its members alone, a board whose owner left would be nobody's to hand on.
+
+The kind of a place is the type of its id, without `Nullable<T>`. The kind says who answers where a caller holds a permission at a place. A package that keeps the places answers its own kind, as a package that keeps an organization answers its unit id. The application answers a kind of its own. In C# that is an `IPlacesReached<TResourceId, TPlaceId>` registered with the resource. On Postgres it is a function the application marks once for the kind ([`PlacesWhereIHold`](#placeswhereihold)). A place that nothing answers reaches nothing. An empty place reaches nothing either. Rules that reach from above a resource none of whose places is answered are refused.
+
+A resource the caller does not see does not exist for it, whatever it holds there. So rules that let a resource be reached from above have a permission every member holds ([`OnAttribute.EveryMember`](#everymember), which is required then). Whoever holds that permission at one of the resource's places, or above it, sees the resource, as its members do.
+
+A permission held from above is not cut by what a role gives ([`OnAttribute.InRoles`](#inroles)). That setting is about a member's roles on the resource. A permission held above is held through the place, by a role of the organization, a permission marked `InRoles = false` included. A permission marked `FromAbove = false` is reached from no place. A caller that holds a permission both ways holds it as a member ([`MemberVia.Members`](managers.md#membervia)). A hold from any place is [`MemberVia.Above`](managers.md#membervia), which does not say the place.
 
 #### `ManagesMembersPermission`
 
@@ -80,13 +121,13 @@ The permission that names the owner of a resource, the one marked `NamesOwner`, 
 
 Whoever holds it by owning the resource alone holds it no longer once the owner has changed, and what a hand-over writes after that is then not its to write. A hand-over by the owner itself is saved as the application's own work; one by somebody who holds it through a role, or from above, as the caller.
 
-#### `For(Roles, MemberSource?, ReachFromAbove?, IReadOnlyList<string>?)`
+#### `For(Roles, MemberSource?, bool, IReadOnlyList<string>?)`
 
 ```csharp
 public static MembershipRules For<TResource>(
     Roles roles,
     MemberSource? members = null,
-    ReachFromAbove? reachFromAbove = null,
+    bool reachFromAbove = false,
     IReadOnlyList<string>? systemScopes = null)
     where TResource : class, IMembershipResource
 ```
@@ -95,9 +136,9 @@ The rules of the resource `TResource`.
 
 **Parameters**
 
-- `roles`: Where the roles a member holds come from: [`Roles.Fixed`](#fixedireadonlylistdeclaredrole) in code, [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string) made by a customer, or [`Roles.External`](#externaldatabasefunction-otherpermissions) kept elsewhere.
+- `roles`: Where the roles a member holds come from: [`Roles.Fixed`](#fixedireadonlylistdeclaredrole-ireadonlylistroleset) in code, [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset) made by a customer, or [`Roles.External`](#externaldatabasefunction-otherpermissions) kept elsewhere.
 - `members`: Who the caller is as a member; left out, it follows from what a member is known by ([`MemberSource.Inferred`](#inferred)): the caller's seat for the seat id of a package that keeps an organization's seats, the caller's user id for an id over a Guid.
-- `reachFromAbove`: Says that a permission held where the resource hangs, or above it, reaches the resource ([`ReachFromAbove`](#reachfromabove)): `true` beside a package that keeps an organization's units, or the function of the application's own that answers where the caller holds a permission. Left out, a resource is reached through its members and by its owner alone. Said, the resource's class marks the place it hangs at `[At]`, and one permission is held by every member ([`OnAttribute.EveryMember`](#everymember)): what is held above sees a resource by that permission.
+- `reachFromAbove`: `true` lets a permission held where the resource hangs, or above it, reach the resource ([`ReachFromAbove`](#reachfromabove)). The resource is reached from each of its places, the properties its class marks `[At]`, that something answers for the place's kind. The rules name no place and no function. Left out, or `false`, a resource is reached through its members and by its owner alone. Said, one permission is held by every member ([`OnAttribute.EveryMember`](#everymember)), and what is held above sees a resource by that permission.
 - `systemScopes`: The scopes whose system work holds every permission on every resource of this kind ([`SystemScopes`](#membershiprules)). Left out, the scope of the module that declares the resource ([`IMembershipResource.MembershipScope`](resource-and-members.md#imembershipresource)): `boards` for the module `Boards`, so work begun as `CurrentUserSnapshot.SystemIn("boards")` does what it needs on boards. Said, the scopes named and no other: name the module's own among them to keep it, and say `[]` for no system work in a scope at all.
 
 **Type parameters**
@@ -209,6 +250,150 @@ Whether `role` is one of the roles declared in code: a fixed role, or a starter 
 
 - `role`: A role.
 
+#### `KindsOf(string)`
+
+```csharp
+public IReadOnlyList<string> KindsOf(string permission)
+```
+
+The kinds of seat that may hold `permission` on the resource ([`OnAttribute.Kinds`](#kinds)). A permission declared without a list gives `[SeatKinds.InOrganization]`.
+
+A permission the rules do not declare, which a role gives through `otherPermissions`, has the kinds that the resource that declares it lists. A role on a folder that gives `documents.view` holds it for the kinds that `[On<Document>(Kinds = [...])]` lists. Such a permission that no resource with members declares, and every other permission the rules do not declare, gives `[SeatKinds.InOrganization]`.
+
+The kinds of another resource's permission are read when they are asked, so they are known once the module that declares them is loaded. A host registers every resource before it starts, and the start-up check of the roles reads them then (`ProblemsWithOtherResources`).
+
+**Parameters**
+
+- `permission`: A permission.
+
+**Exceptions**
+
+- `InvalidOperationException`: A role may give `permission`, the rules do not declare it, and two other resources declare it with different kinds.
+
+#### `MayHold(string, MemberKind)`
+
+```csharp
+public bool MayHold(string permission, MemberKind kind)
+```
+
+Whether a member of `kind` may hold `permission`: the list holds the kind's value, or the group of its side. Reach from above asks the same of the caller's own kind ([`ICurrentMember.KindOf`](#kindofcurrentusersnapshot)).
+
+**Parameters**
+
+- `permission`: A permission.
+- `kind`: The kind on the member's row, or the caller's kind.
+
+#### `MayHoldInside(string)`
+
+```csharp
+public bool MayHoldInside(string permission)
+```
+
+Whether `permission`'s list holds `SeatKinds.InOrganization`. The owner holds a permission only then, since an owner is inside the organization.
+
+**Parameters**
+
+- `permission`: A permission.
+
+#### `MayHoldOutside(string)`
+
+```csharp
+public bool MayHoldOutside(string permission)
+```
+
+Whether `permission`'s list holds `SeatKinds.OutsideOrganization`: every kind outside the organization may hold it.
+
+**Parameters**
+
+- `permission`: A permission.
+
+#### `KindValuesOf(string)`
+
+```csharp
+public IReadOnlyList<string> KindValuesOf(string permission)
+```
+
+The kinds `permission`'s list names by their value, such as `stakeholder`, without the two groups. The checks in C# and in the database compare a member row's kind with these, and its side with [`MayHoldInside`](#mayholdinsidestring) and [`MayHoldOutside`](#mayholdoutsidestring).
+
+**Parameters**
+
+- `permission`: A permission.
+
+#### `SetNamed(string?)`
+
+```csharp
+public RoleSet? SetNamed(string? name)
+```
+
+The set named `name`, by its name or its code; the first set for `null` or the first set's name. `null` for a name the rules do not declare.
+
+**Parameters**
+
+- `name`: A set's name, its code, or `null`.
+
+#### `SetOf(NamedRole)`
+
+```csharp
+public RoleSet? SetOf(NamedRole role)
+```
+
+The set a fixed or starter role is declared in, or `null` for a role the rules do not declare.
+
+**Parameters**
+
+- `role`: A role.
+
+#### `SetFor(MemberKind)`
+
+```csharp
+public RoleSet? SetFor(MemberKind kind)
+```
+
+The one set whose kinds hold `kind`, by its value or the group of its side, or `null`.
+
+**Parameters**
+
+- `kind`: A member's kind.
+
+**Exceptions**
+
+- `InvalidOperationException`: Two sets hold the kind: a group and a kind by value of that side overlap.
+
+#### `MembersManagedWith(RoleSet)`
+
+```csharp
+public string? MembersManagedWith(RoleSet set)
+```
+
+The permission that manages the members of `set`: the one marked `ManagesMembers` for the first set, and the set's own for every other.
+
+**Parameters**
+
+- `set`: A set of these rules.
+
+#### `ProblemsWith(IReadOnlyCollection<MemberKind>)`
+
+```csharp
+public IReadOnlyList<string> ProblemsWith(IReadOnlyCollection<MemberKind> declared)
+```
+
+What of these rules does not fit the kinds of seat an application declares, one sentence per problem; none when they fit. The rules name kinds by value without knowing them, so the join with the package that keeps the seats asks this when the host starts.
+
+**Parameters**
+
+- `declared`: The kinds of seat the application declares, each with its side of the organization.
+
+**Exceptions**
+
+- `ArgumentNullException`: `declared` is null.
+
+**Remarks**
+
+Two problems are found:
+
+- a permission or a role set names a kind by value that `declared` does not hold;
+- a declared kind is in two role sets, through the group of its side in one and by its value in the other.
+
 ### `MembershipRulesAttribute<TMember>`
 
 ```csharp
@@ -315,38 +500,43 @@ Whichever it is, what a role gives a member is held to the resource's permission
 
 | Member | Summary |
 |---|---|
+| `IReadOnlyList<RoleSet> Sets { get; }` | The role sets, at least one, in the order they are declared: the first is the resource's own. Roles without sets have one set, with no name, for the kinds inside the organization, holding every declared role. |
 | `RolesKind Kind { get; }` | Which of the three it is. |
-| `IReadOnlyList<DeclaredRole> Declared { get; }` | The roles declared in code: the roles a member holds, for [`RolesKind.Fixed`](#roleskind); the starter roles a customer's first rows are made from, for [`RolesKind.Custom`](#roleskind); none for [`RolesKind.External`](#roleskind). |
+| `IReadOnlyList<DeclaredRole> Declared { get; }` | The roles declared in code, of every set, in order: the roles a member holds, for [`RolesKind.Fixed`](#roleskind); the starter roles a customer's first rows are made from, for [`RolesKind.Custom`](#roleskind); none for [`RolesKind.External`](#roleskind). |
 | `DatabaseFunction? Function { get; }` | For [`RolesKind.External`](#roleskind), the function that answers in the database which of the application's roles give a permission, or `null` where the database does not answer the questions itself. |
 | `OtherPermissions? OtherPermissions { get; }` | Which permissions of other modules a role gives on the resource besides its permissions, or `null` for none: then a role gives the resource's permissions marked `InRoles` and nothing else. |
 | `string? ManagedWith { get; }` | For [`RolesKind.Custom`](#roleskind), the permission that makes, renames, gives permissions to and archives the roles, or `null`. The roles are a customer's as a whole, not one resource's, so it is held for the whole of what they are kept for: the role manager the generator writes for the role class, `BoardRoleManager`, asks it of what the application registered for that, which the join with an organization's package answers for the whole organization. Where nothing answers, and where it is `null`, only system work changes the roles. |
-| [`Fixed(IReadOnlyList<DeclaredRole>)`](#fixedireadonlylistdeclaredrole) | Roles in code, each with the permissions it gives on the resource, held by name: the same for every resource of the kind, and changed with a deploy. |
-| [`Custom(IReadOnlyList<DeclaredRole>?, OtherPermissions?, string?)`](#customireadonlylistdeclaredrole-otherpermissions-string) | Roles a customer makes for itself while the application runs: rows of the application's role class ([`CustomRoleAttribute<TRoleId, TResource>`](resource-and-members.md#customroleattributetroleid-tresource)), each with a name and the permissions it gives, which a customer renames, gives other permissions and archives, held by the class's id. |
+| [`Fixed(IReadOnlyList<DeclaredRole>?, IReadOnlyList<RoleSet>?)`](#fixedireadonlylistdeclaredrole-ireadonlylistroleset) | Roles in code, each with the permissions it gives on the resource, held by name: the same for every resource of the kind, and changed with a deploy. |
+| [`Custom(IReadOnlyList<DeclaredRole>?, OtherPermissions?, string?, IReadOnlyList<RoleSet>?)`](#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset) | Roles a customer makes for itself while the application runs: rows of the application's role class ([`CustomRoleAttribute<TRoleId, TResource>`](resource-and-members.md#customroleattributetroleid-tresource)), each with a name and the permissions it gives, which a customer renames, gives other permissions and archives, held by the class's id. |
 | [`External(DatabaseFunction?, OtherPermissions?)`](#externaldatabasefunction-otherpermissions) | Roles the application keeps in a store of its own, such as the roles of its organization, held by that store's id. |
 
-#### `Fixed(IReadOnlyList<DeclaredRole>)`
+#### `Fixed(IReadOnlyList<DeclaredRole>?, IReadOnlyList<RoleSet>?)`
 
 ```csharp
-public static Roles Fixed(IReadOnlyList<DeclaredRole> roles)
+public static Roles Fixed(
+    IReadOnlyList<DeclaredRole>? roles = null,
+    IReadOnlyList<RoleSet>? sets = null)
 ```
 
 Roles in code, each with the permissions it gives on the resource, held by name: the same for every resource of the kind, and changed with a deploy.
 
 **Parameters**
 
-- `roles`: The roles, at least one, each named once, with permissions of the resource that a role can give ([`OnAttribute.InRoles`](#inroles)).
+- `roles`: The roles, at least one, each named once, with permissions of the resource that a role can give ([`OnAttribute.InRoles`](#inroles)). Left out where `sets` are given.
+- `sets`: The role sets, each with its fixed roles ([`RoleSet.Named`](#namedstring-ireadonlyliststring-ireadonlylistdeclaredrole-ireadonlylistdeclaredrole-string) with `roles:`), in place of `roles`. A role's set is the set it is declared in.
 
 **Exceptions**
 
-- `ArgumentException`: `roles` is empty, or a role has no name, the name of another, or a permission twice.
+- `ArgumentException`: Both or neither of `roles` and `sets` are given, no role is declared, a set is given starter roles, or a role has no name, the name of another, or a permission twice.
 
-#### `Custom(IReadOnlyList<DeclaredRole>?, OtherPermissions?, string?)`
+#### `Custom(IReadOnlyList<DeclaredRole>?, OtherPermissions?, string?, IReadOnlyList<RoleSet>?)`
 
 ```csharp
 public static Roles Custom(
     IReadOnlyList<DeclaredRole>? starters = null,
     OtherPermissions? otherPermissions = null,
-    string? managedWith = null)
+    string? managedWith = null,
+    IReadOnlyList<RoleSet>? sets = null)
 ```
 
 Roles a customer makes for itself while the application runs: rows of the application's role class ([`CustomRoleAttribute<TRoleId, TResource>`](resource-and-members.md#customroleattributetroleid-tresource)), each with a name and the permissions it gives, which a customer renames, gives other permissions and archives, held by the class's id.
@@ -360,10 +550,11 @@ Roles.Custom(starters: [new("editor", [BoardPermissions.View, BoardPermissions.E
 - `starters`: The roles a customer starts with: what its first rows are made from (the role manager's `CreateStarterRolesAsync`), none when left out. A starter role is no role a member holds; the row made from it is.
 - `otherPermissions`: Which permissions of other modules a role may hold besides the resource's permissions; none when left out.
 - `managedWith`: The permission that changes the roles, held for the whole of what they are kept for ([`ManagedWith`](#roles-1)). Left out, only system work changes them.
+- `sets`: The role sets, each with its starter roles ([`RoleSet.Named`](#namedstring-ireadonlyliststring-ireadonlylistdeclaredrole-ireadonlylistdeclaredrole-string) with `starters:`), in place of `starters`. Left out, the rules have one set, for the kinds inside the organization. One `managedWith` changes the roles of every set.
 
 **Exceptions**
 
-- `ArgumentException`: A starter role has no name, the name of another, or a permission twice; or `managedWith` is blank.
+- `ArgumentException`: A starter role has no name, the name of another, or a permission twice; `managedWith` is blank; both `starters` and `sets` are given; or a set is given fixed roles.
 
 #### `External(DatabaseFunction?, OtherPermissions?)`
 
@@ -390,8 +581,8 @@ The kinds of [`Roles`](#roles-1).
 
 | Member | Summary |
 |---|---|
-| `Fixed = 0` | Roles in code, held by name: [`Roles.Fixed`](#fixedireadonlylistdeclaredrole). |
-| `Custom = 1` | Rows a customer makes: [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string). |
+| `Fixed = 0` | Roles in code, held by name: [`Roles.Fixed`](#fixedireadonlylistdeclaredrole-ireadonlylistroleset). |
+| `Custom = 1` | Rows a customer makes: [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset). |
 | `External = 2` | The application's own store of roles: [`Roles.External`](#externaldatabasefunction-otherpermissions). |
 
 ### `DeclaredRole`
@@ -400,13 +591,13 @@ The kinds of [`Roles`](#roles-1).
 public sealed record DeclaredRole
 ```
 
-A role declared in code: a name, and the permissions a member that holds it has on the resource. Of fixed roles ([`Roles.Fixed`](#fixedireadonlylistdeclaredrole)) a member holds it as a [`NamedRole`](resource-and-members.md#namedrole) of the same name.
+A role declared in code: a name, and the permissions a member that holds it has on the resource. Of fixed roles ([`Roles.Fixed`](#fixedireadonlylistdeclaredrole-ireadonlylistroleset)) a member holds it as a [`NamedRole`](resource-and-members.md#namedrole) of the same name.
 
 ```csharp
 new DeclaredRole("contributor", [DocumentPermissions.View, DocumentPermissions.Edit])
 ```
 
-Of a customer's roles ([`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string)) it is a starter role instead: what a first role is made from, with this name and these permissions, and nothing a member holds.
+Of a customer's roles ([`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset)) it is a starter role instead: what a first role is made from, with this name and these permissions, and nothing a member holds.
 
 | Member | Summary |
 |---|---|
@@ -469,6 +660,8 @@ Roles.Custom(starters: [...], otherPermissions: OtherPermissions.AllBut(Organiza
 
 Without it a role gives the resource's permissions marked `InRoles` and nothing else. With it, a role gives those and every other permission it holds, except the resource's permissions marked `InRoles = false`, the permissions the classes that declare the resource's permissions declare at another level, and the permissions listed here.
 
+A permission of another module that a resource with members declares is held by the kinds of seat that resource lists for it ([`MembershipRules.KindsOf`](#kindsofstring)). Any other permission of another module is held by the kinds inside the organization.
+
 | Member | Summary |
 |---|---|
 | `static OtherPermissions All { get; }` | A role gives every permission of another module it holds. |
@@ -499,9 +692,9 @@ public interface IMemberRoles<TResourceId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-The roles there are for the members of one kind of resource: whether a role exists, which the member manager asks before it gives one.
+The roles there are for the members of one kind of resource: whether a role is in use, and in which role set, which the member manager asks before it gives one.
 
-Where the roles are fixed ([`Roles.Fixed`](#fixedireadonlylistdeclaredrole)), the package answers it from the rules. Where a customer makes them ([`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string)), the package that stores them answers it from their rows: a role in use. Where they are kept elsewhere ([`Roles.External`](#externaldatabasefunction-otherpermissions)), the roles an organization makes for itself say, the application answers it from there, registered with the resource, or the join with that organization's package answers it.
+Where the roles are fixed ([`Roles.Fixed`](#fixedireadonlylistdeclaredrole-ireadonlylistroleset)), the package answers it from the rules. Where a customer makes them ([`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset)), the package that stores them answers it from their rows: a role in use. Where they are kept elsewhere ([`Roles.External`](#externaldatabasefunction-otherpermissions)), the roles an organization makes for itself say, the application answers it from there, registered with the resource, or the join with that organization's package answers it. Roles kept elsewhere are in the first set.
 
 **Type parameters**
 
@@ -510,20 +703,122 @@ Where the roles are fixed ([`Roles.Fixed`](#fixedireadonlylistdeclaredrole)), th
 
 | Member | Summary |
 |---|---|
-| [`ExistsAsync(TRoleId, CancellationToken)`](#existsasynctroleid-cancellationtoken) | Whether `role` is a role in use that a member can be given. |
+| [`FindAsync(TRoleId, CancellationToken)`](#findasynctroleid-cancellationtoken) | The role set of `role`, or `null` where it is no role in use that a member can be given. |
 
-#### `ExistsAsync(TRoleId, CancellationToken)`
+#### `FindAsync(TRoleId, CancellationToken)`
 
 ```csharp
-ValueTask<bool> ExistsAsync(TRoleId role, CancellationToken cancellationToken)
+ValueTask<FoundRole?> FindAsync(TRoleId role, CancellationToken cancellationToken)
 ```
 
-Whether `role` is a role in use that a member can be given.
+The role set of `role`, or `null` where it is no role in use that a member can be given.
 
 **Parameters**
 
 - `role`: The role.
 - `cancellationToken`: Cancels the lookup.
+
+### `FoundRole`
+
+```csharp
+public sealed record FoundRole
+```
+
+A role in use, found for a member ([`IMemberRoles.FindAsync`](#findasynctroleid-cancellationtoken)).
+
+| Member | Summary |
+|---|---|
+| [`FoundRole(string?)`](#foundrolestring) | The primary constructor: the type's summary says what it makes. |
+| `string? Set { get; init; }` | The role set it is in, as a role row stores it: `null` for the first set ([`RoleSet.Stored`](#roleset)). |
+
+#### `FoundRole(string?)`
+
+```csharp
+public FoundRole(string? Set)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `Set`: The role set it is in, as a role row stores it: `null` for the first set ([`RoleSet.Stored`](#roleset)).
+
+### `RoleSet`
+
+```csharp
+public sealed class RoleSet
+```
+
+A set of roles of a resource, for the members of some kinds of seat. A member is in the one set its kind is in, and holds only roles of that set. Each set but the first is managed with a permission of its own.
+
+```csharp
+Roles.Custom(
+    sets:
+    [
+        RoleSet.Named("Team", kinds: [SeatKinds.InOrganization],
+            starters: [new("engineer", [ProjectPermissions.View, ProjectPermissions.Edit])]),
+        RoleSet.Named("Stakeholders", kinds: [HarborSeatKinds.Stakeholder],
+            starters: [new("client-contact", [ProjectPermissions.View])],
+            membersManagedWith: ProjectPermissions.StakeholdersManage),
+    ],
+    managedWith: ProjectPermissions.ManageRoles)
+```
+
+In Harbor Works, Rhea is an employee, so she is in Team. Mira, a client's site manager, is a stakeholder, so she is in Stakeholders. A seat that holds `projects.stakeholders.manage` on a project adds Mira. The set follows from the kind, so an add never names a set, and a member row stores no set.
+
+Rules that declare no sets have one set, with no name, for the kinds inside the organization, holding the roles the rules declare.
+
+| Member | Summary |
+|---|---|
+| `MaxNameLength = 64` | The longest name a set may have. |
+| `string? Name { get; }` | The set's name, such as `Stakeholders`; `null` for the one set of rules that declare none. |
+| `string Code { get; }` | The name as a code is written, such as `stakeholders`: converted as `[Members]` converts a name. Empty for the one set of rules that declare none. |
+| `string? Stored { get; }` | What a role row of this set stores: `null` for the first set, and [`Code`](#roleset) for every other. |
+| `IReadOnlyList<string> Kinds { get; }` | The kinds of seat in the set: kinds by their value, and the groups `SeatKinds.InOrganization` and `SeatKinds.OutsideOrganization`. |
+| `IReadOnlyList<DeclaredRole> Declared { get; }` | The roles declared in the set: its starter roles, where a customer makes the roles, or its fixed roles. |
+| `string? MembersManagedWith { get; }` | The permission that manages the members of this set, or `null` for the first set, which is managed with the permission marked `ManagesMembers` ([`MembershipRules.MembersManagedWith`](#membersmanagedwithroleset)). |
+| `bool HoldsInside { get; }` | Whether the set lists `SeatKinds.InOrganization`: every kind inside the organization is in it. |
+| `bool HoldsOutside { get; }` | Whether the set lists `SeatKinds.OutsideOrganization`: every kind outside the organization is in it. |
+| `IReadOnlyList<string> KindValues { get; }` | The kinds the set names by their value, such as `stakeholder`, without the two groups. |
+| [`Named(string, IReadOnlyList<string>, IReadOnlyList<DeclaredRole>?, IReadOnlyList<DeclaredRole>?, string?)`](#namedstring-ireadonlyliststring-ireadonlylistdeclaredrole-ireadonlylistdeclaredrole-string) | A set of roles for the members of the kinds named. |
+| [`Holds(MemberKind)`](#holdsmemberkind) | Whether the set holds `kind`, by its value or by the group of its side. |
+
+#### `Named(string, IReadOnlyList<string>, IReadOnlyList<DeclaredRole>?, IReadOnlyList<DeclaredRole>?, string?)`
+
+```csharp
+public static RoleSet Named(
+    string name,
+    IReadOnlyList<string> kinds,
+    IReadOnlyList<DeclaredRole>? starters = null,
+    IReadOnlyList<DeclaredRole>? roles = null,
+    string? membersManagedWith = null)
+```
+
+A set of roles for the members of the kinds named.
+
+**Parameters**
+
+- `name`: The set's name, such as `Stakeholders`: letters and digits, with `-` or `_` between words, at most [`MaxNameLength`](#roleset) characters.
+- `kinds`: The kinds of seat in the set, at least one.
+- `starters`: The starter roles of the set, where a customer makes the roles ([`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset)).
+- `roles`: The roles of the set, where the roles are in code ([`Roles.Fixed`](#fixedireadonlylistdeclaredrole-ireadonlylistroleset)).
+- `membersManagedWith`: The permission that manages the members of the set. Every set but the first names one. Its `Kinds` say which kinds of seat may hold it, kinds outside the organization included.
+
+**Exceptions**
+
+- `ArgumentException`: The name cannot be converted to a code or is too long, a kind entry is not one, an entry is listed twice, both `starters` and `roles` are given, or a role is declared wrongly.
+
+#### `Holds(MemberKind)`
+
+```csharp
+public bool Holds(MemberKind kind)
+```
+
+Whether the set holds `kind`, by its value or by the group of its side.
+
+**Parameters**
+
+- `kind`: A member's kind.
 
 ## Permissions
 
@@ -575,6 +870,7 @@ The package's generator collects every permission on a resource into its rules, 
 | [`ManagesMembers`](#managesmembers) | Whether this is the permission that manages the members: the one the resource's member manager requires to add or remove a member and to give or take a role. |
 | [`NamesOwner`](#namesowner) | Whether this is the permission that names the owner: the one the resource's member manager requires to hand the resource to another owner. |
 | [`FromAbove`](#fromabove) | Whether the permission reaches the resource from above, where its rules let a resource be reached so: held where the resource sits, or above it. |
+| [`Kinds`](#kinds) | The kinds of seat that may hold the permission on the resource. |
 
 #### `Owner`
 
@@ -618,6 +914,8 @@ Whether this is the permission that manages the members: the one the resource's 
 
 `ManagesMembers = true`: the manager the generator writes for the resource's member class, `BoardMemberManager`, requires it on the resource for each of those changes, and a resource that marks no permission so lets only system work change its members there. Whatever writes the database's policies adds a lock to both member tables as well, and a member row is written only by a caller that holds this permission on the resource, or the one that names the owner. Without it, whoever may change a resource in any way writes its member rows, a role for itself included, by a statement that never went through a command.
 
+It is held by the kinds its [`Kinds`](#kinds) lists, as every permission is. A list that names a kind outside the organization lets a member of that kind manage the members, where its role gives the permission.
+
 #### `NamesOwner`
 
 ```csharp
@@ -638,6 +936,23 @@ Whether the permission reaches the resource from above, where its rules let a re
 
 `FromAbove = false`: holding it where the resource sits gives nothing on the resource; it is held there by the owner, every member or a role alone. Not on the permission every member holds, which is the one that sees the resource from above.
 
+#### `Kinds`
+
+```csharp
+public string[]? Kinds { get; set; }
+```
+
+The kinds of seat that may hold the permission on the resource. An entry is a kind by its value, such as `stakeholder`, or a group: `SeatKinds.InOrganization` for every kind inside the organization, and `SeatKinds.OutsideOrganization` for every kind outside it. The list is complete. Left out, it is `[SeatKinds.InOrganization]`.
+
+A member holds the permission only when the kind on its member row is in the list, whatever its roles give. Reach from above gives it only to a caller whose own kind is in the list. The owner holds it only when the list holds `SeatKinds.InOrganization`, since an owner is inside the organization. An empty list, a blank entry or an entry twice is DDD11001.
+
+A role on another resource may give the permission through `otherPermissions`. The rules of that resource read this list for it ([`MembershipRules.KindsOf`](#kindsofstring)), so a role at a place and reach from above to this resource hold a member to one list.
+
+```csharp
+[On<Project>(EveryMember = true, Kinds = [SeatKinds.InOrganization, HarborSeatKinds.Stakeholder])]
+public const string View = "projects.view";
+```
+
 ### `ResourcePermission`
 
 ```csharp
@@ -648,7 +963,7 @@ One permission on a resource with members, as a constant marked [`OnAttribute<TR
 
 | Member | Summary |
 |---|---|
-| [`ResourcePermission(string, bool, bool, bool, bool, bool, bool)`](#resourcepermissionstring-bool-bool-bool-bool-bool-bool) | The primary constructor: the type's summary says what it makes. |
+| [`ResourcePermission(string, bool, bool, bool, bool, bool, bool, IReadOnlyList<string>?)`](#resourcepermissionstring-bool-bool-bool-bool-bool-bool-ireadonlyliststring) | The primary constructor: the type's summary says what it makes. |
 | `string Name { get; init; }` | The permission's name, such as `boards.edit`. |
 | `bool Owner { get; init; }` | Whether the owner holds it by owning the resource ([`OnAttribute.Owner`](#owner)). |
 | `bool EveryMember { get; init; }` | Whether every member holds it by being one ([`OnAttribute.EveryMember`](#everymember)). |
@@ -656,8 +971,9 @@ One permission on a resource with members, as a constant marked [`OnAttribute<TR
 | `bool ManagesMembers { get; init; }` | Whether the database holds the member rows to it ([`OnAttribute.ManagesMembers`](#managesmembers)). |
 | `bool NamesOwner { get; init; }` | Whether the database holds the owner column to it ([`OnAttribute.NamesOwner`](#namesowner)). |
 | `bool FromAbove { get; init; }` | Whether it reaches the resource from above ([`OnAttribute.FromAbove`](#fromabove)). |
+| `IReadOnlyList<string>? Kinds { get; init; }` | The kinds of seat that may hold it ([`OnAttribute.Kinds`](#kinds)), or `null` for the kinds inside the organization. Two permissions compare their lists entry by entry. |
 
-#### `ResourcePermission(string, bool, bool, bool, bool, bool, bool)`
+#### `ResourcePermission(string, bool, bool, bool, bool, bool, bool, IReadOnlyList<string>?)`
 
 ```csharp
 public ResourcePermission(
@@ -667,7 +983,8 @@ public ResourcePermission(
     bool InRoles = true,
     bool ManagesMembers = false,
     bool NamesOwner = false,
-    bool FromAbove = true)
+    bool FromAbove = true,
+    IReadOnlyList<string>? Kinds = null)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -681,67 +998,88 @@ The primary constructor: the type's summary says what it makes.
 - `ManagesMembers`: Whether the database holds the member rows to it ([`OnAttribute.ManagesMembers`](#managesmembers)).
 - `NamesOwner`: Whether the database holds the owner column to it ([`OnAttribute.NamesOwner`](#namesowner)).
 - `FromAbove`: Whether it reaches the resource from above ([`OnAttribute.FromAbove`](#fromabove)).
+- `Kinds`: The kinds of seat that may hold it ([`OnAttribute.Kinds`](#kinds)), or `null` for the kinds inside the organization. Two permissions compare their lists entry by entry.
 
 ## Reach from above
 
 Namespace `DTS.Membership.Access`.
 
-### `ReachFromAbove`
+### `PlacesWhereIHold`
 
 ```csharp
-public sealed class ReachFromAbove
+public sealed record PlacesWhereIHold
 ```
 
-Says that a resource is reached from above as well as through its members: it hangs at a place, a unit of an organization or a bay of a depot, which its class marks `[At]`, and a caller that holds a permission at that place, or above it, holds the permission on the resource without being a member of it.
+The function that answers on Postgres where the caller holds a permission at a place of the application's own. It answers for every resource that hangs at a place of that kind. The application marks it once for each kind of place of its own ([`PlacesWhereIHoldAttribute`](#placeswhereiholdattribute)), in any project the export sees:
 
 ```csharp
-// Beside a package that keeps an organization: where a permission is held is that package's to answer, and the rules
-// say only that it reaches.
-MembershipRules.For<Board>(Roles.Custom(...), reachFromAbove: true)
-
-// Beside a place of the application's own: the function that answers it, which the application declares once.
-MembershipRules.For<Crate>(Roles.Fixed(...), reachFromAbove: DepotFunctions.BaysWhereIHold)
+public static class DepotFunctions
+{
+    [PlacesWhereIHold]
+    public static PlacesWhereIHold Bays { get; } = PlacesWhereIHold.Of<BayId>(new("depot", "bays_where_i_hold"));
+}
 ```
 
-Two pictures. Beside an organization, Ada holds the administrators' role at its root, and reaches every board of the organization without being on one; Ben holds `boards.edit` at Pier 7, and edits the boards that hang at Pier 7, and no other. Without one, in a depot of the application's own, porter Piet holds `crates.scrap` at bay A, and scraps crate 17, which stands there, without being one of its porters.
+A crate marks `[At] public BayId BayId`, and its rules say `reachFromAbove: true`. The export then reaches crates from their bay through this function. A pallet that marks a bay as well is reached the same way, with nothing more written. A place of a package's own needs no mark: a package that keeps an organization answers its unit id itself.
 
-Why it matters: whoever runs a part of an organization sees and acts on what hangs there, without being added to each resource; and a resource whose owner has left is still reached by somebody, who can hand it to a new owner. Through its members alone, a board whose owner left would be nobody's to hand on.
+The function takes the permission as text. It answers the places the caller's hold of that permission reaches: each place the permission is held at, and every place below. The resource's functions ask it, and they run as their owner, so the function answers for the caller by a condition of its own and never by a policy.
 
-A resource the caller does not see does not exist for it, whatever it holds there. So rules that let a resource be reached from above have a permission every member holds ([`OnAttribute.EveryMember`](#everymember), which is required then): whoever holds that permission where the resource hangs sees the resource, as its members do, and without one nobody above would.
-
-A permission held from above is not cut by what a role gives ([`OnAttribute.InRoles`](#inroles)): that is about a member's roles on the resource, and a permission held above is held through the place, by a role of the organization, a permission marked `InRoles = false` included. Only a permission marked `FromAbove = false` is not reached this way. A caller that holds a permission both ways holds it as a member ([`MemberVia.Members`](managers.md#membervia)).
-
-Where a caller holds a permission is the application's to answer, or the organization package's: in C# through an `IPlacesReached<TResourceId, TPlaceId>` registered with the resource, which the package that stores the resources asks inside its own statement, and which such a package's join with this one writes; in a database that answers the questions itself, through a function. Beside such a package that function is its own, found by the type of the place, its unit id; beside a place of the application's own it is the one named here. The package keeps no places and no tree of them.
+In C# the mark does nothing. C# reaches a resource from a place through an `IPlacesReached<TResourceId, TPlaceId>` registered with the resource. The start-up check holds the two to the same places: a database that reaches a resource from other places than C# does is refused.
 
 | Member | Summary |
 |---|---|
-| `DatabaseFunction? Function { get; }` | The function that answers in the database where the caller holds a permission, or `null` where it follows from the type of the place: the one the organization package's contribution names for its unit id. A function that takes the permission as text and answers the places the caller's hold of it reaches, each place it is held at and every place below. It is asked by the resource's functions, which run as their owner, so it answers for the caller by a condition of its own, never by a policy. |
-| [`implicit operator ReachFromAbove?(bool)`](#implicit-operator-reachfromabovebool) | `reachFromAbove: true`: a resource is reached from above, by the function that follows from the type of the place it hangs at. |
-| [`implicit operator ReachFromAbove(DatabaseFunction)`](#implicit-operator-reachfromabovedatabasefunction) | `reachFromAbove: DepotFunctions.BaysWhereIHold`: a resource is reached from above, by a function the application declares, beside a place of its own. |
+| [`PlacesWhereIHold(Type, DatabaseFunction)`](#placeswhereiholdtype-databasefunction) | The function for the places whose id is `place`. |
+| `Type Place { get; }` | The kind of place: the type of the place's id, without `Nullable<T>`. |
+| `DatabaseFunction Function { get; }` | The function that answers where the caller holds a permission at a place of that kind. |
+| [`Of(DatabaseFunction)`](#ofdatabasefunction) | The function for the places whose id is `TPlaceId`. |
 
-#### `implicit operator ReachFromAbove?(bool)`
+#### `PlacesWhereIHold(Type, DatabaseFunction)`
 
 ```csharp
-public static implicit operator ReachFromAbove?(bool reaches)
+public PlacesWhereIHold(Type place, DatabaseFunction function)
 ```
 
-`reachFromAbove: true`: a resource is reached from above, by the function that follows from the type of the place it hangs at. `false` is no reach from above, as leaving the argument out is.
+The function for the places whose id is `place`.
 
 **Parameters**
 
-- `reaches`: Whether a permission held above the resource reaches it.
+- `place`: The kind of place: the type of the place's id, never `Nullable<T>`.
+- `function`: The function that answers where the caller holds a permission at a place of that kind.
 
-#### `implicit operator ReachFromAbove(DatabaseFunction)`
+**Exceptions**
+
+- `ArgumentNullException`: `place` or `function` is null.
+- `ArgumentException`: `place` is a `Nullable<T>`.
+
+#### `Of(DatabaseFunction)`
 
 ```csharp
-public static implicit operator ReachFromAbove(DatabaseFunction function)
+public static PlacesWhereIHold Of<TPlaceId>(DatabaseFunction function)
+    where TPlaceId : struct, IEntityId, IEquatable<TPlaceId>
 ```
 
-`reachFromAbove: DepotFunctions.BaysWhereIHold`: a resource is reached from above, by a function the application declares, beside a place of its own.
+The function for the places whose id is `TPlaceId`.
 
 **Parameters**
 
-- `function`: The function that answers where the caller holds a permission, one the application declares once.
+- `function`: The function that answers where the caller holds a permission at a place of that kind.
+
+**Type parameters**
+
+- `TPlaceId`: The kind of place: the type of the place's id.
+
+**Exceptions**
+
+- `ArgumentNullException`: `function` is null.
+
+### `PlacesWhereIHoldAttribute`
+
+```csharp
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+public sealed class PlacesWhereIHoldAttribute : Attribute
+```
+
+Marks a static property of type [`PlacesWhereIHold`](#placeswhereihold), so the program that exports the database's policies reaches a resource from its place of that kind through the function it names. An application marks one for each kind of place of its own. A package that keeps places answers its own kind, and nothing is marked for it.
 
 ## Who a member is
 
@@ -755,7 +1093,7 @@ public sealed record MemberSource
 
 Where the caller's member id comes from: which fact about the caller is compared with the members of a resource. It is data, so the code that asks in C# and the functions that ask in the database read the same declaration.
 
-It is one of three things a resource's rules say apart from each other: who a member is, which is this; where the roles a member holds come from ([`MembershipRules.Roles`](#membershiprules)); and whether something above the resource reaches it ([`MembershipRules.ReachFromAbove`](#membershiprules)). Each stands by itself, so any member source goes with any kind of roles, with reach from above or without.
+It is one of three things a resource's rules say apart from each other: who a member is, which is this; where the roles a member holds come from ([`MembershipRules.Roles`](#membershiprules)); and whether something above the resource reaches it ([`MembershipRules.ReachFromAbove`](#reachfromabove)). Each stands by itself, so any member source goes with any kind of roles, with reach from above or without.
 
 Rules say none, usually: who a member is follows from what a member is known by, the second type of `[Member<...>]` ([`Inferred`](#inferred)). The others are for what that cannot tell.
 
@@ -849,6 +1187,7 @@ It is asked for by the resource, so two kinds of resource whose members are know
 | Member | Summary |
 |---|---|
 | [`Find(CurrentUserSnapshot)`](#findcurrentusersnapshot) | The member id `user` has, or `null` when it has none that counts now: somebody the application does not know, or knows and no longer counts. |
+| [`KindOf(CurrentUserSnapshot)`](#kindofcurrentusersnapshot) | The kind of member `user` is, or `null` when it has no kind that counts now. |
 | [`Require(CurrentUserSnapshot)`](#requirecurrentusersnapshot) | Refuses a caller the questions cannot be asked about at all, with the application's own refusal: somebody who is nobody in the organization the resources belong to. |
 
 #### `Find(CurrentUserSnapshot)`
@@ -858,6 +1197,18 @@ TMemberId? Find(CurrentUserSnapshot user)
 ```
 
 The member id `user` has, or `null` when it has none that counts now: somebody the application does not know, or knows and no longer counts. Such a caller is nobody's member, and holds only what reaches a resource from above. It refuses nobody.
+
+**Parameters**
+
+- `user`: The caller a question is asked for: a signed-in user.
+
+#### `KindOf(CurrentUserSnapshot)`
+
+```csharp
+MemberKind? KindOf(CurrentUserSnapshot user)
+```
+
+The kind of member `user` is, or `null` when it has no kind that counts now. Reach from above gives the caller a permission only when this kind may hold it ([`MembershipRules.MayHold`](#mayholdstring-memberkind)). A caller without a kind holds nothing from above. Like [`Find`](#findcurrentusersnapshot), it answers from what the application knows of the caller, without reading anything. The join with a package that keeps seats answers the kind of the caller's seat. An implementation that leaves it out answers [`MemberKind.Member`](#memberkind) for every caller, a kind inside the organization.
 
 **Parameters**
 
@@ -878,3 +1229,104 @@ Refuses a caller the questions cannot be asked about at all, with the applicatio
 **Exceptions**
 
 - `RefusalException`: The caller is nobody the questions can be asked about.
+
+### `MemberKind`
+
+```csharp
+public sealed record MemberKind
+```
+
+The kind of a member: the kind of seat it is, copied onto its member row when it is added. A permission on a resource lists the kinds that may hold it ([`OnAttribute.Kinds`](#kinds)), and a member is in the role set its kind is in ([`RoleSet`](#roleset)).
+
+In Harbor Works, Rhea is an `employee`, inside the organization, and Mira, a client's site manager, is a `stakeholder`, outside it. Membership without a package that keeps seats has no kinds: every member is [`Member`](#memberkind).
+
+| Member | Summary |
+|---|---|
+| `MaxLength = 64` | The longest value a kind may have, as a member row stores it. |
+| [`MemberKind(string, bool)`](#memberkindstring-bool) | The primary constructor: the type's summary says what it makes. |
+| `string Name { get; init; }` | The kind's value, as the seat stores it, such as `stakeholder`. |
+| `bool InOrganization { get; init; }` | Whether the kind is inside the organization. |
+| `static MemberKind Member { get; }` | The one kind of a member where nothing keeps kinds: `member`, inside the organization. |
+
+#### `MemberKind(string, bool)`
+
+```csharp
+public MemberKind(string Name, bool InOrganization)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `Name`: The kind's value, as the seat stores it, such as `stakeholder`.
+- `InOrganization`: Whether the kind is inside the organization.
+
+### `IMemberKinds<TResourceId, TMemberId>`
+
+```csharp
+public interface IMemberKinds<TResourceId, TMemberId>
+    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+    where TMemberId : struct, IEntityId, IEquatable<TMemberId>
+```
+
+The kind of the one to be made a member of one kind of resource, which the member manager copies onto the member row. The join with a package that keeps seats answers it from the seat. Where nothing answers it, every member is [`MemberKind.Member`](#memberkind).
+
+**Type parameters**
+
+- `TResourceId`: The id of the kind of resource the members are of.
+- `TMemberId`: What a member is known by.
+
+| Member | Summary |
+|---|---|
+| [`OfAsync(TMemberId, CancellationToken)`](#ofasynctmemberid-cancellationtoken) | The kind of `member`, or `null` when it is not known. |
+
+#### `OfAsync(TMemberId, CancellationToken)`
+
+```csharp
+ValueTask<MemberKind?> OfAsync(TMemberId member, CancellationToken cancellationToken)
+```
+
+The kind of `member`, or `null` when it is not known.
+
+**Parameters**
+
+- `member`: The one to be made a member.
+- `cancellationToken`: Cancels the lookup.
+
+### `MemberKindSource`
+
+```csharp
+public sealed record MemberKindSource
+```
+
+Where the database finds the kind of seat of the members of one member class: a function that answers one seat by its id, with its `Kind` and whether it is `InOrganization`. Where an application marks one ([`MemberKindSourceAttribute`](#memberkindsourceattribute)), the export holds the member rows to it: a member row carries its seat's kind, and the owner of a resource is a seat inside the organization. The functions read the caller's own kind from it as well. Reach from above gives the caller a permission only where that kind may hold it.
+
+The join with a package that keeps seats writes the mark for every resource whose members are seats, with that package's function. An application writes none itself.
+
+| Member | Summary |
+|---|---|
+| [`MemberKindSource(Type, DatabaseFunction)`](#memberkindsourcetype-databasefunction) | The primary constructor: the type's summary says what it makes. |
+| `Type MemberClass { get; init; }` | The application's member class, whose rows the guard holds. |
+| `DatabaseFunction Seat { get; init; }` | The function that answers one seat by its id, with the columns `Kind` and `InOrganization`, and no row for a seat the caller may not admit. It answers whatever seats the caller reads, so the guard admits a seat the caller cannot list. |
+
+#### `MemberKindSource(Type, DatabaseFunction)`
+
+```csharp
+public MemberKindSource(Type MemberClass, DatabaseFunction Seat)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `MemberClass`: The application's member class, whose rows the guard holds.
+- `Seat`: The function that answers one seat by its id, with the columns `Kind` and `InOrganization`, and no row for a seat the caller may not admit. It answers whatever seats the caller reads, so the guard admits a seat the caller cannot list.
+
+### `MemberKindSourceAttribute`
+
+```csharp
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+public sealed class MemberKindSourceAttribute : Attribute
+```
+
+Marks a static property of type [`MemberKindSource`](#memberkindsource), so the program that exports the database's policies writes the kind guard of that member class. The join with a package that keeps seats writes it. An application marks nothing itself.

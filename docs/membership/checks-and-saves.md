@@ -143,7 +143,9 @@ a query of your own, through `WhereIHold`. Each answer runs one statement. The e
 
 [`MembershipAccessManager<Document>`](reference/managers.md#membershipaccessmanagertresource) answers questions about
 the current caller and documents. `AddDocumentMembership` registers it per scope, and a handler takes it like any
-service. Each question takes the document, or the document's id:
+service. Every answer is filtered by the kind on the caller's member row
+([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)). Each question takes the
+document, or the document's id:
 
 | Question | Returns | Refuses |
 |---|---|---|

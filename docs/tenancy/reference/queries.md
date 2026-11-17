@@ -82,6 +82,8 @@ The queries are not run here: a module composes them into its own query, where t
 
 A seat is answered from its own rights. System work in a tenant holds every permission in that tenant and nothing in another. Nobody holds nothing. System work outside any tenant has nothing to ask about here, and asking is a programming error.
 
+A seat outside the organization holds no right and has no placement. While the catalogue narrows such seats (`NarrowOutsideSeats`), the reads of units, paths, roles and the roles that grant a permission answer it nothing, and the read of the seats answers its own seat alone, as Tenancy's policies on Postgres do.
+
 **Type parameters**
 
 - `TTenantId`: The application's tenant id.
@@ -102,6 +104,7 @@ A seat is answered from its own rights. System work in a tenant holds every perm
 | [`Units()`](#units) | The tenant's units, archived ones included, as access facts, without a name: where each hangs and whether it is in use. |
 | [`Roles()`](#roles) | The tenant's roles, archived ones included, as access facts, without a name: the starter role each was copied from, its status and the permissions it grants. |
 | [`Seats()`](#seats) | The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. |
+| [`SeatToAdmitAsync(TSeatId, CancellationToken)`](#seattoadmitasynctseatid-cancellationtoken) | The seat `seat` of the caller's tenant while it is active: its kind, and whether that kind is inside the organization. |
 | [`HoldsAtTenantAsync(string, CancellationToken)`](#holdsattenantasyncstring-cancellationtoken) | Whether the caller holds `permission` now for the whole tenant: at its root. |
 | [`HoldsAtAsync(string, TUnitId, CancellationToken)`](#holdsatasyncstring-tunitid-cancellationtoken) | Whether the caller holds `permission` now at `unit`, held there or above it. |
 
@@ -367,7 +370,7 @@ IQueryable<SeatRow<TTenantId, TSeatId>> Seats()
 
 The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. What a seat is shown by is the application's, selected from its own seat class, which `SeatManager.ByIdAsync` returns whole, by id.
 
-This reads the seats, where the other queries read rights. By default it returns every seat of the tenant. On Postgres it returns the seats that a read rule of the application's on its seat class lets the caller read, where the application writes one (`tenant_seats()` runs as its caller). A module that admits a seat by asking here, as Membership's member manager does, then admits only seats the caller reads.
+This reads the seats, where the other queries read rights. By default it returns every seat of the tenant. On Postgres it returns the seats that a read rule of the application's on its seat class lets the caller read, where the application writes one (`tenant_seats_with_kinds()` runs as its caller). A module that admits one seat as a member asks [`SeatToAdmitAsync`](#seattoadmitasynctseatid-cancellationtoken) instead, as Membership's member manager does.
 
 **Returns**: A query of the seats' rows.
 
@@ -378,7 +381,34 @@ This reads the seats, where the other queries read rights. By default it returns
 **Example**
 
 ```csharp
-var seated = await db.Tenancy().Seats().AnyAsync(seat => seat.Id == command.Seat, cancellationToken);
+var placed = await db.Tenancy().Seats().CountAsync(seat => seat.Status == SeatStatus.Active, cancellationToken);
+```
+
+#### `SeatToAdmitAsync(TSeatId, CancellationToken)`
+
+```csharp
+Task<SeatToAdmit?> SeatToAdmitAsync(TSeatId seat, CancellationToken cancellationToken)
+```
+
+The seat `seat` of the caller's tenant while it is active: its kind, and whether that kind is inside the organization. It reads that one seat by its id, whatever seats the caller reads, so a module admits a seat the caller cannot list. A seat outside the organization that manages a resource's members adds a seat it does not read. It is no way to list seats, since it answers the one id asked.
+
+It answers `null` for a seat of another tenant, one that is not active, and an id no seat has, alike, so the answer tells a caller no more than whether the seat can be admitted. On Postgres it asks `seat_to_admit(seat)`, which runs as its owner, answers only for the tenant the connection names, and answers a calling seat an active seat alone.
+
+**Parameters**
+
+- `seat`: The seat to admit.
+- `cancellationToken`: Cancels the query.
+
+**Returns**: The seat's kind while it is an active seat of the caller's tenant; `null` otherwise, and for a caller who is nobody.
+
+**Exceptions**
+
+- `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var kind = (await db.Tenancy().SeatToAdmitAsync(command.Seat, cancellationToken))?.Kind;
 ```
 
 #### `HoldsAtTenantAsync(string, CancellationToken)`
@@ -611,6 +641,7 @@ A source may already keep every set to the current tenant. The queries keep to t
 | [`HoldsAtTenantAsync(TTenantId, TSeatId, string, DateTimeOffset, CancellationToken)`](#holdsattenantasyncttenantid-tseatid-string-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at the root unit of `tenant` at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
 | [`HoldsAtAsync(TTenantId, TSeatId, string, TUnitId, DateTimeOffset, CancellationToken)`](#holdsatasyncttenantid-tseatid-string-tunitid-datetimeoffset-cancellationtoken) | Whether `seat` holds `permission` at `unit` or at a unit above it at `moment`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over the rows above. |
 | [`HasUnitAsync(TTenantId, TUnitId, CancellationToken)`](#hasunitasyncttenantid-tunitid-cancellationtoken) | Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps, or `null` when it has no such query and the question is worked out over [`Units`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). |
+| [`SeatToAdmitAsync(TTenantId, TSeatId, CancellationToken)`](#seattoadmitasyncttenantid-tseatid-cancellationtoken) | The seat `seat` of `tenant` while it is active, read by the storage past what the caller may read of the seats, or `null` when the storage has no such read and the question is worked out over [`Seats`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). |
 
 #### `SeatsHoldingPermissionAt(string, TUnitId)`
 
@@ -681,6 +712,23 @@ Whether `unit` is a unit of `tenant`, read by the storage with a query it keeps,
 
 - `tenant`: The tenant.
 - `unit`: The unit.
+- `cancellationToken`: Stops the reading.
+
+#### `SeatToAdmitAsync(TTenantId, TSeatId, CancellationToken)`
+
+```csharp
+Task<SeatToAdmit?>? SeatToAdmitAsync(
+    TTenantId tenant,
+    TSeatId seat,
+    CancellationToken cancellationToken)
+```
+
+The seat `seat` of `tenant` while it is active, read by the storage past what the caller may read of the seats, or `null` when the storage has no such read and the question is worked out over [`Seats`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid). A storage whose policies narrow [`Seats`](#itenancyreadsourcettenantid-tseatid-tunitid-troleid) to the caller answers here, so a module admits a seat the caller cannot list. The task answers `null` for a seat of another tenant, one that is not active, and an id no seat has, alike.
+
+**Parameters**
+
+- `tenant`: The caller's tenant.
+- `seat`: The seat asked about.
 - `cancellationToken`: Stops the reading.
 
 ### `IQueryExecutor`
@@ -846,13 +894,42 @@ public sealed class SeatRow<TTenantId, TSeatId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-A tenant's seat, as a row to read: whether it counts, never its identity, nor a field the application added to its seat class, such as the name it shows the seat by.
+A tenant's seat, as a row to read: whether it counts and its kind, never its identity, nor a field the application added to its seat class, such as the name it shows the seat by.
 
 | Member | Summary |
 |---|---|
 | `TSeatId Id { get; set; }` | The seat's id. |
 | `TTenantId TenantId { get; set; }` | The seat's tenant. |
 | `SeatStatus Status { get; set; }` | Whether the seat counts. |
+| `string Kind { get; set; }` | The seat's kind, as the seat stores it. |
+| `bool InOrganization { get; set; }` | Whether the seat's kind is inside the organization. |
+
+### `SeatToAdmit`
+
+```csharp
+public sealed record SeatToAdmit
+```
+
+An active seat of the caller's tenant, as a module reads it to admit the seat as a member: its kind, and whether that kind is inside the organization. Nothing else of the seat is read. A module asks it by the seat's id ([`ITenancyQueries.SeatToAdmitAsync`](#seattoadmitasynctseatid-cancellationtoken)), whatever seats the caller reads.
+
+| Member | Summary |
+|---|---|
+| [`SeatToAdmit(string, bool)`](#seattoadmitstring-bool) | The primary constructor: the type's summary says what it makes. |
+| `string Kind { get; init; }` | The seat's kind, as the seat stores it. |
+| `bool InOrganization { get; init; }` | Whether the seat's kind is inside the organization. |
+
+#### `SeatToAdmit(string, bool)`
+
+```csharp
+public SeatToAdmit(string Kind, bool InOrganization)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `Kind`: The seat's kind, as the seat stores it.
+- `InOrganization`: Whether the seat's kind is inside the organization.
 
 ## Projection
 
@@ -969,28 +1046,6 @@ The primary constructor: the type's summary says what it makes.
 
 ## Row access
 
-### `TenancyFunctions`
-
-```csharp
-public static class TenancyFunctions
-```
-
-Namespace `DTS.Tenancy.Access`.
-
-Tenancy's functions in a database that answers the questions itself, as another package names them: the rules of a resource with members, say, whose own functions ask Tenancy's.
-
-```csharp
-MembershipRules.For<Board>(roles, above: new ReachFromAbove(TenancyFunctions.UnitsWhereIHold))
-```
-
-Each is named by its owner, [`TenancyRowAccess.Owner`](#tenancyrowaccess), and its name, whatever schema the application gives Tenancy's tables: the script that writes a function that asks one finds it where it is defined. `DTS.Tenancy.Postgres` defines them.
-
-| Member | Summary |
-|---|---|
-| `static DatabaseFunction CurrentSeat { get; }` | Answers the calling seat: the active seat of the caller's verified identity in the tenant the connection names, or `NULL` for a caller without one. As [`TenancyRowAccess.CurrentSeatId<TSeatId>`](#currentseatidirowuser). |
-| `static DatabaseFunction UnitsWhereIHold { get; }` | Answers, for a permission, the units the calling seat's hold of it reaches: where it is held, and every unit below. As [`TenancyRowAccess.UnitsWhereIHold<TUnitId>`](#unitswhereiholdirowuser-string). |
-| `static DatabaseFunction RolesWithPermission { get; }` | Answers, for a permission, the roles of the caller's tenant in use that give it. As [`TenancyRowAccess.RolesWithPermission<TRoleId>`](#roleswithpermissionirowuser-string). |
-
 ### `TenancyRowAccess`
 
 ```csharp
@@ -1029,6 +1084,8 @@ The questions named `...InTenant` take the tenant as an argument, and read no se
 | [`RolesWithPermission(IRowUser, string)`](#roleswithpermissionirowuser-string) | Answered by the SQL function `tenancy/roles_with_permission`, a set a row access rule asks with `Contains`, once per statement. |
 | [`CurrentSeatId(IRowUser)`](#currentseatidirowuser) | Answered by the SQL function `tenancy/current_seat`, one value a row access rule compares, once per statement when no argument reads the row. |
 | [`CurrentSeat(IRowUser)`](#currentseatirowuser) | Answered by the SQL function `tenancy/current_seat_row`, one row whose properties a row access rule reads, once per statement. |
+| [`IsInOrganization(IRowUser)`](#isinorganizationirowuser) | Answered by the SQL function `tenancy/is_in_organization`, one value a row access rule compares, once per statement when no argument reads the row. |
+| [`SeatKind(IRowUser)`](#seatkindirowuser) | Answered by the SQL function `tenancy/seat_kind`, one value a row access rule compares, once per statement when no argument reads the row. |
 | [`CurrentTenant(IRowUser)`](#currenttenantirowuser) | Answered by the SQL function `tenancy/current_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
 | [`HoldsPermission(IRowUser, string)`](#holdspermissionirowuser-string) | Answered by the SQL function `tenancy/holds_permission`, one value a row access rule compares, once per statement when no argument reads the row. |
 | [`HoldsAtTenant(IRowUser, string)`](#holdsattenantirowuser-string) | Answered by the SQL function `tenancy/holds_at_tenant`, one value a row access rule compares, once per statement when no argument reads the row. |
@@ -1111,6 +1168,30 @@ public static TSeat CurrentSeat<TSeat>(this IRowUser user)
 ```
 
 Answered by the SQL function `tenancy/current_seat_row`, one row whose properties a row access rule reads, once per statement. Only the database can answer it, so called in C# it throws.
+
+**Exceptions**
+
+- `DatabaseOnlyException`: Always: the question is the database's.
+
+#### `IsInOrganization(IRowUser)`
+
+```csharp
+public static bool IsInOrganization(this IRowUser user)
+```
+
+Answered by the SQL function `tenancy/is_in_organization`, one value a row access rule compares, once per statement when no argument reads the row. Only the database can answer it, so called in C# it throws.
+
+**Exceptions**
+
+- `DatabaseOnlyException`: Always: the question is the database's.
+
+#### `SeatKind(IRowUser)`
+
+```csharp
+public static string SeatKind(this IRowUser user)
+```
+
+Answered by the SQL function `tenancy/seat_kind`, one value a row access rule compares, once per statement when no argument reads the row. Only the database can answer it, so called in C# it throws.
 
 **Exceptions**
 
@@ -1230,6 +1311,72 @@ Answered by the SQL function `tenancy/roles_with_permission_in_tenant`, a set a 
 
 - `DatabaseOnlyException`: Always: the question is the database's.
 
+### `TenancyFunctions`
+
+```csharp
+public static class TenancyFunctions
+```
+
+Namespace `DTS.Tenancy.Access`.
+
+Tenancy's functions in a database that answers the questions itself, as another package names them: the rules of a resource with members, say, whose own functions ask Tenancy's.
+
+```csharp
+MembershipRules.For<Lab>(Roles.External(TenancyFunctions.RolesWithPermission), reachFromAbove: true)
+```
+
+The rules name [`RolesWithPermission`](#tenancyfunctions). Reach from above asks [`UnitsWhereIHold`](#tenancyfunctions) without the rules naming it: it follows from the kind of the resource's place, the unit id. Each is named by its owner, [`TenancyRowAccess.Owner`](#tenancyrowaccess), and its name, whatever schema the application gives Tenancy's tables: the script that writes a function that asks one finds it where it is defined. `DTS.Tenancy.Postgres` defines them.
+
+| Member | Summary |
+|---|---|
+| `static DatabaseFunction CurrentSeat { get; }` | Answers the calling seat: the active seat of the caller's verified identity in the tenant the connection names, or `NULL` for a caller without one. As [`TenancyRowAccess.CurrentSeatId<TSeatId>`](#currentseatidirowuser). |
+| `static DatabaseFunction UnitsWhereIHold { get; }` | Answers, for a permission, the units the calling seat's hold of it reaches: where it is held, and every unit below. As [`TenancyRowAccess.UnitsWhereIHold<TUnitId>`](#unitswhereiholdirowuser-string). |
+| `static DatabaseFunction RolesWithPermission { get; }` | Answers, for a permission, the roles of the caller's tenant in use that give it. As [`TenancyRowAccess.RolesWithPermission<TRoleId>`](#roleswithpermissionirowuser-string). |
+| `static DatabaseFunction TenantSeatsWithKinds { get; }` | Answers the seats the caller may read, each with its `Id`, `TenantId`, `Status`, `Kind` and `InOrganization`. It runs as its caller, so the policies on the seats decide its rows. |
+| `static DatabaseFunction SeatToAdmit { get; }` | Answers, for one seat id, that seat of the caller's tenant: its `Kind`, whether it is `InOrganization`, and whether it is `Active`. One row, or none for a seat of another tenant and an id no seat has. A calling seat is answered an active seat alone, so a seat that is not active gives no row either. Scoped system work is answered a seat of its tenant whatever its status. It runs as its owner, past what the caller reads of the seats, and answers the one id asked, so nobody lists the seats through it. Membership's kind guard asks it to hold a member row to its seat's kind, and the owner of a resource to a seat inside the organization. |
+
+### `TenancyFellowSeatsAttribute`
+
+```csharp
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+public sealed class TenancyFellowSeatsAttribute : Attribute
+```
+
+Namespace `DTS.Tenancy.Access`.
+
+Marks a static property of type `Type` that names the id of a resource whose members are seats. The program that exports the database's policies then lets a seat outside the organization read the seats of its fellow members on such a resource, through the resource's `fellow_members` function.
+
+**Remarks**
+
+The join of a package that keeps resources with members, Membership's, writes one for each resource whose members are seats. An application marks nothing itself. Tenancy writes the function `fellow_seats()` from every mark, and widens its restrictive policy on the seats with it while `ApplicationCatalogue.NarrowOutsideSeats` is on.
+
+### `SeatFellowsFunction`
+
+```csharp
+public sealed record SeatFellowsFunction
+```
+
+Namespace `DTS.Tenancy.Access`.
+
+The function of another package that answers the fellow members of one resource whose members are seats, by its name without a schema, such as `projects_fellow_members`. The join of that package registers one for each such resource. Tenancy's start-up check on Postgres compares the functions `fellow_seats()` reads in the database with these.
+
+| Member | Summary |
+|---|---|
+| [`SeatFellowsFunction(string)`](#seatfellowsfunctionstring) | The primary constructor: the type's summary says what it makes. |
+| `string Name { get; init; }` | The function's name, without its schema. |
+
+#### `SeatFellowsFunction(string)`
+
+```csharp
+public SeatFellowsFunction(string Name)
+```
+
+The primary constructor: the type's summary says what it makes.
+
+**Parameters**
+
+- `Name`: The function's name, without its schema.
+
 ### `TenancySaveCheck`
 
 ```csharp
@@ -1262,3 +1409,42 @@ Checks one changed row against the current Tenancy user.
 
 - `ArgumentNullException`: `entryTenant` is null.
 - `RefusalException`: `tenancy.other-tenant` when the row belongs to another tenant than the caller's, and for every row when the caller is system work outside any tenant; `tenancy.not-seated` when there is no caller Tenancy lets in.
+
+## Fellow members
+
+Namespace `DTS.Tenancy.Access`.
+
+### `ISeatFellows<TSeatId>`
+
+```csharp
+public interface ISeatFellows<TSeatId>
+    where TSeatId : struct, IEquatable<TSeatId>
+```
+
+The seats the caller works with on a resource of another package: the members now of every resource the caller is a member of now. Tenancy asks it for a seat outside the organization while the catalogue narrows such seats (`ApplicationCatalogue.NarrowOutsideSeats`). `SeatManager.ListAsync`, `ByIdAsync` and `OverviewAsync` then answer those seats beside the caller's own.
+
+**Type parameters**
+
+- `TSeatId`: The id of the application's seat class.
+
+**Remarks**
+
+The join of a package that keeps resources with members, Membership's, registers one for each resource whose members are seats. An application writes none itself. Each is asked once per read, before the seats are read.
+
+| Member | Summary |
+|---|---|
+| [`OfCallerAsync(CancellationToken)`](#ofcallerasynccancellationtoken) | The seats that are members now of a resource the caller is a member of now. |
+
+#### `OfCallerAsync(CancellationToken)`
+
+```csharp
+Task<IReadOnlyList<TSeatId>> OfCallerAsync(CancellationToken cancellationToken)
+```
+
+The seats that are members now of a resource the caller is a member of now. The caller's own seat may be among them.
+
+**Parameters**
+
+- `cancellationToken`: Cancels the read.
+
+**Returns**: The seats' ids, each once.
