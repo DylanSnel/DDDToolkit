@@ -3367,6 +3367,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **0.1.0 is published to GitHub Packages.**
+  - The feed is `https://nuget.pkg.github.com/DylanSnel/index.json`. A restore from this feed needs a personal access
+    token (classic) with `read:packages`, also for a public package.
+  - The release workflow publishes to nuget.org when the repository variable `PUBLISH_TO_NUGET_ORG` is `true`. Without
+    the variable, the workflow publishes to GitHub Packages.
+  - nuget.org gets the packages when its account is available again.
+
 - **New package ids and namespaces: `DylansTechStack.DDD.*` and `DTS.DDD.*`, from 0.1.0.**
   - The packages are published as `DylansTechStack.DDD`, `DylansTechStack.DDD.EntityFramework` and so on. They replace
     `Temp.DDDToolkit.*`, whose last version is 3.2.0-preview.15.
