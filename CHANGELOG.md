@@ -3367,6 +3367,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **A marker whose convention the application does not have gives a warning, and no longer refuses the model.**
+  - `MarkerConvention` skips a convention that a `[ModelConvention]` marker names when its assembly is not in the
+    application. It logs a warning on Entity Framework's model logger that names the class, the marker and the
+    assembly to reference.
+  - The model is built, and the marker maps nothing in it. A context with `[OfTenant]` and without
+    `DylansTechStack.Tenancy.EntityFramework` then has no tenant filter and no save check of Tenancy.
+  - A marker that names a class which is no convention still refuses the model.
+  - `AddDDDToolkitConventions()` hands `MarkerConvention` the logger of `IDiagnosticsLogger<DbLoggerCategory.Model>`.
+
 - **New package ids and namespaces: `DylansTechStack.DDD.*` and `DTS.DDD.*`, from 0.1.0.**
   - The packages are published as `DylansTechStack.DDD`, `DylansTechStack.DDD.EntityFramework` and so on. They replace
     `Temp.DDDToolkit.*`, whose last version is 3.2.0-preview.15.
