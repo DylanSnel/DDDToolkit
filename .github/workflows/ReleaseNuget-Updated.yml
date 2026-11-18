@@ -83,7 +83,8 @@ jobs:
       # checks this job's token against a policy naming this repository and this workflow file, so
       # renaming the file stops publishing until the policy follows. The key it hands back lives for an
       # hour, which is why it is asked for here, after the tests, and not at the start of the job. The
-      # user is the nuget.org profile that owns the policy and the packages, not an email address.
+      # nuget.org organization DID-IT-Solutions owns the policy and the DylansTechStack.* packages. The
+      # user is the nuget.org profile of a member of that organization, not an email address.
       - name: Log in to NuGet
         id: nuget_login
         uses: NuGet/login@v1

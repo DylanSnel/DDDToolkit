@@ -10,6 +10,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-18
+
 ### Added
 
 #### Core
@@ -3366,6 +3368,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   widening the page.
 
 ### Changed
+
+- **Kinds of seat in the core: `[At]` allows one place of each kind, and a nullable place.** New in 0.1.0.
+  - DDD00097 allows one `[At]` property of each kind of place on an aggregate root. The kind of place is the type of
+    the place's id.
+  - DDD00097 accepts a nullable `[At]` property. An aggregate with an empty place is reached from no place above it.
+  - DDD00097 still refuses a static `[At]` property, an `[At]` property on a type that is no aggregate root, and a
+    second `[At]` property of the same kind.
+  - The message of DDD00101 names `user.IsInOrganization()` and `user.SeatKind()` for the kind of the seat.
+  - The examples of `[RowAccess]` and `[AccessRow]` read an `Onboarding` field instead of a seat `Kind`.
+  - New docs pages: [People from outside the organization](docs/membership/people-from-outside.md), a tutorial part,
+    and [What the packages guarantee](docs/package-guarantees.md), the rules on kinds of seat, role sets and places
+    with the test class of each rule.
 
 - **New package ids and namespaces: `DylansTechStack.DDD.*` and `DTS.DDD.*`, from 0.1.0.**
   - The packages are published as `DylansTechStack.DDD`, `DylansTechStack.DDD.EntityFramework` and so on. They replace
