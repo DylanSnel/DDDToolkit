@@ -25,14 +25,6 @@ pieces.
 dotnet add package DylansTechStack.DDD --prerelease
 ```
 
-Version 0.1.0 is on GitHub Packages, and nuget.org follows later. Add the feed once, with a personal access token
-(classic) that has the `read:packages` scope:
-
-```bash
-dotnet nuget add source https://nuget.pkg.github.com/DylanSnel/index.json \
-  --name dts --username YOUR_GITHUB_USERNAME --password YOUR_TOKEN --store-password-in-clear-text
-```
-
 The packages are published as `DylansTechStack.DDD.*`, and their namespaces are `DTS.DDD.*`: the package
 `DylansTechStack.DDD.EntityFramework` holds the namespace `DTS.DDD.EntityFramework`. See [Packages](../README.md#packages).
 

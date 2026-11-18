@@ -9,12 +9,10 @@ jobs:
     runs-on: ubuntu-latest
 
     # id-token lets the job ask GitHub for the token that trusted publishing trades for an API key.
-    # packages lets the GITHUB_TOKEN push to the GitHub Packages feed of the repository owner.
     # Naming one permission drops the defaults, so the checkout's read access is named too.
     permissions:
       contents: read
       id-token: write
-      packages: write
 
     env:
       # Build and Test and Provider Tests both set this, and the release path needs it most. Without
@@ -86,26 +84,11 @@ jobs:
       # renaming the file stops publishing until the policy follows. The key it hands back lives for an
       # hour, which is why it is asked for here, after the tests, and not at the start of the job. The
       # user is the nuget.org profile that owns the policy and the packages, not an email address.
-      #
-      # The repository variable PUBLISH_TO_NUGET_ORG picks the feed. Set to true, the release goes to
-      # nuget.org. With any other value, or without the variable, the step Publish to GitHub Packages
-      # pushes the release to GitHub Packages. Releases go to GitHub Packages while the nuget.org account
-      # is unavailable. To publish to nuget.org again, set the variable to true under Settings, Secrets
-      # and variables, Actions, Variables.
       - name: Log in to NuGet
         id: nuget_login
-        if: vars.PUBLISH_TO_NUGET_ORG == 'true'
         uses: NuGet/login@v1
         with:
           user: DylanTheVillain
 
       - name: Publish to NuGet
-        if: vars.PUBLISH_TO_NUGET_ORG == 'true'
         run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }} --skip-duplicate
-
-      # The feed of the repository owner, https://nuget.pkg.github.com/DylanSnel/index.json. A consumer
-      # restores from it with a personal access token (classic) that has read:packages, also for a
-      # public package. A version on this feed cannot be pushed twice either.
-      - name: Publish to GitHub Packages
-        if: vars.PUBLISH_TO_NUGET_ORG != 'true'
-        run: dotnet nuget push "./nupkgs/*.nupkg" --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
