@@ -10,6 +10,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-19
+
+No change to the packages. DTS Pro 0.1.1 depends on the core packages of the same version, so the core is released
+at 0.1.1 too.
+
+### Changed
+
+- `DDDToolkit.slnx` groups the projects in solution folders per package family.
+
 ## [0.1.0] - 2026-11-18
 
 ### Added
