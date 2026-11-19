@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
@@ -9,6 +9,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 [git tags](https://github.com/DylanSnel/DDDToolkit/tags).
 
 ## [Unreleased]
+
+## [0.1.2] - 2026-11-19
 
 ### Changed
 
