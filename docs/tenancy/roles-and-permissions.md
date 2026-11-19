@@ -44,6 +44,7 @@ Tenancy's permissions are always in the catalogue. No module may declare a permi
 | `tenancy.settings.manage` | Change the organization's name, and turn a flat tenant into a tree. | For the whole tenant | Yes |
 | `tenancy.units.manage` | Create units below a unit, and rename, move or archive them. | At a unit | Yes |
 | `tenancy.seats.manage` | Add seats, and suspend, reactivate or deactivate them, for the whole tenant. Place a seat at a unit, or withdraw it, at that unit. | For the whole tenant, or at a unit | Yes |
+| `tenancy.seats.invite` | Invite a person into the organization, with a role at a unit ([Invitations](invitations.md)). `tenancy.seats.manage` implies it. | For the whole tenant; list and cancel invitations at a unit | No |
 | `tenancy.grants.manage` | Give roles to seats at a unit, and take them away. | At a unit | Yes |
 | `tenancy.roles.manage` | Make roles, and change their names, permissions and status. | For the whole tenant | Yes |
 | `tenancy.history.view` | Read the [access history](operators-and-history.md#access-history). | For the whole tenant | No |
@@ -451,9 +452,10 @@ catch (RefusalException refusal) when (refusal.Code == TenancyRefusals.GrantExce
 
 ### Which permissions manage access
 
-- All of Tenancy's permissions manage access, except two. `tenancy.history.view` reads the
-  [access history](operators-and-history.md#access-history). `tenancy.externals.invite` invites a person from outside
-  the organization, whose seat holds no role of the organization.
+- All of Tenancy's permissions manage access, except three. `tenancy.history.view` reads the
+  [access history](operators-and-history.md#access-history). `tenancy.seats.invite` invites a person into the
+  organization, and the role on the invitation is held to the rule for giving that role. `tenancy.externals.invite`
+  invites a person from outside the organization, whose seat holds no role of the organization.
 - Mark a permission you own with `ManagesAccess: true`. Mark any other permission, including a module's, in
   `AccessManagingPermissions`:
 

@@ -180,7 +180,7 @@ declared, and then its own rules. The table names each manager's method. The ref
 | Tenants request | Declares | Then |
 |---|---|---|
 | `SeatsOfMine` | Signed in. It returns the caller's own seats, before any tenant is chosen, found by the token's verified identity. | |
-| `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById`, `CatalogueContents`, `UnitsWhereIHold`, `OpenInvitations` | In a tenant. | Most go to a manager's reads: `SeatManager.WhoAmIAsync`, `ListAsync` and `ByIdAsync`, `OrganizationManager.ListUnitsAsync` and `UnitsByIdAsync`, `RoleManager.ListAsync` and `ByIdAsync`. `InvitationManager.ListOpenAsync` returns open invitations only for units where the caller holds `tenancy.seats.manage`. |
+| `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById`, `CatalogueContents`, `UnitsWhereIHold`, `OpenInvitations` | In a tenant. | Most go to a manager's reads: `SeatManager.WhoAmIAsync`, `ListAsync` and `ByIdAsync`, `OrganizationManager.ListUnitsAsync` and `UnitsByIdAsync`, `RoleManager.ListAsync` and `ByIdAsync`. `InvitationManager.ListOpenAsync` returns open invitations only for units where the caller holds `tenancy.seats.invite`. |
 | `AddOrganizationUnit`, `MoveOrganizationUnit`, `ArchiveOrganizationUnit` | `AddOrganizationUnit` declares `tenancy.units.manage` at the parent. A move or an archive declares only "in a tenant". | `OrganizationManager.AddUnitAsync`, `MoveUnitAsync`, `ArchiveUnitAsync`. The sample sets its `kind` field in the callback. |
 | `ChangeTenantShape` | `tenancy.settings.manage` for the whole tenant. | `TenantManager.ChangeShapeAsync` |
 | `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit. | `SeatManager.PlaceAsync`, `WithdrawAsync` |
@@ -188,7 +188,7 @@ declared, and then its own rules. The table names each manager's method. The ref
 | `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant. | `SeatManager.SuspendAsync`, `ReactivateAsync`, `DeactivateAsync` |
 | `SeatGrants` | `tenancy.seats.manage` for the whole tenant, or at the unit asked about (`?unit=`). | `SeatManager.OverviewAsync` |
 | `CreateTenantRole`, `SetRolePermissions`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant. | `RoleManager.CreateAsync`, `SetPermissionsAsync`, `ArchiveAsync` |
-| `InvitePerson`, `CancelInvitation` | `InvitePerson` declares `tenancy.seats.manage` for the whole tenant. A cancel declares only "in a tenant". | `InvitationManager.IssueAsync`, `CancelAsync` |
+| `InvitePerson`, `CancelInvitation` | `InvitePerson` declares `tenancy.seats.invite` for the whole tenant. A cancel declares only "in a tenant". | `InvitationManager.IssueAsync`, `CancelAsync` |
 | `InviteGuest` | `tenancy.externals.invite` at the unit. | `InvitationManager.IssueOutsideAsync`, with the kind `guest` |
 | `AcceptInvitation` | Signed in, with no seat yet. | `InvitationManager.AcceptAsync` |
 | `RenameSeat` | The caller's own seat, or `tenancy.seats.manage` for the whole tenant (`[OrOwn]`). | No manager. The rule is the sample's own ([How a seat is shown](../names-and-languages.md#how-a-seat-is-shown)). A column rule enforces it in the database. |

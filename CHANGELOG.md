@@ -10,6 +10,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+### Changed
+
+- The Tenancy docs describe `tenancy.seats.invite`, the permission to invite people into the organization, which DTS Pro
+  0.1.2 adds: `tenancy/roles-and-permissions.md`, `tenancy/invitations.md`, `tenancy/postgres.md`, the sample pages and
+  `tenancy/reference/catalogue.md` and `managers.md`.
+- `how-a-request-is-checked.md` shows the sample's newest access files of Tenants and Projects.
+
 ## [0.1.1] - 2026-11-19
 
 No change to the packages. DTS Pro 0.1.1 depends on the core packages of the same version, so the core is released
