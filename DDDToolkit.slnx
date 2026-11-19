@@ -7,70 +7,34 @@
     <File Path="README.md" />
   </Folder>
   <Folder Name="/Benchmarks/">
-    <Project Path="Benchmarks/DTS.DDD.Benchmarks/DTS.DDD.Benchmarks.csproj" />
     <Project Path="Benchmarks/DTS.DDD.Benchmarks.FluentValidation/DTS.DDD.Benchmarks.FluentValidation.csproj" />
-  </Folder>
-  <Folder Name="/Source/">
-    <Project Path="Source/DTS.DDD.Abstractions/DTS.DDD.Abstractions.csproj" />
-    <Project Path="Source/DTS.DDD/DTS.DDD.csproj" />
-    <Project Path="Source/DTS.DDD.Analyzers/DTS.DDD.Analyzers.csproj" />
-    <Project Path="Source/DTS.DDD.Analyzers.CodeFixes/DTS.DDD.Analyzers.CodeFixes.csproj" />
-    <Project Path="Source/DTS.DDD.EntityFramework/DTS.DDD.EntityFramework.csproj" />
-    <Project Path="Source/DTS.DDD.EntityFramework.Analyzers/DTS.DDD.EntityFramework.Analyzers.csproj" />
-    <Project Path="Source/DTS.DDD.Messaging.Postgres/DTS.DDD.Messaging.Postgres.csproj" />
-    <Project Path="Source/DTS.DDD.Messaging.Wolverine/DTS.DDD.Messaging.Wolverine.csproj" />
-    <Project Path="Source/DTS.DDD.Messaging.MassTransit/DTS.DDD.Messaging.MassTransit.csproj" />
-    <Project Path="Source/DTS.DDD.EntityFramework.Postgres/DTS.DDD.EntityFramework.Postgres.csproj" />
-    <Project Path="Source/DTS.DDD.EntityFramework.Supabase/DTS.DDD.EntityFramework.Supabase.csproj" />
-    <Project Path="Source/DTS.DDD.EntityFramework.Supabase.Analyzers/DTS.DDD.EntityFramework.Supabase.Analyzers.csproj" />
-    <Project Path="Source/DTS.DDD.Auth.Supabase/DTS.DDD.Auth.Supabase.csproj" />
-    <Project Path="Source/DTS.DDD.Auth.Supabase.AspNetCore/DTS.DDD.Auth.Supabase.AspNetCore.csproj" />
-    <Project Path="Source/DTS.DDD.Auth.Supabase.AzureFunctions/DTS.DDD.Auth.Supabase.AzureFunctions.csproj" />
-    <Project Path="Source/DTS.DDD.FluentValidation/DTS.DDD.FluentValidation.csproj" />
-    <Project Path="Source/DTS.DDD.FluentValidation.Analyzers/DTS.DDD.FluentValidation.Analyzers.csproj" />
-    <Project Path="Source/DTS.DDD.HotChocolate/DTS.DDD.HotChocolate.csproj" />
-    <Project Path="Source/DTS.DDD.HotChocolate.Fusion.InMemory/DTS.DDD.HotChocolate.Fusion.InMemory.csproj" />
-    <Project Path="Source/DTS.DDD.HotChocolate.Analyzers/DTS.DDD.HotChocolate.Analyzers.csproj" />
-    <Project Path="Source/DTS.DDD.Localization/DTS.DDD.Localization.csproj" />
-    <Project Path="Source/DTS.DDD.NewtonSoft.Json/DTS.DDD.NewtonSoft.Json.csproj" />
-    <Project Path="Source/DTS.DDD.Testing/DTS.DDD.Testing.csproj" />
+    <Project Path="Benchmarks/DTS.DDD.Benchmarks/DTS.DDD.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/Examples/">
     <File Path="Examples/README.md" />
-    <Project Path="Examples/DTS.DDD.ExampleLibrary/DTS.DDD.ExampleLibrary.csproj" />
     <Project Path="Examples/DTS.DDD.ExampleApi/DTS.DDD.ExampleApi.csproj" />
+    <Project Path="Examples/DTS.DDD.ExampleLibrary/DTS.DDD.ExampleLibrary.csproj" />
   </Folder>
-  <Folder Name="/Examples/Modules/" />
-  <Folder Name="/Examples/Modules/Catalog/">
-    <Project Path="Examples/Modules/Catalog/Examples.Webshop.Catalog.Contracts/Examples.Webshop.Catalog.Contracts.csproj" />
-    <Project Path="Examples/Modules/Catalog/Examples.Webshop.Catalog/Examples.Webshop.Catalog.csproj" />
-    <Project Path="Examples/Modules/Catalog/Examples.Webshop.Catalog.Migrations.SqlServer/Examples.Webshop.Catalog.Migrations.SqlServer.csproj" />
+  <Folder Name="/Examples/Microservices.MassTransit/">
+    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.AppHost/Examples.Webshop.MassTransit.AppHost.csproj" />
+    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Fulfilment/Examples.Webshop.MassTransit.Fulfilment.csproj" />
+    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Gateway/Examples.Webshop.MassTransit.Gateway.csproj" />
+    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Payments/Examples.Webshop.MassTransit.Payments.csproj" />
+    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Storefront/Examples.Webshop.MassTransit.Storefront.csproj" />
   </Folder>
-  <Folder Name="/Examples/Modules/Ordering/">
-    <Project Path="Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/Examples.Webshop.Ordering.Contracts.csproj" />
-    <Project Path="Examples/Modules/Ordering/Examples.Webshop.Ordering/Examples.Webshop.Ordering.csproj" />
-    <Project Path="Examples/Modules/Ordering/Examples.Webshop.Ordering.Migrations.SqlServer/Examples.Webshop.Ordering.Migrations.SqlServer.csproj" />
+  <Folder Name="/Examples/Microservices.Pgmq/">
+    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.AppHost/Examples.Webshop.Pgmq.AppHost.csproj" />
+    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.Fulfilment/Examples.Webshop.Pgmq.Fulfilment.csproj" />
+    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.Gateway/Examples.Webshop.Pgmq.Gateway.csproj" />
+    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.Payments/Examples.Webshop.Pgmq.Payments.csproj" />
+    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.Storefront/Examples.Webshop.Pgmq.Storefront.csproj" />
   </Folder>
-  <Folder Name="/Examples/Modules/Inventory/">
-    <Project Path="Examples/Modules/Inventory/Examples.Webshop.Inventory.Contracts/Examples.Webshop.Inventory.Contracts.csproj" />
-    <Project Path="Examples/Modules/Inventory/Examples.Webshop.Inventory/Examples.Webshop.Inventory.csproj" />
-    <Project Path="Examples/Modules/Inventory/Examples.Webshop.Inventory.Migrations.SqlServer/Examples.Webshop.Inventory.Migrations.SqlServer.csproj" />
-  </Folder>
-  <Folder Name="/Examples/Modules/Payments/">
-    <Project Path="Examples/Modules/Payments/Examples.Webshop.Payments.Contracts/Examples.Webshop.Payments.Contracts.csproj" />
-    <Project Path="Examples/Modules/Payments/Examples.Webshop.Payments/Examples.Webshop.Payments.csproj" />
-    <Project Path="Examples/Modules/Payments/Examples.Webshop.Payments.Migrations.SqlServer/Examples.Webshop.Payments.Migrations.SqlServer.csproj" />
-  </Folder>
-  <Folder Name="/Examples/Modules/Shipping/">
-    <Project Path="Examples/Modules/Shipping/Examples.Webshop.Shipping/Examples.Webshop.Shipping.csproj" />
-    <Project Path="Examples/Modules/Shipping/Examples.Webshop.Shipping.Migrations.SqlServer/Examples.Webshop.Shipping.Migrations.SqlServer.csproj" />
-  </Folder>
-  <Folder Name="/Examples/Modules/SharedKernel/">
-    <Project Path="Examples/Modules/SharedKernel/Examples.Webshop.SharedKernel/Examples.Webshop.SharedKernel.csproj" />
-  </Folder>
-  <Folder Name="/Examples/Shared/">
-    <Project Path="Examples/Shared/Examples.Hosting/Examples.Hosting.csproj" />
-    <Project Path="Examples/Shared/Examples.ServiceDefaults/Examples.ServiceDefaults.csproj" />
+  <Folder Name="/Examples/Microservices.Wolverine/">
+    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.AppHost/Examples.Webshop.Wolverine.AppHost.csproj" />
+    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.Fulfilment/Examples.Webshop.Wolverine.Fulfilment.csproj" />
+    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.Gateway/Examples.Webshop.Wolverine.Gateway.csproj" />
+    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.Payments/Examples.Webshop.Wolverine.Payments.csproj" />
+    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.Storefront/Examples.Webshop.Wolverine.Storefront.csproj" />
   </Folder>
   <Folder Name="/Examples/ModularMonolith.SqlServer/">
     <Project Path="Examples/ModularMonolith.SqlServer/Examples.Webshop.SqlServer.AppHost/Examples.Webshop.SqlServer.AppHost.csproj" />
@@ -80,46 +44,104 @@
     <Project Path="Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Examples.Webshop.Host.csproj" />
     <Project Path="Examples/ModularMonolith.Supabase/Examples.Webshop.Supabase.AppHost/Examples.Webshop.Supabase.AppHost.csproj" />
   </Folder>
-  <Folder Name="/Examples/Microservices.Pgmq/">
-    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.AppHost/Examples.Webshop.Pgmq.AppHost.csproj" />
-    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.Storefront/Examples.Webshop.Pgmq.Storefront.csproj" />
-    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.Payments/Examples.Webshop.Pgmq.Payments.csproj" />
-    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.Fulfilment/Examples.Webshop.Pgmq.Fulfilment.csproj" />
-    <Project Path="Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.Gateway/Examples.Webshop.Pgmq.Gateway.csproj" />
+  <Folder Name="/Examples/Modules/" />
+  <Folder Name="/Examples/Modules/Catalog/">
+    <Project Path="Examples/Modules/Catalog/Examples.Webshop.Catalog.Contracts/Examples.Webshop.Catalog.Contracts.csproj" />
+    <Project Path="Examples/Modules/Catalog/Examples.Webshop.Catalog.Migrations.SqlServer/Examples.Webshop.Catalog.Migrations.SqlServer.csproj" />
+    <Project Path="Examples/Modules/Catalog/Examples.Webshop.Catalog/Examples.Webshop.Catalog.csproj" />
   </Folder>
-  <Folder Name="/Examples/Microservices.Wolverine/">
-    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.AppHost/Examples.Webshop.Wolverine.AppHost.csproj" />
-    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.Storefront/Examples.Webshop.Wolverine.Storefront.csproj" />
-    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.Payments/Examples.Webshop.Wolverine.Payments.csproj" />
-    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.Fulfilment/Examples.Webshop.Wolverine.Fulfilment.csproj" />
-    <Project Path="Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.Gateway/Examples.Webshop.Wolverine.Gateway.csproj" />
+  <Folder Name="/Examples/Modules/Inventory/">
+    <Project Path="Examples/Modules/Inventory/Examples.Webshop.Inventory.Contracts/Examples.Webshop.Inventory.Contracts.csproj" />
+    <Project Path="Examples/Modules/Inventory/Examples.Webshop.Inventory.Migrations.SqlServer/Examples.Webshop.Inventory.Migrations.SqlServer.csproj" />
+    <Project Path="Examples/Modules/Inventory/Examples.Webshop.Inventory/Examples.Webshop.Inventory.csproj" />
   </Folder>
-  <Folder Name="/Examples/Microservices.MassTransit/">
-    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.AppHost/Examples.Webshop.MassTransit.AppHost.csproj" />
-    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Storefront/Examples.Webshop.MassTransit.Storefront.csproj" />
-    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Payments/Examples.Webshop.MassTransit.Payments.csproj" />
-    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Fulfilment/Examples.Webshop.MassTransit.Fulfilment.csproj" />
-    <Project Path="Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.Gateway/Examples.Webshop.MassTransit.Gateway.csproj" />
+  <Folder Name="/Examples/Modules/Ordering/">
+    <Project Path="Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/Examples.Webshop.Ordering.Contracts.csproj" />
+    <Project Path="Examples/Modules/Ordering/Examples.Webshop.Ordering.Migrations.SqlServer/Examples.Webshop.Ordering.Migrations.SqlServer.csproj" />
+    <Project Path="Examples/Modules/Ordering/Examples.Webshop.Ordering/Examples.Webshop.Ordering.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Modules/Payments/">
+    <Project Path="Examples/Modules/Payments/Examples.Webshop.Payments.Contracts/Examples.Webshop.Payments.Contracts.csproj" />
+    <Project Path="Examples/Modules/Payments/Examples.Webshop.Payments.Migrations.SqlServer/Examples.Webshop.Payments.Migrations.SqlServer.csproj" />
+    <Project Path="Examples/Modules/Payments/Examples.Webshop.Payments/Examples.Webshop.Payments.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Modules/SharedKernel/">
+    <Project Path="Examples/Modules/SharedKernel/Examples.Webshop.SharedKernel/Examples.Webshop.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Modules/Shipping/">
+    <Project Path="Examples/Modules/Shipping/Examples.Webshop.Shipping.Migrations.SqlServer/Examples.Webshop.Shipping.Migrations.SqlServer.csproj" />
+    <Project Path="Examples/Modules/Shipping/Examples.Webshop.Shipping/Examples.Webshop.Shipping.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Shared/">
+    <Project Path="Examples/Shared/Examples.Hosting/Examples.Hosting.csproj" />
+    <Project Path="Examples/Shared/Examples.ServiceDefaults/Examples.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/Source/" />
+  <Folder Name="/Source/Auth/">
+    <Project Path="Source/DTS.DDD.Auth.Supabase.AspNetCore/DTS.DDD.Auth.Supabase.AspNetCore.csproj" />
+    <Project Path="Source/DTS.DDD.Auth.Supabase.AzureFunctions/DTS.DDD.Auth.Supabase.AzureFunctions.csproj" />
+    <Project Path="Source/DTS.DDD.Auth.Supabase/DTS.DDD.Auth.Supabase.csproj" />
+  </Folder>
+  <Folder Name="/Source/Core/">
+    <Project Path="Source/DTS.DDD.Abstractions/DTS.DDD.Abstractions.csproj" />
+    <Project Path="Source/DTS.DDD.Analyzers.CodeFixes/DTS.DDD.Analyzers.CodeFixes.csproj" />
+    <Project Path="Source/DTS.DDD.Analyzers/DTS.DDD.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.Localization/DTS.DDD.Localization.csproj" />
+    <Project Path="Source/DTS.DDD.NewtonSoft.Json/DTS.DDD.NewtonSoft.Json.csproj" />
+    <Project Path="Source/DTS.DDD.Testing/DTS.DDD.Testing.csproj" />
+    <Project Path="Source/DTS.DDD/DTS.DDD.csproj" />
+  </Folder>
+  <Folder Name="/Source/EntityFramework/">
+    <Project Path="Source/DTS.DDD.EntityFramework.Analyzers/DTS.DDD.EntityFramework.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework.Postgres/DTS.DDD.EntityFramework.Postgres.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework.Supabase.Analyzers/DTS.DDD.EntityFramework.Supabase.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework.Supabase/DTS.DDD.EntityFramework.Supabase.csproj" />
+    <Project Path="Source/DTS.DDD.EntityFramework/DTS.DDD.EntityFramework.csproj" />
+  </Folder>
+  <Folder Name="/Source/FluentValidation/">
+    <Project Path="Source/DTS.DDD.FluentValidation.Analyzers/DTS.DDD.FluentValidation.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.FluentValidation/DTS.DDD.FluentValidation.csproj" />
+  </Folder>
+  <Folder Name="/Source/HotChocolate/">
+    <Project Path="Source/DTS.DDD.HotChocolate.Analyzers/DTS.DDD.HotChocolate.Analyzers.csproj" />
+    <Project Path="Source/DTS.DDD.HotChocolate.Fusion.InMemory/DTS.DDD.HotChocolate.Fusion.InMemory.csproj" />
+    <Project Path="Source/DTS.DDD.HotChocolate/DTS.DDD.HotChocolate.csproj" />
+  </Folder>
+  <Folder Name="/Source/Messaging/">
+    <Project Path="Source/DTS.DDD.Messaging.MassTransit/DTS.DDD.Messaging.MassTransit.csproj" />
+    <Project Path="Source/DTS.DDD.Messaging.Postgres/DTS.DDD.Messaging.Postgres.csproj" />
+    <Project Path="Source/DTS.DDD.Messaging.Wolverine/DTS.DDD.Messaging.Wolverine.csproj" />
+  </Folder>
+  <Folder Name="/Tests/" />
+  <Folder Name="/Tests/Auth/">
+    <Project Path="Tests/DTS.DDD.Auth.Supabase.Tests/DTS.DDD.Auth.Supabase.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Core/">
+    <Project Path="Tests/DTS.DDD.Analyzers.Tests/DTS.DDD.Analyzers.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Mediator.Tests/DTS.DDD.Mediator.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Testing.Tests/DTS.DDD.Testing.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.Tests/DTS.DDD.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tests/EntityFramework/">
+    <Project Path="Tests/DTS.DDD.EntityFramework.Providers.Tests/DTS.DDD.EntityFramework.Providers.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.EntityFramework.Tests/DTS.DDD.EntityFramework.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Examples/">
+    <Project Path="Tests/Examples.AppHost.Tests/Examples.AppHost.Tests.csproj" />
+    <Project Path="Tests/Examples.Webshop.Tests/Examples.Webshop.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tests/HotChocolate/">
+    <Project Path="Tests/DTS.DDD.HotChocolate.Fusion.InMemory.Tests/DTS.DDD.HotChocolate.Fusion.InMemory.Tests.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Gallery.Api/DTS.DDD.HotChocolate.Tests.Gallery.Api.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Harbor.Api/DTS.DDD.HotChocolate.Tests.Harbor.Api.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Harbor.Domain/DTS.DDD.HotChocolate.Tests.Harbor.Domain.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Library.Api/DTS.DDD.HotChocolate.Tests.Library.Api.csproj" />
+    <Project Path="Tests/DTS.DDD.HotChocolate.Tests/DTS.DDD.HotChocolate.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Messaging/">
+    <Project Path="Tests/DTS.DDD.Messaging.Tests/DTS.DDD.Messaging.Tests.csproj" />
   </Folder>
   <Folder Name="/Tests/Spikes/">
     <Project Path="Tests/Spikes/DTS.DDD.Spikes.FusionInProcess/DTS.DDD.Spikes.FusionInProcess.csproj" />
-  </Folder>
-  <Folder Name="/Tests/">
-    <Project Path="Tests/DTS.DDD.Tests/DTS.DDD.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.Analyzers.Tests/DTS.DDD.Analyzers.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.Auth.Supabase.Tests/DTS.DDD.Auth.Supabase.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.EntityFramework.Providers.Tests/DTS.DDD.EntityFramework.Providers.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.EntityFramework.Tests/DTS.DDD.EntityFramework.Tests.csproj" />
-    <Project Path="Tests/Examples.Webshop.Tests/Examples.Webshop.Tests.csproj" />
-    <Project Path="Tests/Examples.AppHost.Tests/Examples.AppHost.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.HotChocolate.Tests/DTS.DDD.HotChocolate.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Harbor.Domain/DTS.DDD.HotChocolate.Tests.Harbor.Domain.csproj" />
-    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Harbor.Api/DTS.DDD.HotChocolate.Tests.Harbor.Api.csproj" />
-    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Gallery.Api/DTS.DDD.HotChocolate.Tests.Gallery.Api.csproj" />
-    <Project Path="Tests/DTS.DDD.HotChocolate.Tests.Library.Api/DTS.DDD.HotChocolate.Tests.Library.Api.csproj" />
-    <Project Path="Tests/DTS.DDD.HotChocolate.Fusion.InMemory.Tests/DTS.DDD.HotChocolate.Fusion.InMemory.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.Mediator.Tests/DTS.DDD.Mediator.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.Messaging.Tests/DTS.DDD.Messaging.Tests.csproj" />
-    <Project Path="Tests/DTS.DDD.Testing.Tests/DTS.DDD.Testing.Tests.csproj" />
   </Folder>
 </Solution>
