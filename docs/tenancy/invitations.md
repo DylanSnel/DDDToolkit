@@ -94,14 +94,16 @@ The reference lists every member of `InvitationManager` ([Invitations](reference
 
 Issuing requires what adding the seat and granting the role would require:
 
-- The issuer needs `tenancy.seats.manage` for the whole tenant, and `tenancy.grants.manage` at the unit.
+- The issuer needs `tenancy.seats.invite` for the whole tenant, and `tenancy.grants.manage` at the unit.
+  `tenancy.seats.manage` implies `tenancy.seats.invite`, so a seat that manages seats also invites. A role with
+  `tenancy.seats.invite` and without `tenancy.seats.manage` invites people and suspends nobody.
 - For a role that manages access, while containment is on, the issuer needs each of the role's access-managing
   permissions at the unit, until at least the end of the grant
   ([Who may give a role](roles-and-permissions.md#who-may-give-a-role)).
 - A role that manages no access needs nothing more. Its grant may last longer than the issuer's grants.
 - System work in the tenant may issue any invitation, because no seat's rights limit system work.
 
-A seat with `tenancy.seats.manage` at the invitation's unit lists and cancels the invitation, whoever issued it. An
+A seat with `tenancy.seats.invite` at the invitation's unit lists and cancels the invitation, whoever issued it. An
 invitation from outside the organization has more readers ([below](#invitations-from-outside-the-organization)).
 Every other seat gets `tenancy.invitation-not-found`.
 
@@ -144,7 +146,7 @@ access in your module, for example a place on the project's crew through [Member
 
 **Who reads and cancels it.** A seat that holds `tenancy.externals.invite` at the invitation's unit lists every open
 invitation from outside the organization at that unit, and cancels each of them. The issuer also lists its own
-invitations from outside the organization. A seat with `tenancy.seats.manage` at the unit lists and cancels them, as
+invitations from outside the organization. A seat with `tenancy.seats.invite` at the unit lists and cancels them, as
 it does every invitation there. Every other seat gets `tenancy.invitation-not-found`. On Postgres, the read policy and
 a second update policy hold the same rule. The update policy changes an invitation from outside the organization from
 open to cancelled, and to nothing else.
