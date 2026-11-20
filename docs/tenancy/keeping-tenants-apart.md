@@ -124,7 +124,7 @@ and starts the work with one of its `Begin…` methods:
 
 ```csharp
 // An import that an administrator started. It runs in a job, so no request carries the tenant.
-public sealed class UnitImport(OrganizationManager organization, TenancyAccessManager access)
+public sealed class UnitImport(OrganizationService organization, TenancyAccessManager access)
 {
     public async Task RunAsync(ImportJob job, CancellationToken cancellationToken)
     {
@@ -196,7 +196,7 @@ shows what the work holds, how Tenancy records it, and which database role it ru
   policies, and the policies decide which rows it reaches
   ([The scoped system role](../row-level-security.md#the-scoped-system-role)).
 - The scope names whose work the system work is:
-  - `tenancy` is Tenancy's scope, for work that calls Tenancy's managers. On Postgres only work in this scope
+  - `tenancy` is Tenancy's scope, for work that calls Tenancy's services. On Postgres only work in this scope
     writes Tenancy's tables.
   - A module's name is the scope for that module's work in a tenant, and for its work on its resources with members
     ([Who holds a permission](../membership/permissions-and-roles.md#who-holds-a-permission)). Work in a module's
@@ -215,11 +215,11 @@ shows what the work holds, how Tenancy records it, and which database role it ru
   - The handler checks the caller. The handler of the sample's `MarkTenantAsDemo` calls
     `access.CurrentTenant.Require()` and refuses the caller with `access.system-only` unless `BySystem` is true.
   - Tenancy's system-only manager methods refuse every other caller with `access.system-only`. These are
-    `TenantManager.ProvisionAsync`, `SuspendAsync`, `ReactivateAsync` and `CloseAsync`.
+    `TenantService.ProvisionAsync`, `SuspendAsync`, `ReactivateAsync` and `CloseAsync`.
 - Code that runs without a started Tenancy user is nobody to Tenancy. This holds where the toolkit's current user is
   system work past the row access rules. That is work begun with the core's `BeginSystemBypassingRowAccess()`, and the
   host's answer where nothing was begun in a host that does not
-  [require an explicit current user](../row-level-security.md#requiring-an-explicit-current-user). Tenancy's managers refuse a
+  [require an explicit current user](../row-level-security.md#requiring-an-explicit-current-user). Tenancy's services refuse a
   caller that is nobody with `tenancy.not-seated`.
 
 ### System work outside any tenant
@@ -268,7 +268,7 @@ public sealed class EndExpiredOrdersJob(IServiceScopeFactory scopes)
   start a transaction. Inside a transaction, your code holds one connection while the read waits for another. With
   few connections in the data source, the code can then wait for itself
   ([With a context pool](../row-level-security.md#with-a-context-pool)). Tenancy's
-  managers run on one connection.
+  services run on one connection.
 - **A read that belongs to no tenant.** Wrap a read of yours that belongs to no seat and no tenant in
   `TenancyUsers.BeginNone()` when it runs in the middle of somebody's work. Then the surrounding tenant does not
   apply to that read.

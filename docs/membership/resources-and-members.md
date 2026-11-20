@@ -6,7 +6,7 @@ sidebar_label: Resources and members
 # Membership: resources and members
 
 Read this page when you add a resource with members. It covers the member class, the owner, the member list, the
-managers, the names, and several kinds of resource in one module. The [tutorial](tutorial.md) builds a resource
+services, the names, and several kinds of resource in one module. The [tutorial](tutorial.md) builds a resource
 beside Tenancy.
 
 ## The packages
@@ -18,9 +18,9 @@ beside Tenancy.
 
 | Package | What it holds |
 |---|---|
-| `DylansTechStack.Membership` | The templates, the member list, the managers' base classes and the generator that writes the list and the managers, the rules, the access manager (`MembershipAccessManager<TResource>`) and the requirements. It has no database code. |
+| `DylansTechStack.Membership` | The templates, the member list, the services' base classes and the generator that writes the list and the services, the rules, the access manager (`MembershipAccessManager<TResource>`) and the requirements. It has no database code. |
 | `DylansTechStack.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on each property that says where a resource hangs, one per kind of place, nullable where a place may be empty, in the namespace `DTS.Membership`. No Entity Framework. `DTS.Membership` references it. |
-| `DylansTechStack.Membership.EntityFramework` | The mapping by convention, with `HasMembers()` and `IsCustomRole()` for names of your own, the registrations, the stores the managers load and save through, and `WhereIHold` for your own queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
+| `DylansTechStack.Membership.EntityFramework` | The mapping by convention, with `HasMembers()` and `IsCustomRole()` for names of your own, the registrations, the stores the services load and save through, and `WhereIHold` for your own queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
 | `DylansTechStack.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
 
 - **Membership needs no dispatcher and no Tenancy.** Members are your users unless the rules say
@@ -60,7 +60,7 @@ public sealed partial class Document
 
     public partial IReadOnlyList<DocumentShare> Shares { get; }
 
-    // Runs before every change the member manager makes to the shares
+    // Runs before every change the member service makes to the shares
     partial void OnChangingMembers()
     {
         if (Archived)
@@ -74,9 +74,9 @@ public sealed partial class Document
 - `Members` is the **member list**. The generator writes it over `Shares`
   ([The generated member list](#the-generated-member-list)), with the name `documents` ([Names](#names)), the codes in
   `Codes` (`documents.already-member` and the others), and the system-work scope `filing`.
-- The generator also writes `DocumentShareManager`, the **member manager**, named after the member class
-  ([The managers](#the-managers)). Every change to the shares goes through it. The document has no method for them.
-- `OnChangingMembers` is a **hook**. The generator declares it on the document, and the member manager calls it
+- The generator also writes `DocumentShareService`, the **member service**, named after the member class
+  ([The services](#the-services)). Every change to the shares goes through it. The document has no method for them.
+- `OnChangingMembers` is a **hook**. The generator declares it on the document, and the member service calls it
   before each change. This one refuses every change to the shares of an archived document.
 
 **The permissions.** Each permission is asked on one document (`[On<Document>]`). The attribute also says how the
@@ -100,7 +100,7 @@ public static class DocumentPermissions
 - The owner holds all three permissions by owning the document. A role can give each of them. Every member holds
   `View`.
 - `ManagesMembers` marks `Share` as the permission that changes the members. `NamesOwner` marks it as the permission
-  that hands the document on. The member manager requires them. Without the marks, it makes these changes only for
+  that hands the document on. The member service requires them. Without the marks, it makes these changes only for
   system work.
 - On Postgres, the database also refuses a direct write to the member rows or the owner column from a caller without
   `Share` ([Who writes the member rows](postgres.md#who-writes-the-member-rows)).
@@ -141,7 +141,7 @@ public static class FilingModule
     public static IServiceCollection AddFiling(this IServiceCollection services, Action<DbContextOptionsBuilder> database)
     {
         services.AddDbContext<FilingContext>(database);                             // your context, on your provider
-        services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);    // the access manager, the queries and the member manager for documents
+        services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);    // the access manager, the queries and the member service for documents
         services.AddDocumentMemberAccess<IFilingRequest>();                         // the check for documents, on your requests
         services.RequireExplicitCurrentUser();                                      // work that begins no user fails
         return services.AddScoped<DocumentHandlers>();
@@ -152,9 +152,9 @@ public static class FilingModule
 - The generator writes `AddDocumentMembership` and `AddDocumentMemberAccess`, and names them after the resource.
 - `AddDDDToolkitConventions()` maps `Shares` as two tables, `DocumentShares` and `DocumentShareRoles`, owned by the
   document. `OnModelCreating` needs no line for them. Add a migration for the tables.
-- `AddDocumentMembership` registers `MembershipAccessManager<Document>` and `DocumentShareManager` per scope, and the
+- `AddDocumentMembership` registers `MembershipAccessManager<Document>` and `DocumentShareService` per scope, and the
   queries on `db.Documents` ([Access in your own queries](checks-and-saves.md#access-in-your-own-queries)). The
-  manager loads and saves documents on `FilingContext`.
+  service loads and saves documents on `FilingContext`.
 - Without `RequireExplicitCurrentUser()`, work that begins no user runs as system work, which holds every
   permission. With it, that work [fails](../row-level-security.md#requiring-an-explicit-current-user).
 
@@ -168,13 +168,13 @@ public partial interface IFilingRequest : IRequireAccess;           // what ever
 
 public sealed record ShareDocument([OnResource(DocumentPermissions.Share)] DocumentId Document, UserId With, string Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
-public sealed class DocumentHandlers(DocumentShareManager shares, ICurrentUser user, TimeProvider clock)
+public sealed class DocumentHandlers(DocumentShareService shares, ICurrentUser user, TimeProvider clock)
 {
-    // The user who writes a document owns it: the manager adds the new document and saves it
+    // The user who writes a document owns it: the service adds the new document and saves it
     public Task<Document> WriteAsync(CancellationToken cancellationToken)
         => shares.OpenAsync(new Document(DocumentId.Create(), new UserId(user.RequireId()), clock.GetUtcNow()), cancellationToken);
 
-    // Runs after the check let the request through: the manager loads the document at the version named,
+    // Runs after the check let the request through: the service loads the document at the version named,
     // checks the role, calls the hook, adds the share from now and saves
     public Task<Document> HandleAsync(ShareDocument command, CancellationToken cancellationToken)
         => shares.AddAsync(command.Document, command.With, new NamedRole(command.Role), command.Until, cancellationToken, command.ExpectedVersion);
@@ -190,21 +190,21 @@ public sealed class DocumentHandlers(DocumentShareManager shares, ICurrentUser u
   is [DDD00093](../diagnostics.md#ddd00093). A request with a marker on each of two resources requires both
   permissions ([Requirements that combine](checks-and-saves.md#requirements-that-combine)). For a requirement computed
   from the request's values, implement `RequiredAccess` instead.
-- **The manager uses the request's check.** `ShareDocument` was checked for `documents.share` on this document, so
-  `AddAsync` asks nothing again. Without such a request in hand, the manager asks the access manager itself
-  ([The managers](#the-managers)).
-- **The manager checks what the member list cannot know.** The role must exist for the resource. With fixed roles,
+- **The service uses the request's check.** `ShareDocument` was checked for `documents.share` on this document, so
+  `AddAsync` asks nothing again. Without such a request in hand, the service asks the access manager itself
+  ([The services](#the-services)).
+- **The service checks what the member list cannot know.** The role must exist for the resource. With fixed roles,
   that means a role the rules declare. Where you registered an `IMemberDirectory`, the new member must be known and
   active. Where you registered an `IMemberRolePolicy`, a member must be allowed to hold the role
-  ([Who may be a member](reference/managers.md#who-may-be-a-member)).
-- **Pass the version the caller read.** The manager compares it with the document it loads. A change between the
+  ([Who may be a member](reference/services.md#who-may-be-a-member)).
+- **Pass the version the caller read.** The service compares it with the document it loads. A change between the
   check and the load is then a 409 ([From the check to the save](checks-and-saves.md#from-the-check-to-the-save)).
-- **Each handler returns the document** as the manager saved it.
+- **Each handler returns the document** as the service saved it.
 
 ### The generated member list
 
 The generator writes `Members` as a private property on the resource. Your constructor opens the list with it. The
-member manager makes every other change through it.
+member service makes every other change through it.
 
 <details>
 <summary>Show the code the generator writes for the document</summary>
@@ -242,7 +242,7 @@ partial class Document : global::DTS.Membership.IMembershipResource<global::Fili
     partial void OnRoleTaken(global::Filing.UserId member, global::DTS.Membership.MemberRole<global::Filing.UserId, global::DTS.Membership.NamedRole> role);
     partial void OnOwnerNamed(global::DTS.Membership.OwnerNamed<global::Filing.UserId, global::DTS.Membership.NamedRole> named);
 
-    // The member manager's way to the list, written as explicit members of the interface: AddMember, GiveRole,
+    // The member service's way to the list, written as explicit members of the interface: AddMember, GiveRole,
     // TakeRole, RemoveMember and NameOwner. Each calls OnChangingMembers, then Members, then the hook of the change.
 }
 ```
@@ -259,7 +259,7 @@ partial class Document : global::DTS.Membership.IMembershipResource<global::Fili
   `[EntityId<Guid>]`. An id over any other type declares its own `Create()`.
 - **When the generator cannot write the list**, [DDD00059](../diagnostics.md#ddd00059) says what stands in the way.
 - **For another shape, declare the list yourself.** Two examples are codes in a class of their own, and a collection
-  called `Members`. The generator then writes no list and no managers. It still writes the name, the codes and the
+  called `Members`. The generator then writes no list and no services. It still writes the name, the codes and the
   scope. `_shares` is the field behind `Shares`:
 
 ```csharp
@@ -285,27 +285,27 @@ private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
 - **The system-work scope is named after the module**, for example `filing` for `Filing`
   ([System work](checks-and-saves.md#system-work)).
 
-## The managers
+## The services
 
-The generator writes two managers for a resource, into the project of the member class, in the global namespace:
+The generator writes two services for a resource, into the project of the member class, in the global namespace:
 
 | Manager | Named after | Written when |
 |---|---|---|
-| The member manager, `DocumentShareManager` | the member class, with `Manager` after it | the generator writes the resource's member list |
-| The role manager, `BoardRoleManager` | the role class, `[CustomRole<BoardRoleId, Board>]`, with `Manager` after it | the role class is declared in the project of its resource |
+| The member service, `DocumentShareService` | the member class, with `Manager` after it | the generator writes the resource's member list |
+| The role service, `BoardRoleService` | the role class, `[CustomRole<BoardRoleId, Board>]`, with `Manager` after it | the role class is declared in the project of its resource |
 
 - **A handler takes them like any service.** The resource's registration, `AddDocumentMembership` or
   `AddBoardMembershipWithTenancy`, adds both per scope.
 - **Each method loads, checks, changes and saves**, and returns what it saved. A change takes the resource or its id.
   After the cancellation token comes the version the caller read, for a command that names one.
-- **Your code keeps the resource, its constructor and its hooks.** The managers keep the rest. The base classes are
-  `MemberManager<...>` and `CustomRoleManager<...>` in `DTS.Membership.Managers`
-  ([Managers and access](reference/managers.md)).
-- **A type of the same name in your project** keeps the manager out. One in a namespace is
-  [DDD00106](../diagnostics.md#ddd00106), because the generated manager would hide it. One in the global namespace
-  is your own manager, and the generator writes none.
+- **Your code keeps the resource, its constructor and its hooks.** The services keep the rest. The base classes are
+  `MemberService<...>` and `CustomRoleService<...>` in `DTS.Membership.Managers`
+  ([Managers and access](reference/services.md)).
+- **A type of the same name in your project** keeps the service out. One in a namespace is
+  [DDD00106](../diagnostics.md#ddd00106), because the generated service would hide it. One in the global namespace
+  is your own service, and the generator writes none.
 
-### The member manager
+### The member service
 
 | Method | What it does | The caller needs |
 |---|---|---|
@@ -323,7 +323,7 @@ What a change checks, in this order:
 
 1. **The caller's right.** The refusals come as the access manager's do: the caller's own refusal when the caller is
    nobody, `not-found`, then `not-permitted` naming the permission. When the request in hand was checked for that
-   permission on that resource, the manager uses the check's answer and sends no statement. A resource whose rules
+   permission on that resource, the service uses the check's answer and sends no statement. A resource whose rules
    mark no such permission lets only system work make the change.
 2. **Who may go on the list.** An active member, where you registered an `IMemberDirectory`. A role that exists for
    the resource and that a member may hold. With Tenancy, the join answers both ([With Tenancy](beside-an-organization.md#with-tenancy)).
@@ -350,14 +350,14 @@ Raise your own domain events from the hooks. The package raises none.
 ### The member's kind
 
 Every member row stores the kind of the member's seat, in `Kind`, and whether that kind is inside the organization, in
-`InOrganization`. The member manager copies both from `IMemberKinds` when it adds the member, and the row never
+`InOrganization`. The member service copies both from `IMemberKinds` when it adds the member, and the row never
 changes them. A seat keeps its kind, so the copy stays right.
 
 - **Without Tenancy**, nothing answers the kind. Every member is `member`, inside the organization.
 - **With Tenancy**, the join reads the seat's kind ([With Tenancy](beside-an-organization.md#with-tenancy)). Mira, a
   client's site manager, is stored as a `guest`, outside the organization.
 - **`AddAsync` chooses the role set from the kind.** With one set, the caller's permission is checked first, as before.
-  With several sets, the manager reads the member's kind first, finds the set the kind is in, and then requires that
+  With several sets, the service reads the member's kind first, finds the set the kind is in, and then requires that
   set's permission ([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)).
 - **`GiveRoleAsync`** requires the permission of the role's set. The role must be in the member's set.
 - **`TakeRoleAsync` and `RemoveAsync`**, with several sets, first require that the caller sees the resource, and then
@@ -379,7 +379,7 @@ changes them. A seat keeps its kind, so the copy stays right.
 ### The caller's own place
 
 A member that takes a role from itself, takes itself off, leaves, or hands on a resource it owns can lose the right
-that the save needs. Where the database checks every row, the save would then be refused. So the member manager saves
+that the save needs. Where the database checks every row, the save would then be refused. So the member service saves
 such a change as the resource's own work, in the module's scope, for the caller, when both hold:
 
 - the request in hand is the one whose check read this resource;
@@ -388,9 +388,9 @@ such a change as the resource's own work, in the module's scope, for the caller,
 Otherwise it saves as the caller, and the database judges every row. With Tenancy, the join begins that work for the
 caller's seat, so the history names who left ([System work](checks-and-saves.md#system-work)).
 
-### The role manager
+### The role service
 
-The role manager changes the roles a customer makes, `Roles.Custom(...)`
+The role service changes the roles a customer makes, `Roles.Custom(...)`
 ([Roles a customer makes](permissions-and-roles.md#roles-a-customer-makes)):
 
 | Method | What it does |
@@ -414,20 +414,20 @@ The role manager changes the roles a customer makes, `Roles.Custom(...)`
 
 ## Rules of the member list
 
-The member list refuses each of the following before it changes anything. The member manager calls it, so these
-refusals reach your handler from the manager.
+The member list refuses each of the following before it changes anything. The member service calls it, so these
+refusals reach your handler from the service.
 [`MemberList`](reference/resource-and-members.md#memberlisttmember-tid-tmemberid-troleid) lists every method and
 refusal.
 
 - **A member is on the list once, for a period.** A membership that has ended is over. The member comes back with a
   new membership, without the old roles. While a membership runs or is still to start, adding the member again is
-  refused (`documents.already-member`), whatever start the new membership has. The member manager passes the
+  refused (`documents.already-member`), whatever start the new membership has. The member service passes the
   current time to decide this.
 - **A period ends after it starts.** A period that ends at or before its start is refused
   (`documents.invalid-period`).
 - **A member holds each role once, for a period of its own.** A role counts only while the membership counts.
 - **Every member row has a kind.** `Add` and `NameOwner` take the member's kind. `Members.Open(now)` puts the owner on
-  the list without a kind, and the member manager gives it one with `GiveOwnerKind(kind)` before the save. The invariant
+  the list without a kind, and the member service gives it one with `GiveOwnerKind(kind)` before the save. The invariant
   `KindIsGiven` reports a row without a kind (`membership.member-kind-missing`).
 - **A resource has one owner.** `Members.Open(now)` puts the owner on the list, with no end and no role. The owner
   cannot be removed and cannot get a role (`documents.owner-protected`) until somebody else is named owner.
@@ -441,7 +441,7 @@ refusal.
   `OnOwnerNamed` hook receives it. One of the changes is `EndLifted`, for a new owner who should still leave when the
   old membership would have ended.
 - **The members live inside your aggregate**, under its single version, so `If-Match` covers them. The package
-  raises no events. Raise your own events from the [hooks](#the-member-manager).
+  raises no events. Raise your own events from the [hooks](#the-member-service).
 - **Refusals carry your codes.** `Document.Codes.Refuse(MembershipRefusals.NotFound)` gives `documents.not-found`.
   `With` renames one code, and `WithMemberArgument("Staff")` renames the argument that carries the member
   ([Refusals](reference/refusals.md)).
@@ -450,14 +450,14 @@ refusal.
   is used first.
 - **Invariants catch code that changed the collection another way.** Write invariants that call
   [`OneMembershipPerMember()`](reference/resource-and-members.md#onemembershippermember) and `OwnerStays()`.
-- **For a screen of members**, the member manager's `ListAsync` returns the owner first, then the other members by
+- **For a screen of members**, the member service's `ListAsync` returns the owner first, then the other members by
   start ([tutorial step 6](tutorial.md#step-6-open-a-board-get-it-list-them)).
 
 ## Several kinds of resource
 
 Each resource has its own member class, rules, registrations, tables, codes, functions, access manager
-(`MembershipAccessManager<Folder>` beside `MembershipAccessManager<Document>`) and member manager (`FolderMemberManager`
-beside `DocumentShareManager`). Two resources share none of these. The
+(`MembershipAccessManager<Folder>` beside `MembershipAccessManager<Document>`) and member service (`FolderMemberService`
+beside `DocumentShareService`). Two resources share none of these. The
 module keeps one request interface, which gets one check per resource. Adding a second resource changes none of the
 existing calls:
 

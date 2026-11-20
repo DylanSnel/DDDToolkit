@@ -13,11 +13,11 @@ namespace DTS.DDD.Analyzers.Common;
 /// <summary>
 /// Closes the generic classes packages name with <c>[assembly: TemplateFacade]</c> over the classes a project
 /// declares with their templates, as a class of the project's own, named as the package's class is without its type
-/// parameters, that derives from it: Tenancy's <c>SeatManager&lt;...&gt;</c> gives <c>SeatManager</c>, and
-/// every project that references the project takes a <c>SeatManager</c> rather than writing nine type arguments.
+/// parameters, that derives from it: Tenancy's <c>SeatService&lt;...&gt;</c> gives <c>SeatService</c>, and
+/// every project that references the project takes a <c>SeatService</c> rather than writing nine type arguments.
 /// <para>
 /// <b>The package's own types.</b> C# finds a type nested in a class through every class that derives from it,
-/// so <c>SeatManager.SeatOverview</c> is the package's own nested type, closed over the module's classes: the one
+/// so <c>SeatService.SeatOverview</c> is the package's own nested type, closed over the module's classes: the one
 /// reflection and the compiler's messages show, with the package's documentation. The package's class decides what the
 /// application's is: a sealed class the container makes for a class that is not abstract, a sealed record the
 /// application's code makes for a record, and an abstract class with a private constructor, a name alone, for an
@@ -27,7 +27,7 @@ namespace DTS.DDD.Analyzers.Common;
 /// <b>Why not a global alias.</b> An alias holds in the project that declares it and no further, so it would be
 /// written into every project, each one paying for the work on every edit. And a generator's output is seen by the
 /// compiler but not by the project's other generators: HotChocolate's, reading
-/// <c>[ObjectType&lt;SeatManager.PermissionReach&gt;]</c> in an API project, would find no such name and write code
+/// <c>[ObjectType&lt;SeatService.PermissionReach&gt;]</c> in an API project, would find no such name and write code
 /// that does not compile. The class is written once, in the project that declares the classes, and reaches every
 /// project above it through the reference, where the generators read it like any other type. A class of its own
 /// that wrapped the package's could not do this either: the records nested in the package's class are the package's,
@@ -37,10 +37,10 @@ namespace DTS.DDD.Analyzers.Common;
 /// <b>Not in the project that writes it.</b> There the same holds for the class itself: it is a generator's output,
 /// so another generator of that project does not see it, in an attribute or in a method's signature, whose types
 /// it reads from the code as written. A generator that writes the name as it is spelled compiles; HotChocolate's
-/// does not know the type, and writes <c>typeof(SeatManager.SeatOverview?)</c> for a resolver that may answer
+/// does not know the type, and writes <c>typeof(SeatService.SeatOverview?)</c> for a resolver that may answer
 /// nothing, which does not. A module split by layer names the records in such code in its API project, above the
 /// domain project, where all is well. A module of one project keeps an alias of exactly that name there,
-/// <c>global using SeatManager = ...;</c>, which every generator of that project reads; the generator then
+/// <c>global using SeatService = ...;</c>, which every generator of that project reads; the generator then
 /// stands back for it, and nothing else changes.
 /// </para>
 /// <para>
@@ -56,7 +56,7 @@ namespace DTS.DDD.Analyzers.Common;
 /// <b>Its name.</b> The package's class's, without the type parameters: the one name the package's documentation
 /// uses, whatever the module is called, and no clash with the package's class, which C# tells apart by its type
 /// parameters. The project that declares the classes may give it another with
-/// <c>[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]</c>, which names the class by the
+/// <c>[assembly: TemplateFacadeName("SeatService", "CustomersSeatService")]</c>, which names the class by the
 /// package's name for it, or by its full name where two packages' classes share one; a module whose classes are split
 /// over two projects may say it in either, and the project that writes the class reads it in the projects of its
 /// module it takes classes from. The class is written once, so every project that sees it calls it the same. It is
@@ -112,8 +112,8 @@ namespace DTS.DDD.Analyzers.Common;
 /// <para>
 /// <b>An interface.</b> No class can stand for an interface the package's storage implements: the container hands out
 /// the package's interface, closed over the classes, and a class of the application's would be another service. So a
-/// package's interface, Tenancy's <c>ITenancyStore&lt;...&gt;</c>, gets a global alias,
-/// <c>global using TenancyStore = global::...ITenancyStore&lt;...&gt;;</c>, named as the interface is without its
+/// package's interface, Tenancy's <c>ITenancyRepositories&lt;...&gt;</c>, gets a global alias,
+/// <c>global using TenancyRepositories = global::...ITenancyRepositories&lt;...&gt;;</c>, named as the interface is without its
 /// leading <c>I</c>. An alias holds in its own project only, so it is written into the project that declares the classes,
 /// closed over them as a class is, and into every project above it that sees the classes the generator wrote there
 /// (<see cref="AliasesAbove"/>), closed over the types those were closed over. A name given with
@@ -1065,10 +1065,10 @@ internal static class TemplateFacades
             ? "the one '" + written.ContainingAssembly.Name + "' has for the module " + module
             : "the one '" + written.ContainingAssembly.Name + "' has";
 
-    /// <summary>The line that names a class, written out: <c>[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]</c>.</summary>
+    /// <summary>The line that names a class, written out: <c>[assembly: TemplateFacadeName("SeatService", "CustomersSeatService")]</c>.</summary>
     private static string NameLine(string facade, string name) => "[assembly: TemplateFacadeName(\"" + facade + "\", \"" + name + "\")]";
 
-    /// <summary>The package's class as the application writes it in a typeof: <c>SeatManager&lt;,,,,,,,,&gt;</c>, with its namespace.</summary>
+    /// <summary>The package's class as the application writes it in a typeof: <c>SeatService&lt;,,,,,,,,&gt;</c>, with its namespace.</summary>
     private static string OpenName(INamedTypeSymbol type) => FullName(type) + "<" + new string(',', type.Arity - 1) + ">";
 
     /// <summary>The package's class with its namespace and the classes it is nested in, without type parameters: what a line names where two packages' classes share a name.</summary>
@@ -1203,7 +1203,7 @@ internal static class TemplateFacades
 
     /// <summary>
     /// What the application's class or alias is called when nobody names it: the package's type's name without its type
-    /// parameters, and an interface's without its leading <c>I</c> as well, <c>ITenancyStore</c> giving <c>TenancyStore</c>.
+    /// parameters, and an interface's without its leading <c>I</c> as well, <c>ITenancyRepositories</c> giving <c>TenancyRepositories</c>.
     /// </summary>
     internal static string DefaultNameOf(INamedTypeSymbol type)
         => type.TypeKind == TypeKind.Interface && type.Name.Length > 1 && type.Name[0] == 'I' && char.IsUpper(type.Name[1]) ? type.Name.Substring(1) : type.Name;
@@ -1398,7 +1398,7 @@ internal static class TemplateFacades
 }
 
 /// <summary>What one class a package asks for comes to in a project: the file the generator writes, or what is said instead.</summary>
-/// <param name="Name">What the class is called, <c>SeatManager</c>.</param>
+/// <param name="Name">What the class is called, <c>SeatService</c>.</param>
 /// <param name="File">The file, or null when the class is not written.</param>
 /// <param name="Diagnostic">
 /// What is said: DDD00065 for why the class is not written, DDD00075 for two classes of one name, DDD00076 for a line
@@ -1407,8 +1407,8 @@ internal static class TemplateFacades
 internal sealed record FacadeOutcome(string Name, FacadeFile? File, DiagnosticInfo? Diagnostic);
 
 /// <summary>One class a project gets: the file the generator writes.</summary>
-/// <param name="HintName">The file's name, <c>SeatManager.TemplateFacade.g.cs</c>.</param>
-/// <param name="Name">What the class is called, <c>SeatManager</c>.</param>
+/// <param name="HintName">The file's name, <c>SeatService.TemplateFacade.g.cs</c>.</param>
+/// <param name="Name">What the class is called, <c>SeatService</c>.</param>
 /// <param name="IsPublic">Whether it is public; otherwise internal, as far as an internal class it is closed over reaches.</param>
 /// <param name="BaseType">The package's class closed over the application's, fully qualified.</param>
 /// <param name="Summary">What it is closed over, for its documentation, escaped for XML.</param>
@@ -1419,7 +1419,7 @@ internal sealed record FacadeFile(string HintName, string Name, bool IsPublic, s
     public string Namespace { get; init; } = string.Empty;
 
     /// <summary>
-    /// Whether it is a global alias of a package's interface, <c>global using TenancyStore = ...;</c>, rather than a class:
+    /// Whether it is a global alias of a package's interface, <c>global using TenancyRepositories = ...;</c>, rather than a class:
     /// its file holds the alias alone, and no registration fills a type parameter with it.
     /// </summary>
     public bool IsAlias { get; init; }

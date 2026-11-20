@@ -213,7 +213,7 @@ namespace Harbor.Tenancy.Application.Seats.WhoAmI;
 [InTenant]
 public sealed record WhoAmIQuery : IQuery<MyOverview>, ITenancyRequest;
 
-public sealed class WhoAmIHandler(SeatManager seats) : IQueryHandler<WhoAmIQuery, MyOverview>
+public sealed class WhoAmIHandler(SeatService seats) : IQueryHandler<WhoAmIQuery, MyOverview>
 {
     public async ValueTask<MyOverview> Handle(WhoAmIQuery query, CancellationToken cancellationToken)
     {
@@ -316,7 +316,7 @@ namespace Harbor.Tenancy.Contracts.ValueObjects;
 public readonly partial record struct InvitationId;
 ```
 
-**The invitation class.** **Why:** declaring it turns invitations on. The generator then writes `InvitationManager`
+**The invitation class.** **Why:** declaring it turns invitations on. The generator then writes `InvitationService`
 for your classes.
 
 **`Harbor.Tenancy.Domain/Aggregates/Invitations/Invitation.cs`**
@@ -371,7 +371,7 @@ public sealed class TenancyContext(DbContextOptions<TenancyContext> options) : D
 }
 ```
 
-**The registration.** **Why:** it registers `InvitationManager`, and the outbox stores the invitations' events.
+**The registration.** **Why:** it registers `InvitationService`, and the outbox stores the invitations' events.
 
 **`Harbor.Tenancy.Infrastructure/TenancyInfrastructure.cs`**
 
@@ -422,12 +422,12 @@ using Harbor.Tenancy.Contracts;
 namespace Harbor.Tenancy.Application.Invitations.InviteGuest;
 
 public sealed record InviteGuestCommand(string Address, [AtUnit(TenancyPermissions.ExternalsInvite)] OrganizationUnitId Unit)
-    : ICommand<InvitationManager.IssuedInvitation>, ITenancyRequest;
+    : ICommand<InvitationService.IssuedInvitation>, ITenancyRequest;
 
-public sealed class InviteGuestHandler(InvitationManager invitations) : ICommandHandler<InviteGuestCommand, InvitationManager.IssuedInvitation>
+public sealed class InviteGuestHandler(InvitationService invitations) : ICommandHandler<InviteGuestCommand, InvitationService.IssuedInvitation>
 {
     // A guest's seat, at the unit the request names. The answer holds the token, this once.
-    public async ValueTask<InvitationManager.IssuedInvitation> Handle(InviteGuestCommand command, CancellationToken cancellationToken)
+    public async ValueTask<InvitationService.IssuedInvitation> Handle(InviteGuestCommand command, CancellationToken cancellationToken)
         => await invitations.IssueOutsideAsync(command.Address, HarborSeatKinds.Guest, command.Unit, lifetime: null, cancellationToken);
 }
 ```
@@ -440,17 +440,17 @@ public sealed class InviteGuestHandler(InvitationManager invitations) : ICommand
 namespace Harbor.Tenancy.Application.Invitations.AcceptInvitation;
 
 [SignedIn]
-public sealed record AcceptInvitationCommand(string Token) : ICommand<InvitationManager.AcceptedInvitation>, ITenancyRequest
+public sealed record AcceptInvitationCommand(string Token) : ICommand<InvitationService.AcceptedInvitation>, ITenancyRequest
 {
     // A record prints its members, and a token must not end up in a log.
     public override string ToString() => nameof(AcceptInvitationCommand);
 }
 
-public sealed class AcceptInvitationHandler(InvitationManager invitations)
-    : ICommandHandler<AcceptInvitationCommand, InvitationManager.AcceptedInvitation>
+public sealed class AcceptInvitationHandler(InvitationService invitations)
+    : ICommandHandler<AcceptInvitationCommand, InvitationService.AcceptedInvitation>
 {
     // Harbor's development header carries no verified address, so the token and the sign-in are what accepts.
-    public async ValueTask<InvitationManager.AcceptedInvitation> Handle(AcceptInvitationCommand command, CancellationToken cancellationToken)
+    public async ValueTask<InvitationService.AcceptedInvitation> Handle(AcceptInvitationCommand command, CancellationToken cancellationToken)
         => await invitations.AcceptAsync(command.Token, verifiedAddress: null, cancellationToken);
 }
 ```
@@ -533,9 +533,9 @@ dotnet ef migrations add Invitations --project src/Modules/Tenancy/Harbor.Tenanc
 ### What it does
 
 - `[InvitationAggregate<InvitationId>]`: the generator writes the other half of `Invitation`, which derives from the
-  invitation template. It also writes `InvitationManager`, in the global namespace.
+  invitation template. It also writes `InvitationService`, in the global namespace.
 - `AddTenancyInvitations<Invitation, InvitationId>()` maps `Invitations` and `InvitationDigests`.
-  `services.AddTenancyInvitations<TenancyContext>()` registers `InvitationManager` per scope.
+  `services.AddTenancyInvitations<TenancyContext>()` registers `InvitationService` per scope.
 - `AddTenancyInvitationEvents<InvitationId>()`: issuing, accepting and cancelling each raise an event, saved with the
   change.
 - `[AtUnit(TenancyPermissions.ExternalsInvite)] Unit`: Tenancy's check asks for the permission at that unit or above
@@ -587,7 +587,7 @@ guest may hold it at all.
   inside the organization.
 - **The filter**: a member holds a permission through its role only when its kind is on the permission's list. A role
   that gives `boards.edit` to a guest gives the guest nothing.
-- **The kind is on the member row.** The member manager copies the seat's kind onto the row when it adds the member.
+- **The kind is on the member row.** The member service copies the seat's kind onto the row when it adds the member.
   The check reads the row, so it needs no question to Tenancy.
 - **Seeing follows the filter.** A member sees a board only when its kind may hold the permission every member holds,
   here `boards.view`.
@@ -690,7 +690,7 @@ colleague.
   seats inside the organization manage the guests.
 - **Starter roles per set**: each set has its own starter roles. A tenant gets its copy of each, as it got `editor`.
 
-The diagram shows how the member manager picks the set and the permission it asks for. Purple: the member's kind.
+The diagram shows how the member service picks the set and the permission it asks for. Purple: the member's kind.
 Green: a set that takes it. Red: no set takes it.
 
 ```mermaid
@@ -827,7 +827,7 @@ public static partial class EditorsAndManagersChangeBoards
   already.
 - `RoleSet.Named("Guests", ...)`: its role rows store `guests`, the set's name as a code.
 - `kinds: [SeatKinds.InOrganization]`: every kind inside the organization is in Team, `member` among them.
-- `membersManagedWith: BoardPermissions.ManageGuests`: the member manager asks `boards.guests.manage` for every change
+- `membersManagedWith: BoardPermissions.ManageGuests`: the member service asks `boards.guests.manage` for every change
   to a guest. It asks `boards.members.manage` for a member of Team, as before.
 - `InRoles = false`: no board role gives `boards.guests.manage`. The owner holds it by owning the board. Ada's
   Administrator role at the root holds it from above.
@@ -865,7 +865,7 @@ and sees nothing else.
 
 - **One request per set.** Adding a guest requires `boards.guests.manage` on the board. Adding a colleague requires
   `boards.members.manage`. Each request states the permission of its set.
-- **The member manager asks too.** It reads the new member's kind, finds the set, and asks that set's permission. A
+- **The member service asks too.** It reads the new member's kind, finds the set, and asks that set's permission. A
   caller who sends `AddMemberCommand` with a guest's seat still needs `boards.guests.manage`.
 - **The member row keeps the kind.** Mira's row on Quay plan stores `guest`. The answer shows it, so a screen can show
   the team and the guests apart.
@@ -874,7 +874,7 @@ and sees nothing else.
 
 ### What you write
 
-**Adding a guest.** **Why:** the request states the guests' permission. The member manager checks the seat, finds the
+**Adding a guest.** **Why:** the request states the guests' permission. The member service checks the seat, finds the
 set from its kind, checks the role against the set, and saves.
 
 **`Harbor.Boards.Application/Boards/AddGuest/AddGuest.cs`**
@@ -884,7 +884,7 @@ namespace Harbor.Boards.Application.Boards.AddGuest;
 
 public sealed record AddGuestCommand([OnResource(BoardPermissions.ManageGuests)] BoardId Board, SeatId Seat, BoardRoleId Role) : ICommand<Board>, IBoardsRequest;
 
-public sealed class AddGuestHandler(BoardMemberManager members) : ICommandHandler<AddGuestCommand, Board>
+public sealed class AddGuestHandler(BoardMemberService members) : ICommandHandler<AddGuestCommand, Board>
 {
     // From now, with no end, in a role of the guests' set, added by the caller's seat.
     public async ValueTask<Board> Handle(AddGuestCommand command, CancellationToken cancellationToken)
@@ -965,8 +965,8 @@ dotnet build Harbor.slnx
 
 - `[OnResource(BoardPermissions.ManageGuests)] Board`: Membership's check asks `boards.guests.manage` on the board. Ada
   owns Quay plan, so she holds it.
-- `members.AddAsync(...)`: with two sets, the manager reads the seat's kind first. Mira's kind puts her in Guests. The
-  manager then asks Guests' permission, which the request's check answered already.
+- `members.AddAsync(...)`: with two sets, the service reads the seat's kind first. Mira's kind puts her in Guests. The
+  service then asks Guests' permission, which the request's check answered already.
 - A role of Team is refused with `boards.role-not-in-set`. A seat of a kind no set takes is refused with
   `boards.kind-in-no-set`.
 - `member.Kind`: the kind on the member row, `guest` for Mira and `member` for Ada. `member.InOrganization` says its

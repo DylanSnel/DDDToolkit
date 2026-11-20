@@ -59,7 +59,7 @@ A member belongs to the member list of its resource, and nothing else changes it
 | `DateTimeOffset StartsAt { get; }` | The first moment the membership counts. |
 | `DateTimeOffset? EndsAt { get; }` | The first moment it no longer counts, or `null` when it has no end. |
 | `TMemberId? AddedBy { get; }` | The member that added this one, or `null` for system work and for an owner the resource was opened with or that was named owner without being a member. |
-| `string Kind { get; }` | The member's kind of seat, such as `employee` or `stakeholder`, copied from the seat when the member is added and never changed. A seat keeps its kind, so the copy stays right. Empty only on the owner's row of a resource that is not opened yet: the member manager gives it the owner's kind before the save. Where nothing keeps kinds it is `member`. |
+| `string Kind { get; }` | The member's kind of seat, such as `employee` or `stakeholder`, copied from the seat when the member is added and never changed. A seat keeps its kind, so the copy stays right. Empty only on the owner's row of a resource that is not opened yet: the member service gives it the owner's kind before the save. Where nothing keeps kinds it is `member`. |
 | `bool InOrganization { get; }` | Whether the member's kind is inside the organization, copied with [`Kind`](#member-memberentitytid-tmemberid-troleid). A permission whose kinds name a group is answered from it, without the catalogue of kinds. |
 | `IReadOnlyList<MemberRole<TMemberId, TRoleId>> Roles { get; }` | The roles the member holds on the resource, at most one per role. A read-only view: only the member list changes them. |
 | [`AppliesAt(DateTimeOffset)`](#appliesatdatetimeoffset) | Whether the membership counts at `moment`: it has started, and has not ended. |
@@ -185,7 +185,7 @@ Membership's Entity Framework package maps the resource's collection of this cla
 public sealed class KindIsGiven : IInvariant<MemberEntity<TId, TMemberId, TRoleId>>
 ```
 
-A member row has a kind of seat. The member manager gives every row its kind, the owner's row included. A resource saved without the member manager's `OpenAsync` fails here.
+A member row has a kind of seat. The member service gives every row its kind, the owner's row included. A resource saved without the member service's `OpenAsync` fails here.
 
 It reports the package's own name for the rule, [`MembershipRefusals.MemberKindMissing`](refusals.md#membershiprefusals), and not a code of the resource: a member does not know whose it is.
 
@@ -251,7 +251,7 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-The members of one resource, with the rules about them: who is a member for which period, which roles each member holds for which period, and what the owner may not lose. The resource's aggregate holds one over its own member collection, which the package's generator writes as `Members`. Its constructor opens the list, and every other change goes through the member manager the generator writes for the member class:
+The members of one resource, with the rules about them: who is a member for which period, which roles each member holds for which period, and what the owner may not lose. The resource's aggregate holds one over its own member collection, which the package's generator writes as `Members`. Its constructor opens the list, and every other change goes through the member service the generator writes for the member class:
 
 ```csharp
 [AggregateRoot<DocumentId>]
@@ -289,7 +289,7 @@ Each method refuses what would break a rule with a coded `RefusalException`, und
 
 Two of the rules are about the whole list, which only the aggregate has, so they are checks here ([`OneMembershipPerMember`](#onemembershippermember), [`OwnerStays`](#ownerstays)) for two invariants of the aggregate to call, under the aggregate's own codes. The third, one hold per role, a member checks by itself.
 
-Whether a member or a role may go on the list at all cannot be told from the list, and neither can who may change it: the member manager asks both before it calls the list, the caller's permission that manages the members and what the application answers about who may be a member and which roles go to one.
+Whether a member or a role may go on the list at all cannot be told from the list, and neither can who may change it: the member service asks both before it calls the list, the caller's permission that manages the members and what the application answers about who may be a member and which roles go to one.
 
 **Type parameters**
 
@@ -350,7 +350,7 @@ Opens the list of a new resource: puts its owner on it, from `now` on and with n
 public TMember GiveOwnerKind(MemberKind kind)
 ```
 
-Gives the owner's row of a new resource its kind of seat, once. A row that has the same kind keeps it. The member manager calls it when it opens the resource, from what it read of the owner.
+Gives the owner's row of a new resource its kind of seat, once. A row that has the same kind keeps it. The member service calls it when it opens the resource, from what it read of the owner.
 
 **Parameters**
 
@@ -377,7 +377,7 @@ Adds a member for `period`, with no role yet: what else it may do comes with the
 
 **Parameters**
 
-- `member`: The member; the member manager has checked it may be one.
+- `member`: The member; the member service has checked it may be one.
 - `kind`: The member's kind of seat, which its row keeps.
 - `period`: When the membership counts.
 - `now`: When the member is added: what a membership it had before is judged by. Not the period's start, which may lie ahead: a membership that runs today is not over because another is to start next month.
@@ -405,9 +405,9 @@ Adds a member for `period` and gives it `role` for the same period, in one chang
 
 **Parameters**
 
-- `member`: The member; the member manager has checked it may be one.
+- `member`: The member; the member service has checked it may be one.
 - `kind`: The member's kind of seat, which its row keeps.
-- `role`: The role; the member manager has checked it may go to a member.
+- `role`: The role; the member service has checked it may go to a member.
 - `period`: When the membership, and the role, count.
 - `now`: When the member is added: what a membership it had before is judged by.
 - `by`: Who adds it, or `null` for system work.
@@ -434,7 +434,7 @@ Gives a member a role for `period`, next to whatever roles it holds already. A m
 **Parameters**
 
 - `member`: The member.
-- `role`: The role; the member manager has checked it may go to a member.
+- `role`: The role; the member service has checked it may go to a member.
 - `period`: When the role counts. It counts only while the membership does.
 - `now`: When the role is given: what the membership, and a hold of the role from before, are judged by. Not the period's start, which may lie ahead: a role held today is not over because it is given again from next month.
 - `by`: Who gives it, or `null` for system work.
@@ -498,9 +498,9 @@ The list does not keep who the owner is: the aggregate does, and keeps the answe
 
 **Parameters**
 
-- `member`: The member that is to own the resource; the member manager has checked it may be one.
+- `member`: The member that is to own the resource; the member service has checked it may be one.
 - `kind`: The new owner's kind of seat, which its row keeps when it is not on the list yet.
-- `formerOwner`: What the owner before becomes: [`FormerOwner.StaysAs<TRoleId>`](#staysastroleid) a role, which the member manager has checked may go to a member, or [`FormerOwner.Leaves`](#formerowner).
+- `formerOwner`: What the owner before becomes: [`FormerOwner.StaysAs<TRoleId>`](#staysastroleid) a role, which the member service has checked may go to a member, or [`FormerOwner.Leaves`](#formerowner).
 - `now`: When the owner is named.
 
 **Returns**: What happened, for the aggregate to keep its owner by and raise its events from.
@@ -567,7 +567,7 @@ The owner before stays a member, with no end, holding `role` from the moment the
 
 **Parameters**
 
-- `role`: The role; the member manager checks it may go to a member.
+- `role`: The role; the member service checks it may go to a member.
 
 **Type parameters**
 
@@ -941,7 +941,7 @@ An application declares nothing for it. The name follows from the class, `Board`
 | Member | Summary |
 |---|---|
 | `static abstract string MembershipName { get; }` | The resource's name, as its codes and its functions in the database are named: `boards`, so the codes are `boards.already-member` and so on, and the functions `boards_i_see` and so on. |
-| `static abstract MembershipCodes MembershipCodes { get; }` | The codes the resource refuses under: the member list's, the questions' and the member manager's. |
+| `static abstract MembershipCodes MembershipCodes { get; }` | The codes the resource refuses under: the member list's, the questions' and the member service's. |
 | `static abstract string? MembershipScope { get; }` | The scope of the system work of the module that declares the resource, its name as a scope is written: `boards` for the module `Boards`. `null` for a resource of a project that declares no module. Work begun in this scope holds every permission on the resource unless its rules say otherwise. |
 
 ### `MembersAttribute`
@@ -1080,13 +1080,13 @@ public abstract class CustomRoleAggregate<TRoleId> : AggregateRoot<TRoleId>
 
 A role of one kind of resource, kept as a row: a name, what it is for, and the permissions it gives a member that holds it. The application declares its own class with [`CustomRoleAttribute<TRoleId, TResource>`](#customroleattributetroleid-tresource), for a resource whose rules say a customer makes its roles ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions-string-ireadonlylistroleset)): roles a customer makes for itself, where fixed roles are the same for everybody.
 
-A role is made, renamed, given permissions and archived, and the role says each change that changed something to a hook of the application's class: the partial methods `OnRenamed()`, `OnPermissionsSet(set)` and `OnArchived()`, which the package's generator declares on the class. The application raises its own events there, under its own names: the role raises none. The role manager the generator writes for the class, `BoardRoleManager`, makes each change, and asks first whether the caller may: the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)).
+A role is made, renamed, given permissions and archived, and the role says each change that changed something to a hook of the application's class: the partial methods `OnRenamed()`, `OnPermissionsSet(set)` and `OnArchived()`, which the package's generator declares on the class. The application raises its own events there, under its own names: the role raises none. The role service the generator writes for the class, `BoardRoleService`, makes each change, and asks first whether the caller may: the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)).
 
 Its permissions are held to the resource's rules: a role gives only permissions the rules let a member's role give ([`MembershipRules.RolePermissions`](rules.md#membershiprules)), the permissions marked `InRoles`, and one that would give another is refused. The rules are handed to everything that changes the role, as the one declaration the application has of them, and a refusal carries the code those rules give it.
 
 An archived role gives nothing from then on and is not given again. It stays, and stays on the members that hold it, so what they held still has a name. A role made from a starter role remembers which ([`FromStarterRole`](#customrole-customroleaggregatetroleid)), and only when it is made: that is how the starter roles a customer has not made yet are found, whatever it has called the ones it has. A role called "owner" is a role like any other: the owner of a resource holds no role.
 
-A role made from a starter role follows it ([`FollowStarterRole`](#followstarterrolemembershiprules)). It remembers what the starter role gave it ([`PermissionsFromStarterRole`](#customrole-customroleaggregatetroleid)). A permission the starter role gains later is added to it, a permission the starter role loses is taken out, and what the customer changed itself stays. The manager's `FollowStarterRolesAsync` runs that for every role of a customer. Nothing else changes a role behind the customer's back.
+A role made from a starter role follows it ([`FollowStarterRole`](#followstarterrolemembershiprules)). It remembers what the starter role gave it ([`PermissionsFromStarterRole`](#customrole-customroleaggregatetroleid)). A permission the starter role gains later is added to it, a permission the starter role loses is taken out, and what the customer changed itself stays. The service's `FollowStarterRolesAsync` runs that for every role of a customer. Nothing else changes a role behind the customer's back.
 
 The class is the application's. Whose a role is, a customer's say, is a property the application adds and sets in its own constructor, and keeping one customer's roles from another's is its own rule on its own rows, as for any aggregate. That a name is not used twice is an index it declares over that property and [`Name`](#customrole-customroleaggregatetroleid).
 
@@ -1336,7 +1336,7 @@ What a new role of a resource is made from.
 | `string Name { get; init; }` | The role's name, 1 to [`CustomRoleAggregate.MaxNameLength`](#customrole-customroleaggregatetroleid) characters; white space around it is dropped. |
 | `string? Description { get; init; }` | What the role is for, at most [`CustomRoleAggregate.MaxDescriptionLength`](#customrole-customroleaggregatetroleid) characters, or nothing. |
 | `IReadOnlyCollection<string> Permissions { get; init; }` | The permissions it gives: each one a permission the resource's rules let a member's role give. |
-| `string? FromStarterRole { get; init; }` | The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync` and `FollowStarterRolesAsync`); a draft made from what a customer entered leaves it out. |
+| `string? FromStarterRole { get; init; }` | The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role service's `CreateStarterRolesAsync` and `FollowStarterRolesAsync`); a draft made from what a customer entered leaves it out. |
 | `string? Set { get; init; }` | The role set the role is in, by its name, such as `Stakeholders`, or `null` for the first set. A draft made from a starter role carries the starter role's set. |
 
 #### `CustomRoleDraft(string, string?, IReadOnlyCollection<string>, string?, string?)`
@@ -1357,7 +1357,7 @@ The primary constructor: the type's summary says what it makes.
 - `Name`: The role's name, 1 to [`CustomRoleAggregate.MaxNameLength`](#customrole-customroleaggregatetroleid) characters; white space around it is dropped.
 - `Description`: What the role is for, at most [`CustomRoleAggregate.MaxDescriptionLength`](#customrole-customroleaggregatetroleid) characters, or nothing.
 - `Permissions`: The permissions it gives: each one a permission the resource's rules let a member's role give.
-- `FromStarterRole`: The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role manager's `CreateStarterRolesAsync` and `FollowStarterRolesAsync`); a draft made from what a customer entered leaves it out.
+- `FromStarterRole`: The name of the starter role it is made from, one of the roles the resource's rules declare, or `null` for a role a customer makes. The drafts of the starter roles carry it (the role service's `CreateStarterRolesAsync` and `FollowStarterRolesAsync`); a draft made from what a customer entered leaves it out.
 - `Set`: The role set the role is in, by its name, such as `Stakeholders`, or `null` for the first set. A draft made from a starter role carries the starter role's set.
 
 ### `RolePermissionsSet`

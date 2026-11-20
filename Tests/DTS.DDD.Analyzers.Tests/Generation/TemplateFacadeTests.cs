@@ -9,8 +9,8 @@ namespace DTS.DDD.Analyzers.Tests.Generation;
 /// <summary>
 /// A package asks, with <c>[assembly: TemplateFacade]</c>, that the project that declares the application's classes
 /// gets a generic class of the package's closed over them, as a class of its own named as the package's class is
-/// without its type parameters: Tenancy's seat manager, generic over nine of the application's classes and ids, is
-/// <c>SeatManager</c> there and in every project above it, and no project writes the nine types.
+/// without its type parameters: Tenancy's seat service, generic over nine of the application's classes and ids, is
+/// <c>SeatService</c> there and in every project above it, and no project writes the nine types.
 /// <para>
 /// Most of these use the real Tenancy package, seen through metadata as an application sees it, and a module split
 /// by layer the way the sample is: each project of it is compiled with what the generators wrote, and names the
@@ -24,9 +24,9 @@ namespace DTS.DDD.Analyzers.Tests.Generation;
 /// meet in a project that sees both: DDD00075 says so there, with the line that names one of them.
 /// </para>
 /// <para>
-/// Tenancy asks for more classes than that one: a manager per aggregate, the record a tenant is provisioned from, and
+/// Tenancy asks for more classes than that one: a service per aggregate, the record a tenant is provisioned from, and
 /// its access manager, <c>TenancyAccessManager</c>, closed over the ids, each held to the same rules. These tests are
-/// about the seat manager's class; where something is said of every one, they read what is said of that one
+/// about the seat service's class; where something is said of every one, they read what is said of that one
 /// (<see cref="About"/>), and count one for each (<see cref="TenancyClasses"/>).
 /// </para>
 /// </summary>
@@ -57,12 +57,12 @@ public partial class TemplateFacadeTests
         """;
 
     /// <summary>The name the class has when nobody names it: Tenancy's class's, without its type parameters.</summary>
-    private const string Default = "SeatManager";
+    private const string Default = "SeatService";
 
     private static string ModuleAttribute(string module) => "[assembly: DTS.DDD.Abstractions.Attributes.Module(\"" + module + "\")]\n";
 
     /// <summary>
-    /// The line an application names one of Tenancy's classes with, the seat manager's unless said otherwise, in place of
+    /// The line an application names one of Tenancy's classes with, the seat service's unless said otherwise, in place of
     /// the package's name.
     /// </summary>
     private static string NamedItself(string name, string facade = Default)
@@ -73,10 +73,11 @@ public partial class TemplateFacadeTests
 
     /// <summary>Every class Tenancy asks for, by the package's names, in the order of their names.</summary>
     private static readonly string[] TenancyClasses =
-        ["InvitationManager", "OrganizationManager", "RoleManager", "SeatManager", "TenancyAccessManager", "TenantManager", "TenantToProvision"];
+        ["InvitationService", "OrganizationService", "RoleService", "SeatService", "TenancyAccessManager", "TenantService", "TenantToProvision"];
 
-    /// <summary>The aliases Tenancy asks for, of its stores, by the package's names without the I, in the order of their names.</summary>
-    private static readonly string[] TenancyAliases = ["InvitationStore", "TenancyStore"];
+    /// <summary>The aliases Tenancy asks for, of its repositories and its unit of work, by the package's names without the I, in the order of their names.</summary>
+    private static readonly string[] TenancyAliases =
+        ["InvitationRepository", "OrganizationRepository", "RoleRepository", "SeatRepository", "TenancyRepositories", "TenancyUnitOfWork", "TenantRepository"];
 
     /// <summary>Every class and alias Tenancy asks for, in the order of their names.</summary>
     private static readonly string[] TenancyNames = [.. TenancyClasses.Concat(TenancyAliases).Order(StringComparer.Ordinal)];
@@ -86,7 +87,7 @@ public partial class TemplateFacadeTests
         => string.Concat(TenancyNames.Select(facade => NamedItself(prefix + facade, facade)));
 
     /// <summary>
-    /// The one diagnostic of <paramref name="id"/> said of the class called <paramref name="name"/>, the seat manager's unless
+    /// The one diagnostic of <paramref name="id"/> said of the class called <paramref name="name"/>, the seat service's unless
     /// said otherwise: Tenancy asks for several classes, and what keeps one out often keeps them all.
     /// </summary>
     private static Diagnostic About(IEnumerable<Diagnostic> diagnostics, string id, string name = Default)
@@ -234,14 +235,14 @@ public partial class TemplateFacadeTests
     }
 
     /// <summary>A handler of the application's that takes both stores, by the names the aliases give them.</summary>
-    private static string StoreHandler(string @namespace = "Shop.Application", string store = "TenancyStore", bool invitations = true)
+    private static string RepositoriesHandler(string @namespace = "Shop.Application", string repositories = "TenancyRepositories", bool invitations = true)
         => $$"""
              namespace {{@namespace}};
 
-             public sealed class RenameSeat({{store}} store)
+             public sealed class RenameSeat({{repositories}} repositories)
              {
-                 public {{store}} Store => store;
-             {{(invitations ? "\n    public InvitationStore? Invitations { get; set; }" : string.Empty)}}
+                 public {{repositories}} Store => repositories;
+             {{(invitations ? "\n    public InvitationRepository? Invitations { get; set; }" : string.Empty)}}
              }
              """;
 

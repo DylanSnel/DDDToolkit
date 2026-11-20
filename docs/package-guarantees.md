@@ -10,7 +10,7 @@ class that proves it. The test classes are in the DTS Pro repository, under `Tes
 
 | Test project | What it runs on |
 |---|---|
-| `DTS.Tenancy.Tests`, `DTS.Membership.Tests` | C#, with the stores in memory |
+| `DTS.Tenancy.Tests`, `DTS.Membership.Tests` | C#, with the repositories in memory |
 | `DTS.Tenancy.EntityFramework.Tests`, `DTS.Membership.EntityFramework.Tests` | Entity Framework on SQLite |
 | `DTS.Tenancy.Postgres.Tests`, `DTS.Membership.Postgres.Tests` | Postgres in a container, every statement as the caller |
 | `DTS.Pro.Analyzers.Tests` | The packages' generators, and the diagnostics they report in the build |
@@ -37,7 +37,7 @@ class that proves it. The test classes are in the DTS Pro repository, under `Tes
 | The packages guarantee | Test class | Runs on |
 |---|---|---|
 | It reads its own seats and its tenant, and no unit, role, placement or other seat. | `SeatKindManagerTests`, `SeatKindStoreTests`, `OutsideSeatTests` | C#, SQLite, Postgres |
-| The managers answer it what the database's policies let it read. | `OutsideSeatTests` | Postgres |
+| The services answer it what the database's policies let it read. | `OutsideSeatTests` | Postgres |
 | Tenancy's access queries answer it its own seat alone. | `SeatKindManagerTests` | C# |
 | With `NarrowOutsideSeats` off, it reads what any seat reads, and is still placed at no unit. | `SeatKindManagerTests`, `OutsideSeatTests` | C#, Postgres |
 | The start-up check refuses a database written with other kinds, or with the setting the other way round. | `OutsideSeatTests` | Postgres |
@@ -102,7 +102,7 @@ class that proves it. The test classes are in the DTS Pro repository, under `Tes
 
 | The packages guarantee | Test class | Runs on |
 |---|---|---|
-| The member manager admits a seat by its id, whatever seats the caller reads. While `NarrowOutsideSeats` is on, a seat outside the organization adds a seat it does not read and gives it a role. | `OutsideSeatsManageMembersTests`, `SeatReadRuleTests` | SQLite, Postgres |
+| The member service admits a seat by its id, whatever seats the caller reads. While `NarrowOutsideSeats` is on, a seat outside the organization adds a seat it does not read and gives it a role. | `OutsideSeatsManageMembersTests`, `SeatReadRuleTests` | SQLite, Postgres |
 | Admitting reads whether the seat is a seat of the caller's tenant, whether it is active, and its kind, and nothing else of it. | `SeatKindManagerTests`, `OutsideSeatsManageMembersTests` | C#, SQLite, Postgres |
 | An id no seat has, a seat of another tenant and a seat that is not active get the same refusal, `member-not-active`. | `OutsideSeatsManageMembersTests`, `SeatKindManagerTests` | C#, SQLite, Postgres |
 | What the caller reads does not change. After the add the new member is a fellow member, and the caller reads no other seat. | `OutsideSeatsManageMembersTests` | SQLite, Postgres |

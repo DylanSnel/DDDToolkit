@@ -43,7 +43,7 @@ A principle here is a rule with a reason. When a design breaks one, the reason s
   provider beyond what its own job needs. Its events are domain events, and the application decides how they are
   delivered ([Delivery](domain-events.md#delivery)).
 - **App code writes no type arguments.** A package's generic classes are closed over the application's classes by the
-  generator. The application writes `SeatManager`, not a manager with nine type arguments
+  generator. The application writes `SeatService`, not a service with nine type arguments
   ([A class closed over your classes](writing-a-supporting-domain.md#a-class-closed-over-your-classes)).
 
 ## The domain
@@ -83,15 +83,15 @@ A principle here is a rule with a reason. When a design breaks one, the reason s
   moment of the check. It keeps no copy of the access data. A copy of names that the back end needs is fed by
   integration events.
 - **A package keeps its complex rules inside.** Rules such as who may give a role that manages access stay in the
-  package's managers and in its policies. The application sees a refusal with a code.
+  package's services and in its policies. The application sees a refusal with a code.
 - **The package guards its own data, and offers the rest as settings.** A package keeps its own data sound. What users
   may see is a product choice, so the package offers a default and a setting, not a fixed rule. The package does not
   try to protect itself from the developer.
 
 ## Names and the API
 
-- **Use names a .NET developer already knows.** Tenancy's managers follow ASP.NET Identity: `SeatManager.AddAsync`,
-  `RoleManager.RenameAsync`. Requests are named for what they do: `ListBoardQuery`, `EditBoardCommand`.
+- **Use names a .NET developer already knows.** Tenancy's services follow ASP.NET Identity: `SeatService.AddAsync`,
+  `RoleService.RenameAsync`. Requests are named for what they do: `ListBoardQuery`, `EditBoardCommand`.
 - **The toolkit shapes the classes it ships.** In GraphQL the toolkit names the packages' generic classes, leaves out
   their methods, and hides members marked `[PersonalData]` or `[Bookkeeping]`. The application shapes its own classes,
   and binds them by convention with opt-outs

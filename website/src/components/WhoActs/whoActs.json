@@ -41,7 +41,7 @@
         "public sealed record SignUpOrganization(string Slug, string Name)",
         "    : ICommand<Tenant>, ITenancyRequest;",
         "",
-        "public sealed class SignUpOrganizationHandler(TenantManager tenants, TenancyAccessManager access)",
+        "public sealed class SignUpOrganizationHandler(TenantService tenants, TenancyAccessManager access)",
         "    : ICommandHandler<SignUpOrganization, Tenant>",
         "{",
         "    public async ValueTask<Tenant> Handle(SignUpOrganization command, CancellationToken cancellationToken)",
@@ -111,7 +111,7 @@
         "public sealed record CreateCustomerTenant(string Slug, string Name, Guid Customer)",
         "    : ICommand<Tenant>, ITenancyRequest;",
         "",
-        "public sealed class CreateCustomerTenantHandler(TenantManager tenants)",
+        "public sealed class CreateCustomerTenantHandler(TenantService tenants)",
         "    : ICommandHandler<CreateCustomerTenant, Tenant>",
         "{",
         "    public async ValueTask<Tenant> Handle(CreateCustomerTenant command, CancellationToken cancellationToken)",
@@ -176,7 +176,7 @@
         "public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason)",
         "    : ICommand<Tenant>, ITenancyRequest;",
         "",
-        "public sealed class SuspendTenantHandler(TenantManager tenants)",
+        "public sealed class SuspendTenantHandler(TenantService tenants)",
         "    : ICommandHandler<SuspendTenant, Tenant>",
         "{",
         "    public async ValueTask<Tenant> Handle(SuspendTenant command, CancellationToken cancellationToken)",
@@ -185,7 +185,7 @@
         "",
         "// A query starts no work. The operator reads every tenant through its own database role.",
         "[Operator]",
-        "public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;"
+        "public sealed record AllTenants(string? After) : IQuery<TenantService.TenantPage>, ITenancyRequest;"
       ],
       "links": [
         {
@@ -220,7 +220,7 @@
         "The work holds every permission in Harbor Works and none in Meadow Gardens.",
         "The last-administrator rule still applies. The seeding cannot take the administrators' role from Ada by mistake.",
         "`actingSeat` adds no rights. It names the person the work is for, such as the administrator who starts an import.",
-        "A seeder runs in a service scope of its own. It resolves the managers and the access manager as a handler does."
+        "A seeder runs in a service scope of its own. It resolves the services and the access manager as a handler does."
       ],
       "calls": [
         "BeginSystemIn"
@@ -237,8 +237,8 @@
         "    {",
         "        await using var scope = scopes.CreateAsyncScope();",
         "        var access = scope.ServiceProvider.GetRequiredService<TenancyAccessManager>();",
-        "        var organization = scope.ServiceProvider.GetRequiredService<OrganizationManager>();",
-        "        var seats = scope.ServiceProvider.GetRequiredService<SeatManager>();",
+        "        var organization = scope.ServiceProvider.GetRequiredService<OrganizationService>();",
+        "        var seats = scope.ServiceProvider.GetRequiredService<SeatService>();",
         "",
         "        using (access.BeginSystemIn(Demo.Harbor, actingSeat: Demo.AdaSeat))",
         "        {",
@@ -350,7 +350,7 @@
         "Leave out `actingSeat` here. It names the person who asked for the work. With Leo as acting seat, the history would read as system work for Leo, which looks as if Leo gave himself the role.",
         "Take the tenant and the seat from `access.CurrentTenant`. Take the role and the unit from your own records. A role taken from the request would let anyone who passes name the administrators' role.",
         "Only the `GrantAsync` call runs as system work. The quiz check runs as Leo.",
-        "The handler takes `SeatManager`, so it lives in a project that sees Tenancy's classes."
+        "The handler takes `SeatService`, so it lives in a project that sees Tenancy's classes."
       ],
       "calls": [
         "BeginSystemIn"
@@ -366,7 +366,7 @@
         "    : ICommand<bool>, ITenancyRequest;",
         "",
         "public sealed class SubmitSafetyQuizHandler(",
-        "    IQuizRepository quizzes, SeatManager seats, TenancyAccessManager access)",
+        "    IQuizRepository quizzes, SeatService seats, TenancyAccessManager access)",
         "    : ICommandHandler<SubmitSafetyQuiz, bool>",
         "{",
         "    public async ValueTask<bool> Handle(SubmitSafetyQuiz command, CancellationToken cancellationToken)",
@@ -481,7 +481,7 @@
       "postgresDetail": "`tenancy.current_tenant` holds Harbor Works, and the policies find Ada's seat again from her token.",
       "kind": "seat",
       "notes": [
-        "The managers check every new seat against Ada's rights, as for one seat added by hand.",
+        "The services check every new seat against Ada's rights, as for one seat added by hand.",
         "A caller without `tenancy.seats.manage` gets `tenancy.not-permitted` from the access check.",
         "Start system work only when the caller's own rights cannot do the work."
       ],
@@ -498,7 +498,7 @@
         "public sealed record ImportSeats(OrganizationUnitId Unit, IReadOnlyList<Guid> Identities)",
         "    : ICommand<IReadOnlyList<Seat>>, ITenancyRequest;",
         "",
-        "public sealed class ImportSeatsHandler(SeatManager seats)",
+        "public sealed class ImportSeatsHandler(SeatService seats)",
         "    : ICommandHandler<ImportSeats, IReadOnlyList<Seat>>",
         "{",
         "    public async ValueTask<IReadOnlyList<Seat>> Handle(ImportSeats command, CancellationToken cancellationToken)",

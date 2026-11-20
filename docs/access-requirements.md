@@ -130,7 +130,7 @@ public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest
 - **A requirement names the permission and the ids.** It carries a permission and the ids the request names. The
   check reads everything else, such as who holds the permission and where, from where it is stored. A rule that a
   requirement cannot express, such as a rule about what is given to whom or about the current state, belongs in the
-  handler, or in the method of the package that the handler calls, such as a method of Tenancy's managers.
+  handler, or in the method of the package that the handler calls, such as a method of Tenancy's services.
 - **Every request declares a requirement.** A request that declares none is stopped when it is sent, so a forgotten
   requirement lets nobody through. When the interface is `partial`, the build reports it as
   [DDD00077](diagnostics.md#ddd00077). When it is not, the compiler reports CS0535. A request that anyone may send
@@ -445,7 +445,7 @@ public sealed record CloseStaleInvitations : ICommand, ITenantsRequest;
 public sealed record ProvisionTenant(string Slug, string Name, Guid Administrator) : ICommand<Tenant>, ITenantsRequest;
 
 [Operator]                                           // a query: nothing begins
-public sealed record AllTenants(string? After = null) : IQuery<TenantManager.TenantPage>, ITenantsRequest;
+public sealed record AllTenants(string? After = null) : IQuery<TenantService.TenantPage>, ITenantsRequest;
 ```
 
 The generator writes `[Operator]` with `[ForTenant]` as `TenancyAccess.Operator(request.Tenant)`, and a property set
@@ -748,7 +748,7 @@ public sealed record MoveSeat(
     [AtUnit(TenancyPermissions.SeatsManage)] OrganizationUnitId From,
     [AtUnit(TenancyPermissions.SeatsManage)] OrganizationUnitId To) : ICommand, ISeatsRequest;
 
-public sealed class MoveSeatHandler(SeatManager seats) : ICommandHandler<MoveSeat>
+public sealed class MoveSeatHandler(SeatService seats) : ICommandHandler<MoveSeat>
 {
     public async ValueTask<Unit> Handle(MoveSeat command, CancellationToken cancellationToken)
     {
@@ -1081,12 +1081,12 @@ flowchart LR
 ```
 
 The database can still require the permission for the save. A resource can mark a permission `ManagesMembers`. This
-is the permission that the member manager requires to change the members. Membership then adds a restrictive policy
+is the permission that the member service requires to change the members. Membership then adds a restrictive policy
 on the member tables, the lock. A member row changes only for a caller who holds that permission, and no row rule of
 the application widens this. A caller who takes themselves off passes the access check, and then the database refuses
 their row.
 
-So the member manager saves the caller's own place as the resource's own work, begun for that one save. It does this
+So the member service saves the caller's own place as the resource's own work, begun for that one save. It does this
 only when the request in hand is the one whose check read the resource, because then its check let it through in
 this handling. It saves anybody else's place as the caller, and the database checks that save like every other save
 ([The caller's own place](membership/resources-and-members.md#the-callers-own-place)).
@@ -1098,7 +1098,7 @@ this handling. It saves anybody else's place as the caller, and the database che
 public sealed record LeaveDocument(                                                      // take yourself off, or anybody with the permission
     [OnResource(DocumentPermissions.Share)] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 
-public sealed class LeaveDocumentHandler(DocumentShareManager shares, ICurrentUser user)
+public sealed class LeaveDocumentHandler(DocumentShareService shares, ICurrentUser user)
 {
     public Task<Document> HandleAsync(LeaveDocument command, CancellationToken cancellationToken)
         => user.Id is { } id && new UserId(id) == command.Member
@@ -1127,7 +1127,7 @@ alternative without a row rule.
 ```mermaid
 flowchart LR
     Operator["<b>An operator</b>"] --> Check{"<b>TenantAuditLog</b><br/><small>Any(operator, seats.manage)</small>"}
-    Manager["<b>A seat manager</b>"] --> Check
+    Manager["<b>A seat service</b>"] --> Check
     Check -- "operator" --> OperatorRule["<b>Operators read<br/>the audit log</b><br/><small>row rule</small>"]
     Check -- "seats.manage" --> ManagerRule["<b>Seat managers read<br/>the audit log</b><br/><small>row rule</small>"]
     OperatorRule --> Rows[("<b>Audit rows</b><br/><small>of every tenant</small>")]
@@ -1233,7 +1233,7 @@ The pipeline begins one kind of system work itself: the operator work of a comma
 operator through. The work is recorded as that operator.
 
 - **Trusted code starts it, around the send or inside the handler.** A seeder, a job or an import starts it. Inside
-  it, the code either calls the package's manager directly, without a request, or sends a request. The sample's seeding does
+  it, the code either calls the package's service directly, without a request, or sends a request. The sample's seeding does
   both. It provisions its tenants without a request, and sends `MarkTenantAsDemo` in each tenant. A handler starts
   system work itself for the one step its caller may not do, as the registration that
   [provisions a tenant](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) does.
@@ -1246,7 +1246,7 @@ operator through. The work is recorded as that operator.
     test's list of requests that anyone may send ([Testing the requirements](#testing-the-requirements)), so a review
     sees the decision. Refuse everyone else in the handler.
   - When only trusted code ever runs the work, call the work inside the scope. No request is needed.
-- **The handler refuses everyone except system work.** The handler, or the manager of the package it calls, checks
+- **The handler refuses everyone except system work.** The handler, or the service of the package it calls, checks
   which caller it runs as. It refuses every other caller with `access.system-only` (`ToolkitRefusals.SystemOnly`).
   - `user.RequireSystemWork()` on `ICurrentUser` does this in any host.
   - In a tenant, Tenancy's access manager returns it together with the tenant:
@@ -1291,7 +1291,7 @@ using (access.BeginSystemIn(tenant.Id))
 [InTenant]
 public sealed record MarkTenantAsDemo : ICommand<Tenant>, ITenantsRequest;
 
-public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessManager access) : ICommandHandler<MarkTenantAsDemo, Tenant>
+public sealed class MarkTenantAsDemoHandler(TenancyRepositories store, TenancyAccessManager access) : ICommandHandler<MarkTenantAsDemo, Tenant>
 {
     public async ValueTask<Tenant> Handle(MarkTenantAsDemo command, CancellationToken cancellationToken)
     {
@@ -1567,7 +1567,7 @@ nothing for a handler while it does this. It returns:
 Any other exception the check throws comes out unchanged. This includes a `ConcurrencyConflictException`, which means
 the resource changed since the version the request named. It says nothing about whether the caller may act. A request
 that anyone may send passed without asking a check, and passes again the same way. Only the requirement the request
-declared is asked again. A rule that a handler or a package's manager checks itself is not part of it.
+declared is asked again. A rule that a handler or a package's service checks itself is not part of it.
 
 The toolkit calls it when the policies or a guard refuse a save that the check allowed. The answer tells two cases
 apart: the caller's permissions changed in the meantime, or C# and the policies apply a rule differently

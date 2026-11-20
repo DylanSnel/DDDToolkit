@@ -45,18 +45,18 @@ outbox.AddTenancyInvitationEvents<InvitationId>();
 ```
 
 - A context that names its tables passes the same `TenancyTableNames` as it passes to `AddTenancy`.
-- `services.AddTenancyInvitations<TContext>()` registers `InvitationManager`, which the generator writes for your
-  classes beside the other managers. The generator writes both only in a project that declares an invitation class.
+- `services.AddTenancyInvitations<TContext>()` registers `InvitationService`, which the generator writes for your
+  classes beside the other services. The generator writes both only in a project that declares an invitation class.
 - A database in use needs a migration. On Postgres it also needs a new export of the access files.
 
 ## Issuing and accepting
 
-`InvitationManager.IssueAsync` returns the new invitation and its token. It returns the token this once. Your code
+`InvitationService.IssueAsync` returns the new invitation and its token. It returns the token this once. Your code
 sends the token to the person. Accepting needs no tenant, because the token identifies the invitation and so its
 tenant.
 
 ```csharp
-public sealed class InviteColleague(InvitationManager invitations, IShopMail mail)
+public sealed class InviteColleague(InvitationService invitations, IShopMail mail)
 {
     public async Task HandleAsync(string address, OrganizationUnitId unit, RoleId role, CancellationToken cancellationToken)
     {
@@ -71,7 +71,7 @@ public sealed class InviteColleague(InvitationManager invitations, IShopMail mai
 // The page calls this route after the person signs in.
 app.MapPost("/invitations/accept", async (
     AcceptInvitation request,
-    InvitationManager invitations,
+    InvitationService invitations,
     CancellationToken cancellationToken) =>
 {
     var accepted = await invitations.AcceptAsync(request.Token, verifiedAddress: null, cancellationToken,
@@ -88,7 +88,7 @@ app.MapPost("/invitations/accept", async (
 - `ListOpenAsync` returns the open invitations as your invitation class, the soonest to end first.
 - `CancelAsync` cancels one invitation and returns it.
 
-The reference lists every member of `InvitationManager` ([Invitations](reference/managers.md#invitations)).
+The reference lists every member of `InvitationService` ([Invitations](reference/services.md#invitations)).
 
 ## Who may issue an invitation
 
@@ -166,12 +166,12 @@ through a handler of yours:
 
 ```csharp
 public sealed record InviteGuestCommand([OnResource(BoardPermissions.ManageGuests)] BoardId Board, string Address)
-    : ICommand<InvitationManager.IssuedInvitation>, IBoardsRequest;
+    : ICommand<InvitationService.IssuedInvitation>, IBoardsRequest;
 
-public sealed class InviteGuestHandler(IBoardRepository boards, TenancyAccessManager access, InvitationManager invitations)
-    : ICommandHandler<InviteGuestCommand, InvitationManager.IssuedInvitation>
+public sealed class InviteGuestHandler(IBoardRepository boards, TenancyAccessManager access, InvitationService invitations)
+    : ICommandHandler<InviteGuestCommand, InvitationService.IssuedInvitation>
 {
-    public async ValueTask<InvitationManager.IssuedInvitation> Handle(InviteGuestCommand command, CancellationToken cancellationToken)
+    public async ValueTask<InvitationService.IssuedInvitation> Handle(InviteGuestCommand command, CancellationToken cancellationToken)
     {
         // The request's check let the caller through, so the caller manages the board's guests.
         var board = await boards.FindAsync(command.Board, cancellationToken) ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
@@ -198,7 +198,7 @@ public sealed class InviteGuestHandler(IBoardRepository boards, TenancyAccessMan
   with `42501`, because no policy lets a seat without `tenancy.externals.invite` add it. The same row written as system
   work goes through.
 - **The guest then adds the new seat.** Once the person accepts, the guest adds the seat to the board through the
-  member manager ([A kind outside the organization that manages members](../membership/permissions-and-roles.md#a-kind-outside-the-organization-that-manages-members)).
+  member service ([A kind outside the organization that manages members](../membership/permissions-and-roles.md#a-kind-outside-the-organization-that-manages-members)).
 
 ## Who accepts
 
@@ -259,7 +259,7 @@ argument names. [TenancyRefusals](reference/refusals.md#tenancyrefusals) in the 
 
 - `BearerTokens.New()` in the toolkit's core makes the token: 32 random bytes, written as 43 URL-safe characters
   (base64url without padding). You can use `BearerTokens` for links of your own too.
-- The store keeps only the token's SHA-256 digest. Nobody can guess 256 random bits, so the token needs no rate
+- The repositories keep only the token's SHA-256 digest. Nobody can guess 256 random bits, so the token needs no rate
   limit of its own. Nobody can reverse the digest, so the digest needs no salt.
 - The token appears in no event, refusal or log of the package. Keep it out of query strings, because servers log
   them.

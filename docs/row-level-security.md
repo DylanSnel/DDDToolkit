@@ -2450,7 +2450,7 @@ the two cases apart, and answers a hidden row with the same refusal.
   - Tenancy's checks of a tenant's last administrator, of the rights rows (`SeatRights`) and the paths, and of the
     rows that stay fixed raise `check_violation`.
   - An [event log](entity-framework.md#an-event-log)'s guard raises `55000`.
-  - Tenancy's store answers the last-administrator check with a refusal of its own.
+  - Tenancy's repositories answer the last-administrator check with a refusal of its own.
 - **Only a save is answered.** `DatabaseRefusalInterceptor` sees what a `SaveChanges` threw. A statement of yours,
   such as an `ExecuteUpdate`, an `ExecuteDelete` or SQL, is not a save. An access guard's refusal of such a statement
   reaches you as the `PostgresException` itself. To answer it with `access.refused` too, read it with
@@ -2974,8 +2974,8 @@ writes, or a dispatcher of yours written with `async` and `await`
 What runs again is the requirement that the request declared:
 
 - A rule that a handler checks itself, beyond what its request declared, is not part of the requirement.
-- What a package's manager checks beyond the requirement is not part of it either. A request handed to one of
-  Tenancy's managers declares what the manager checks first, such as `TenancyAccess.InTenant()`, and the manager
+- What a package's service checks beyond the requirement is not part of it either. A request handed to one of
+  Tenancy's services declares what the service checks first, such as `TenancyAccess.InTenant()`, and the service
   checks the rest itself.
 - A change of permissions against either one still gives a warning. The warning names the requirement that ran
   again, so it shows how little that requirement checked.

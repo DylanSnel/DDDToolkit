@@ -80,7 +80,7 @@ flowchart TD
 - `MemberAccess.Sees` requires that the caller sees the document, whether or not the caller holds the permission.
   Like `On`, it refuses with `documents.not-found`, compares the version and keeps the hold.
 - Where a permission is marked `ManagesMembers`, the database lets only callers with that permission write member
-  rows. A member without it cannot remove its own row. So the member manager saves that change as the resource's own
+  rows. A member without it cannot remove its own row. So the member service saves that change as the resource's own
   work, for the request this check let through
   ([The caller's own place](resources-and-members.md#the-callers-own-place)).
 
@@ -99,7 +99,7 @@ longer allowed:
 | Step | What it checks | Refused with |
 |---|---|---|
 | 1. The request's check | The caller holds the permission. Then, the version the caller named is the current one. | `not-found`, `not-permitted`, 409 |
-| 2. The load by id at the version named: the member manager's `expectedVersion`, or `db.ExpectVersion(document, command.ExpectedVersion)` in a handler of yours | The checked resource still exists at the version named. With no version named, any version passes. | 404 when the resource is gone, 409 |
+| 2. The load by id at the version named: the member service's `expectedVersion`, or `db.ExpectVersion(document, command.ExpectedVersion)` in a handler of yours | The checked resource still exists at the version named. With no version named, any version passes. | 404 when the resource is gone, 409 |
 | 3. The save | The resource is still at the version the handler loaded. | 409 |
 | 4. The aggregate's rules | Rules that apply at any version, such as "an archived document takes no member" and "the owner stays". | your codes |
 | 5. The database, which checks every row as the caller ([On Postgres](postgres.md)) | The write, for a caller who lost every permission that writes the resource. | 403 `access.refused`. A resource that is hidden by then is a 404 at the load. |
@@ -125,10 +125,10 @@ The default path has three limits:
   permission.
 - **When a handler is reached around its checks, only the database checks the write**, against what the caller may
   do. Add a test that proves your request sender runs the checks. In such a handler no checked request is in hand, so
-  a member manager asks the access manager for the caller's permission before it changes anything. No row rule restricts a save
+  a member service asks the access manager for the caller's permission before it changes anything. No row rule restricts a save
   that runs as system work. So begin system work only for a request whose check passed.
   `RequestInHand.Current.Request` is that request
-  ([The request in hand](../access-requirements.md#the-request-in-hand)). The member manager does this for a change
+  ([The request in hand](../access-requirements.md#the-request-in-hand)). The member service does this for a change
   to the caller's own place.
 - **The save is not tied to the version the check read.** For a caller who named no version, the last write wins.
   [The expert hold](#the-expert-hold) adds that tie.
@@ -141,7 +141,7 @@ a query of your own, through `WhereIHold`. Each answer runs one statement. The e
 
 ### The access manager
 
-[`MembershipAccessManager<Document>`](reference/managers.md#membershipaccessmanagertresource) answers questions about
+[`MembershipAccessManager<Document>`](reference/services.md#membershipaccessservicetresource) answers questions about
 the current caller and documents. `AddDocumentMembership` registers it per scope, and a handler takes it like any
 service. Every answer is filtered by the kind on the caller's member row
 ([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)). Each question takes the
@@ -182,7 +182,7 @@ public sealed class ShowDocumentHandler(FilingContext db, MembershipAccessManage
   the command runs.
 - **Each question answers for the caller who is current when the question runs.** Inside system work that the
   handler began, a question answers for the system work.
-- **The access manager answers what a caller holds.** The member manager asks it for the permission marked
+- **The access manager answers what a caller holds.** The member service asks it for the permission marked
   `ManagesMembers` before a change. A rule beyond that permission is yours
   ([Who may give a role](permissions-and-roles.md#who-may-give-a-role)).
 
@@ -336,7 +336,7 @@ A save that changes a resource with members, or one of its members or roles, the
 |---|---|
 | the resource the check read, at that version | saved |
 | that resource, changed since the check, whether or not a version was named | 409, whatever changed |
-| a resource that no check of the request read: a handler called directly, a transport that bypasses the pipeline, a save after the handling returned, or another resource than the request names | refused with `InvalidOperationException`. Nothing is saved. A member manager refuses a caller without the permission before that, with `not-permitted`. |
+| a resource that no check of the request read: a handler called directly, a transport that bypasses the pipeline, a save after the handling returned, or another resource than the request names | refused with `InvalidOperationException`. Nothing is saved. A member service refuses a caller without the permission before that, with `not-permitted`. |
 | another resource, as system work begun by trusted code (`access.BeginSystem(scope)` in a scope the rules name, or `access.BeginSystemBypassingRowAccess()`) | saved. A resource the check read is still tied to its version. |
 | a new resource | saved |
 

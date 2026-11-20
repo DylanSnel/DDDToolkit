@@ -69,14 +69,14 @@ Tenancy's save check.
 
 ### The registration
 
-`AddTenancyPostgres()` ([reference](reference/managers.md#addtenancypostgresiservicecollection)) does four things:
+`AddTenancyPostgres()` ([reference](reference/services.md#addtenancypostgresiservicecollection)) does four things:
 
 - Sets the caller's tenant on every connection ([Passing the tenant to Postgres](#passing-the-tenant-to-postgres)).
 - Requires an explicit current user. Work that never says who it runs as fails. Without this rule, that work would
   run as system work, past every policy
   ([Requiring an explicit current user](../row-level-security.md#requiring-an-explicit-current-user)).
 - Leaves [the rights](#how-rights-are-written) to the database, by turning on
-  `TenancyStoreOptions.DatabaseKeepsRights`.
+  `TenancyDatabaseOptions.DatabaseKeepsRights`.
 - Turns the refusal of the administrator trigger into `tenancy.last-admin`, and registers the
   [start-up checks](#the-start-up-checks).
 
@@ -136,8 +136,8 @@ statement that fixes it.
 
 ### What Postgres refuses
 
-Some rules only the database can check, for example when two requests race for one slug. The manager cannot see
-the other request. Postgres refuses the second save, and the caller gets the same refusal that the manager gives
+Some rules only the database can check, for example when two requests race for one slug. The service cannot see
+the other request. Postgres refuses the second save, and the caller gets the same refusal that the service gives
 for that rule ([`TenancyRefusals`](reference/refusals.md#tenancyrefusals)):
 
 | Refused by | Refusal |
@@ -316,8 +316,8 @@ one seat of the caller's tenant. To a signed-in user it returns an active seat a
 
 | Reader | Reads through |
 |---|---|
-| A seat, through Tenancy's managers | The tables, under the [policies](#what-the-policies-check). |
-| A manager that needs other seats' rights | Three owner-run functions ([Functions about other seats' rights](#functions-about-other-seats-rights)). |
+| A seat, through Tenancy's services | The tables, under the [policies](#what-the-policies-check). |
+| A service that needs other seats' rights | Three owner-run functions ([Functions about other seats' rights](#functions-about-other-seats-rights)). |
 | A module | Six functions that run as the caller ([Read functions for modules](#read-functions-for-modules)). |
 | System work in a tenant | The tables, with every row of its tenant. |
 | System work in no tenant | Four owner-run functions ([Reads across tenants](#reads-across-tenants)). |
@@ -337,23 +337,23 @@ Replace a default with a read rule on your class. Write it like any
 
 | Table | Default for a signed-in user | Replaced by a rule on | Stays, whatever your rule says |
 |---|---|---|---|
-| Seats | The tenant's seats, and the person's own seats in every tenant. | Your seat class. | The person's own seats, because the tenant picker and the history need them. A seat that manages seats, grants or units anywhere, or roles for the whole tenant, reads every seat of the tenant, because the managers and policies load them. While `NarrowOutsideSeats` is on, a seat outside the organization reads only its own seats and the seats of its fellow members, whatever your rule says ([What a seat outside the organization reads](#what-a-seat-outside-the-organization-reads)). |
+| Seats | The tenant's seats, and the person's own seats in every tenant. | Your seat class. | The person's own seats, because the tenant picker and the history need them. A seat that manages seats, grants or units anywhere, or roles for the whole tenant, reads every seat of the tenant, because the services and policies load them. While `NarrowOutsideSeats` is on, a seat outside the organization reads only its own seats and the seats of its fellow members, whatever your rule says ([What a seat outside the organization reads](#what-a-seat-outside-the-organization-reads)). |
 | Invitations | The invitations at a unit where the seat manages seats. An invitation from outside the organization, also at a unit where the seat holds `tenancy.externals.invite`, and for its issuer. | Your invitation class. | The same invitations. Your rule can only add readers. |
 | Tenants, Organizations, Roles and the rest | As [What the policies check](#what-the-policies-check) says. | None. The export refuses a read rule here. | The tenant picker reads the tenants. Tenancy's queries read the roles as their caller. The other tables hold an organization's rows, a seat's rows, or Tenancy's own rows. |
 
 - The export writes a rule on your seat or invitation class as a policy that allows `Read`. That policy replaces the
   policy that Tenancy marked as a default ([Policies a package ships](../row-level-security.md#policies-a-package-ships)).
   A rule without `To` applies to the default's roles. The export limits your rule to the calling seat's tenant.
-- Your rule breaks no manager method. The package's tests run every manager method under a rule that lets a member
+- Your rule breaks no service method. The package's tests run every service method under a rule that lets a member
   read only its own seat.
 - The export refuses a rule on your seat class that allows anything but `Read`. It also refuses a rule whose `To`
   names a role that the default does not cover. To narrow the default, write a [restrictive rule](#restrictive-rules).
 
 | Your rule changes | Your rule leaves unchanged |
 |---|---|
-| Your queries, the seats that `SeatManager` reads, `tenant_seats_with_kinds()` and `ITenancyQueries.Seats()`. | Tenancy's queries about the caller and about rights (`current_seat`, `seats_in_my_units`, `seats_holding_permission_at` …). These functions run as their owner. |
+| Your queries, the seats that `SeatService` reads, `tenant_seats_with_kinds()` and `ITenancyQueries.Seats()`. | Tenancy's queries about the caller and about rights (`current_seat`, `seats_in_my_units`, `seats_holding_permission_at` …). These functions run as their owner. |
 | Your entities on the seat class. | Placements and grants. Every member still reads every seat's id and units. Your rule hides the seat's row (the identity and your fields), and other members still see that the seat exists. |
-| A module's rule on `tenant_seats_with_kinds()`. It refuses a seat outside your rule as it refuses a seat that does not exist. | Writes, which stay Tenancy's. A [column rule](#who-may-change-a-seats-columns) still guards your fields. System work and operators. [Membership](../membership/overview.md)'s member manager and kind guard, which read the one seat they admit through `seat_to_admit(seat)`. |
+| A module's rule on `tenant_seats_with_kinds()`. It refuses a seat outside your rule as it refuses a seat that does not exist. | Writes, which stay Tenancy's. A [column rule](#who-may-change-a-seats-columns) still guards your fields. System work and operators. [Membership](../membership/overview.md)'s member service and kind guard, which read the one seat they admit through `seat_to_admit(seat)`. |
 
 <details>
 <summary>Show the code: two read rules, their building blocks, and the policy the export writes</summary>
@@ -472,7 +472,7 @@ CREATE POLICY "Only onboarded seats read the organization (select) for authentic
   another class than your seat class gives [DDD00101](../diagnostics.md#ddd00101). In a module that does not map the
   seats, use `CurrentSeatId` for the id alone.
 - **System work and owner-run functions are not narrowed.** The restrictive policy applies to signed-in users, and
-  owner-run functions read past every policy. The package's tests run every manager method under such a rule.
+  owner-run functions read past every policy. The package's tests run every service method under such a rule.
 - **A seat that the rule keeps out still reads:**
   - the name, path and depth of its own units and of the units it asks for (`units_named()`, which
     `UnitsByIdAsync` and `WhoAmIAsync` call). So a seat in its onboarding can show the name of the unit it is placed
@@ -498,7 +498,7 @@ Harbor Works. Her seat reads:
 | Invitations, the access history | Nothing. The seat holds no permission. |
 | Tenants, TenancyAccessRevisions | The same rows as any seat. The tenant picker and the access revision need them. |
 | `units_named(ids)`, `seats_in_my_units()` | No row. |
-| `seat_to_admit(seat)` | The same row as any seat: the kind of that one active seat of its tenant. A resource's member manager admits a seat through it. |
+| `seat_to_admit(seat)` | The same row as any seat: the kind of that one active seat of its tenant. A resource's member service admits a seat through it. |
 | `identity_tenant_names()`, `current_seat_row()` | The same rows as any seat. |
 
 - The export writes a restrictive policy named "Outside seats read only themselves" on Organizations,
@@ -509,12 +509,12 @@ Harbor Works. Her seat reads:
   permission, and a seat outside the organization holds none.
 - `current_seat_in_organization()` runs as its owner. It returns true for system work and for a seat of a kind inside
   the organization.
-- In C#, the managers and `db.Tenancy()` return the same, also on a database without RLS. `ListUnitsAsync`,
-  `RoleManager.ListAsync` and `RoleManager.ByIdAsync` return nothing. `SeatManager.ListAsync` and
-  `SeatManager.ByIdAsync` return the caller's own seat and its fellow members. `OverviewAsync` of a fellow member
+- In C#, the services and `db.Tenancy()` return the same, also on a database without RLS. `ListUnitsAsync`,
+  `RoleService.ListAsync` and `RoleService.ByIdAsync` return nothing. `SeatService.ListAsync` and
+  `SeatService.ByIdAsync` return the caller's own seat and its fellow members. `OverviewAsync` of a fellow member
   returns the seat alone. `OverviewAsync` of any other seat is refused with `tenancy.seat-not-found`.
   `UnitsByIdAsync` returns no unit. `ITenancyQueries.Seats()` returns the caller's own seat only.
-- Membership's member manager admits a new member through `ITenancyQueries.SeatToAdmitAsync`, which reads that one
+- Membership's member service admits a new member through `ITenancyQueries.SeatToAdmitAsync`, which reads that one
   seat by its id whatever the caller reads. A seat outside the organization whose role manages a resource's members
   adds a seat it does not read. Once that seat is a member, the fellow-seat rule shows it to the caller
   ([A kind outside the organization that manages members](../membership/permissions-and-roles.md#a-kind-outside-the-organization-that-manages-members)).
@@ -529,7 +529,7 @@ references the other:
   resource, a static property that names the resource's id type
   ([Kinds of seat and fellow members](../membership/beside-an-organization.md#kinds-of-seat-and-fellow-members)). You
   mark nothing yourself.
-- In C#, the join registers an `ISeatFellows<SeatId>` per resource. `SeatManager` asks each one once per read, before it
+- In C#, the join registers an `ISeatFellows<SeatId>` per resource. `SeatService` asks each one once per read, before it
   reads the seats.
 - On Postgres, the export writes `fellow_seats()` from the marks. Its body reads each resource's `fellow_members`
   function as the caller. It is written with `check_function_bodies` off, because Tenancy's access file runs before the
@@ -627,8 +627,8 @@ The policies and your rules call these SQL functions:
 | `identity_tenants()` | Every tenant where the caller's identity has a seat, of any status. | Owner | The seat directory |
 | `identity_tenant_names()` | The ids, slugs and organization names of those tenants. Only signed-in users may run it. | Owner | The tenant picker, a seat's overview |
 | `unit_parent(unit)` | A unit's parent as it was before the statement. | Owner | The units' policies |
-| `units_named(ids)` | The units of the seat's tenant among the ids, with name, path from the root and depth. No row for a seat outside the organization while `NarrowOutsideSeats` is on. Only signed-in users may run it. | Owner | `OrganizationManager.UnitsByIdAsync` |
-| `seat_to_admit(seat)` | The seat of the caller's tenant with that id: its kind, whether the kind is inside the organization, and whether the seat is active. No row for a seat of another tenant or an id no seat has. A signed-in user gets an active seat alone, so a seat that is not active gives no row either. The scoped system role gets a seat of the tenant of its work, whatever its status. It answers one id, so it lists no seats. | Owner | `ITenancyQueries.SeatToAdmitAsync`, Membership's member manager and kind guard |
+| `units_named(ids)` | The units of the seat's tenant among the ids, with name, path from the root and depth. No row for a seat outside the organization while `NarrowOutsideSeats` is on. Only signed-in users may run it. | Owner | `OrganizationService.UnitsByIdAsync` |
+| `seat_to_admit(seat)` | The seat of the caller's tenant with that id: its kind, whether the kind is inside the organization, and whether the seat is active. No row for a seat of another tenant or an id no seat has. A signed-in user gets an active seat alone, so a seat that is not active gives no row either. The scoped system role gets a seat of the tenant of its work, whatever its status. It answers one id, so it lists no seats. | Owner | `ITenancyQueries.SeatToAdmitAsync`, Membership's member service and kind guard |
 | `permission_manages_access(permission)` | Whether your catalogue marks the permission as managing access. | Caller | `TenancyCatalogue.ManagesAccess` |
 | `permission_is_contained(permission)` | Whether a seat hands the permission on only where it holds it. True for permissions that manage access, while [containment](roles-and-permissions.md#containment-on-or-off) is on. | Caller | `ContainAccessManagingPermissions` |
 | `starter_role_permissions(starter_role)` | The permissions a copy of that starter role holds, implied ones included. Null for an unknown starter role. | Caller | `TenancyCatalogue.StarterRoles` |
@@ -768,7 +768,7 @@ access function.
 ## What the policies check
 
 Every command stays in the caller's tenant. Inside the tenant, a signed-in user reads what members read through the
-managers. A signed-in user writes where the manager requires the permission:
+services. A signed-in user writes where the service requires the permission:
 
 | Table | Reads | Writes |
 |---|---|---|
@@ -788,7 +788,7 @@ managers. A signed-in user writes where the manager requires the permission:
 - **A seat outside the organization** reads its own seats, its tenant and the revision while `NarrowOutsideSeats` is
   on, and none of the other rows above
   ([What a seat outside the organization reads](#what-a-seat-outside-the-organization-reads)).
-- **A seat takes away its own grants and placements** without the permissions the managers require. Taking away
+- **A seat takes away its own grants and placements** without the permissions the services require. Taking away
   never gives access. The same save removes the seat's permissions before the rows that need them.
 
 ### Roles that manage access
@@ -806,15 +806,15 @@ managers. A signed-in user writes where the manager requires the permission:
 - A copy of a starter role names its starter role (`FromStarterRole`). It holds the permissions that
   `starter_role_permissions` returns for that starter role. The copy keeps that list for the next
   [sync of the starter roles](roles-and-permissions.md#starter-roles-after-provisioning). A settings manager adds only such
-  copies. A role manager may also add a role made by hand, which names no starter role.
+  copies. A role service may also add a role made by hand, which names no starter role.
 
 ### How rights are written
 
 - The trigger `tenancy_rights_follow_grants` on the grants, the seats and the roles writes the rights that each
   change reaches, in the same statement, whoever wrote the row. It writes one right per live permission of an active
   role granted to an active seat, and only the rows that differ. No policy lets any caller write a right.
-- The trigger takes no lock. Two transactions that write past the managers at the same time do not see each other's
-  rows. The managers avoid this, because each command of a tenant waits for the command before. Past the managers,
+- The trigger takes no lock. Two transactions that write past the services at the same time do not see each other's
+  rows. The services avoid this, because each command of a tenant waits for the command before. Past the services,
   a right written from a permission that another transaction removes at the same time is refused by trigger 2 when
   the second transaction commits. A right left out because its permission was being added at the same time is
   written the next time the tenant's rights are written again.
@@ -833,7 +833,7 @@ their owner, and only signed-in users may run them. A seat that does not match t
 | `permissions_a_unit_move_changes(parent, new_parent)` | The rights that a move between the two parents changes: the caller's own rights, and anyone's access-managing right that reaches one parent and not the other. | A seat with `tenancy.units.manage` at both parents. |
 | `seats_holding_permission_at(permission, unit)` | The active seats that hold the permission live at the unit or above. | Each holder whose grant there the caller may read. |
 
-- The store calls the first two, for the last administrator and for a move. `ITenancyQueries.SeatsHoldingPermissionAt`
+- The repositories call the first two, for the last administrator and for a move. `ITenancyQueries.SeatsHoldingPermissionAt`
   calls the third, inside a query of yours.
 - The application's clock checks a move, and the database's clock computes what the move changes. When a grant of
   the mover's starts or ends in between, the move fails with a `ConcurrencyConflictException`. Read again and retry.
@@ -858,8 +858,8 @@ their owner, and only signed-in users may run them. A seat that does not match t
 
 ### The triggers
 
-Besides the rights trigger, nine triggers check every role, the tables' owner included. A manager trips trigger 1
-only in a race, and trigger 6 only when the caller loses a permission between check and save. A manager never trips
+Besides the rights trigger, nine triggers check every role, the tables' owner included. A service trips trigger 1
+only in a race, and trigger 6 only when the caller loses a permission between check and save. A service never trips
 the others.
 
 | Trigger | Enforces | When |
@@ -877,8 +877,8 @@ the others.
 Triggers 6 and 7 check seats only. System work and the tables' owner pass, so a migration can fill the
 `FromStarterRole` column of older rows.
 
-- Triggers 1 to 4, 8 and 9 enforce what may never happen, and raise `check_violation`. A manager that trips one of
-  them has a bug. The store turns trigger 1 into the refusal `tenancy.last-admin`, because a race can trip it.
+- Triggers 1 to 4, 8 and 9 enforce what may never happen, and raise `check_violation`. A service that trips one of
+  them has a bug. The repositories turns trigger 1 into the refusal `tenancy.last-admin`, because a race can trip it.
 - Triggers 5 to 7 are access guards. They raise `42501` with the toolkit's hint, the same as a policy refusal.
 
 Two more triggers are described on other pages. One keeps an invitation's terms fixed ([Invitations](invitations.md)).
@@ -898,7 +898,7 @@ A save that a policy or an access guard denies fails with `access.refused` ("not
 Before the toolkit logs the refusal, it runs the request's access check again
 ([When the policies refuse what C# allowed](../row-level-security.md#when-the-policies-refuse-what-c-allowed)). A
 request that requires `AtTenant` or `AtUnit` is then refused by that check too, and logged as information. A check
-that a manager makes beyond its request's declaration (behind `InTenant()`) is logged as a warning.
+that a service makes beyond its request's declaration (behind `InTenant()`) is logged as a warning.
 
 ## Who may change a seat's columns
 
@@ -918,7 +918,7 @@ has its own guard:
   seat at the caller's unit. A policy limited to the seat's units would decide for you which of your fields a grants
   manager writes. The cost is that a grants manager may bump any seat's version.
 - **The identity** links the seat to a person's account. Another identity would hand the seat and its permissions to
-  that account. Another tenant or id would strand the seat's placements, grants and rights. The managers write these
+  that account. Another tenant or id would strand the seat's placements, grants and rights. The services write these
   three columns only in the insert. To link a seat to the identity that another sign-in provider gives, run a one-off
   as Tenancy's system work (code below).
 - **Your columns.** Where your command requires more, add a column rule. A column rule adds no policy, so a table that
@@ -995,11 +995,11 @@ the whole tenant reads every grant, because a change of a role reaches every sea
 | `tenancy.roles.manage` for the whole tenant | Every grant of the tenant | Ada and Maud, Access admins |
 | `tenancy.roles.manage` below the root | Its own grants, because it changes no role there | |
 
-**The managers work within this limit.**
+**The services work within this limit.**
 
-- The store loads a seat with the grants its caller may read, and every command acts on those grants. A command at
+- The repositories load a seat with the grants its caller may read, and every command acts on those grants. A command at
   a unit requires its permission there. A status change reaches every grant, so it requires `tenancy.seats.manage`
-  for the whole tenant. `SeatManager.OverviewAsync` reads through this policy too
+  for the whole tenant. `SeatService.OverviewAsync` reads through this policy too
   ([Another seat's overview](names-and-languages.md#another-seats-overview)).
 - The seats permission reads grants because withdrawing a placement removes its grants. `WithdrawAsync` then also
   requires `tenancy.grants.manage`, and the placements' policy keeps a placement that still has grants.
@@ -1015,7 +1015,7 @@ the whole tenant reads every grant, because a change of a role reaches every sea
 
 ## Rules checked only in C#
 
-The policies check each permission where its manager requires it. The managers alone check the rules below. The
+The policies check each permission where its service requires it. The services alone check the rules below. The
 rules marked *containment* go away when you turn [containment](roles-and-permissions.md#containment-on-or-off) off.
 
 - *containment*: how long a grant of an access-managing role may run, compared with the giver's own hold;
@@ -1030,7 +1030,7 @@ rules marked *containment* go away when you turn [containment](roles-and-permiss
 - a change of state that a policy cannot tell apart from another change of the row, such as archiving a unit;
 - what a seat needs to take away its own grants and placements, and which starter roles a tenant's shape requires.
 
-**Your columns** are checked by neither the policies nor Tenancy's managers. Guard them with your command's rule in
+**Your columns** are checked by neither the policies nor Tenancy's services. Guard them with your command's rule in
 C#, and with a column rule in the database ([Who may change a seat's columns](#who-may-change-a-seats-columns)).
 
 **A retired permission** stops counting in C# at once. In SQL, it stops counting once the access file that rewrites

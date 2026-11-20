@@ -62,7 +62,7 @@ public sealed class DomainBehaviourFieldsInterceptor : TypeInterceptor
     }
 
     // An entity, a value object, or a class of a package that names itself with [DisplayName], such as Tenancy's
-    // SeatManager.SeatOverview: its methods, such as UnitOf, are behaviour and no field.
+    // SeatService.SeatOverview: its methods, such as UnitOf, are behaviour and no field.
     private static bool IsDomainType(Type? type)
         => type is not null
             && (typeof(IEntity).IsAssignableFrom(type)

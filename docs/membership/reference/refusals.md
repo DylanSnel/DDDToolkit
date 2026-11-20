@@ -117,7 +117,7 @@ And a resource that has a word of its own for a member has a client read the mem
 MembershipCodes.Under("folders").WithMemberArgument("Staff");
 ```
 
-A resource has its own codes because an application may have several kinds of resource with members, and a client should read from a code which one refused it. The member list of a resource refuses with them ([`MemberList<TMember, TId, TMemberId, TRoleId>`](resource-and-members.md#memberlisttmember-tid-tmemberid-troleid)), and so do the access questions and the member manager of that resource, which read them from its rules. Declare them once, where the aggregate can reach them, and hand the same instance to both: a static property of the aggregate, which the member list the package's generator writes there is made with, and which the rules take as their `codes`.
+A resource has its own codes because an application may have several kinds of resource with members, and a client should read from a code which one refused it. The member list of a resource refuses with them ([`MemberList<TMember, TId, TMemberId, TRoleId>`](resource-and-members.md#memberlisttmember-tid-tmemberid-troleid)), and so do the access questions and the member service of that resource, which read them from its rules. Declare them once, where the aggregate can reach them, and hand the same instance to both: a static property of the aggregate, which the member list the package's generator writes there is made with, and which the rules take as their `codes`.
 
 The kind and the English text of a refusal are the package's whatever its code. For the reader's language the package ships its texts in English and Dutch, and whatever registers the resource offers them under this resource's codes ([`TextKeys`](#membershipcodes)), so an application that localizes its failures adds no line for them. A resource file of the application's own for these codes, in its own words, is asked first.
 
@@ -193,7 +193,7 @@ public MembershipCodes WithMemberArgument(string name)
 
 The same codes, for a resource whose refusals carry the member in an argument called `name` instead of [`DefaultMemberArgument`](#membershipcodes): a resource that has a word of its own for a member, or whose clients read that argument already. What a client reads from a refusal is its code and its arguments, so a resource's own words go for both.
 
-Every refusal of this resource then carries the member under that name, whoever makes it: the member list, the member manager, the two checks of the whole list. The one rule a member checks by itself keeps [`DefaultMemberArgument`](#membershipcodes), as it keeps the package's name for the rule: a member does not know whose it is.
+Every refusal of this resource then carries the member under that name, whoever makes it: the member list, the member service, the two checks of the whole list. The one rule a member checks by itself keeps [`DefaultMemberArgument`](#membershipcodes), as it keeps the package's name for the rule: a member does not know whose it is.
 
 **Parameters**
 

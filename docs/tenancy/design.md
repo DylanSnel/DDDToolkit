@@ -27,7 +27,7 @@ Three choices keep the access data small and the checks fast
 
 - **Decide access to your resources.** The resource's module decides, or
   [Membership](../membership/beside-an-organization.md#with-tenancy) does for a resource with members.
-- **Give a module names.** The managers return names by id ([Names](names-and-languages.md#names)).
+- **Give a module names.** The services return names by id ([Names](names-and-languages.md#names)).
 - **Publish integration events or create tables.** Your module publishes integration events, and your migrations
   create the tables.
 - **Link a seat to an e-mail address.** A seat links to a verified identity.
@@ -74,7 +74,7 @@ Up to 3.2.0-preview.5, the code called a starter role a **pack**. The docs alrea
 says starter role too, in C# and in SQL. Upgrading loses no row:
 
 1. **Rebuild, and follow the compiler.** `RolePack` is now `StarterRole`, `services.SyncRolePacks()` is now
-   `services.SyncStarterRoles()`, `RoleManager.FollowPacksAsync` is now `FollowStarterRolesAsync`, and a role's
+   `services.SyncStarterRoles()`, `RoleService.FollowPacksAsync` is now `FollowStarterRolesAsync`, and a role's
    `FromPack` is now `FromStarterRole`. The [changelog](../../CHANGELOG.md) lists every renamed name.
 2. **Add one migration** to the context that maps Tenancy's tables. Entity Framework writes the two column renames:
 

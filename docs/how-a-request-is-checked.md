@@ -129,7 +129,7 @@ handler then reads the same constant. `AddCrewMember` names the catalogue's cons
 
 ```csharp
 [InTenant]
-public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest;
+public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationService.UnitInTree>>, ITenantsRequest;
 
 public sealed record AddOrganizationUnit([AtUnit(TenancyPermissions.UnitsManage)] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;
 
@@ -168,7 +168,7 @@ sample's four requests and the registration look as below. The sample does not w
 one way of writing each requirement.
 
 ```csharp
-public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest
+public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationService.UnitInTree>>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
@@ -714,7 +714,7 @@ code. The handler of a refused request does not run, so nothing it would read or
 ```
 
 The refusal above is Juno renaming Leo's seat. Neither alternative holds, so `Any` gives one refusal with both reasons.
-The access check is not the only place that refuses. A handler, or the manager of the package it calls, refuses what
+The access check is not the only place that refuses. A handler, or the service of the package it calls, refuses what
 only it can read. For example, the sample's `AddCrewMember` handler refuses a seat that is not active, and Tenancy's
 provisioning refuses everyone except system work. The database also refuses a row that its policies do not allow, after
 the access check let the request through.
@@ -969,8 +969,8 @@ sequenceDiagram
     Handler->>Postgres: sends as Ada again
 ```
 
-A handler that does not start the scope fails in the package's manager. Tenancy's provisioning,
-`TenantManager.ProvisionAsync`, refuses a seat with `access.system-only`, and refuses a caller without a seat with that
+A handler that does not start the scope fails in the package's service. Tenancy's provisioning,
+`TenantService.ProvisionAsync`, refuses a seat with `access.system-only`, and refuses a caller without a seat with that
 caller's own reason, `tenancy.not-seated`. System work can also start before the request is sent. The sample's seeding does this. It starts system work in each tenant
 and sends `MarkTenantAsDemo`. That request requires `[InTenant]`, which lets system work in the tenant through, and
 its handler refuses everyone else ([System work](access-requirements.md#system-work)).

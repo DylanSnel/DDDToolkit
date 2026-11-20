@@ -121,7 +121,7 @@ The classes carry marks that an API layer reads. In GraphQL these are the defaul
 - The seat's `Identity` is `[PersonalData]`. It is left out of the type. The invitation's `Address` is not marked,
   because whoever may read invitations needs it.
 - The role's `FromStarterRole` and `PermissionsFromStarterRole` are `[Bookkeeping]`. They are left out of the type.
-- `Placement`, `RoleGrant`, `NamedUnit` and the records of the managers have a `[DisplayName]`. The type is named
+- `Placement`, `RoleGrant`, `NamedUnit` and the records of the services have a `[DisplayName]`. The type is named
   `Placement` instead of after its type arguments.
 - `Placement` and `RoleGrant` are entities. Methods such as `RoleGrant.AppliesAt(moment)` are no fields.
 
@@ -180,7 +180,7 @@ Every choice has a default. An application that changes none of them works.
 | Choice | Default | What you can do instead |
 |---|---|---|
 | The roles a new tenant starts with | One role, Administrator, with every permission. The tenant's first person gets it at the root. | Declare your own starter roles, and your own administrators' role ([Administrators](roles-and-permissions.md#the-administrators-starter-role)). |
-| Whether a tenant can make its own roles | `RoleManager` has the commands (create, rename, change permissions, archive), but no request calls them. Tenants keep their starter roles. | Add a request for each command you want, as the tutorial does, and give `tenancy.roles.manage` to the people who may send them. |
+| Whether a tenant can make its own roles | `RoleService` has the commands (create, rename, change permissions, archive), but no request calls them. Tenants keep their starter roles. | Add a request for each command you want, as the tutorial does, and give `tenancy.roles.manage` to the people who may send them. |
 | A starter role you change later | Existing tenants keep their copy as it was. | Call `services.SyncStarterRoles()`. Existing copies then get your change, and changes a tenant made itself are kept ([Starter roles after provisioning](roles-and-permissions.md#starter-roles-after-provisioning)). |
 | Giving a permission that manages access | A seat can only give such a permission where it holds that permission itself. Rhea manages grants at North, so she cannot give herself the right to manage roles for the whole tenant. | Turn this off with `ContainAccessManagingPermissions: false` on your catalogue ([Containment](roles-and-permissions.md#containment-on-or-off)). |
 | The shape of a tenant | Chosen when the tenant is created: flat (only the root) or hierarchical (a tree of units). | A flat tenant can become hierarchical later. A hierarchical tenant cannot become flat again, because its units would have to be deleted. |
@@ -195,7 +195,7 @@ Every choice has a default. An application that changes none of them works.
 - **Build it:** the [tutorial](tutorial.md), step by step.
 - **Look something up:** one page per topic, with every detail:
   - [Your tenancy module](your-module.md): the packages, the model, your classes and ids, the kinds of seat, the
-    registration, the managers and the access manager.
+    registration, the services and the access manager.
   - [Roles and permissions](roles-and-permissions.md): the catalogue, starter roles, who may give a role,
     containment.
   - [Who may do what](who-may-do-what.md): the queries a module runs, and what a request requires of its caller.

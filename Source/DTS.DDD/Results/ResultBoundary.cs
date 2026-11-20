@@ -23,7 +23,7 @@ internal static partial class ResultBoundary
         }
         catch (Exception exception) when (Errors.FromException(exception) is { } error)
         {
-            // A refusal of an access check, of a manager or of a value object: thrown below, answered as a result.
+            // A refusal of an access check, of a service or of a value object: thrown below, answered as a result.
             Log(provider, typeof(TMessage), error);
             return ResultResponse<TResponse>.Fail(error);
         }

@@ -521,10 +521,10 @@ Tenancy gives each of them a name with `[DisplayName]` from `DTS.DDD.Abstraction
 | `RoleGrant<TSeatId, TRoleId>` | `RoleGrant` |
 | `NamedUnit<TUnitId>` | `NamedUnit` |
 | `SeatInTenant<TSeat>` | `SeatInTenant` |
-| `SeatManager.SeatOverview`, `PermissionReach`, `UnitRef` | `SeatOverview`, `PermissionReach`, `UnitRef` |
-| `OrganizationManager.UnitInTree` | `UnitInTree` |
-| `TenantManager.TenantListing`, `TenantPage` | `TenantListing`, `TenantPage` |
-| `InvitationManager.IssuedInvitation`, `AcceptedInvitation` | `IssuedInvitation`, `AcceptedInvitation` |
+| `SeatService.SeatOverview`, `PermissionReach`, `UnitRef` | `SeatOverview`, `PermissionReach`, `UnitRef` |
+| `OrganizationService.UnitInTree` | `UnitInTree` |
+| `TenantService.TenantListing`, `TenantPage` | `TenantListing`, `TenantPage` |
+| `InvitationService.IssuedInvitation`, `AcceptedInvitation` | `IssuedInvitation`, `AcceptedInvitation` |
 
 `DisplayNameTypesInterceptor` uses the display name for the object type and the interface type over the class. An
 input object type keeps HotChocolate's name.

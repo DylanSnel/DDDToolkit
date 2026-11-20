@@ -108,11 +108,11 @@ projects build with 0 warnings.
 - **Member list**: the object that applies the rules about members, such as "a seat is on the board once" and "the
   owner stays". The generator adds it to your board as a private property, `Members`. It works on your collection
   `People` and on the owner property. `Members.Open(now)` in the board's constructor puts the owner on the board.
-- **Managers**: the generator also writes two classes into the domain project. `BoardMemberManager`, named after the
+- **Managers**: the generator also writes two classes into the domain project. `BoardMemberService`, named after the
   member class, opens a board, adds and removes members, gives and takes roles, and lists who is on a board.
-  `BoardRoleManager`, named after the role class, makes, changes and lists the tenant's board roles. Each manager
+  `BoardRoleService`, named after the role class, makes, changes and lists the tenant's board roles. Each service
   checks, loads, changes and saves. The board has no method that changes its members. Steps 6 and 7 use the
-  managers.
+  services.
 - **Custom role**: a role stored as a row of the tenant. The tenant may rename it and change it. The role template
   has the name, the permissions, and the starter role it was made from. You add the role's tenant, `TenantId`,
   yourself, because Membership does not know about tenants.
@@ -176,7 +176,7 @@ references only the toolkit's core package.
 ```
 
 **The domain project.** **Why:** it gets the member and role templates, and the generator that writes the member
-list and the two managers. From Tenancy, it references the contracts project and the markers package, for
+list and the two services. From Tenancy, it references the contracts project and the markers package, for
 `[OfTenant]`. A board stores Tenancy's ids and cannot change a seat.
 
 **`src/Modules/Boards/Harbor.Boards.Domain/Harbor.Boards.Domain.csproj`**
@@ -346,15 +346,15 @@ dotnet build Harbor.slnx
 - `CustomRoleDraft` holds what a new role is made from: a name, a description, the permissions, and the starter role
   it is made from, if any. Step 7 shows where the drafts of the starter roles come from.
 
-- The generator writes `BoardMemberManager` and `BoardRoleManager` in the global namespace. Each has one
+- The generator writes `BoardMemberService` and `BoardRoleService` in the global namespace. Each has one
   constructor, and the registration of step 5 adds both to the container.
 
 The generated files are in the domain project, under **Dependencies → Analyzers**. `Board.Members` holds one line:
-the member list. `BoardMemberManager` and `BoardRoleManager` hold the managers. `Board.MemberManagement` declares the
+the member list. `BoardMemberService` and `BoardRoleService` hold the services. `Board.MemberManagement` declares the
 board's hooks, which step 7 explains.
 
 > **Going further.** What is written, and when it is not: [The generated member list](resources-and-members.md#the-generated-member-list)
-> and [The managers](resources-and-members.md#the-managers).
+> and [The services](resources-and-members.md#the-services).
 
 ## Step 2: the permissions and the rules
 
@@ -511,7 +511,7 @@ dotnet build Harbor.slnx
 - `MembershipRules.For<Board>`: the owner holds the three permissions on a board. Every member holds `boards.view`. A
   role may give `boards.view` and `boards.edit`.
 - `new("editor", [...])`: a starter role, with its name and its permissions.
-- `managedWith: BoardPermissions.ManageRoles`: the role manager of step 7 requires `boards.roles.manage` for every
+- `managedWith: BoardPermissions.ManageRoles`: the role service of step 7 requires `boards.roles.manage` for every
   change to a board role. Joined to Tenancy in step 5, the caller must hold it for the whole tenant.
 - `MembershipRules.For` checks the rules when it runs, and throws for rules that contradict themselves. For example,
   a starter role with `boards.members.manage` is refused, because no role may give that permission.
@@ -705,7 +705,7 @@ lock on the member rows and on the owner column.
   the rule for changing a board allows anyone who may edit the board or manage its members. The check before the
   handler tells the two commands apart.
 - **The permission that manages the members.** `ManagesMembers` marks the permission that changes who is on a board
-  and which roles they hold. `NamesOwner` marks the permission that hands a board to another owner. The member manager
+  and which roles they hold. `NamesOwner` marks the permission that hands a board to another owner. The member service
   of step 7 requires them. Without them, it changes the members only for system work.
 - **The lock.** The member tables follow the board's rules. Without a lock, Leo, who may edit a board, could write its
   member rows with his own SQL statement, or make himself the owner. From the two marks, Membership also writes a
@@ -792,7 +792,7 @@ public static partial class RoleManagersWriteBoardRoles
 }
 ```
 
-**The marks**, on `boards.members.manage`. **Why:** the member manager requires this permission for every change to
+**The marks**, on `boards.members.manage`. **Why:** the member service requires this permission for every change to
 the members (step 7), and for naming a new owner. The database's lock checks the same permission.
 
 **`Harbor.Boards.Application/Access/BoardPermissions.cs`**
@@ -847,9 +847,9 @@ database.
 - The create rule makes the database check the same thing as the command: the owner is the caller's seat.
 - `user.CurrentTenant()`: the tenant of the caller's seat. `user.HoldsAtTenant(permission)`: whether
   the caller's seat holds the permission now, at the root, so for the whole tenant.
-- `ManagesMembers`: the member manager adds, changes and removes members only for a caller who holds
+- `ManagesMembers`: the member service adds, changes and removes members only for a caller who holds
   `boards.members.manage` on the board. In the database, a member row is written only on such a board.
-- `NamesOwner`: the member manager names a new owner only for a caller with that permission on the board. In the
+- `NamesOwner`: the member service names a new owner only for a caller with that permission on the board. In the
   database, only such a caller can change the owner column.
 - Without the marks, a start-up check logs a warning. The member rows then follow your rule for changing a board.
 
@@ -877,9 +877,9 @@ and policies.
   `AddBoardMembershipWithTenancy`. With it, the caller's seat is the caller's member identity, a new member's seat
   must be active in the tenant, and `boards.roles.manage` is checked for the whole tenant. The `TenancyIds` line of
   step 2 names Tenancy's ids, and the member class names the seat id, so the call names only the context.
-- **The access manager and the managers of boards.** `AddBoardMembershipWithTenancy` also registers
-  `MembershipAccessManager<Board>`, `BoardMemberManager` and `BoardRoleManager` per scope. A handler takes the access
-  manager to ask what the caller holds on a board (step 9), and the managers to change members and read roles (steps 6
+- **The access manager and the services of boards.** `AddBoardMembershipWithTenancy` also registers
+  `MembershipAccessManager<Board>`, `BoardMemberService` and `BoardRoleService` per scope. A handler takes the access
+  manager to ask what the caller holds on a board (step 9), and the services to change members and read roles (steps 6
   and 7).
 - **Each tenant's starter roles.** `AddBoardMembershipWithTenancy` also registers what makes a tenant's `editor` role.
   Step 7 explains it.
@@ -1138,8 +1138,8 @@ dotnet sln Harbor.slnx add --solution-folder src/Modules/Boards src/Modules/Boar
   `TenancyAccessManager` per scope. The checks read through this context's read functions. The generator wrote the
   call for Boards from the `TenancyIds` line.
 - `AddBoardMembershipWithTenancy<BoardsContext>(BoardMembership.Rules)` registers, over this context and joined to
-  Tenancy, the access manager `MembershipAccessManager<Board>`, the queries on `db.Boards`, and the two managers.
-  The managers load and save on this context.
+  Tenancy, the access manager `MembershipAccessManager<Board>`, the queries on `db.Boards`, and the two services.
+  The services load and save on this context.
 - `AddBoardMemberAccess<IBoardsRequest>()` registers Membership's check for Boards' requests.
 - `AddMembershipPostgres()` adds a start-up check: the database functions and the lock must match the rules the host
   runs with.
@@ -1200,14 +1200,14 @@ not see it yet.
   interface is in the application project, and the infrastructure project implements it. The repository loads a board
   whole, with `Include(board => board.People).ThenInclude(member => member.Roles)`, because `Describe` reads the members
   and their roles.
-- **Opening through the member manager**: `BoardMemberManager.OpenAsync(board)` checks that the owner may be a
-  member, adds the board and saves it. With Tenancy, the owner must be an active seat of the tenant. The manager asks
+- **Opening through the member service**: `BoardMemberService.OpenAsync(board)` checks that the owner may be a
+  member, adds the board and saves it. With Tenancy, the owner must be an active seat of the tenant. The service asks
   no permission for a new board, because the request's check asked `boards.create` at the unit.
 - **The owner is the caller**: the handler takes `TenancyAccessManager`, Tenancy's access manager. Its
   `CurrentTenant.RequireSeat()` returns the caller's tenant and seat. The create rule of step 4 makes the database check
   the same.
 - **The order of the members**: `Include` sets no order, so `board.People` lists the members in the order the database
-  returns them. `BoardMemberManager.ListAsync(board)` returns the owner first, then the others by when each membership
+  returns them. `BoardMemberService.ListAsync(board)` returns the owner first, then the others by when each membership
   starts. Use it for a screen that needs that order.
 
 ### What you write
@@ -1309,7 +1309,7 @@ namespace Harbor.Boards.Application.Boards.OpenBoard;
 public sealed record OpenBoardCommand([AtUnit(BoardPermissions.Create)] OrganizationUnitId Unit, string Name) : ICommand<Board>, IBoardsRequest;
 
 public sealed class OpenBoardHandler(
-    BoardMemberManager members,
+    BoardMemberService members,
     TenancyAccessManager access,
     TimeProvider clock) : ICommandHandler<OpenBoardCommand, Board>
 {
@@ -1318,7 +1318,7 @@ public sealed class OpenBoardHandler(
         // The caller's tenant and seat: the board is the tenant's, and the caller owns it.
         var scope = access.CurrentTenant.RequireSeat();
 
-        // The member manager checks the owner's seat with the tenant, adds the board and saves it.
+        // The member service checks the owner's seat with the tenant, adds the board and saves it.
         var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, scope.Seat, clock.GetUtcNow());
         return await members.OpenAsync(board, cancellationToken);
     }
@@ -1527,13 +1527,13 @@ it.
   tenant's rows, so `RoleManagersWriteBoardRoles` does not apply to it.
 - **It is not one transaction.** Boards has its own context, so the tenant is saved first. A failure after that does not
   fail `ProvisionAsync`. It is logged as an error, and the next `SyncStarterRoles()` makes the role.
-- **The role manager checks `managedWith`.** Every change a request makes to a board role requires
+- **The role service checks `managedWith`.** Every change a request makes to a board role requires
   `boards.roles.manage`, the permission the rules of step 2 name. Joined to Tenancy, the caller must hold it for the whole
   tenant.
-- **The member manager checks the permission marked `ManagesMembers`.** `BoardMemberManager.AddAsync` requires
+- **The member service checks the permission marked `ManagesMembers`.** `BoardMemberService.AddAsync` requires
   `boards.members.manage` on the board. The owner holds it, and no role can give it. The request's check asks the
-  same permission on the same board, so the manager uses that answer and asks nothing again.
-- **The member manager checks what the member list cannot know**, before anything changes:
+  same permission on the same board, so the service uses that answer and asks nothing again.
+- **The member service checks what the member list cannot know**, before anything changes:
   - the seat is an active seat of this tenant;
   - the role is one of this tenant's board roles, and is in use.
 - **The member list then applies its rules**: it refuses a seat that is already on the board with `409`,
@@ -1543,13 +1543,13 @@ it.
   gives nothing else.
 - **Hooks for your own rules**: the board has no method that changes its members. A guard of your own, such as "a
   closed board takes no new members", goes in `OnChangingMembers`. This is a `partial` method that the generator
-  declares on the board, and the member manager calls it before every change. `OnMemberAdded`, `OnRoleGiven` and the
+  declares on the board, and the member service calls it before every change. `OnMemberAdded`, `OnRoleGiven` and the
   other hooks run after a change, for events of your own. Harbor needs none of them.
 
 ### What you write
 
 **The board's rename.** **Why:** renaming changes the board itself, so the board has a method for it. The members
-change only through the member manager, so the board gets no method for them.
+change only through the member service, so the board gets no method for them.
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
@@ -1600,14 +1600,14 @@ namespace Harbor.Boards.Application.BoardRoles.ListBoardRole;
 [InTenant]
 public sealed record ListBoardRoleQuery : IQuery<IReadOnlyList<BoardRole>>, IBoardsRequest;
 
-public sealed class ListBoardRoleHandler(BoardRoleManager roles) : IQueryHandler<ListBoardRoleQuery, IReadOnlyList<BoardRole>>
+public sealed class ListBoardRoleHandler(BoardRoleService roles) : IQueryHandler<ListBoardRoleQuery, IReadOnlyList<BoardRole>>
 {
     public async ValueTask<IReadOnlyList<BoardRole>> Handle(ListBoardRoleQuery query, CancellationToken cancellationToken)
         => await roles.ListAsync(cancellationToken);
 }
 ```
 
-**Adding a member.** **Why:** the request states who may send it. The member manager checks the seat and the role,
+**Adding a member.** **Why:** the request states who may send it. The member service checks the seat and the role,
 then loads the board, adds the member and saves.
 
 **`Harbor.Boards.Application/Boards/AddMember/AddMember.cs`**
@@ -1617,7 +1617,7 @@ namespace Harbor.Boards.Application.Boards.AddMember;
 
 public sealed record AddMemberCommand([OnResource(BoardPermissions.ManageMembers)] BoardId Board, SeatId Seat, BoardRoleId Role) : ICommand<Board>, IBoardsRequest;
 
-public sealed class AddMemberHandler(BoardMemberManager members) : ICommandHandler<AddMemberCommand, Board>
+public sealed class AddMemberHandler(BoardMemberService members) : ICommandHandler<AddMemberCommand, Board>
 {
     // From now, with no end, in the role, added by the caller's seat.
     public async ValueTask<Board> Handle(AddMemberCommand command, CancellationToken cancellationToken)
@@ -1762,7 +1762,7 @@ public static class BoardsModule
 ### What it does
 
 - `AddMemberCommand` and `EditBoardCommand` answer the board as the change left it. Their routes answer it with `Describe`.
-- What the generator wrote in step 5 calls `BoardRoleManager.FollowStarterRolesAsync`. It compares `FromStarterRole`, so a
+- What the generator wrote in step 5 calls `BoardRoleService.FollowStarterRolesAsync`. It compares `FromStarterRole`, so a
   renamed role still counts as made. A seat that calls this method gets `access.system-only`.
 - A starter role whose name the tenant already gave another role fails that tenant's save, because of the unique index
   on the tenant and the name. The sync reports it at each start, until the tenant renames that role.
@@ -1772,9 +1772,9 @@ public static class BoardsModule
   fails it, whatever role the member holds.
 - `members.AddAsync(...)` refuses with the board's codes: `boards.member-not-active` for a seat that is not active in
   the tenant, and `boards.role-not-for-members` for a role that is not one of the tenant's board roles in use.
-- The member list then adds Leo, with the role for the same period, and refuses him a second time. The manager saves
+- The member list then adds Leo, with the role for the same period, and refuses him a second time. The service saves
   the board and returns it.
-- The manager stores the caller's seat on the member row, as `AddedBy`. It is `null` when system work without a seat
+- The service stores the caller's seat on the member row, as `AddedBy`. It is `null` when system work without a seat
   adds a member.
 
 ### Try it
@@ -1816,7 +1816,7 @@ its owner. If he inserts a member row by hand, the lock's policy on `BoardPeople
 > **Going further.** A role the tenant makes itself, renames or archives: [Roles a customer makes](permissions-and-roles.md#roles-a-customer-makes).
 > Every rule of following a starter role: [Starter roles](permissions-and-roles.md#starter-roles).
 > A rule of your own, such as "never for longer than you hold it yourself": [Who may give a role](permissions-and-roles.md#who-may-give-a-role).
-> Every method of both managers, and the hooks: [The managers](resources-and-members.md#the-managers).
+> Every method of both services, and the hooks: [The services](resources-and-members.md#the-services).
 
 ## Step 8: reach from above
 
@@ -2205,8 +2205,8 @@ dotnet build Harbor.slnx
 | 1-3 | A board with members, an owner and the tenant's roles, and its tables |
 | 4 | Database rules for who reads and changes a board, and the lock on its members |
 | 5 | The module registered and checked by Tenancy and Membership, and Ada's role updated with the board permissions |
-| 6 | Opening a board at a unit through the member manager, getting it and listing the boards the read policy lets through, each answered by one `Describe` |
-| 7 | A tenant's starter roles made and kept up to date without a line of yours, and members that the owner adds through the member manager, with a role that counts on that one board |
+| 6 | Opening a board at a unit through the member service, getting it and listing the boards the read policy lets through, each answered by one `Describe` |
+| 7 | A tenant's starter roles made and kept up to date without a line of yours, and members that the owner adds through the member service, with a role that counts on that one board |
 | 8 | A permission held at a unit counting on every board at that unit and below it |
 | 9 | Each board answered with what the caller may do on it, for one board and for a list |
 

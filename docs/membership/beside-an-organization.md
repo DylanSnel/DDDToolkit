@@ -181,7 +181,7 @@ written for other places than C# reaches from ([The start-up check](postgres.md#
 ## With Tenancy
 
 The two packages do not reference each other. In a project that references both, Membership's generator writes these
-for each member class whose members are seats: a class that returns what the rules and the managers need from Tenancy, the
+for each member class whose members are seats: a class that returns what the rules and the services need from Tenancy, the
 registration `Add{Resource}MembershipWithTenancy`, and, for a role class kept for the resource, a class that makes the
 tenant's starter roles ([Starter roles with Tenancy](permissions-and-roles.md#starter-roles-with-tenancy)). The tutorial uses
 them throughout:
@@ -205,7 +205,7 @@ project roles that each tenant makes from three starter roles.
 - **System work is nobody's member.** It holds every permission where the rules let its scope
   through. So Tenancy's own work, in the `tenancy` scope, holds nothing on a board
   ([System work](checks-and-saves.md#system-work)).
-- **A new member's seat must be active in the caller's tenant.** Otherwise the member manager refuses with
+- **A new member's seat must be active in the caller's tenant.** Otherwise the member service refuses with
   `boards.member-not-active`. The class reads that one seat by its id, through Tenancy's `SeatToAdmitAsync`. It reads
   the seat whatever seats the caller reads, so a [read rule on your seat class](../tenancy/postgres.md#default-read-policies-for-seats-and-invitations)
   and `NarrowOutsideSeats` leave it as it is. A seat of another tenant, one that is not active and an id no seat has
@@ -220,7 +220,7 @@ project roles that each tenant makes from three starter roles.
 - **The tenant's roles.** When the member class holds the tenant's roles, the class returns which roles in use give
   a permission, and whether a role exists. An archived role gives nothing, even where it is still held.
 - **The permission that changes the custom roles** (`Roles.Custom(managedWith: ...)`) is held for the whole tenant
-  or not at all. The role manager refuses a caller without it with `tenancy.not-permitted`, and a caller without an
+  or not at all. The role service refuses a caller without it with `tenancy.not-permitted`, and a caller without an
   active seat with Tenancy's own code. A permission that is not in Tenancy's catalogue is held by nobody.
 - **A change to the caller's own place** is saved as system work in the caller's tenant, in the resource's scope, for
   the caller's seat ([The caller's own place](resources-and-members.md#the-callers-own-place)). The history names the
@@ -235,10 +235,10 @@ project roles that each tenant makes from three starter roles.
 The generated class implements two more ports, so the two packages share what a seat's kind decides:
 
 - **`IMemberKinds<TResourceId, SeatId>`** answers a seat's kind and whether it is inside the organization, from
-  Tenancy's read of that one seat. The member manager copies both onto the member row
+  Tenancy's read of that one seat. The member service copies both onto the member row
   ([The member's kind](resources-and-members.md#the-members-kind)).
 - **Tenancy's `ISeatFellows<SeatId>`** forwards to Membership's `IFellowMembers`. It answers the members now of every
-  resource the caller is a member of now. Tenancy's `SeatManager` reads those seats for a seat outside the organization
+  resource the caller is a member of now. Tenancy's `SeatService` reads those seats for a seat outside the organization
   ([What a seat outside the organization reads](../tenancy/postgres.md#what-a-seat-outside-the-organization-reads)).
 
 The generator also writes a public class of marks per resource, such as `GeneratedBoardMembershipMarks`, which the
@@ -254,7 +254,7 @@ kind the catalogue does not declare, or a kind in two role sets
 ([Kinds of seat and role sets](permissions-and-roles.md#kinds-of-seat-and-role-sets)).
 
 A member class that holds the tenant's roles (`Roles.External`) has one role set, for the kinds inside the
-organization. A seat outside the organization is not added there, and the member manager refuses it with
+organization. A seat outside the organization is not added there, and the member service refuses it with
 `kind-in-no-set`.
 
 ### Resource roles and tenant roles
@@ -403,7 +403,7 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
                select path.BayId;
     }
 
-    // The role, where it exists, in the first role set. The member manager calls this before a role is given.
+    // The role, where it exists, in the first role set. The member service calls this before a role is given.
     public async ValueTask<FoundRole?> FindAsync(DepotRoleId role, CancellationToken cancellationToken)
         => await db.Roles.AnyAsync(kept => kept.Id == role && kept.InUse, cancellationToken) ? new FoundRole(null) : null;
 }
