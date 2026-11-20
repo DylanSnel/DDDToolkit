@@ -10,6 +10,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-20
+
 ### Added
 
 - **Implicit conversions for single value objects.** Every `[SingleValueObject<T>]` converts to and from its value, and
