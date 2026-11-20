@@ -10,6 +10,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-20
+
+### Changed
+
+- The Tenancy docs describe `app.UseTenantSelection()` of the new DTS Pro package `DylansTechStack.Tenancy.AspNetCore`:
+  `tenancy/postgres.md`, `how-a-request-is-checked.md`, `tenancy/sample/design-choices.md` and `Examples/README.md`.
+
 ## [0.1.3] - 2026-11-20
 
 ### Added
