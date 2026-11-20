@@ -277,6 +277,18 @@ internal sealed record SingleValueObjectDefinition(
     /// and its twin implement it. See <see cref="EntityIdDefinition.SingleValueAvailable"/>.
     /// </summary>
     public bool SingleValueAvailable { get; init; }
+
+    /// <summary>
+    /// False when C# allows no user-defined conversion between the record and its value: the value is an interface or
+    /// <see cref="object"/>, a base of every record.
+    /// </summary>
+    public bool ValueConvertible { get; init; } = true;
+
+    /// <summary>
+    /// True when the author declared a conversion operator on the record. The generator then writes none on it, so the
+    /// two never clash; the twin's conversion from the value is still written.
+    /// </summary>
+    public bool DeclaresConversion { get; init; }
 }
 
 internal sealed record ValueObjectDefinition(

@@ -353,6 +353,56 @@ harm.
 > element of a new array skip the constructor, and so they skip the check. The same holds for
 > [struct identifiers](identifiers.md#struct-or-record), which have no twin.
 
+## Implicit conversions
+
+A project can let a single value object convert to its value, and a value convert to the always-valid twin. Set the
+MSBuild property `DDD_ImplicitConversions` to `true`, for one project or in a `Directory.Build.props`. The property is
+off by default:
+
+```xml
+<PropertyGroup>
+  <DDD_ImplicitConversions>true</DDD_ImplicitConversions>
+</PropertyGroup>
+```
+
+The generator then writes two conversions on every `[SingleValueObject<T>]` of the project:
+
+| Conversion | Written on | What it does |
+|---|---|---|
+| `EmailAddress` to `string` | the record | Returns `Value`. A `ValidEmailAddress` converts the same way, because it is an `EmailAddress`. |
+| `string` to `ValidEmailAddress` | the twin | Calls the twin's constructor, which validates. An invalid value throws `InvalidValueObjectException`. |
+
+So a list of valid values is written as its values:
+
+```csharp
+[SingleValueObject<string>(ColumnLength: 5)]
+public partial record Language
+{
+    private static readonly string[] Tags = ["nl-NL", "en-GB"];
+
+    public static IReadOnlyList<ValidLanguage> Supported { get; } = [.. Tags.Select(tag => (ValidLanguage)tag)];
+
+    public static Language Create(string tag) => new(tag);
+
+    protected override bool Validate() => Tags.Contains(Value);
+}
+
+string tag = Language.Supported[0];        // "nl-NL"
+ValidLanguage english = "en-GB";           // validated here
+ValidLanguage french = "fr-FR";            // throws InvalidValueObjectException
+```
+
+`Validate()` reads `Tags`, not `Supported`: while C# builds `Supported`, the list is still `null`, and each element it
+converts runs `Validate()`.
+
+- **No conversion from the value to the plain record.** A plain value object may be invalid, so a silent conversion to
+  it would hide that. Write that conversion yourself in the partial record when a type wants it, and check the value
+  later with `ToValid()`.
+- **A conversion operator you declare wins.** When the record declares a conversion operator of its own, the generator
+  writes none on the record. It still writes the twin's conversion from the value.
+- **No conversion for an interface or `object`.** C# allows no user-defined conversion between a record and an
+  interface or one of its base types, so a value of such a type gets none.
+
 ## Failure handling
 
 `ToValid()` throws. Throwing is right when an invalid value is a bug. It is wrong when an invalid value is a normal

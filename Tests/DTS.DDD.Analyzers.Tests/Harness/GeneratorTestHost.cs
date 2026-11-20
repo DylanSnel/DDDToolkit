@@ -88,6 +88,7 @@ public sealed partial class GeneratorTestHost
     {
         ["build_property.DDD_Module"] = string.Empty,
         ["build_property.DDD_ModuleContracts"] = string.Empty,
+        ["build_property.DDD_ImplicitConversions"] = string.Empty,
         ["build_property.IsTestProject"] = string.Empty,
         ["build_property.IsTestingPlatformApplication"] = string.Empty,
         ["build_property.DDD_DeclareModule"] = string.Empty,
