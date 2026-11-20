@@ -4,9 +4,10 @@ using DTS.DDD.Exceptions;
 namespace DTS.DDD.Analyzers.Tests.Generation;
 
 /// <summary>
-/// Unless <c>DDD_ImplicitConversions</c> is <c>false</c>, a <c>[SingleValueObject&lt;T&gt;]</c> converts to its value,
-/// and a value converts to the always-valid twin, which validates and throws for an invalid value. The plain record gets
-/// no conversion from the value, and a record whose author declared a conversion operator gets none from the generator.
+/// Unless <c>DDD_ImplicitConversions</c> is <c>false</c>, a <c>[SingleValueObject&lt;T&gt;]</c> converts to and from its
+/// value, and a value converts to the always-valid twin, which validates and throws for an invalid value. The conversion
+/// to the plain record does not validate. A record whose author declared a conversion operator gets none from the
+/// generator on the record.
 /// </summary>
 public class ImplicitConversionTests
 {
@@ -51,7 +52,7 @@ public class ImplicitConversionTests
         var host = GeneratorTestHost.Create(Preamble + Language);
         var emitted = (setting is null ? host.WithoutBuildProperties() : host.WithBuildProperty("DDD_ImplicitConversions", setting)).RunCore().Emit();
 
-        Conversions(emitted.Type("Sample.Language")).Should().ContainSingle();
+        Conversions(emitted.Type("Sample.Language")).Should().HaveCount(2);
         Conversions(emitted.Type("Sample.ValidLanguage")).Should().ContainSingle();
     }
 
@@ -64,8 +65,7 @@ public class ImplicitConversionTests
         result.ShouldCompile();
         var emitted = result.Emit();
 
-        var toValue = Conversions(emitted.Type("Sample.Language")).Should().ContainSingle().Which;
-        toValue.ReturnType.Should().Be(typeof(string));
+        var toValue = Conversions(emitted.Type("Sample.Language")).Should().ContainSingle(method => method.ReturnType == typeof(string)).Which;
         toValue.Invoke(null, [emitted.CallStatic("Sample.Language", "Create", "nl-NL")]).Should().Be("nl-NL");
 
         var toTwin = Conversions(emitted.Type("Sample.ValidLanguage")).Should().ContainSingle().Which;
@@ -74,8 +74,11 @@ public class ImplicitConversionTests
         valid.GetType().Name.Should().Be("ValidLanguage");
         emitted.Property(valid, "Value").Should().Be("en-GB");
 
-        // The plain record gets no conversion from the value: it may be invalid, and a silent conversion would hide that.
-        Conversions(emitted.Type("Sample.Language")).Should().NotContain(method => method.ReturnType.Name == "Language");
+        // The plain record converts from the value without validating: a plain value object may be invalid.
+        var toRecord = Conversions(emitted.Type("Sample.Language")).Should().ContainSingle(method => method.ReturnType.Name == "Language").Which;
+        var french = toRecord.Invoke(null, ["fr-FR"])!;
+        emitted.Property(french, "Value").Should().Be("fr-FR");
+        emitted.Property(french, "IsValid").Should().Be(false);
     }
 
     [Fact]
@@ -100,6 +103,8 @@ public class ImplicitConversionTests
                 public static IReadOnlyList<ValidLanguage> Supported { get; } = ["nl-NL", "en-GB"];
 
                 public static string Tag(Language language) => language;
+
+                public static Language Unchecked => "fr-FR";
             }
             """);
 
@@ -146,7 +151,7 @@ public class ImplicitConversionTests
 
         result.ShouldCompile();
         var emitted = result.Emit();
-        Conversions(emitted.Type("Sample.Percentage")).Single().Invoke(null, [emitted.CallStatic("Sample.Percentage", "Create", 40)]).Should().Be(40);
+        Conversions(emitted.Type("Sample.Percentage")).Single(method => method.ReturnType == typeof(int)).Invoke(null, [emitted.CallStatic("Sample.Percentage", "Create", 40)]).Should().Be(40);
         emitted.Property(Conversions(emitted.Type("Sample.ValidPercentage")).Single().Invoke(null, [60])!, "Value").Should().Be(60);
     }
 }

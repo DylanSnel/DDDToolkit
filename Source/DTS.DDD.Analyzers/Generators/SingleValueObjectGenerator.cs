@@ -10,11 +10,11 @@ namespace DTS.DDD.Analyzers;
 /// records, plus their always-valid twin. Both implement <c>ISingleValue&lt;TSelf, TValue&gt;</c> when the project
 /// can see it, so a project that does not declare them can still store them as their value.
 /// <para>
-/// It also writes two implicit conversions, unless the MSBuild property <c>DDD_ImplicitConversions</c> is
-/// <c>false</c>: from the record to its value, and from the value to the twin. The second validates, and throws
-/// <c>InvalidValueObjectException</c> for an invalid value. A record whose author declared a conversion operator
-/// gets no conversion from the generator, and the plain record never gets one from the value: a plain value object
-/// may be invalid, and a silent conversion to it would hide that.
+/// It also writes implicit conversions, unless the MSBuild property <c>DDD_ImplicitConversions</c> is <c>false</c>:
+/// between the record and its value, both ways, and from the value to the twin. The conversion to the record does not
+/// validate, as a plain value object may be invalid. The one to the twin validates, and throws
+/// <c>InvalidValueObjectException</c> for an invalid value. A record whose author declared a conversion operator gets
+/// none from the generator on the record; its twin still gets its own.
 /// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
@@ -80,6 +80,9 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
                     writer.Line();
                     writer.Line("/// <summary>The value. Set DDD_ImplicitConversions to false for no conversions.</summary>");
                     writer.Line("public static implicit operator " + value.FullyQualifiedName + "(" + name + " value) => (value ?? throw new global::System.ArgumentNullException(nameof(value))).Value;");
+                    writer.Line();
+                    writer.Line("/// <summary>A value object of the value, not validated: ToValid() checks it. Set DDD_ImplicitConversions to false for no conversions.</summary>");
+                    writer.Line("public static implicit operator " + name + "(" + value.FullyQualifiedName + " value) => new(value);");
                 }
 
                 if (definition.SingleValueAvailable)
