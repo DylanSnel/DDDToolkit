@@ -4,9 +4,9 @@ A handler can answer with a `Result<T>` instead of throwing. The result holds th
 the GraphQL schema and the logging read the error from the result, so a refusal is a normal answer and no exception.
 
 ```csharp
-public sealed record ReserveStock(string Sku, int Quantity) : ICommand<Result<Reservation>>;
+public sealed record ReserveStock(string Sku, int Quantity) : IResultCommand<Reservation>;
 
-public sealed class ReserveStockHandler(IStockStore stock) : ICommandHandler<ReserveStock, Result<Reservation>>
+public sealed class ReserveStockHandler(IStockStore stock) : IResultCommandHandler<ReserveStock, Reservation>
 {
     public async ValueTask<Result<Reservation>> Handle(ReserveStock command, CancellationToken cancellationToken)
     {
@@ -31,6 +31,23 @@ public sealed class ReserveStockHandler(IStockStore stock) : ICommandHandler<Res
   as a success. `default(Result)` is a success.
 - `Value` of a failure throws an `ErrorException` with the error. `Error` of a success throws an
   `InvalidOperationException`.
+
+## Requests that answer a result
+
+A request answers a result when its response type is `Result` or `Result<T>`. The short interfaces of
+`DTS.DDD.Mediator` say the same with less text:
+
+| Short | Long |
+|---|---|
+| `IResultCommand<T>` | `ICommand<Result<T>>` |
+| `IResultCommand` | `ICommand<Result>` |
+| `IResultQuery<T>` | `IQuery<Result<T>>` |
+| `IResultCommandHandler<TCommand, T>` | `ICommandHandler<TCommand, Result<T>>` |
+| `IResultCommandHandler<TCommand>` | `ICommandHandler<TCommand, Result>` |
+| `IResultQueryHandler<TQuery, T>` | `IQueryHandler<TQuery, Result<T>>` |
+
+Both spellings are the same type to the mediator and to the generated `Add{Module}Handlers()`. A request that answers
+anything else keeps throwing, so a project chooses per request.
 
 ## The errors
 

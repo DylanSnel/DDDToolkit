@@ -29,6 +29,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Results in GraphQL.** With `AddDDDToolkitErrors()` a resolver may return a `Result<T>`, also in a `Task` or
   `ValueTask`. The field has the type of `T`, a field of a `Result` is a `Boolean`, and a failure is a coded GraphQL
   error with `kind` (`INVALID`, `NOT_PERMITTED`, `NOT_FOUND`, `CONFLICT` or `UNEXPECTED`), `field` and `arguments`.
+- Short interfaces for requests that answer a result: `IResultCommand<T>`, `IResultCommand`, `IResultQuery<T>` and their
+  handlers `IResultCommandHandler<TCommand, T>`, `IResultCommandHandler<TCommand>` and `IResultQueryHandler<TQuery, T>`.
 - `IFailureLocalizer.Localize(Error)`, which `DTS.DDD.Localization` fills from the error's code and arguments.
 - **DDD00111**: a call that returns a `Result` and stands as a statement of its own, directly or awaited, is an error.
 
