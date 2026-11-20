@@ -39,8 +39,8 @@ public enum RefusalKind
 /// one coded GraphQL error.
 /// </para>
 /// <para>
-/// There is no <c>Result&lt;T&gt;</c> beside it, for the reason there is none for value objects: a
-/// result type turns up in every signature it touches, and a codebase with one ends up with two.
+/// A handler that answers with a <c>Result&lt;T&gt;</c> (<c>DTS.DDD.Results</c>) gets a refusal thrown in its pipeline as a
+/// failed result, by its kind: see <c>docs/results.md</c>.
 /// </para>
 /// </summary>
 public class RefusalException : DDDToolkitException

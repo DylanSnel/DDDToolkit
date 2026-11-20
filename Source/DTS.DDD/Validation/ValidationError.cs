@@ -9,8 +9,7 @@ namespace DTS.DDD.Validation;
 /// of these, so the same code reads failures either way.
 /// </para>
 /// <para>
-/// It is deliberately not a <c>Result&lt;T&gt;</c>. The toolkit hands you the failures and lets you put
-/// them in whatever result type your application already uses.
+/// An <c>InvalidError</c> of <c>DTS.DDD.Results</c> holds a list of these, one per input.
 /// </para>
 /// </summary>
 public sealed record ValidationError
@@ -19,7 +18,7 @@ public sealed record ValidationError
     /// The code used when a <c>Validate()</c> override said "no" without saying why. Branch on it to
     /// spot value objects whose rules could be more descriptive.
     /// </summary>
-    public const string UnspecifiedCode = "Unspecified";
+    public const string UnspecifiedCode = "ddd.value-invalid";
 
     /// <summary>
     /// The argument that names the value object type a failure is about, on the failures the toolkit

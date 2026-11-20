@@ -36,7 +36,7 @@
     <value>That was not found, or it is not one you can see.</value>
     <comment>ToolkitRefusals.NotFound: a request is about the owner of an aggregate, and names one there is no row of for the caller, whether it does not exist or row level security keeps it from the caller. No arguments.</comment>
   </data>
-  <data name="Unspecified" xml:space="preserve">
+  <data name="ddd.value-invalid" xml:space="preserve">
     <value>{ValueObject} is not valid.</value>
     <comment>ValidationError.UnspecifiedCode: a Validate() override refused without saying why. {ValueObject} is the type name.</comment>
   </data>

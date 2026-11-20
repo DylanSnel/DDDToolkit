@@ -60,6 +60,13 @@ public interface IFailureLocalizer
     string Localize(RefusalException refusal) => (refusal ?? throw new ArgumentNullException(nameof(refusal))).Message;
 
     /// <summary>
+    /// The error of a failed result in the reader's language, looked up by its code as a refusal is, or its own
+    /// <see cref="Results.Error.Message"/> when no translation is known for the code.
+    /// </summary>
+    /// <param name="error">The error to phrase.</param>
+    string Localize(Results.Error error) => (error ?? throw new ArgumentNullException(nameof(error))).Message;
+
+    /// <summary>
     /// A text of the application's own, by its key, in the reader's language: what the translations hold under
     /// <paramref name="key"/>, or <paramref name="fallback"/> where none does. A permission's description is read so,
     /// by the permission's name, with the description its <c>[Permissions]</c> class gives it as the fallback, from the

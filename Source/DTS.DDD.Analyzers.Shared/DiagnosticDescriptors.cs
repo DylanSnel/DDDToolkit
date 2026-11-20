@@ -758,6 +758,14 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "A permission marker can mark a member that is a collection of ids, where its package names a method for a collection with EachMethod on [PermissionMarker]. Membership's [OnResource] names MemberAccess.OnEach, so [OnResource(BoardPermissions.Edit)] IReadOnlyCollection<BoardId> Boards becomes MemberAccess.OnEach(BoardPermissions.Edit, request.Boards). That call takes the permission and the collection, and nothing more. A marker argument such as [ExpectedVersion] names the version of one resource, so beside a marker on a collection it is reported. [OrOwn] makes the caller's own an alternative to one permission on one resource, so paired with a marker on a collection it is reported. A marker argument that can belong to a marker on one id of the same resource belongs to that marker. Send one request for each resource where a version or the caller's own is needed.");
 
+    public static readonly DiagnosticDescriptor ResultNotObserved = Create(
+        id: "DDD00111",
+        title: "A Result is read or returned",
+        messageFormat: "The Result of '{0}' is dropped. Read IsSuccess or IsFailure, return it, or call ThrowIfFailure().",
+        category: Usage,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A method that returns DTS.DDD.Results.Result or Result<T> reports a failure in its return value and throws nothing. A call whose result is dropped, as a statement of its own or awaited as one, loses that failure. Read the result, return it, pass it on, or call ThrowIfFailure() where a failure is a bug. Assign it to the discard, _ = Call(), where the failure does not matter.");
     public static readonly DiagnosticDescriptor SecondRequestHandler = Create(
         id: "DDD00110",
         title: "A request, a command or a query has one handler",

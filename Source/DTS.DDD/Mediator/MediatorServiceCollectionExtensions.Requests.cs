@@ -1,3 +1,4 @@
+using DTS.DDD.Results;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -233,6 +234,12 @@ public static partial class MediatorServiceCollectionExtensions
     {
         var handler = provider.GetRequiredService<THandler>();
         var behaviors = PipelineOf<TRequest, TResponse>(provider);
+        if (ResultResponse<TResponse>.IsResult)
+        {
+            // A refusal thrown in the pipeline becomes a failed result, and every failure is logged.
+            return ResultBoundary.RunAsync<TRequest, TResponse>(provider, () => behaviors.Length == 0 ? handler.Handle(request, cancellationToken) : Around(behaviors, handler.Handle, request, cancellationToken));
+        }
+
         return behaviors.Length == 0 ? handler.Handle(request, cancellationToken) : Around(behaviors, handler.Handle, request, cancellationToken);
     }
 
@@ -242,6 +249,12 @@ public static partial class MediatorServiceCollectionExtensions
     {
         var handler = provider.GetRequiredService<THandler>();
         var behaviors = PipelineOf<TCommand, TResponse>(provider);
+        if (ResultResponse<TResponse>.IsResult)
+        {
+            // A refusal thrown in the pipeline becomes a failed result, and every failure is logged.
+            return ResultBoundary.RunAsync<TCommand, TResponse>(provider, () => behaviors.Length == 0 ? handler.Handle(command, cancellationToken) : Around(behaviors, handler.Handle, command, cancellationToken));
+        }
+
         return behaviors.Length == 0 ? handler.Handle(command, cancellationToken) : Around(behaviors, handler.Handle, command, cancellationToken);
     }
 
@@ -251,6 +264,12 @@ public static partial class MediatorServiceCollectionExtensions
     {
         var handler = provider.GetRequiredService<THandler>();
         var behaviors = PipelineOf<TQuery, TResponse>(provider);
+        if (ResultResponse<TResponse>.IsResult)
+        {
+            // A refusal thrown in the pipeline becomes a failed result, and every failure is logged.
+            return ResultBoundary.RunAsync<TQuery, TResponse>(provider, () => behaviors.Length == 0 ? handler.Handle(query, cancellationToken) : Around(behaviors, handler.Handle, query, cancellationToken));
+        }
+
         return behaviors.Length == 0 ? handler.Handle(query, cancellationToken) : Around(behaviors, handler.Handle, query, cancellationToken);
     }
 

@@ -135,6 +135,10 @@ internal static class KnownTypes
     /// <summary>On a module's request interface: the generator writes the pipeline behavior that holds its requests to what they declare.</summary>
     public const string AccessRequestsAttribute = AttributesNamespace + ".AccessRequestsAttribute";
 
+    public const string Result = "DTS.DDD.Results.Result";
+
+    public const string ResultOfT = "DTS.DDD.Results.Result`1";
+
     /// <summary>What a request implements to say what it requires of its caller; a module's request interface derives from it.</summary>
     public const string RequireAccessInterface = "DTS.DDD.Access.IRequireAccess";
 

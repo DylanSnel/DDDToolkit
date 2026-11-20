@@ -10,6 +10,37 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-20
+
+### Added
+
+- **Results.** `Result` and `Result<T>` in `DTS.DDD.Results`: a struct with a value or an `Error`. A value and an error
+  convert to a result, and `Map`, `Bind`, `Ensure`, `Tap`, `TapError`, `Match`, `TryGetValue` and `ThrowIfFailure`
+  combine and read it. See `docs/results.md`.
+  - Five error records: `InvalidError` (with `Failures`, one per input), `NotPermittedError`, `NotFoundError`,
+    `ConflictError` and `UnexpectedError`. An application derives its own errors from them.
+  - `default(Result<T>)` is a failure with the code `ddd.result-not-set`.
+- **Results in the mediator.** A request whose response is a `Result` or `Result<T>` gets a `RefusalException` or an
+  `InvalidValueObjectException` thrown in its pipeline as a failed result, by the refusal's kind. A refused access
+  check does not run the handler. A request with another response throws as before.
+  - Every failure is logged as `<request> gave <error type> <code>`, without the message and the arguments.
+    `AddDDDToolkitResultLogging(options => options.Level<TError>(level))` sets the level per error type. The defaults:
+    `UnexpectedError` at Error, `NotPermittedError` at Warning, the rest at Information.
+- **Results in GraphQL.** With `AddDDDToolkitErrors()` a resolver may return a `Result<T>`, also in a `Task` or
+  `ValueTask`. The field has the type of `T`, a field of a `Result` is a `Boolean`, and a failure is a coded GraphQL
+  error with `kind` (`INVALID`, `NOT_PERMITTED`, `NOT_FOUND`, `CONFLICT` or `UNEXPECTED`), `field` and `arguments`.
+- `IFailureLocalizer.Localize(Error)`, which `DTS.DDD.Localization` fills from the error's code and arguments.
+- **DDD00111**: a call that returns a `Result` and stands as a statement of its own, directly or awaited, is an error.
+
+### Changed
+
+- `ValidationError.UnspecifiedCode`, the code of a `Validate()` that says no without a reason, is `ddd.value-invalid`
+  instead of `Unspecified`. The translations in `DTS.DDD.Localization` use the new key.
+- In GraphQL a class of a package that names itself with `[DisplayName]`, such as Tenancy's `SeatOverview`, shows no
+  methods as fields, as an entity or a value object does.
+- Code in a namespace under `DTS.DDD` sees the new namespace `DTS.DDD.Results` before ASP.NET Core's static class
+  `Results`. Such code writes `Microsoft.AspNetCore.Http.Results.Ok(...)` in full. Code in other namespaces is not affected.
+
 ## [0.1.4] - 2026-11-20
 
 ### Changed

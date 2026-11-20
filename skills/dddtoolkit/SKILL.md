@@ -137,8 +137,9 @@ public partial record Address
   `email.Value`.
 - Change a value with the generated `money.With(amount: 12.50m)`. A `with { }` expression only compiles
   inside the type (CS0272). That is intended, so do not widen the setters to make `with` work.
-- The toolkit has no `Result<T>` on purpose. Wrap `TryToValid` in the project's own result type if it
-  has one.
+- A handler answers with `Result<T>` of `DTS.DDD.Results` (`ICommand<Result<T>>`) and returns an error record
+  (`InvalidError`, `NotPermittedError`, `NotFoundError`, `ConflictError`, `UnexpectedError`) instead of throwing.
+  The mediator turns a thrown refusal or invalid value object into a failed result. See `docs/results.md`.
 
 ## Entities and aggregates
 

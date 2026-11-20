@@ -479,7 +479,7 @@ The toolkit writes eight messages itself, and ships them in English and Dutch:
 
 | Code | Where it comes from | Placeholders |
 | --- | --- | --- |
-| `Unspecified` | A `Validate()` that returned `false` without a reason. | `{ValueObject}` |
+| `ddd.value-invalid` | A `Validate()` that returned `false` without a reason. | `{ValueObject}` |
 | `ValueObjectValidator` | `MustBeValid()` in `DTS.DDD.FluentValidation`. | `{PropertyName}`, `{ValueObject}` |
 | `access.refused` | `ToolkitRefusals.Refused`, in two cases. `DTS.DDD.EntityFramework` makes it when a row level security (RLS) policy or a guard of the database refuses a save. A request that lets one caller or another through (`AccessRequirement.Any`, `[OrOwn]`) makes it when the caller is neither. Its argument `Reasons` then lists the code and the arguments of each case. | none |
 | `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`. `DTS.DDD.EntityFramework.Postgres` makes it for a token whose role is on none of the host's lists, before anything runs for it. | `{Role}` |

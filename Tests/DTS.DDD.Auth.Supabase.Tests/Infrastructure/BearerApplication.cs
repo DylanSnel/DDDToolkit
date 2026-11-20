@@ -67,8 +67,8 @@ internal sealed class BearerApplication : IAsyncDisposable
         var app = builder.Build();
         app.UseAuthentication();
         app.UseAuthorization();
-        app.MapGet("/me", (HttpContext context) => Results.Text($"{context.User.Identity!.Name}|{context.GetSupabaseUser()}")).RequireAuthorization();
-        app.MapGet("/who", (HttpContext context) => Results.Text(context.GetSupabaseUser().ToString()));
+        app.MapGet("/me", (HttpContext context) => global::Microsoft.AspNetCore.Http.Results.Text($"{context.User.Identity!.Name}|{context.GetSupabaseUser()}")).RequireAuthorization();
+        app.MapGet("/who", (HttpContext context) => global::Microsoft.AspNetCore.Http.Results.Text(context.GetSupabaseUser().ToString()));
 
         await app.StartAsync(cancellation);
         var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();

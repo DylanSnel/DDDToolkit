@@ -146,7 +146,7 @@ public sealed partial class GeneratorTestHost
     public static IIncrementalGenerator[] SupabaseGenerators() => [new SupabaseMigrationsGenerator(), new SupabaseDesignTimeFactoryGenerator()];
 
     /// <summary>The diagnostic analyzers in DTS.DDD.Analyzers, as opposed to its generators.</summary>
-    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new AccessBehaviorCallAnalyzer(), new DirectHandlerCallAnalyzer(), new ApplicationMarkAnalyzer()];
+    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new AccessBehaviorCallAnalyzer(), new DirectHandlerCallAnalyzer(), new ApplicationMarkAnalyzer(), new ResultNotObservedAnalyzer()];
 
     /// <summary>The diagnostic analyzers in DTS.DDD.EntityFramework.Analyzers, as opposed to its generators.</summary>
     public static DiagnosticAnalyzer[] EntityFrameworkAnalyzers() => [new EfDesignTimeFactoryAnalyzer()];

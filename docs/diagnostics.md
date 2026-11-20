@@ -4093,6 +4093,23 @@ the permission and the collection, and nothing more.
 A request that also has `[OnResource]` on one id of the same resource is not reported: the marker argument belongs to
 that marker. Remove the marker argument, or send one request for each resource.
 
+## DDD00111
+
+**A Result is read or returned.**
+
+```csharp
+Stock.Reserve(sku);           // DDD00111: the failure of the Result is lost
+await sender.Send(command);   // DDD00111 when the response is a Result
+
+var reserved = Stock.Reserve(sku);
+if (reserved.IsFailure) { ... }
+_ = Stock.Reserve(sku);       // nothing reported: the failure does not matter here
+```
+
+A method that returns `Result` or `Result<T>` reports a failure in its return value and throws nothing. A call whose
+result is dropped, as a statement of its own or awaited as one, loses that failure. Read the result, return it, pass it
+on, or call `ThrowIfFailure()` where a failure is a bug. `Tap` and `TapError` return the result they were called on
+and are not reported. See [Results](results.md#a-dropped-result).
 ## DDD00110
 
 **A request, a command or a query has one handler.**
