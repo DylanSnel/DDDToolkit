@@ -72,7 +72,7 @@ The sample's seed has a tenant called **harbor** (Harbor Works). Its organizatio
 regions below it (North and South), and areas below those, such as North Coast. The project **Pier 7** is at North
 Coast. Leo owns it, and Juno and Vic are on its crew. The project **Bay bridge** is at South Bay, and Juno is not on its
 crew. Every request below is sent for harbor. Its `Tenant` header names the tenant, and the host looks up the caller's
-seat there before anything else (TenantHeader).
+seat there before anything else (`UseTenantSelection` of `DylansTechStack.Tenancy.AspNetCore`).
 
 | Caller | Who it is | Runs on Postgres as |
 |---|---|---|
@@ -650,7 +650,7 @@ SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claim
 <summary>Show the code: where the user and the Tenancy user start, and the function that finds the seat</summary>
 
 ```csharp shortened
-// The sample's TenantHeader.UseTenantSelection, shortened: the user and the Tenancy user begun for the request
+// TenantHeader.UseTenantSelection of DTS.Tenancy.AspNetCore, shortened: the user and the Tenancy user begun for the request
 var requestUser = context.GetSupabaseUser();                      // from the validated token, or anonymous
 using (access.BeginAs(requestUser))                               // access is the application's AccessManager
 {

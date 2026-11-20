@@ -219,7 +219,17 @@ flowchart TD
 `TenantSelection` reads the seat directory as the user, in no tenant. Postgres returns only the seats of the
 token's identity. `TenantSelection` returns the seat when the seat and its tenant are active.
 
-**The host's `Program.cs`**, after authentication:
+The package `DylansTechStack.Tenancy.AspNetCore` has this step as a middleware. Add it to the host's `Program.cs`
+after authentication:
+
+```csharp
+app.UseAuthentication();
+app.UseTenantSelection();   // DTS.Tenancy.AspNetCore: the Tenant header, or another header as its argument
+```
+
+`UseTenantSelection` takes the caller from the Supabase access token (`GetSupabaseUser`). It begins that caller and the
+seat for the rest of the request, and refuses nothing: a request that needs a seat refuses a caller without one. A
+lookup that throws is logged, and the request runs as nobody. Shortened, the middleware does this:
 
 ```csharp
 app.Use(async (context, next) =>
