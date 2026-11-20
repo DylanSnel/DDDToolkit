@@ -190,7 +190,7 @@ services.AddTenancy<ShopTenancyContext>();
 public static ApplicationCatalogue Application { get; } = new(Permissions: ShopPermissions.All);
 
 // In a request that names the tenant: the tenant's role made from the default administrators' starter role
-var administrators = (await roles.ListAsync(cancellationToken))   // roles: RoleManager
+var administrators = (await roles.ListAsync(cancellationToken))   // roles: RoleService
     .Single(role => role.FromStarterRole == TenancyStarterRoles.DefaultAdministratorsKey);
 
 // Administrators of your own, one seeded for each shape of tenant, and a starter role that every tenant gets
@@ -271,7 +271,7 @@ builder.Services.SyncStarterRoles();   // once the host has started, every tenan
 - `SyncStarterRoles()` is not a start-up check, because a start-up check changes nothing. The sync runs once per start,
   in the background. It starts after the start-up checks and after every hosted service has started, so a seeding of
   yours is done. The host serves requests while the sync runs. Calling `SyncStarterRoles()` twice runs the sync once.
-- In each active or suspended tenant, the sync runs `RoleManager.FollowStarterRolesAsync` as Tenancy's system work, in
+- In each active or suspended tenant, the sync runs `RoleService.FollowStarterRolesAsync` as Tenancy's system work, in
   Tenancy's scope. On Postgres it runs under the policies.
 - The sync saves once per tenant, after taking the tenant's access revision. So a second run, or a second host that
   starts at the same time, changes nothing more. When another change of the tenant's access commits first, the sync
@@ -281,7 +281,7 @@ builder.Services.SyncStarterRoles();   // once the host has started, every tenan
 - To sync from a deployment step or an operator's endpoint, leave out the call and run
   [`IStarterRoleSync`](reference/catalogue.md#istarterrolesync) yourself. `AddTenancy` registers it.
 - To sync one tenant for an operator, write a command marked `[Operator]` that names the tenant with a `[ForTenant]`
-  member. Its handler calls `RoleManager.FollowStarterRolesAsync` ([Roles](reference/managers.md#roles)). The handler
+  member. Its handler calls `RoleService.FollowStarterRolesAsync` ([Roles](reference/services.md#roles)). The handler
   runs as operator work in that tenant, and the events record the operator. No seat may run it
   (`access.system-only`).
 
@@ -303,13 +303,13 @@ if (!report.Succeeded)
 // so the events record the operator.
 [Operator]
 public sealed record FollowStarterRolesIn([ForTenant] TenantId Tenant)
-    : ICommand<RoleManager.StarterRolesFollowed>, ITenantsRequest;
+    : ICommand<RoleService.StarterRolesFollowed>, ITenantsRequest;
 
-public sealed class FollowStarterRolesInHandler(RoleManager roles)
-    : ICommandHandler<FollowStarterRolesIn, RoleManager.StarterRolesFollowed>
+public sealed class FollowStarterRolesInHandler(RoleService roles)
+    : ICommandHandler<FollowStarterRolesIn, RoleService.StarterRolesFollowed>
 {
     // followed.Changed, followed.KeptForAnAdministrator, followed.WithoutTheirStarterRole
-    public async ValueTask<RoleManager.StarterRolesFollowed> Handle(FollowStarterRolesIn command, CancellationToken cancellationToken)
+    public async ValueTask<RoleService.StarterRolesFollowed> Handle(FollowStarterRolesIn command, CancellationToken cancellationToken)
         => await roles.FollowStarterRolesAsync(cancellationToken);
 }
 ```
@@ -323,7 +323,7 @@ the tenant the current work acts in", and Tenancy runs every one that is registe
 role class kept for a resource, and `AddBoardMembershipWithTenancy` registers it
 ([Starter roles with Tenancy](../membership/permissions-and-roles.md#starter-roles-with-tenancy)).
 
-- `TenantManager.ProvisionAsync` runs them after its save, as system work in the new tenant.
+- `TenantService.ProvisionAsync` runs them after its save, as system work in the new tenant.
 - `IStarterRoleSync` runs them for each tenant, after Tenancy's own roles, as system work in that tenant.
 - Each one runs in a scope of its own, which begins after that system work. So a context it takes from that scope runs as
   that work.
@@ -436,7 +436,7 @@ and `projects.crew.manage`, and both manage access. At North Coast:
 - At South Bay, Rhea can give no role (`tenancy.not-permitted`).
 
 ```csharp
-// seats: SeatManager. GrantAsync finds the calling seat and applies the rules above before it saves.
+// seats: SeatService. GrantAsync finds the calling seat and applies the rules above before it saves.
 try
 {
     await seats.GrantAsync(leo, crewLead, northCoast, until: null, reason: null, cancellationToken);   // until: null, for good
@@ -448,7 +448,7 @@ catch (RefusalException refusal) when (refusal.Code == TenancyRefusals.GrantExce
 ```
 
 `GrantAsync` takes your `Seat`, `Role` and unit objects, or their ids. It returns the seat with its new grant.
-[`SeatManager`](reference/managers.md#seats) lists every parameter and refusal.
+[`SeatService`](reference/services.md#seats) lists every parameter and refusal.
 
 ### Which permissions manage access
 
@@ -506,8 +506,8 @@ public async Task The_permissions_that_manage_access_are_exactly_these()
 
 **A forgotten mark gives access away.** Without its mark, a permission counts as one that manages no access:
 
-- Every grants manager can give the unmarked permission to anyone placed where the manager holds
-  `tenancy.grants.manage`, the manager included. Mark permissions before anyone manages grants.
+- Every grants manager can give the unmarked permission to anyone placed where the service holds
+  `tenancy.grants.manage`, the service included. Mark permissions before anyone manages grants.
 - A module that gives permissions through its own grants, such as a crew role on one project, must apply containment
   to a marked permission itself. The sample's crews give `projects.crew.manage` only from a seat that already manages
   that crew.
@@ -521,11 +521,11 @@ Each of these commands follows the rule for giving a role. With containment on:
 
 | Change | The command requires | A role that manages access also requires |
 |---|---|---|
-| Take a role away (`SeatManager.RevokeAsync`) | `tenancy.grants.manage` at the unit | The role's access-managing permissions at the unit, until at least the grant's end. A seat's current grant counts as the seat's hold, so a seat can take away its own roles. |
-| Withdraw a placement and its grants (`SeatManager.WithdrawAsync`) | `tenancy.seats.manage` at the unit, plus `tenancy.grants.manage` when the placement has grants | The same, for each grant. |
-| Suspend, deactivate or reactivate a seat (`SeatManager.SuspendAsync`, `DeactivateAsync`, `ReactivateAsync`). This takes away or gives back the seat's grants. | `tenancy.seats.manage` for the whole tenant | The same, for each grant that has not ended. A seat can suspend or deactivate itself. A seat can never reactivate itself, because a suspended seat acts as nobody. |
-| Move a unit (`OrganizationManager.MoveUnitAsync`). This changes which grants reach the unit. | `tenancy.units.manage` at the old parent and at the new parent | Every access-managing permission that the move gives to anyone or takes from anyone, held by the mover at the unit until at least the end of that grant. Even with containment off, the move gives the mover nothing that the mover lacks at the unit, or for longer. |
-| Add or remove an access-managing permission in a role, or archive a role that holds one (`RoleManager.SetPermissionsAsync`, `ArchiveAsync`) | `tenancy.roles.manage` for the whole tenant | A caller who is an administrator, which means `tenancy.roles.manage` at the root with no end. |
+| Take a role away (`SeatService.RevokeAsync`) | `tenancy.grants.manage` at the unit | The role's access-managing permissions at the unit, until at least the grant's end. A seat's current grant counts as the seat's hold, so a seat can take away its own roles. |
+| Withdraw a placement and its grants (`SeatService.WithdrawAsync`) | `tenancy.seats.manage` at the unit, plus `tenancy.grants.manage` when the placement has grants | The same, for each grant. |
+| Suspend, deactivate or reactivate a seat (`SeatService.SuspendAsync`, `DeactivateAsync`, `ReactivateAsync`). This takes away or gives back the seat's grants. | `tenancy.seats.manage` for the whole tenant | The same, for each grant that has not ended. A seat can suspend or deactivate itself. A seat can never reactivate itself, because a suspended seat acts as nobody. |
+| Move a unit (`OrganizationService.MoveUnitAsync`). This changes which grants reach the unit. | `tenancy.units.manage` at the old parent and at the new parent | Every access-managing permission that the move gives to anyone or takes from anyone, held by the mover at the unit until at least the end of that grant. Even with containment off, the move gives the mover nothing that the mover lacks at the unit, or for longer. |
+| Add or remove an access-managing permission in a role, or archive a role that holds one (`RoleService.SetPermissionsAsync`, `ArchiveAsync`) | `tenancy.roles.manage` for the whole tenant | A caller who is an administrator, which means `tenancy.roles.manage` at the root with no end. |
 
 - The refusal is `tenancy.grant-exceeds-own`, and it names what the seat lacks. The last administrator always stays.
 - Only an administrator changes an access-managing permission in a role, because the change reaches every holder at
@@ -633,7 +633,7 @@ public static class ShopCatalogue
 [InTenant]
 public sealed record PassQuiz(QuizId Quiz, QuizAnswers Answers) : ICommand<Seat>, ITenantsRequest;
 
-public sealed class PassQuizHandler(SeatManager seats, TenancyAccessManager access, IQuizzes quizzes)
+public sealed class PassQuizHandler(SeatService seats, TenancyAccessManager access, IQuizzes quizzes)
     : ICommandHandler<PassQuiz, Seat>
 {
     public async ValueTask<Seat> Handle(PassQuiz command, CancellationToken cancellationToken)

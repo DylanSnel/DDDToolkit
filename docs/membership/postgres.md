@@ -221,7 +221,7 @@ The check logs a warning for a resource whose rules mark no `NamesOwner` permiss
 
 The database cannot tell which command wrote a row. A caller whom your rule lets change a resource could write its
 member rows and its owner column with a statement of its own. That caller could give itself a role, or take the
-resource. The permissions the member manager requires (`documents.share` on
+resource. The permissions the member service requires (`documents.share` on
 [the document](resources-and-members.md#a-document-and-the-people-it-is-shared-with)) are marked, and the package
 writes a lock from the same marks:
 
@@ -233,11 +233,11 @@ writes a lock from the same marks:
 | `NamesOwner` | A trigger. A statement that leaves a row with another owner is refused, unless the caller held that permission before the statement. A new row had no owner, so your create rule decides whom it names. |
 | either mark, with `reachFromAbove` | Nothing extra about where a resource hangs. The lock checks what the caller holds there, from each place reached, when the statement runs. |
 
-- **The member manager and the lock check the same permission.** The manager refuses a caller without it before
-  anything is written. The lock refuses a statement that went round the manager.
+- **The member service and the lock check the same permission.** The service refuses a caller without it before
+  anything is written. The lock refuses a statement that went round the service.
 - **A change the lock would refuse to the caller itself is saved as the resource's own work.** Leaving a document is
   an example. The lock refuses the member a write to its own row, because the member does not hold `documents.share`.
-  So the member manager saves the leave as system work in the resource's scope, begun for the member, when the request
+  So the member service saves the leave as system work in the resource's scope, begun for the member, when the request
   in hand was checked for this document ([The caller's own place](resources-and-members.md#the-callers-own-place)).
   With Tenancy, that work names the member's seat, so the history names who left.
 - **Three columns need a rule of yours:**
@@ -256,7 +256,7 @@ writes a lock from the same marks:
 - **The lock policies are restrictive.** They narrow what your rules allow and grant nothing on their own. They apply
   to every database role that may call the functions. Work in a scope the rules do not name writes no member row and
   names no owner. System work and the table owner are not checked.
-- **Without `ManagesMembers`**, only system work changes the members, in the member manager and in the database.
+- **Without `ManagesMembers`**, only system work changes the members, in the member service and in the database.
   Opening a resource writes the owner's member row, so a caller who opens such a resource as itself is refused. Open
   it as system work, or mark a permission `ManagesMembers`.
 - **Without `NamesOwner`**, the owner column follows your rule for changing the resource, and the start-up check
@@ -270,7 +270,7 @@ writes a lock from the same marks:
     row names the owner. So a rule over `user.Sees<DocumentId>()` lets the owner write the member rows of a resource it
     has just opened. Where callers open resources as themselves, let the owner hold the locking permission.
   - An owner who holds the permissions only by owning loses them once the owner column changes. The rest of that
-    hand-over is then no longer the old owner's to write. So the member manager saves an owner's own hand-over as
+    hand-over is then no longer the old owner's to write. So the member service saves an owner's own hand-over as
     the resource's own work, once the command's check passed. A caller who holds the permission through a role or
     from above saves the hand-over as itself.
 - **The lock is written only for a resource with row access rules.** Without rules, no role may call the functions
@@ -313,7 +313,7 @@ from claiming another kind:
   Without Tenancy no row can claim to be outside, so nothing is written.
 - The resource's access file runs after Tenancy's, which makes `seat_to_admit(seat)`.
 - `seat_to_admit(seat)` runs as its owner. It answers one seat of the caller's tenant by its id, whatever seats the
-  caller reads. So the guard lets a member row through for a seat the caller does not read, as the member manager does.
+  caller reads. So the guard lets a member row through for a seat the caller does not read, as the member service does.
 - To a signed-in user it answers an active seat alone. A seat that is not active, a seat of another tenant and an id no
   seat has give no row alike, and the guard refuses the member row.
 - To scoped system work it answers a seat of the work's tenant whatever its status, so the application's own work
@@ -327,7 +327,7 @@ The functions run as their owner and find a role by its id, past your query filt
 another customer's resource behaves differently in two places. In your application it gives nothing. In the database
 functions it gives its permissions. Each writer is checked as follows:
 
-- **Your application** gives roles through the member manager, which checks the role under your filter.
+- **Your application** gives roles through the member service, which checks the role under your filter.
 - **A caller who writes rows directly** is checked by the lock, where a permission is marked `ManagesMembers`. A role
   the caller gives must be one it sees in your role table. So your read rule on that table says which customer a
   role belongs to, from the token or from a function of yours. Your rules also keep the resources a caller may change

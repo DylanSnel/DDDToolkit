@@ -46,9 +46,9 @@ lookup uses a data loader that sends `SeatsById` once per batch, in parts of at 
 
 ## Tenancy's classes as GraphQL types
 
-Tenancy's managers return the application's classes: `Tenant`, `Seat`, `Role`, `OrganizationUnit` and
+Tenancy's services return the application's classes: `Tenant`, `Seat`, `Role`, `OrganizationUnit` and
 `Invitation`. The Tenants schema declares one GraphQL type over each class. For example, `seats` returns the `Seat`
-objects that `SeatManager.ListAsync` read, and the `Seat` type shows their `id`, `displayName` and `status`.
+objects that `SeatService.ListAsync` read, and the `Seat` type shows their `id`, `displayName` and `status`.
 
 - **A type class lists the fields it shows.** Each type class calls `BindFieldsExplicitly()` and names the fields of
   the class one by one. A field that is not listed is not in the schema. The classes hold more than the schema
@@ -59,14 +59,14 @@ objects that `SeatManager.ListAsync` read, and the `Seat` type shows their `id`,
 - **A field that the class lacks is a resolver in the type class.** A unit's path depends on the units above it, so
   `OrganizationUnit.path` and `depth` are resolvers. Whether a role manages access comes from the catalogue, so
   `Role.managesAccess` is a resolver. Each resolver loads its value through a data loader. The data loader sends a
-  query, and the query's handler asks the manager. A resolver takes no manager itself. So the units of a list are one
-  question to the manager, and that question passes the access check of its query.
-- **A manager's record is a GraphQL type too.** Some reads return more than one class holds. The manager then returns
-  a record with the class inside it, and the schema shows that record. `overviewOfMine` returns the seat manager's
+  query, and the query's handler asks the service. A resolver takes no service itself. So the units of a list are one
+  question to the service, and that question passes the access check of its query.
+- **A service's record is a GraphQL type too.** Some reads return more than one class holds. The service then returns
+  a record with the class inside it, and the schema shows that record. `overviewOfMine` returns the seat service's
   `SeatOverview`, which holds the tenant, the seat, its units and its roles. The operators' `tenants` returns the tenant
-  manager's page, where each `TenantListing` holds a tenant beside its name and its number of active seats.
+  service's page, where each `TenantListing` holds a tenant beside its name and its number of active seats.
 
-The diagram follows the fields of one unit. Purple: the resolvers in the type class; green: the manager that reads
+The diagram follows the fields of one unit. Purple: the resolvers in the type class; green: the service that reads
 the path and the depth; grey: the fields that come from the object, with no read.
 
 ```mermaid
@@ -76,7 +76,7 @@ flowchart TB
     resolvers["<b>path, depth</b><br/><small>resolvers in OrganizationUnitType</small>"]
     loader["<b>IOrganizationUnitNameByIdDataLoader</b><br/><small>the ids of one batch</small>"]
     query["<b>OrganizationUnitsById</b><br/><small>access check, then handler</small>"]
-    manager["<b>OrganizationManager</b><br/><small>UnitsByIdAsync: one statement</small>"]
+    manager["<b>OrganizationService</b><br/><small>UnitsByIdAsync: one statement</small>"]
     unit --> own
     unit --> resolvers
     resolvers --> loader --> query --> manager
@@ -163,22 +163,22 @@ The types of the Tenants schema, with the class or record each is declared over:
 | `Role` | `Role` | `managesAccess` loads through `IRoleByIdDataLoader`. `permissions` requires `tenancy.roles.manage`. |
 | `OrganizationUnit` | `OrganizationUnit` | `path` and `depth` load through `IOrganizationUnitNameByIdDataLoader`. |
 | `Invitation` | `Invitation` | `unit`, `role` and `issuedBy` load through the three directory loaders. |
-| `SeatOverview` | `SeatManager.SeatOverview` | `placements` returns the placements of the overview's seat. |
+| `SeatOverview` | `SeatService.SeatOverview` | `placements` returns the placements of the overview's seat. |
 | `Placement`, `RoleGrant` | the package's `Placement<…>` and `RoleGrant<…>` | None. They name units and roles by id. |
 | `SeatOfMine` | `SeatInTenant<Seat>` | None. |
-| `TenantPage`, `TenantListing` | `TenantManager.TenantPage` and `TenantManager.TenantListing` | None. |
+| `TenantPage`, `TenantListing` | `TenantService.TenantPage` and `TenantService.TenantListing` | None. |
 | `OrganizationUnitName` | `NamedUnit<OrganizationUnitId>` | None. |
-| `IssuedInvitation` | `InvitationManager.IssuedInvitation` | None. |
-| `AcceptedInvitation` | `InvitationManager.AcceptedInvitation` | None. |
+| `IssuedInvitation` | `InvitationService.IssuedInvitation` | None. |
+| `AcceptedInvitation` | `InvitationService.AcceptedInvitation` | None. |
 
 The routes write the same fields as the types. `GET /tenancy/units` writes each unit with `path` and `depth`, from the
-organization manager's `UnitInTree`. `GET /me` writes the fields of `SeatOverview`. Its `placements` name units and
+organization service's `UnitInTree`. `GET /me` writes the fields of `SeatOverview`. Its `placements` name units and
 roles by id, and the overview's `units` and `roles` say what each id is called. A route writes a seat as `id`,
 `displayName` and `status`. It never writes the identity.
 
 ### What a mutation returns
 
-A command of the Tenants module returns the object that its manager returned. A command that creates returns the
+A command of the Tenants module returns the object that its service returned. A command that creates returns the
 new object, and a command that changes returns the changed aggregate. The mutation sends the command and returns that
 object. It reads nothing again.
 
@@ -290,7 +290,7 @@ module against these rules. Projects' schema is the example:
   changed ([What a mutation returns](#what-a-mutation-returns)).
 - **A type is what a query returns.** It is declared over that class or record with
   [`[ObjectType<T>]`](../../graphql.md#types-over-application-records). In Projects and Inspections that is the
-  application's record. In Tenants it is one of Tenancy's classes or a manager's record, as
+  application's record. In Tenants it is one of Tenancy's classes or a service's record, as
   [Tenancy's classes as GraphQL types](#tenancys-classes-as-graphql-types) shows. Nothing is copied or mapped.
 - **Missing data returns `null` without an error.** `project(id:)` and `node(id:)` return `null` for a project that is
   missing or out of sight. A reference that its owner does not resolve, such as another tenant's seat, returns its id

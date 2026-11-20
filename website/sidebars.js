@@ -78,7 +78,7 @@ const sidebars = {
               label: 'API reference',
               items: [
                 'tenancy/reference/aggregates',
-                'tenancy/reference/managers',
+                'tenancy/reference/services',
                 'tenancy/reference/catalogue',
                 'tenancy/reference/access',
                 'tenancy/reference/queries',
@@ -118,7 +118,7 @@ const sidebars = {
               items: [
                 'membership/reference/resource-and-members',
                 'membership/reference/rules',
-                'membership/reference/managers',
+                'membership/reference/services',
                 'membership/reference/refusals',
                 'membership/reference/entity-framework',
                 'membership/reference/postgres',

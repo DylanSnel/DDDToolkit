@@ -36,9 +36,9 @@ module name of its folder ([A module named by its folder](../../modules.md#a-mod
   Application projects of Inspections also reference `Projects.Contracts`.
 - **Two ports.** `ProjectsInfrastructure.cs`
   registers both:
-  - A command that changes the project itself loads, changes and saves it through `IProjectRepository`. The store works
+  - A command that changes the project itself loads, changes and saves it through `IProjectRepository`. The repositories work
     on the request's context, which is the request's unit of work. A command on the crew or on the project roles
-    calls the managers the Membership package writes, `CrewMemberManager` and `ProjectRoleManager`. They load and
+    calls the services the Membership package writes, `CrewMemberService` and `ProjectRoleService`. They load and
     save on the same context.
   - A query reads through `IProjectReads`, on a context of its own. The queries of one request may run at the same
     time, and a context runs one query at a time.
@@ -93,7 +93,7 @@ public partial interface IProjectsRequest : IRequireAccess;
 ```
 
 - A refused request never reaches its handler. Its trace gets a tag with the refusal code.
-- A handler saves through the store. One command is one unit of work.
+- A handler saves through the repositories. One command is one unit of work.
 - A handler cannot be reached another way:
   - The host does not start when a module's access behavior is missing
     ([start-up check](../../startup-checks.md) `access.behaviors-registered`).
@@ -154,7 +154,7 @@ not reach. It refuses nobody for seeing nothing.
 | `TakeCrewRole`, `RemoveCrewMember` | `projects.crew.manage` on the project. | When a seat changes its own place on the crew, the crew manager saves the change as the module's work. |
 | `AddGuest`, `RemoveGuest` | `projects.guests.manage` on the project. | The crew manager takes the set from the seat's kind and asks that set's permission again. A team role for a guest is `projects.role-not-in-set`. |
 | `ChangeProjectOwner` | `projects.owner.change` on the project. | The new owner's seat is active. The old owner stays on the crew in the project role that `FormerOwnerRole` names, or leaves the crew. |
-| `MakeProjectRole`, `RenameProjectRole`, `SetProjectRolePermissions`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant. | The role manager asks the same permission, the one the projects' rules name in `managedWith`. |
+| `MakeProjectRole`, `RenameProjectRole`, `SetProjectRolePermissions`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant. | The role service asks the same permission, the one the projects' rules name in `managedWith`. |
 
 | Inspections request | Declares | The handler also checks |
 |---|---|---|
@@ -171,36 +171,36 @@ the result into a refusal:
 - A closed project returns `projects.closed`, for a request that adds an inspection.
 - A permission the caller does not hold returns `projects.not-permitted`.
 
-Most Tenants requests hand their work to one of Tenancy's managers. The manager checks again what the request
-declared, and then its own rules. The table names each manager's method. The reference lists them under
-[Tenants](../reference/managers.md#tenants), [Organization](../reference/managers.md#organization),
-[Seats](../reference/managers.md#seats), [Roles](../reference/managers.md#roles) and
-[Invitations](../reference/managers.md#invitations):
+Most Tenants requests hand their work to one of Tenancy's services. The service checks again what the request
+declared, and then its own rules. The table names each service's method. The reference lists them under
+[Tenants](../reference/services.md#tenants), [Organization](../reference/services.md#organization),
+[Seats](../reference/services.md#seats), [Roles](../reference/services.md#roles) and
+[Invitations](../reference/services.md#invitations):
 
 | Tenants request | Declares | Then |
 |---|---|---|
 | `SeatsOfMine` | Signed in. It returns the caller's own seats, before any tenant is chosen, found by the token's verified identity. | |
-| `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById`, `CatalogueContents`, `UnitsWhereIHold`, `OpenInvitations` | In a tenant. | Most go to a manager's reads: `SeatManager.WhoAmIAsync`, `ListAsync` and `ByIdAsync`, `OrganizationManager.ListUnitsAsync` and `UnitsByIdAsync`, `RoleManager.ListAsync` and `ByIdAsync`. `InvitationManager.ListOpenAsync` returns open invitations only for units where the caller holds `tenancy.seats.invite`. |
-| `AddOrganizationUnit`, `MoveOrganizationUnit`, `ArchiveOrganizationUnit` | `AddOrganizationUnit` declares `tenancy.units.manage` at the parent. A move or an archive declares only "in a tenant". | `OrganizationManager.AddUnitAsync`, `MoveUnitAsync`, `ArchiveUnitAsync`. The sample sets its `kind` field in the callback. |
-| `ChangeTenantShape` | `tenancy.settings.manage` for the whole tenant. | `TenantManager.ChangeShapeAsync` |
-| `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit. | `SeatManager.PlaceAsync`, `WithdrawAsync` |
-| `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit. | `SeatManager.GrantAsync`, `RevokeAsync` |
-| `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant. | `SeatManager.SuspendAsync`, `ReactivateAsync`, `DeactivateAsync` |
-| `SeatGrants` | `tenancy.seats.manage` for the whole tenant, or at the unit asked about (`?unit=`). | `SeatManager.OverviewAsync` |
-| `CreateTenantRole`, `SetRolePermissions`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant. | `RoleManager.CreateAsync`, `SetPermissionsAsync`, `ArchiveAsync` |
-| `InvitePerson`, `CancelInvitation` | `InvitePerson` declares `tenancy.seats.invite` for the whole tenant. A cancel declares only "in a tenant". | `InvitationManager.IssueAsync`, `CancelAsync` |
-| `InviteGuest` | `tenancy.externals.invite` at the unit. | `InvitationManager.IssueOutsideAsync`, with the kind `guest` |
-| `AcceptInvitation` | Signed in, with no seat yet. | `InvitationManager.AcceptAsync` |
-| `RenameSeat` | The caller's own seat, or `tenancy.seats.manage` for the whole tenant (`[OrOwn]`). | No manager. The rule is the sample's own ([How a seat is shown](../names-and-languages.md#how-a-seat-is-shown)). A column rule enforces it in the database. |
-| `MarkTenantAsDemo` | In a tenant. No route sends it. | No manager. The handler accepts only system work in the tenant it marks. Anyone else gets `access.system-only`. |
+| `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById`, `CatalogueContents`, `UnitsWhereIHold`, `OpenInvitations` | In a tenant. | Most go to a service's reads: `SeatService.WhoAmIAsync`, `ListAsync` and `ByIdAsync`, `OrganizationService.ListUnitsAsync` and `UnitsByIdAsync`, `RoleService.ListAsync` and `ByIdAsync`. `InvitationService.ListOpenAsync` returns open invitations only for units where the caller holds `tenancy.seats.invite`. |
+| `AddOrganizationUnit`, `MoveOrganizationUnit`, `ArchiveOrganizationUnit` | `AddOrganizationUnit` declares `tenancy.units.manage` at the parent. A move or an archive declares only "in a tenant". | `OrganizationService.AddUnitAsync`, `MoveUnitAsync`, `ArchiveUnitAsync`. The sample sets its `kind` field in the callback. |
+| `ChangeTenantShape` | `tenancy.settings.manage` for the whole tenant. | `TenantService.ChangeShapeAsync` |
+| `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit. | `SeatService.PlaceAsync`, `WithdrawAsync` |
+| `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit. | `SeatService.GrantAsync`, `RevokeAsync` |
+| `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant. | `SeatService.SuspendAsync`, `ReactivateAsync`, `DeactivateAsync` |
+| `SeatGrants` | `tenancy.seats.manage` for the whole tenant, or at the unit asked about (`?unit=`). | `SeatService.OverviewAsync` |
+| `CreateTenantRole`, `SetRolePermissions`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant. | `RoleService.CreateAsync`, `SetPermissionsAsync`, `ArchiveAsync` |
+| `InvitePerson`, `CancelInvitation` | `InvitePerson` declares `tenancy.seats.invite` for the whole tenant. A cancel declares only "in a tenant". | `InvitationService.IssueAsync`, `CancelAsync` |
+| `InviteGuest` | `tenancy.externals.invite` at the unit. | `InvitationService.IssueOutsideAsync`, with the kind `guest` |
+| `AcceptInvitation` | Signed in, with no seat yet. | `InvitationService.AcceptAsync` |
+| `RenameSeat` | The caller's own seat, or `tenancy.seats.manage` for the whole tenant (`[OrOwn]`). | No service. The rule is the sample's own ([How a seat is shown](../names-and-languages.md#how-a-seat-is-shown)). A column rule enforces it in the database. |
+| `MarkTenantAsDemo` | In a tenant. No route sends it. | No service. The handler accepts only system work in the tenant it marks. Anyone else gets `access.system-only`. |
 | `AccessHistory` | `tenancy.history.view` for the whole tenant. | |
-| `AllTenants`, `TenantAccessHistory` | An operator only. | `AllTenants` uses `TenantManager.ListAsync`. |
+| `AllTenants`, `TenantAccessHistory` | An operator only. | `AllTenants` uses `TenantService.ListAsync`. |
 
-A Tenants request declares the first thing that its manager checks. So the access behavior refuses with the same
-code and permission as the manager. Two test classes hold the tables above:
+A Tenants request declares the first thing that its service checks. So the access behavior refuses with the same
+code and permission as the service. Two test classes hold the tables above:
 
 - `AccessDeclarationTests` fails for a request that declares nothing, and checks every request against these tables.
-- `RequestPipelineTests` checks that the access behavior and the manager refuse in the same way.
+- `RequestPipelineTests` checks that the access behavior and the service refuse in the same way.
 
 ## How a seat reaches a project
 

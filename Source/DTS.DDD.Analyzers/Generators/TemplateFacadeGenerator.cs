@@ -9,18 +9,18 @@ namespace DTS.DDD.Analyzers;
 /// Writes the class a package asks with <c>[assembly: TemplateFacade]</c> into the project that declares the classes
 /// it is closed over. A package ships
 /// <code>
-/// [assembly: TemplateFacade(typeof(SeatManager&lt;,,,,,,,,&gt;))]
+/// [assembly: TemplateFacade(typeof(SeatService&lt;,,,,,,,,&gt;))]
 /// </code>
 /// and the domain project of the module Tenants, which declares the classes with the package's templates, gets
 /// <code>
-/// public sealed class SeatManager : global::Acme.Tenancy.SeatManager&lt;global::Shop.Domain.Tenant, ...&gt;
+/// public sealed class SeatService : global::Acme.Tenancy.SeatService&lt;global::Shop.Domain.Tenant, ...&gt;
 /// {
-///     public SeatManager(...) : base(...) { }
+///     public SeatService(...) : base(...) { }
 /// }
 /// </code>
-/// in the global namespace, so that project and every project above it take a <c>SeatManager</c> and name
-/// <c>SeatManager.SeatOverview</c>, the package's own nested type, and none of them writes the nine types.
-/// <c>[assembly: TemplateFacadeName("SeatManager", "CustomersSeats")]</c> in that project names it otherwise.
+/// in the global namespace, so that project and every project above it take a <c>SeatService</c> and name
+/// <c>SeatService.SeatOverview</c>, the package's own nested type, and none of them writes the nine types.
+/// <c>[assembly: TemplateFacadeName("SeatService", "CustomersSeats")]</c> in that project names it otherwise.
 /// When the class cannot be written, it says why there, DDD00065, as information: the projects above would otherwise
 /// only hear that the name does not exist. Two classes of one name where a project sees both are DDD00075, and a line
 /// that names nothing is DDD00076. See <c>TemplateFacades</c>.
@@ -32,8 +32,8 @@ namespace DTS.DDD.Analyzers;
 /// <c>[assembly: TenancyIds&lt;...&gt;]</c> gets a class closed over them, in its root namespace.
 /// </para>
 /// <para>
-/// A package's interface, <c>[assembly: TemplateFacade(typeof(ITenancyStore&lt;,,,,,,,,&gt;))]</c>, gets a global alias,
-/// <c>global using TenancyStore = global::...ITenancyStore&lt;...&gt;;</c>, in the project that declares the classes and in
+/// A package's interface, <c>[assembly: TemplateFacade(typeof(ITenancyRepositories&lt;,,,,,,,,&gt;))]</c>, gets a global alias,
+/// <c>global using TenancyRepositories = global::...ITenancyRepositories&lt;...&gt;;</c>, in the project that declares the classes and in
 /// every project above it that sees them, since an alias holds in its own project only.
 /// </para>
 /// </summary>

@@ -47,7 +47,7 @@ public sealed class AddMemberHandler(IBoardRepository boards, TenancyAccessManag
 
 The project that declares Tenancy's classes gets that class in the global namespace. A project of another module sees only Tenancy's ids, and says which of its ids they are with one line, `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]` ([`TenancyIdsAttribute<TTenantId, TSeatId, TUnitId, TRoleId>`](aggregates.md#tenancyidsattributettenantid-tseatid-tunitid-troleid)). It then gets the class in its root namespace. `AddTenancy` registers the class of the module that declares the classes, and `AddTenancyAccess` the class of the module it is called for. Both register it per scope.
 
-It keeps no state of its own. `AccessManager.CurrentUser` and [`CurrentTenant`](#currenttenant) read the current flow of work each time they are asked, so they follow every `Begin` made after the manager was handed out.
+It keeps no state of its own. `AccessManager.CurrentUser` and [`CurrentTenant`](#currenttenant) read the current flow of work each time they are asked, so they follow every `Begin` made after the service was handed out.
 
 `BeginSystem()`, `BeginSystem(scope)`, [`BeginSystemIn`](#beginsysteminttenantid-tseatid-string) and [`BeginTokenIn`](#begintokeninttenantid-tseatid-string) each start work that is not the caller's own, for one `using`. Each begins the tenant the work acts in, or none, and the kind of work together: the kind decides how the work is recorded, and which database role it runs as. The row access rules hold each of them. When the result is disposed, the user before it is current again. Begin as narrow as possible: around the one call that needs it. `AccessManager.BeginAs`, with a user's id or a snapshot, `AccessManager.BeginSystemBypassingRowAccess` and `AccessManager.BeginNone` are the core's, and leave the tenant as it is.
 
@@ -695,7 +695,7 @@ A [`TenancyUser<TTenantId, TSeatId>`](#tenancyuserttenantid-tseatid) without its
 public static class TenancyUsers
 ```
 
-The Tenancy user of the current flow of work, which every manager, access question and tenant filter reads. It is kept apart from the toolkit's current user, `ICurrentUser`: that one says which person or which system is calling, this one which seat in which tenant, and system work there is never system work here.
+The Tenancy user of the current flow of work, which every service, access question and tenant filter reads. It is kept apart from the toolkit's current user, `ICurrentUser`: that one says which person or which system is calling, this one which seat in which tenant, and system work there is never system work here.
 
 It is stored without its id types, so a query filter that only compares the tenant can read it without knowing the application's classes. It follows the flow the way an `AsyncLocal<T>` does: into awaited calls and tasks started inside, not back out.
 
@@ -768,7 +768,7 @@ using (TenancyWork.BeginSystemIn(tenant, actingSeat))
 
 Every method is generic over the application's tenant and seat ids. C# infers both where both are arguments, as above. Where one is not, as for [`BeginSystem<TTenantId, TSeatId>`](#beginsystemstring-1) or system work in a tenant for no seat, the ids are written: `TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant)`. An application calls the same methods closed over its ids on the access manager its code takes, `access.BeginSystem()` and `access.BeginSystemIn(tenant)` ([`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid)), and writes no id. Its `BeginSystem(scope)` overrides the core's, so system work begun with it always says it is outside every tenant. The core's `BeginSystemBypassingRowAccess()` begins no Tenancy user.
 
-Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system work here itself, in trusted code, whatever its request requires: `[AllowAnonymous]` for a registration form anyone may fill in, `[SignedIn]` for a signed-in user who registers an organization. A tool only the application runs is trusted code itself: it begins the work here and calls the manager, or sends its request inside it. The requirement decides who gets as far as the handler; what the work may then do is what is begun here, and nothing of the caller's. System work is no requirement a request declares: it is this scope, and once its result is disposed the user before it is current again.
+Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system work here itself, in trusted code, whatever its request requires: `[AllowAnonymous]` for a registration form anyone may fill in, `[SignedIn]` for a signed-in user who registers an organization. A tool only the application runs is trusted code itself: it begins the work here and calls the service, or sends its request inside it. The requirement decides who gets as far as the handler; what the work may then do is what is begun here, and nothing of the caller's. System work is no requirement a request declares: it is this scope, and once its result is disposed the user before it is current again.
 
 Each method begins two things, and ends both when its result is disposed. The Tenancy user says in which tenant the work acts. The toolkit's scoped system work, the core's `AccessManager.BeginSystem(scope)`, says what kind of work it is. Keeping them in one scope keeps them from drifting apart. None of them begins the system work that no row access rule holds, the core's `BeginSystemBypassingRowAccess()`. System work in a tenant must stay inside that tenant. On Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to it. Tenancy's own policies come with `DTS.Tenancy.Postgres`.
 
@@ -817,7 +817,7 @@ public static IDisposable BeginSystemIn<TTenantId, TSeatId>(
 
 Begins system work inside one tenant, such as an import or seeding: it holds every permission there, and nothing in any other tenant. The last-administrator rule still applies to it.
 
-Work that calls Tenancy's managers keeps the default scope. A module's own system work in a tenant, that only reads Tenancy's rows next to its own, passes the module's name instead, and then cannot write Tenancy's tables under the policies of `DTS.Tenancy.Postgres`.
+Work that calls Tenancy's services keeps the default scope. A module's own system work in a tenant, that only reads Tenancy's rows next to its own, passes the module's name instead, and then cannot write Tenancy's tables under the policies of `DTS.Tenancy.Postgres`.
 
 **Parameters**
 
@@ -1491,7 +1491,7 @@ public sealed record TenantRoles : IQuery<IReadOnlyList<RoleListing>>, ITenantsR
 
 **Remarks**
 
-The toolkit's generator turns it into `TenancyAccess.InTenant()` at compile time, in the module's request interface (`[AccessRequests]`, declared `partial`), and the check that `services.AddTenancyAccess<TRequests, TContext>()` adds holds the caller to it. A request handed to a manager that asks more than this, a permission the manager reads where it acts, says this much and the manager asks the rest. Beside a permission of Tenancy's, from `[RequiresPermission]` or `[AtUnit(permission)]`, it adds nothing, because only a caller in the tenant holds such a permission. The generator reports it as a warning (DDD00084).
+The toolkit's generator turns it into `TenancyAccess.InTenant()` at compile time, in the module's request interface (`[AccessRequests]`, declared `partial`), and the check that `services.AddTenancyAccess<TRequests, TContext>()` adds holds the caller to it. A request handed to a service that asks more than this, a permission the service reads where it acts, says this much and the service asks the rest. Beside a permission of Tenancy's, from `[RequiresPermission]` or `[AtUnit(permission)]`, it adds nothing, because only a caller in the tenant holds such a permission. The generator reports it as a warning (DDD00084).
 
 On the module's interface it is the module's default, said once where nearly every request reads the tenant's data: a request of the module that states nothing of its own requires a caller in the tenant, and one that states its own, a permission say, keeps only its own.
 
@@ -1594,7 +1594,7 @@ Says on a request that its caller is one of the application's operators, and nob
 public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;
 
 [Operator]
-public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;
+public sealed record AllTenants(string? After) : IQuery<TenantService.TenantPage>, ITenancyRequest;
 ```
 
 **Remarks**
@@ -1872,11 +1872,11 @@ The cases are about the tenant: as a whole, or at one of its units ([`TenancyReq
 public sealed record AtTenant : TenancyRequirement
 ```
 
-A permission is held by the caller for the whole tenant: at its root, now. Otherwise `tenancy.not-permitted`, naming the permission, exactly as the package's own managers refuse it; nobody is refused with its own reason first. System work in the tenant holds every permission there. A request declares it with [`TenancyAccess.AtTenant`](#attenantstring).
+A permission is held by the caller for the whole tenant: at its root, now. Otherwise `tenancy.not-permitted`, naming the permission, exactly as the package's own services refuse it; nobody is refused with its own reason first. System work in the tenant holds every permission there. A request declares it with [`TenancyAccess.AtTenant`](#attenantstring).
 
 **Remarks**
 
-For what changes or shows something of the tenant as a whole: a manager of the package that asks for the permission first, such as making a role, or the state an application adds to one of the package's aggregates. It costs one statement, on the context the check was registered over.
+For what changes or shows something of the tenant as a whole: a service of the package that asks for the permission first, such as making a role, or the state an application adds to one of the package's aggregates. It costs one statement, on the context the check was registered over.
 
 | Member | Summary |
 |---|---|
@@ -1889,7 +1889,7 @@ public sealed record AtUnit<TUnitId> : TenancyRequirement
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
 
-A permission is held by the caller at a unit: there, or at a unit above it, now. Otherwise `tenancy.not-permitted`, with the permission and the unit, exactly as the package's own managers refuse it; nobody is refused with its own reason first. System work in the tenant holds every permission at every unit of its tenant. A unit of another tenant, or one that does not exist, is one where nobody holds anything, and is refused the same way. A request declares it with [`TenancyAccess.AtUnit<TUnitId>`](#atunitstring-tunitid).
+A permission is held by the caller at a unit: there, or at a unit above it, now. Otherwise `tenancy.not-permitted`, with the permission and the unit, exactly as the package's own services refuse it; nobody is refused with its own reason first. System work in the tenant holds every permission at every unit of its tenant. A unit of another tenant, or one that does not exist, is one where nobody holds anything, and is refused the same way. A request declares it with [`TenancyAccess.AtUnit<TUnitId>`](#atunitstring-tunitid).
 
 **Type parameters**
 
@@ -1897,7 +1897,7 @@ A permission is held by the caller at a unit: there, or at a unit above it, now.
 
 **Remarks**
 
-For a command that acts at a unit the request names: one the package's manager decides, such as placing a seat or giving a role there, and one that makes something at a unit, where there is nothing yet a permission could be held on, such as opening a project there: the check a module would otherwise write in its handler, or as a case of its own. The unit is the request's own, so the unit checked is the unit the handler acts at. It costs one statement, on the context the check was registered over, as a permission for the whole tenant does.
+For a command that acts at a unit the request names: one the package's service decides, such as placing a seat or giving a role there, and one that makes something at a unit, where there is nothing yet a permission could be held on, such as opening a project there: the check a module would otherwise write in its handler, or as a case of its own. The unit is the request's own, so the unit checked is the unit the handler acts at. It costs one statement, on the context the check was registered over, as a permission for the whole tenant does.
 
 ```csharp
 AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(BillingPermissions.OpenLedger, UnitId);
@@ -1920,7 +1920,7 @@ The caller works in the tenant the request was sent for: a seat there, or system
 
 **Remarks**
 
-For a request that answers only what the caller itself holds or may see, where holding nothing is an answer and not a refusal; for one whose handler asks for whatever else it takes in plain sight; and for one handed to a manager of the package whose first rule needs something read, such as the unit an invitation is for, or the parent a unit hangs under now. That manager asks the rest itself.
+For a request that answers only what the caller itself holds or may see, where holding nothing is an answer and not a refusal; for one whose handler asks for whatever else it takes in plain sight; and for one handed to a service of the package whose first rule needs something read, such as the unit an invitation is for, or the parent a unit hangs under now. That service asks the rest itself.
 
 ### `TenancyRequirement.Operator`
 
@@ -1928,7 +1928,7 @@ For a request that answers only what the caller itself holds or may see, where h
 public sealed record Operator : TenancyRequirement
 ```
 
-The caller is one of the application's operators: a signed-in user whose token carries one of [`TenancyOptions.OperatorTokenRoles`](managers.md#operatortokenroles). Anyone else is refused with `tenancy.operators-only`, a seat and system work included. A request declares it with [`TenancyAccess.Operator`](#operatoroperatortenant-string), or with [`OperatorAttribute`](#operatorattribute).
+The caller is one of the application's operators: a signed-in user whose token carries one of [`TenancyOptions.OperatorTokenRoles`](services.md#operatortokenroles). Anyone else is refused with `tenancy.operators-only`, a seat and system work included. A request declares it with [`TenancyAccess.Operator`](#operatoroperatortenant-string), or with [`OperatorAttribute`](#operatorattribute).
 
 **Remarks**
 

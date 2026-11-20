@@ -12,20 +12,20 @@ language. The words are defined in the [overview](overview.md).
 ## Names
 
 Tenancy stores the name of each unit and each role. It stores no name for a seat. You choose how a seat is shown
-([How a seat is shown](#how-a-seat-is-shown)). A screen reads names through the **reads of the managers**. Each
-manager reads its own aggregate and returns your classes. The reference lists them under
-[Seats](reference/managers.md#seats), [Roles](reference/managers.md#roles) and
-[Organization](reference/managers.md#organization).
+([How a seat is shown](#how-a-seat-is-shown)). A screen reads names through the **reads of the services**. Each
+service reads its own aggregate and returns your classes. The reference lists them under
+[Seats](reference/services.md#seats), [Roles](reference/services.md#roles) and
+[Organization](reference/services.md#organization).
 
 | Method | Returns |
 |---|---|
-| `SeatManager.WhoAmIAsync()` | The calling seat's `SeatOverview`. It holds your seat object with its placements and grants, your tenant object and its name, the path of each placement's unit, your role objects that the grants name, and every permission the seat holds now with the units it reaches. |
-| `SeatManager.OverviewAsync(seat)` | The same overview for any seat of the tenant ([Another seat's overview](#another-seats-overview)). It takes your seat object or its id. |
-| `SeatManager.ListAsync()` | The seats the caller can read, as objects of your seat class with every field, in id order. |
-| `RoleManager.ListAsync()` | The tenant's roles, as objects of your role class, active roles first and then by name. `RoleManager.ManagesAccess(role)` says whether a role manages access. |
-| `OrganizationManager.ListUnitsAsync()` | The units the caller is placed at and every unit below them, as objects of your unit class with path and depth (`UnitInTree`). System work gets every unit. |
-| `SeatManager.ByIdAsync(ids)`, `RoleManager.ByIdAsync(ids)` | The seats or roles among the ids, in the same form as the lists. |
-| `OrganizationManager.UnitsByIdAsync(ids)` | Each unit among the ids, with its name, path and depth (`NamedUnit`) and no other field. |
+| `SeatService.WhoAmIAsync()` | The calling seat's `SeatOverview`. It holds your seat object with its placements and grants, your tenant object and its name, the path of each placement's unit, your role objects that the grants name, and every permission the seat holds now with the units it reaches. |
+| `SeatService.OverviewAsync(seat)` | The same overview for any seat of the tenant ([Another seat's overview](#another-seats-overview)). It takes your seat object or its id. |
+| `SeatService.ListAsync()` | The seats the caller can read, as objects of your seat class with every field, in id order. |
+| `RoleService.ListAsync()` | The tenant's roles, as objects of your role class, active roles first and then by name. `RoleService.ManagesAccess(role)` says whether a role manages access. |
+| `OrganizationService.ListUnitsAsync()` | The units the caller is placed at and every unit below them, as objects of your unit class with path and depth (`UnitInTree`). System work gets every unit. |
+| `SeatService.ByIdAsync(ids)`, `RoleService.ByIdAsync(ids)` | The seats or roles among the ids, in the same form as the lists. |
+| `OrganizationService.UnitsByIdAsync(ids)` | Each unit among the ids, with its name, path and depth (`NamedUnit`) and no other field. |
 
 A path runs from the root down, joined with ` / `, for example `Harbor Works / North / North Coast`.
 
@@ -43,8 +43,8 @@ A path runs from the root down, joined with ` / `, for example `Harbor Works / N
   names this way.
 - **Unknown ids.** The by-id methods leave out an id of another tenant and an id that belongs to nothing. The result
   does not say which of the two an id was.
-- **Limit.** One call takes at most `MostIds` (200) different ids, the same constant on each manager. More ids give
-  `tenancy.too-many-ids`, a 400 with the argument `Max`. The manager checks the caller first, so nobody learns the
+- **Limit.** One call takes at most `MostIds` (200) different ids, the same constant on each service. More ids give
+  `tenancy.too-many-ids`, a 400 with the argument `Max`. The service checks the caller first, so nobody learns the
   limit before their own refusal.
 - **Cost.** Each call runs a fixed number of statements, whatever the number of ids. Seats take one statement,
   roles one, and units two. On Postgres, `UnitsByIdAsync` for a seat is one function call.
@@ -62,7 +62,7 @@ sequenceDiagram
     participant Page as Page
     participant Projects as Projects API
     participant Names as Names on the page
-    participant Tenancy as Tenancy's managers
+    participant Tenancy as Tenancy's services
 
     Page->>Projects: GET /projects
     Projects-->>Page: projects with unitId,<br/>seatId and roleId
@@ -80,10 +80,10 @@ A screen keeps names only while it shows them. The sample's UI requests the name
 renamed seat shows its new name at the next load, and no name of one tenant shows in another tenant.
 
 The sample's directory routes are a `POST`, because 200 ids do not fit in a request line. The code behind a route
-calls the manager like this:
+calls the service like this:
 
 ```csharp
-public sealed class ProjectScreen(SeatManager seats)
+public sealed class ProjectScreen(SeatService seats)
 {
     public async Task<IReadOnlyDictionary<SeatId, string>> NamesOfAsync(IReadOnlyCollection<SeatId> ids, CancellationToken cancellationToken)
         => (await seats.ByIdAsync(ids, cancellationToken)).ToDictionary(seat => seat.Id, seat => seat.DisplayName);
@@ -121,7 +121,7 @@ new TenantToProvision(slug, name, shape, name, identity, ConfigureFirstSeat: sea
 await seats.AddAsync(identity, cancellationToken, configure: seat => seat.Rename("Leo"));
 await invitations.AcceptAsync(command.Token, verifiedAddress, cancellationToken, configure: seat => seat.Rename(command.DisplayName));
 
-// SeatManager returns your seat class, so the name is on every seat it returns.
+// SeatService returns your seat class, so the name is on every seat it returns.
 IReadOnlyList<Seat> listed = await seats.ListAsync(cancellationToken);
 ```
 
@@ -129,7 +129,7 @@ IReadOnlyList<Seat> listed = await seats.ListAsync(cancellationToken);
   stays open.
 - Renaming is a command of yours, under your rule. In the sample's `RenameSeat`, a seat renames itself, and a seat
   with `tenancy.seats.manage` for the whole tenant renames any seat.
-- Tenancy returns objects of your seat class with every field. `SeatManager` does this, and so does
+- Tenancy returns objects of your seat class with every field. `SeatService` does this, and so does
   `TenantSelection.SeatsOfAsync<TSeat>(user)`, which returns the person's seats in every tenant for a tenant
   picker. A screen shows the name with no extra query.
 - The identity is personal data, like an e-mail address. Only the fields your API lists leave it. Each of the
@@ -191,7 +191,7 @@ flowchart LR
 
 ### Another seat's overview
 
-`SeatManager.OverviewAsync(seat)` returns, for any seat of the tenant, what `WhoAmIAsync` returns for the caller. The
+`SeatService.OverviewAsync(seat)` returns, for any seat of the tenant, what `WhoAmIAsync` returns for the caller. The
 overview is as of the moment `AsOf`. Use it for a page about one person, such as the page an administrator opens
 before changing someone's roles.
 
@@ -228,8 +228,8 @@ public sealed class SeatGrantsHandler(ITenancyReads reads) : IQueryHandler<SeatG
 {
     public async ValueTask<IReadOnlyList<SeatGrant>> Handle(SeatGrants query, CancellationToken cancellationToken)
     {
-        // Calls the manager in a separate scope. The manager refuses a seat the caller does not read.
-        var overview = await reads.AskAsync((SeatManager seats) => seats.OverviewAsync(query.Seat, cancellationToken));
+        // Calls the service in a separate scope. The service refuses a seat the caller does not read.
+        var overview = await reads.AskAsync((SeatService seats) => seats.OverviewAsync(query.Seat, cancellationToken));
 
         // One row per grant, at the unit asked about or at every unit. Row uses overview.UnitOf(unit).Path,
         // overview.RoleOf(role)?.Name and grant.AppliesAt(overview.AsOf).
@@ -270,7 +270,7 @@ services.AddDDDToolkitLocalization(options => options.AddResource<TenancyFailure
   neutral file first. So a key that is only in your neutral resx gives Dutch readers your English text.
 - **For a third language**, do the same with every `tenancy.*` key.
 - **Form fields.** A refusal of the kind "invalid" about one input names that input in its `Field` argument, in the
-  managers' word (`name`, `until`, `ids` …). A form shows the text under that input. An API that uses another
+  services' word (`name`, `until`, `ids` …). A form shows the text under that input. An API that uses another
   name for the input maps the word. [TenancyRefusals](reference/refusals.md#tenancyrefusals) in the reference lists
   each code's field. `tenancy.tenant-required` names no field, because the tenant is named next to the command, in
   a header or the address.
@@ -297,10 +297,10 @@ public sealed class ShopStarterRoleTexts(IStringLocalizer<ShopStarterRoles> text
 services.AddSingleton<IStarterRoleTexts, ShopStarterRoleTexts>();
 ```
 
-- The managers call `For` each time they make a role from a starter role, with the language you pass:
+- The services call `For` each time they make a role from a starter role, with the language you pass:
   - `TenantToProvision.Language` at provisioning. Keep the same language on your tenant class in `ConfigureTenant`
     ([How your classes add behaviour](your-module.md#how-your-classes-add-behaviour)).
-  - The `language` argument of `TenantManager.ChangeShapeAsync`, when a change of shape copies the starter roles
+  - The `language` argument of `TenantService.ChangeShapeAsync`, when a change of shape copies the starter roles
     the tenant lacks.
 - The role gets the catalogue's texts when no language is passed, when no `IStarterRoleTexts` is registered, or when
   `For` returns `null`.

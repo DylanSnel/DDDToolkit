@@ -7,7 +7,7 @@ sidebar_label: Permissions and roles
 
 Read this page when you declare permissions or write the commands that give roles. It covers the settings of a
 permission, who holds a permission, who may give a role, and roles a customer makes and changes through the role
-manager.
+service.
 [Tutorial step 2](tutorial.md#step-2-the-permissions-and-the-rules) introduces the levels and a first set of
 permissions.
 
@@ -26,8 +26,8 @@ One class may mix levels. On a resource, `[On<T>]` also says how the permission 
 | `Owner` | The owner holds the permission by owning the resource. | Set `false` when the owner should hold it only the way anybody else does, through a role or from above. Use it for a permission such as naming another owner. |
 | `EveryMember` | Being a member gives nothing. | Set `true` to let every member hold it, whatever their roles. This is usually the permission that sees the resource. One permission at most. |
 | `InRoles` | A role may give it. | Set `false` when only the owner and reach from above may hold it. Use it for a permission a customer must never hand out. A fixed role that lists it is refused when the rules are made. |
-| `ManagesMembers` | It manages nothing. | Set `true` on the permission that adds and removes members and gives and takes their roles. The [member manager](resources-and-members.md#the-member-manager) requires it. On Postgres, a policy also lets only callers with this permission write the member rows ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). One permission at most. |
-| `NamesOwner` | It names nobody. | Set `true` on the permission that hands the resource to another owner. The member manager requires it. On Postgres, a trigger also lets only callers with this permission change the owner column. One permission at most. |
+| `ManagesMembers` | It manages nothing. | Set `true` on the permission that adds and removes members and gives and takes their roles. The [member service](resources-and-members.md#the-member-service) requires it. On Postgres, a policy also lets only callers with this permission write the member rows ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). One permission at most. |
+| `NamesOwner` | It names nobody. | Set `true` on the permission that hands the resource to another owner. The member service requires it. On Postgres, a trigger also lets only callers with this permission change the owner column. One permission at most. |
 | `FromAbove` | The permission reaches from above, where the rules allow reach from above. | Set `false` when holding it where the resource hangs should give nothing on the resource ([Reach from above](beside-an-organization.md#reach-from-above)). When the rules reach from above, the `EveryMember` permission must keep `FromAbove = true`. |
 | `Kinds` | Only kinds of seat inside the organization may hold it. | List the kinds that may hold it, by their value or as `SeatKinds.InOrganization` and `SeatKinds.OutsideOrganization` for every kind on that side. The list is complete, so list `SeatKinds.InOrganization` too where the kinds inside should keep it ([Kinds of seat and role sets](#kinds-of-seat-and-role-sets)). `Kinds` exists on `[On<T>]` only. |
 
@@ -78,23 +78,23 @@ The five ways a caller holds a permission are listed in the
 
 ## Who may give a role
 
-The member manager requires one permission for adding a member, giving or taking a role, and taking a member off:
+The member service requires one permission for adding a member, giving or taking a role, and taking a member off:
 the one you mark `ManagesMembers`. Naming another owner requires the one you mark `NamesOwner`. The package has no
 rule about who gives what to whom.
 
 - **The request usually requires the same permission on the resource.**
   [`ShareDocument`](resources-and-members.md#a-document-and-the-people-it-is-shared-with) requires
-  `documents.share`, the permission marked `ManagesMembers`. The manager then uses the check's answer. A caller with
+  `documents.share`, the permission marked `ManagesMembers`. The service then uses the check's answer. A caller with
   that permission shares with anyone, in any role, for any period. The owner holds it by owning. A member holds it
   when a role gives it.
 - **Write any further rule in the handler**, over what the resource's access manager returns in one statement, and
-  call the manager after it. The handler takes `MembershipAccessManager<Folder>` and `FolderMemberManager`. This
+  call the service after it. The handler takes `MembershipAccessManager<Folder>` and `FolderMemberService`. This
   handler refuses to put staff on a folder for longer than the caller holds `folders.staff`:
 
 ```csharp
 public sealed record AdmitStaff([OnResource("folders.staff")] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
-// In the handler. folderAccess is the MembershipAccessManager<Folder>, and staff the FolderMemberManager, the handler takes.
+// In the handler. folderAccess is the MembershipAccessManager<Folder>, and staff the FolderMemberService, the handler takes.
 var hold = await folderAccess.RequireAsync(command.Folder, "folders.staff", cancellationToken);
 if (hold.Until is { } mine && (command.Until is not { } theirs || theirs > mine))
 {
@@ -105,7 +105,7 @@ if (hold.Until is { } mine && (command.Until is not { } theirs || theirs > mine)
 return await staff.AddAsync(command.Folder, command.Staff, command.Role, command.Until, cancellationToken, command.ExpectedVersion);
 ```
 
-- **[`MemberHold.Until`](reference/managers.md#until)** is the first moment the caller no longer holds the
+- **[`MemberHold.Until`](reference/services.md#until)** is the first moment the caller no longer holds the
   permission, as things stand now. It is `null` for the owner, for system work, and when the
   permission is not held.
   - Through membership alone, `Until` is the end of the membership.
@@ -201,7 +201,7 @@ What the code does:
   under `Roles.Fixed(sets: [...])`. Rules that declare no sets have one set, for every kind inside the organization.
 - **The first set** is managed with the permission marked `ManagesMembers`. Every other set names its own permission
   with `membersManagedWith`. Without a `ManagesMembers` permission, only system work changes the first set's members,
-  in the member manager and on Postgres.
+  in the member service and on Postgres.
 - **`AddAsync`** reads the member's kind first, finds its set, and requires that set's permission. A role given must be
   in that set. A kind in no set is refused with `boards.kind-in-no-set`.
 
@@ -327,7 +327,7 @@ has no setting for it. You open it with three things you write anyway:
 - **A role of the kind's set gives the permission.** A role holds only permissions every kind of its set may hold, so
   the rules refuse the role while the list leaves the kind out.
 - **Your handler makes the change.** Its request requires the permission with `[OnResource]`, and the handler calls
-  the member manager, which requires the same permission. The tutorial's `AddGuestCommand` is such a request
+  the member service, which requires the same permission. The tutorial's `AddGuestCommand` is such a request
   ([Step 5](people-from-outside.md#step-5-mira-on-quay-plan)).
 
 On Harbor's boards, a guest who holds `guest-host` adds other guests:
@@ -348,7 +348,7 @@ RoleSet.Named("Guests", kinds: [HarborSeatKinds.Guest],
 - **A guest adds a seat it does not read.** While `NarrowOutsideSeats` is on, a guest reads its own seats and the
   seats of its fellow members alone
   ([What a seat outside the organization reads](../tenancy/postgres.md#what-a-seat-outside-the-organization-reads)).
-  The member manager reads the new member's one seat by its id, past that. It asks whether the seat is an active seat
+  The member service reads the new member's one seat by its id, past that. It asks whether the seat is an active seat
   of the caller's tenant, and its kind, and nothing else.
 - **On Postgres the kind guard asks the same of the database.** `seat_to_admit(seat)` answers the one seat of the
   caller's tenant, as its owner, so the guard lets a guest's member row through for a seat the guest does not read.
@@ -363,7 +363,7 @@ RoleSet.Named("Guests", kinds: [HarborSeatKinds.Guest],
 |---|---|---|---|
 | `Roles.Fixed([...])` | its name, a `NamedRole` | you, in code | the rules |
 | `Roles.Custom(...)` | the id of your role class | a customer, while the application runs | the role's row, in your context |
-| `Roles.External(...)` | the id in the store that keeps it | whoever keeps the roles | what you [return](beside-an-organization.md#three-settings-of-the-rules) |
+| `Roles.External(...)` | the id in the repository that keeps it | whoever keeps the roles | what you [return](beside-an-organization.md#three-settings-of-the-rules) |
 
 A custom role is given on one resource and counts there alone. The tutorial writes the role class
 ([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles)), leaves its mapping and unique indexes to the
@@ -374,7 +374,7 @@ for `AddBoardMembershipWithTenancy` ([step 7](tutorial.md#step-7-members)).
 
 - **Starter roles are the roles a scope begins with.** You name them in `Roles.Custom(starters: [...])`. A scope is a
   tenant, a customer of yours, or the whole application.
-- **Each starter role is made once.** The role manager recognises a role that was made from a starter role by its
+- **Each starter role is made once.** The role service recognises a role that was made from a starter role by its
   `FromStarterRole` value. A renamed or archived role keeps that value, so it is not made again. A unique index over the
   scope column and `FromStarterRole` stops two requests at the same moment from both making it
   ([Which customer a role belongs to](#which-customer-a-role-belongs-to)).
@@ -437,7 +437,7 @@ the rules:
   it at the call. A module without the `TenancyIds` line names the tenant id at the call, so the generator cannot match the
   constructor, and `makeRole` is required there too.
 - A member that holds the tenant's own roles, or named roles, gets none of this. Rules with no starter roles do nothing.
-- The role manager reads the roles through the role class's own filter. So a role class kept per tenant marks its tenant
+- The role service reads the roles through the role class's own filter. So a role class kept per tenant marks its tenant
   `[OfTenant]`. Without the marker, the roles of every tenant count as the current tenant's.
 
 **When it runs.** Tenancy runs it through
@@ -475,18 +475,18 @@ The toolkit cannot know when one of your scopes begins, so your code says it.
 
 ### Changing a role
 
-The role manager has three changes. Each loads the role, checks the caller, changes the role, saves it and returns
+The role service has three changes. Each loads the role, checks the caller, changes the role, saves it and returns
 it:
 
 ```csharp
-// roles is the BoardRoleManager the handler takes
+// roles is the BoardRoleService the handler takes
 var renamed = await roles.RenameAsync(command.Role, "Lead editor", "Edits and plans a board.", cancellationToken);   // the name and the description as they should be
 var narrowed = await roles.SetPermissionsAsync(command.Role, [BoardPermissions.View, BoardPermissions.Edit], cancellationToken);
 var archived = await roles.ArchiveAsync(command.Role, cancellationToken);
 ```
 
 - **Who may change a role** is the permission the rules name in `managedWith`
-  ([The role manager](resources-and-members.md#the-role-manager)). Without it, only system work changes roles.
+  ([The role service](resources-and-members.md#the-role-service)). Without it, only system work changes roles.
 - **For your own events, implement the role's hooks**: `OnRenamed()`, `OnPermissionsSet(set)` with `set.Added` and
   `set.Removed`, and `OnArchived()`. Each runs only when the role changed.
 - **The role checks every change against the rules.** A role row does not store them. The rules say what a role may
@@ -536,7 +536,7 @@ var archived = await roles.ArchiveAsync(command.Role, cancellationToken);
   });
   ```
 
-- **The managers read through the request's context**, so your filter applies. Another customer's role does not
+- **The services read through the request's context**, so your filter applies. Another customer's role does not
   exist there. Your filter also applies where a role's permissions are read
   ([Access in your own queries](checks-and-saves.md#access-in-your-own-queries)).
 - **Without customers**, there is one set of roles. Declare the two unique indexes over `Name` alone and `FromStarterRole`

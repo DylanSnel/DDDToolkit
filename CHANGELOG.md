@@ -10,6 +10,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-20
+
+No change to the code of the packages. The docs and the messages follow the names of DTS Pro 0.2.0.
+
+### Changed
+
+- The docs, the skill and the diagnostics' examples name Tenancy's and Membership's domain services `TenantService`,
+  `SeatService`, `MemberService` and so on. They were `TenantManager`, `SeatManager` and `MemberManager`.
+- The docs name the ports repositories: `ITenancyRepositories` with a repository per aggregate (`ITenantRepository`,
+  `ISeatRepository`, ...) and `ITenancyUnitOfWork`, `IInvitationRepository`, `IMemberRepository`. They were
+  `ITenancyStore`, `IInvitationStore` and `IMemberStore`. The pages on the Tenancy sample name its ports `IProjectRepository` and
+  `IInspectionRepository`.
+- The reference pages `docs/tenancy/reference/managers.md` and `docs/membership/reference/managers.md` are now
+  `services.md`.
+
 ## [0.1.5] - 2026-11-20
 
 ### Added

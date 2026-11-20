@@ -105,7 +105,7 @@ problem, and the fix.
 | [DDD00103](#ddd00103) | Error | An operator's command takes its tenant from the request or from itself |
 | [DDD00104](#ddd00104) | Error | [Operator] stands beside no requirement an operator cannot meet |
 | [DDD00105](#ddd00105) | Warning | [Operator] on a query names no tenant and no scope |
-| [DDD00106](#ddd00106) | Info | A member or role manager is not written |
+| [DDD00106](#ddd00106) | Info | A member or role service is not written |
 | [DDD00107](#ddd00107) | Error | The registration of an access behavior is written and in scope where it is called |
 | [DDD00108](#ddd00108) | Warning | The migrations make the model the access files are written from |
 | [DDD00109](#ddd00109) | Error | A permission marker on a collection of ids takes no marker argument and no [OrOwn] |
@@ -165,7 +165,7 @@ rules, by topic:
 - [DDD00059](#ddd00059) and [DDD00060](#ddd00060): the
   [member list of a resource](membership/resources-and-members.md#the-generated-member-list). They report what
   the Membership generator could not tell, and a member class that names the wrong resource.
-  [DDD00106](#ddd00106) reports a [manager](membership/resources-and-members.md#the-managers) the generator does not
+  [DDD00106](#ddd00106) reports a [manager](membership/resources-and-members.md#the-services) the generator does not
   write.
 - [DDD00092](#ddd00092) to [DDD00095](#ddd00095) and [DDD00099](#ddd00099):
   [permissions declared once](membership/permissions-and-roles.md#the-settings-of-a-permission). They catch a
@@ -2189,7 +2189,7 @@ public sealed partial class Document                    // DDD00059: no property
 
 For a class declared with [Membership](membership/overview.md)'s member template, the package's generator writes
 the member list on the resource that the template names. The member list is a private property `Members`. The
-member manager changes the members through it, and no manager is written without it ([DDD00106](#ddd00106)). The generator writes it from three things the resource
+member service changes the members through it, and no service is written without it ([DDD00106](#ddd00106)). The generator writes it from three things the resource
 declares and from the member class's own id. It writes the list only when it can tell each of them without a
 guess:
 
@@ -2463,7 +2463,7 @@ with `is_global = true`.
 
 ```csharp
 // Shop.Tenants.Domain, [assembly: Module("Tenants")], with no class declared with [SeatAggregate]
-[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'SeatManager' is not written, ...
+[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'SeatService' is not written, ...
 [OrganizationAggregate<TenantId>] public sealed partial class Organization;
 [OrganizationUnit<OrganizationUnitId>] public sealed partial class OrganizationUnit;
 [RoleAggregate<RoleId>] public sealed partial class Role;
@@ -2473,15 +2473,15 @@ with `is_global = true`.
 // The same project, with all the classes, and a type of the class's name in a namespace of its own
 namespace Shop.Tenants.Settings;
 
-public static class SeatManager;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
+public static class SeatService;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
 ```
 
 A package names its generic classes in `[assembly: TemplateFacade]`. For each, the toolkit's generator writes a class
 into the project that declares your classes. The class derives from the package's class, closed over your classes,
-and has the package's class name without the type parameters. Tenancy names seven: `TenantManager`,
-`OrganizationManager`, `SeatManager`, `RoleManager`, `InvitationManager`, `TenancyAccessManager` and the record
-`TenantToProvision`. So your code takes a `SeatManager` and names `SeatManager.SeatOverview`
-([The managers and the access manager](tenancy/your-module.md#the-managers-and-the-access-manager)). Each type parameter of the package's class is one of
+and has the package's class name without the type parameters. Tenancy names seven: `TenantService`,
+`OrganizationService`, `SeatService`, `RoleService`, `InvitationService`, `TenancyAccessManager` and the record
+`TenantToProvision`. So your code takes a `SeatService` and names `SeatService.SeatOverview`
+([The services and the access manager](tenancy/your-module.md#the-services-and-the-access-manager)). Each type parameter of the package's class is one of
 your classes or ids. So the generator writes a class only when every template it takes from has one class, in that
 project or in a project of the same module that the project references.
 
@@ -2495,7 +2495,7 @@ classes, once for each class that is not written:
 | no class is declared with one of the templates | declare it, next to the others |
 | several classes are declared with one template | keep one |
 | a class does not meet the constraints of the package's class | give it what the message names |
-| the project declares a type of that name in a namespace. The class would hide that type wherever the namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacadeName("SeatManager", "ShopSeatManager")]` |
+| the project declares a type of that name in a namespace. The class would hide that type wherever the namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacadeName("SeatService", "ShopSeatManager")]` |
 
 DDD00065 has the severity Info. A module whose classes are split over two projects gets DDD00065 in the first
 project, where nothing is wrong. The second project, where the classes are complete, gets the class.
@@ -2508,10 +2508,10 @@ Some causes are reported elsewhere, and not again here:
   [DDD00049](#ddd00049) or [DDD00045](#ddd00045).
 - A class that cannot be generated has its own diagnostic.
 - A class that the package marks `OnlyWith` a template is written only where that template has a class. A project
-  without one gets no class and no diagnostic. Tenancy's `InvitationManager` is written only where the module declares
+  without one gets no class and no diagnostic. Tenancy's `InvitationService` is written only where the module declares
   an invitation class.
 
-A package's interface gets an alias instead of a class, such as Tenancy's `TenancyStore`. The same causes keep the
+A package's interface gets an alias instead of a class, such as Tenancy's `TenancyRepositories`. The same causes keep the
 alias out of the project that declares the classes. A project above that declares a type of the alias's name in a
 namespace gets DDD00065 on that type, because the alias would hide it wherever the namespace is imported.
 
@@ -2883,31 +2883,31 @@ not read generated code. See [Supabase](supabase.md#exporting-as-part-of-the-bui
 **Every class a package's use cases are named through has a name of its own where a project sees it.**
 
 ```
-Shop.Host.csproj: warning DDD00075: 'SeatManager' is the name of more than one class in this project: it sees the
+Shop.Host.csproj: warning DDD00075: 'SeatService' is the name of more than one class in this project: it sees the
 one 'Shop.Customers.Domain' has for the module Customers and the one 'Shop.Partners.Domain' has for the module
-Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName("SeatManager",
-"CustomersSeatManager")] in 'Shop.Customers.Domain'.
+Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName("SeatService",
+"CustomersSeatService")] in 'Shop.Customers.Domain'.
 ```
 
-The toolkit's generator writes Tenancy's managers, its access manager and `TenantToProvision` into the project that
-declares your Tenancy classes. Each class is named after the package's own class: `SeatManager`, `TenancyAccessManager`
+The toolkit's generator writes Tenancy's services, its access manager and `TenantToProvision` into the project that
+declares your Tenancy classes. Each class is named after the package's own class: `SeatService`, `TenancyAccessManager`
 and so on ([Two modules with the classes](tenancy/your-module.md#two-modules-with-tenancys-classes)). An application
 with two modules that each declare Tenancy's classes gets two classes of each name, one in each module's domain
 project. While neither module references the other, neither project sees the other's class, and neither reports
 anything. The two classes meet in every project that references both modules, first the host and your tests.
-There, the first line that names `SeatManager` gets the compiler's CS0433, with no hint of what to do. So DDD00075 is
+There, the first line that names `SeatService` gets the compiler's CS0433, with no hint of what to do. So DDD00075 is
 reported in such a project, at its project file, because no line of its code is wrong. It is reported once for each
 name, so a host that sees two modules with Tenancy's classes gets seven warnings for the classes.
 
-The stores are aliases, `TenancyStore` and `InvitationStore`, which the generator writes into every project that sees
+The repositories are aliases, `TenancyRepositories` and `InvitationRepository`, which the generator writes into every project that sees
 the classes. A project that sees two modules' classes would get two aliases of one name. It gets neither, and
 DDD00075 says so at its project file, once for each alias:
 
 ```
-Shop.Host.csproj: warning DDD00075: 'TenancyStore' is the name of more than one alias in this project: it sees the
+Shop.Host.csproj: warning DDD00075: 'TenancyRepositories' is the name of more than one alias in this project: it sees the
 classes 'Shop.Customers.Domain' declares for the module Customers and the classes 'Shop.Partners.Domain' declares for
-the module Partners, and would get an alias of ITenancyStore for each. Give one of them a name of its own, with
-[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")] in 'Shop.Customers.Domain'.
+the module Partners, and would get an alias of ITenancyRepositories for each. Give one of them a name of its own, with
+[assembly: TemplateFacadeName("TenancyRepositories", "CustomersTenancyRepositories")] in 'Shop.Customers.Domain'.
 ```
 
 What happens depends on where the two classes meet. DDD00075 is a warning in every case. It stops no build unless
@@ -2915,7 +2915,7 @@ warnings are errors there. The compiler's error on the first line that names the
 
 | Where the two classes meet | What the generator writes there | Where DDD00075 is reported | What your code gets while the warning stands |
 |---|---|---|---|
-| a project that references both modules' projects, such as the host or a test project | nothing. The classes belong to the modules | at the project file, because no line of it is wrong | Code that names neither class builds and runs. The first line that names `SeatManager` gets CS0433, an error |
+| a project that references both modules' projects, such as the host or a test project | nothing. The classes belong to the modules | at the project file, because no line of it is wrong | Code that names neither class builds and runs. The first line that names `SeatService` gets CS0433, an error |
 | a project that declares one module's classes, and references another module's project that has a class of that name | its own class, as usual | on the project's first Tenancy class, and not also at the project file | The project's own code builds and names its own module's classes. The compiler takes the class from the project's own source and reports CS0436, a warning. Every project above it sees both classes, gets DDD00075 at its project file, and gets CS0433 on the first line that names the class |
 | a project that would get two classes of one name itself: two packages' classes of one name, or a name you gave that another of its classes has | neither class, because the two cannot be told apart | on the project's first class | Code that names neither class builds. A line that names the class gets the compiler's error that no such type exists |
 
@@ -2928,19 +2928,19 @@ of the module that the host sees twice, one line each:
 // Shop.Customers.Domain, beside [assembly: Module("Customers")] or Tenancy's switch
 using DTS.DDD.Abstractions.Attributes;
 
-[assembly: TemplateFacadeName("TenantManager", "CustomersTenantManager")]
-[assembly: TemplateFacadeName("OrganizationManager", "CustomersOrganizationManager")]
-[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]
-[assembly: TemplateFacadeName("RoleManager", "CustomersRoleManager")]
-[assembly: TemplateFacadeName("InvitationManager", "CustomersInvitationManager")]   // where the module declares an invitation
+[assembly: TemplateFacadeName("TenantService", "CustomersTenantManager")]
+[assembly: TemplateFacadeName("OrganizationService", "CustomersOrganizationManager")]
+[assembly: TemplateFacadeName("SeatService", "CustomersSeatService")]
+[assembly: TemplateFacadeName("RoleService", "CustomersRoleManager")]
+[assembly: TemplateFacadeName("InvitationService", "CustomersInvitationManager")]   // where the module declares an invitation
 [assembly: TemplateFacadeName("TenancyAccessManager", "CustomersTenancyAccessManager")]
 [assembly: TemplateFacadeName("TenantToProvision", "CustomersTenantToProvision")]
-[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")]
-[assembly: TemplateFacadeName("InvitationStore", "CustomersInvitationStore")]                 // where the module declares an invitation
+[assembly: TemplateFacadeName("TenancyRepositories", "CustomersTenancyRepositories")]
+[assembly: TemplateFacadeName("InvitationRepository", "CustomersInvitationStore")]                 // where the module declares an invitation
 ```
 
-Every project above it then takes Customers' managers as `CustomersSeatManager` and the others, and Partners keeps
-`SeatManager`. Any name that a class can have works, `CustomersSeats` too, as long as no namespace or type of yours
+Every project above it then takes Customers' managers as `CustomersSeatService` and the others, and Partners keeps
+`SeatService`. Any name that a class can have works, `CustomersSeats` too, as long as no namespace or type of yours
 in the global namespace has it. The message only suggests a name.
 
 If two packages' classes share a name in one project, the line names the one it means with its namespace:
@@ -2964,7 +2964,7 @@ works as well.
 ```csharp
 [assembly: TemplateFacadeName("SeatManagers", "ShopSeats")]   // DDD00076: ... changes nothing: no package this project
                                                               // references asks for a class of that name; it can name
-                                                              // 'InvitationManager', 'OrganizationManager', ... and 'TenantToProvision'
+                                                              // 'InvitationService', 'OrganizationService', ... and 'TenantToProvision'
 ```
 
 The line gives your own name to a class that the generator writes for a package's `[TemplateFacade]`. It works in the project
@@ -2976,7 +2976,7 @@ it changed the name. So it is reported at the line, and the class keeps its name
 | The line | What to do |
 |---|---|
 | names no class that a referenced package asks for | write the class name as the message lists it: the package's class name without its type parameters |
-| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DTS.Tenancy.Managers.SeatManager"` |
+| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DTS.Tenancy.Services.SeatService"` |
 | is in a project that declares none of the classes, such as an application project above the domain project | move it into the project that declares the classes. The class is written and named there |
 | names a class that an earlier line names already, in this project or in a project of its module that it takes classes from | keep one line. This project's line wins, then the line of the first other project by name |
 | gives a name that no class can have, such as a keyword or a name with a space | give a name that a class can have |
@@ -3616,7 +3616,7 @@ Of the permissions on one resource:
 - At most one is held by every member (`EveryMember`). That permission is also the one that sees the resource
   from above.
 - At most one manages the members (`ManagesMembers`), and at most one names the owner (`NamesOwner`). The member
-  manager requires each of them, and the database's lock checks each of them, as one permission.
+  service requires each of them, and the database's lock checks each of them, as one permission.
 
 A permission declared on one resource by two constants is reported as well. Each case is reported where the
 permission is declared, among the permissions that the project sees.
@@ -3945,7 +3945,7 @@ public sealed record TenantSeats : IQuery<IReadOnlyList<SeatRow>>, ITenancyReque
 
 ```csharp
 [Operator(Tenant = OperatorTenant.FromRequest)]            // DDD00105, a warning
-public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;
+public sealed record AllTenants(string? After) : IQuery<TenantService.TenantPage>, ITenancyRequest;
 ```
 
 On a command, `[Operator]` runs the handler as operator work. `Tenant` and `Scope` say where the work acts and in
@@ -3954,7 +3954,7 @@ which scope. On a query nothing begins. An operator reads across tenants through
 
 ```csharp
 [Operator]
-public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;
+public sealed record AllTenants(string? After) : IQuery<TenantService.TenantPage>, ITenancyRequest;
 ```
 
 `[ForTenant]` on a query is not reported. It still refuses a request that names another tenant than the query does,
@@ -3962,32 +3962,32 @@ with `tenancy.tenant-mismatch`.
 
 ## DDD00106
 
-**A member or role manager is not written.**
+**A member or role service is not written.**
 
 ```csharp
 namespace Filing.Sharing;
 
-public sealed class DocumentShareManager;               // DDD00106, information: the generated manager would hide it
+public sealed class DocumentShareService;               // DDD00106, information: the generated service would hide it
 
 [Member<DocumentShareId, UserId, NamedRole, Document>]
 public sealed partial class DocumentShare;
 ```
 
-Membership's generator writes the [managers](membership/resources-and-members.md#the-managers) in the global
-namespace. The member manager is named after the member class, `DocumentShareManager` for `DocumentShare`. The role
-manager is named after the role class, `BoardRoleManager` for `BoardRole`. The generator writes a manager only where
-the name is free and the manager can do its work. This information names the manager and says why it is not written:
+Membership's generator writes the [managers](membership/resources-and-members.md#the-services) in the global
+namespace. The member service is named after the member class, `DocumentShareService` for `DocumentShare`. The role
+service is named after the role class, `BoardRoleService` for `BoardRole`. The generator writes a service only where
+the name is free and the service can do its work. This information names the service and says why it is not written:
 
 | Why | Fix |
 |---|---|
-| The project declares a type of that name in a namespace. The manager in the global namespace would hide it in every file that imports the namespace. | Rename your type, or move it to the global namespace if it is your own manager. |
-| Two member classes, or two role classes, have the same name in different namespaces. Their managers would be one class. | Rename one of them. |
-| The resource's owner property has no setter the manager can use when it names another owner. | Give the `[Owner]` property a `private set`. |
+| The project declares a type of that name in a namespace. The service in the global namespace would hide it in every file that imports the namespace. | Rename your type, or move it to the global namespace if it is your own service. |
+| Two member classes, or two role classes, have the same name in different namespaces. Their services would be one class. | Rename one of them. |
+| The resource's owner property has no setter the service can use when it names another owner. | Give the `[Owner]` property a `private set`. |
 | The resource's id cannot be told. | Declare the resource with `[AggregateRoot<TId>]` over an id the project can see. |
-| The role class's resource is declared in another project. The resource's registration cannot name the manager. | Declare the role class in the resource's project. |
+| The role class's resource is declared in another project. The resource's registration cannot name the service. | Declare the role class in the resource's project. |
 
-A type of the manager's name in the global namespace is your own manager, and the generator writes none and reports
-nothing. A resource whose member list is not written gets no manager either. [DDD00059](#ddd00059) or
+A type of the service's name in the global namespace is your own service, and the generator writes none and reports
+nothing. A resource whose member list is not written gets no service either. [DDD00059](#ddd00059) or
 [DDD00060](#ddd00060) says why.
 
 ## DDD00107

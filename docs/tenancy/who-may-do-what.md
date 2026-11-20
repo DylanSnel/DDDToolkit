@@ -60,7 +60,7 @@ Who the caller is, and in which tenant, comes from `TenancyAccessManager`: `acce
 - System work in a tenant holds every permission in that tenant. A query from system work outside any tenant throws
   an `InvalidOperationException`.
 - While `NarrowOutsideSeats` is on, a caller of a kind outside the organization gets no units, paths or roles from
-  these queries, and no seat but its own. `SeatManager` also returns the seats of its fellow members, without their
+  these queries, and no seat but its own. `SeatService` also returns the seats of its fellow members, without their
   placements and grants
   ([What a seat outside the organization reads](postgres.md#what-a-seat-outside-the-organization-reads)).
 
@@ -206,7 +206,7 @@ public sealed record OpenLedger(                                // TenancyAccess
 - **Level.** A permission's level is declared once, on its constant, with `[AtTenant]` or `[AtUnit]`
   ([Declaring a module's permissions](roles-and-permissions.md#declaring-a-modules-permissions)).
 - **`[AtUnit(p)]`** marks the unit of a command that acts at a unit it names. Its argument is the permission that the
-  caller holds at that unit. Two kinds of command need it. The first kind calls a manager method that checks the unit,
+  caller holds at that unit. Two kinds of command need it. The first kind calls a service method that checks the unit,
   such as placing a seat or giving a role there. The second kind creates something at a unit before anything exists
   there to hold a permission on, such as opening a project. Without an argument, `[AtUnit]` is the level of a
   permission constant. On a request's member, `[AtUnit]` without an argument is [DDD00080](../diagnostics.md#ddd00080).
@@ -239,24 +239,24 @@ public sealed record OpenLedger(                                // TenancyAccess
   requirement case of that module ([What answers it](../access-requirements.md#what-answers-it)).
   [Membership](../membership/overview.md) ships these cases.
 
-### Requests that call a manager
+### Requests that call a service
 
-A request whose handler calls one of Tenancy's managers declares the permission that the manager checks first.
+A request whose handler calls one of Tenancy's services declares the permission that the service checks first.
 Examples:
 
-- `MakeGrant`, whose handler calls `SeatManager.GrantAsync`, declares `[AtUnit(TenancyPermissions.GrantsManage)]` on
+- `MakeGrant`, whose handler calls `SeatService.GrantAsync`, declares `[AtUnit(TenancyPermissions.GrantsManage)]` on
   the unit.
 - A request that makes a role declares `[RequiresPermission(TenancyPermissions.RolesManage)]`.
-- A query that calls a manager's read, such as `SeatManager.WhoAmIAsync` or `OrganizationManager.ListUnitsAsync`,
+- A query that calls a service's read, such as `SeatService.WhoAmIAsync` or `OrganizationService.ListUnitsAsync`,
   declares `[InTenant]`.
 
-When the manager's first check needs data from the database, the request declares `[InTenant]`. Example: archiving
-a unit requires `tenancy.units.manage` at the unit's parent, and only the manager loads the parent.
+When the service's first check needs data from the database, the request declares `[InTenant]`. Example: archiving
+a unit requires `tenancy.units.manage` at the unit's parent, and only the service loads the parent.
 
 ```csharp
 public sealed record MakeGrant(SeatId Seat, RoleId Role, [AtUnit(TenancyPermissions.GrantsManage)] OrganizationUnitId Unit) : ICommand<Seat>, ITenantsRequest;
 
-public sealed class MakeGrantHandler(SeatManager seats) : ICommandHandler<MakeGrant, Seat>
+public sealed class MakeGrantHandler(SeatService seats) : ICommandHandler<MakeGrant, Seat>
 {
     // The access check let through a caller with tenancy.grants.manage at the unit. GrantAsync checks it again,
     // then the rules that need stored data.
@@ -265,23 +265,23 @@ public sealed class MakeGrantHandler(SeatManager seats) : ICommandHandler<MakeGr
 }
 ```
 
-The manager checks the permission again, whoever calls it. Then it runs the checks that need stored data:
+The service checks the permission again, whoever calls it. Then it runs the checks that need stored data:
 
 - whether the caller may give a role that manages access;
 - whether a move gives away what the caller could not give;
 - whether the tenant keeps an administrator.
 
-A caller that the manager's first check would refuse is refused before the handler runs, with the same code.
+A caller that the service's first check would refuse is refused before the handler runs, with the same code.
 
-The diagram shows the checks a grant passes, in order. The access check tests what the request names. The manager
+The diagram shows the checks a grant passes, in order. The access check tests what the request names. The service
 tests what it reads from the database. On Postgres, [row level security](postgres.md) then checks every saved row
-against the seat the manager runs as. Purple: the request. Red: refused. Green: saved.
+against the seat the service runs as. Purple: the request. Red: refused. Green: saved.
 
 ```mermaid
 flowchart TB
     request["<b>MakeGrant</b><br/><small>the request</small>"]
     door{"tenancy.grants.manage<br/>at the unit?"}
-    manager["<b>SeatManager.GrantAsync</b><br/><small>checks the permission again,<br/>then the stored grants</small>"]
+    manager["<b>SeatService.GrantAsync</b><br/><small>checks the permission again,<br/>then the stored grants</small>"]
     notPermitted["<b>Refused</b><br/><small>tenancy.not-permitted</small>"]
     exceeds["<b>Refused</b><br/><small>tenancy.grant-exceeds-own</small>"]
     saved["<b>Grant saved</b><br/><small>on Postgres, row level security<br/>checks the row again</small>"]
@@ -313,14 +313,14 @@ involves two separate decisions: who may send the request, and what the work run
 |---|---|---|
 | a signed-in person who registers an organization | `[SignedIn]` | The caller's token, read before the system work begins. The handler refuses an anonymous sign-in. |
 | anyone, through a public form or a development route | `[AllowAnonymous]` | An e-mail address in the form. The handler creates the account with `IIdentityAccounts.InviteByEmailAsync` and provisions the tenant for the new account's id. |
-| a job or tool of the application, such as an import or the seeding | None. Trusted code begins the work and calls the manager. | The job's input. |
+| a job or tool of the application, such as an import or the seeding | None. Trusted code begins the work and calls the service. | The job's input. |
 | your staff, for a customer | `[Operator]` on the command, without `[ForTenant]` | The command names the customer. The handler begins nothing: the access check runs it as operator work in no tenant, recorded as the operator ([Operators](operators-and-history.md#operators)). |
 
 ```csharp
 [SignedIn]
 public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest;
 
-public sealed class RegisterOrganizationHandler(TenantManager tenants, TenancyAccessManager access)
+public sealed class RegisterOrganizationHandler(TenantService tenants, TenancyAccessManager access)
     : ICommandHandler<RegisterOrganization, Tenant>
 {
     public async ValueTask<Tenant> Handle(RegisterOrganization command, CancellationToken cancellationToken)

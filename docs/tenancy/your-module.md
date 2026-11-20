@@ -7,14 +7,14 @@ sidebar_label: Your module
 
 The module that holds Tenancy is the toolkit's first [supporting domain](../writing-a-supporting-domain.md). This
 page covers the module's options, variants and edge cases: its packages, classes, ids, context and registration, and
-how your code names the managers and the access manager. The [tutorial](tutorial.md) shows the basic path. The [overview](overview.md)
+how your code names the services and the access manager. The [tutorial](tutorial.md) shows the basic path. The [overview](overview.md)
 defines the words.
 
 ## The packages
 
 | Package | What it contains | Where it goes |
 |---|---|---|
-| `DylansTechStack.Tenancy` | The model, its rules, its managers and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
+| `DylansTechStack.Tenancy` | The model, its rules, its services and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
 | `DylansTechStack.Tenancy.Abstractions` | Tenancy's markers for domain classes: `[OfTenant]`, on the property that says which tenant a row belongs to ([Keeping tenants apart](keeping-tenants-apart.md)). The markers of the kinds of seat: `[SeatKinds]`, `[InOrganization]` and `[OutsideOrganization]` ([Kinds of seat](#kinds-of-seat)). Tenancy's generators, which every project that references the package gets. No Entity Framework. `DTS.Tenancy` references it. | The domain project of another module, which sees only Tenancy's ids. The contracts project that declares the kinds of seat. |
 | `DylansTechStack.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, and Tenancy's queries as Entity Framework queries. It works with every provider. | The infrastructure project, which has the context |
 | `DylansTechStack.Tenancy.Postgres` | Tenancy's queries as SQL functions, and row level security (RLS) policies, written by the [export](../supabase.md). It references the Entity Framework package. | The infrastructure project, on Postgres |
@@ -38,7 +38,7 @@ their names can still change.
   optional part that your application adds
   ([What the catalogue is for](roles-and-permissions.md#what-the-catalogue-is-for)).
 
-The managers enforce the rules that involve more than one aggregate. These managers first take the tenant's access
+The services enforce the rules that involve more than one aggregate. These services first take the tenant's access
 revision, so two concurrent changes cannot both commit
 ([Who may give a role](roles-and-permissions.md#who-may-give-a-role)):
 
@@ -102,7 +102,7 @@ flowchart TB
     idQ{"Does a type with<br/>the id's name exist?"}
     taken["<b>Your id</b><br/><small>used as you wrote it</small>"]
     writtenId["<b>Id written</b><br/><small>TenantId, RoleId ...</small>"]
-    generators["<b>Every generator</b><br/><small>base class, converters,<br/>AddTenancy(), the managers</small>"]
+    generators["<b>Every generator</b><br/><small>base class, converters,<br/>AddTenancy(), the services</small>"]
     theSwitch --> classQ
     classQ -- "yes" --> yours
     classQ -- "no" --> written
@@ -174,7 +174,7 @@ does not write that class. This happens in these cases:
 - Two types with the id's name exist.
 
 A class that needs a class the switch left out is left out too, and neither class gets an id. Example: a seat needs
-its role. `AddTenancy()` and the managers are then not written either, and they report no second error.
+its role. `AddTenancy()` and the services are then not written either, and they report no second error.
 
 When one of your classes is in the way and should become the package's class, add the template to it:
 `[RoleAggregate<RoleId>] public sealed partial class Role`.
@@ -317,7 +317,7 @@ var mira = await seats.AddAsync(identity, cancellationToken, kind: HarborSeatKin
 
 Tenancy creates the id of every tenant, unit, seat, role and invitation in code, before the save. It calls the static
 `Create()` of the id type, for example `TSeatId.Create()`. So the change and its events have the id from the start.
-The database never creates an id. A manager method that receives an id, for an import or seed data, uses that id.
+The database never creates an id. A service method that receives an id, for an import or seed data, uses that id.
 
 | The id | Its `Create()` |
 |---|---|
@@ -362,7 +362,7 @@ The context is a plain `DbContext` of your module that calls `modelBuilder.AddTe
 | `TenantSelection.SeatedTokenRoles` | `authenticated` | Your tokens give people with seats another role |
 | `OperatorTokenRoles` | Empty | You have [operators](operators-and-history.md#operators) |
 
-[`TenancyOptions`](reference/managers.md#tenancyoptionsttenantid-tseatid-tunitid-troleid) lists every option.
+[`TenancyOptions`](reference/services.md#tenancyoptionsttenantid-tseatid-tunitid-troleid) lists every option.
 
 - `services.AddTenancy<TContext>()` and `modelBuilder.AddTenancy()` are generated, closed over your classes and ids
   ([A registration closed over your classes](../writing-a-supporting-domain.md#a-registration-closed-over-your-classes)).
@@ -373,29 +373,29 @@ The context is a plain `DbContext` of your module that calls `modelBuilder.AddTe
 - `AddTenancy` adds Tenancy's save check to every context that `UseDDDToolkit` wires
   ([Keeping tenants apart](keeping-tenants-apart.md)).
 
-## The managers and the access manager
+## The services and the access manager
 
 Your code changes and reads Tenancy's aggregates through **managers**, one per aggregate, as ASP.NET Core Identity
-does with `UserManager` and `RoleManager`. Each manager holds the commands and the reads of its aggregate. The
-package declares each one as a generic class, such as `SeatManager<TTenant, TTenantId, …>`. In the project that
+does with `UserManager` and `RoleService`. Each service holds the commands and the reads of its aggregate. The
+package declares each one as a generic class, such as `SeatService<TTenant, TTenantId, …>`. In the project that
 declares your classes, the generator writes a class without type parameters, closed over your classes. Each class is
 in the global namespace, whatever your module is called. Every project that references the declaring project takes
 the class by that name:
 
 | Class | What it holds | Registered by |
 |---|---|---|
-| `TenantManager` | Provisioning a tenant, changing its shape, suspending, reactivating and closing it. The operators' list of tenants. | `AddTenancy` |
-| `OrganizationManager` | Renaming the organization. Adding, renaming, moving and archiving units. The units a caller reads. | `AddTenancy` |
-| `SeatManager` | Adding a seat, placing and withdrawing it, granting and revoking roles, suspending, reactivating and deactivating it. The caller's overview and the seats a caller reads. | `AddTenancy` |
-| `RoleManager` | Creating, renaming and archiving roles, changing their permissions, following the starter roles. The tenant's roles. | `AddTenancy` |
-| `InvitationManager` | Issuing, cancelling and accepting invitations, and the open ones. It is written only where you declare an invitation class. | `AddTenancyInvitations` |
+| `TenantService` | Provisioning a tenant, changing its shape, suspending, reactivating and closing it. The operators' list of tenants. | `AddTenancy` |
+| `OrganizationService` | Renaming the organization. Adding, renaming, moving and archiving units. The units a caller reads. | `AddTenancy` |
+| `SeatService` | Adding a seat, placing and withdrawing it, granting and revoking roles, suspending, reactivating and deactivating it. The caller's overview and the seats a caller reads. | `AddTenancy` |
+| `RoleService` | Creating, renaming and archiving roles, changing their permissions, following the starter roles. The tenant's roles. | `AddTenancy` |
+| `InvitationService` | Issuing, cancelling and accepting invitations, and the open ones. It is written only where you declare an invitation class. | `AddTenancyInvitations` |
 | `TenancyAccessManager` | Who acts (`CurrentUser`), in which tenant (`CurrentTenant`), and the `Begin…` methods that start system work ([System work](keeping-tenants-apart.md#system-work)). | `AddTenancy`, and `AddTenancyAccess` in another module |
 | `TenantToProvision` | The record `ProvisionAsync` takes. Your code makes it with `new`. | (a record) |
 
 ```csharp
 public sealed record GrantRole(SeatId Seat, RoleId Role, [AtUnit(TenancyPermissions.GrantsManage)] OrganizationUnitId Unit) : ICommand<Seat>, ITenancyRequest;
 
-public sealed class GrantRoleHandler(SeatManager seats) : ICommandHandler<GrantRole, Seat>
+public sealed class GrantRoleHandler(SeatService seats) : ICommandHandler<GrantRole, Seat>
 {
     // The request carries ids, so the handler passes ids. GrantAsync returns the seat with its new grant.
     public async ValueTask<Seat> Handle(GrantRole command, CancellationToken cancellationToken)
@@ -404,49 +404,49 @@ public sealed class GrantRoleHandler(SeatManager seats) : ICommandHandler<GrantR
 ```
 
 - **Objects or ids.** A method takes your objects or their ids: `seats.GrantAsync(leo, safetyOfficer, north, ...)`
-  or `seats.GrantAsync(seatId, roleId, unitId, ...)`. The object overload reads only the object's id. The manager
+  or `seats.GrantAsync(seatId, roleId, unitId, ...)`. The object overload reads only the object's id. The service
   loads the aggregate and checks it the same way for both.
 - **What a command returns.** A command returns the aggregate it made or changed. `AddAsync` returns the new `Seat`,
   `AddUnitAsync` the new unit, `CreateAsync` the new `Role`, `GrantAsync` the seat, and `ProvisionAsync` the new
   `Tenant`.
 - **What a read returns.** A read returns your classes. A read that adds data your class does not have returns a
-  record that holds your objects: `SeatManager.SeatOverview`, `OrganizationManager.UnitInTree` and
-  `TenantManager.TenantListing`. `roles.ManagesAccess(role)` says whether a role holds a permission that manages
+  record that holds your objects: `SeatService.SeatOverview`, `OrganizationService.UnitInTree` and
+  `TenantService.TenantListing`. `roles.ManagesAccess(role)` says whether a role holds a permission that manages
   access.
-- **The checks.** Each manager checks the caller's permissions where it acts, after the access check before the
-  handler ([Requests that call a manager](who-may-do-what.md#requests-that-call-a-manager)).
-- [Tenants](reference/managers.md#tenants), [Organization](reference/managers.md#organization),
-  [Seats](reference/managers.md#seats), [Roles](reference/managers.md#roles) and
-  [Invitations](reference/managers.md#invitations) in the reference list every method.
+- **The checks.** Each service checks the caller's permissions where it acts, after the access check before the
+  handler ([Requests that call a service](who-may-do-what.md#requests-that-call-a-service)).
+- [Tenants](reference/services.md#tenants), [Organization](reference/services.md#organization),
+  [Seats](reference/services.md#seats), [Roles](reference/services.md#roles) and
+  [Invitations](reference/services.md#invitations) in the reference list every method.
 
-The first manager method most applications call provisions a tenant
+The first service method most applications call provisions a tenant
 ([tutorial step 6](tutorial.md#step-6-provisioning-a-tenant)).
 
-C# finds a nested type through a derived class. So `SeatManager.SeatOverview` is the package's `SeatOverview`,
+C# finds a nested type through a derived class. So `SeatService.SeatOverview` is the package's `SeatOverview`,
 closed over your classes. Each name is a class because a `global using` alias works only in its own project. A class
 reaches every project above, and the generators of those projects read it.
 
-### The stores
+### The repositories
 
-The managers load and save through two **stores**, interfaces that the storage package implements and registers:
-`ITenancyStore<...>` and, where you declare an invitation class, `IInvitationStore<...>`. A command of yours that changes
-a field of your own on one of Tenancy's aggregates loads and saves it through a store. The save then happens in the unit
-of work that the managers save through.
+The services load and save through two **stores**, interfaces that the storage package implements and registers:
+`ITenancyRepositories<...>` and, where you declare an invitation class, `IInvitationRepository<...>`. A command of yours that changes
+a field of your own on one of Tenancy's aggregates loads and saves it through the repositories. The save then happens in the unit
+of work that the services save through.
 
-The generator names the stores `TenancyStore` and `InvitationStore`. Each name is a `global using` alias, closed over
+The generator names the repositories `TenancyRepositories` and `InvitationRepository`. Each name is a `global using` alias, closed over
 your classes. No class can stand for an interface that the container hands out. An alias works only in its own
 project, so the generator writes the alias into the project that declares your classes and into every project above it
 that sees them.
 
 ```csharp
-public sealed class RenameSeatHandler(TenancyStore store) : ICommandHandler<RenameSeat, Seat>
+public sealed class RenameSeatHandler(TenancyRepositories repositories) : ICommandHandler<RenameSeat, Seat>
 {
-    // The store keeps to the caller's tenant. A seat of another tenant is not found.
+    // The repositories keeps to the caller's tenant. A seat of another tenant is not found.
     public async ValueTask<Seat> Handle(RenameSeat command, CancellationToken cancellationToken)
     {
-        var seat = await store.FindSeatAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
+        var seat = await repositories.Seats.FindAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
         seat.Rename(command.DisplayName);
-        await store.SaveAsync(cancellationToken);
+        await repositories.SaveAsync(cancellationToken);
         return seat;
     }
 }
@@ -455,9 +455,9 @@ public sealed class RenameSeatHandler(TenancyStore store) : ICommandHandler<Rena
 - A project above gets the aliases only when the toolkit's generator runs in it. A package reference brings the
   generator. A project reference to the toolkit's source needs `OutputItemType="Analyzer"`.
 - Your own alias of the same name stays, and the generator writes none.
-- [Stores](reference/managers.md#stores) in the reference lists every member.
+- [Repositories](reference/services.md#repositories) in the reference lists every member.
 
-### Another name for a manager
+### Another name for a service
 
 Add one line per class or store to the project that declares the classes, beside `[assembly: Module]` or the switch.
 Every project above uses the new name.
@@ -465,36 +465,36 @@ Every project above uses the new name.
 ```csharp
 using DTS.DDD.Abstractions.Attributes;
 
-[assembly: TemplateFacadeName("SeatManager", "ShopSeatManager")]
+[assembly: TemplateFacadeName("SeatService", "ShopSeatManager")]
 ```
 
 - You need these lines when two modules declare Tenancy's classes ([below](#two-modules-with-tenancys-classes)).
-  Otherwise a line is optional. **Template facade** is the toolkit's term for a class like `SeatManager`, which a
+  Otherwise a line is optional. **Template facade** is the toolkit's term for a class like `SeatService`, which a
   package requests with `[assembly: TemplateFacade]`.
 - The name must not be the name of a namespace or type of yours in the global namespace. For example, `Shop` is taken
   when your namespaces start with `Shop.`. A line that changes nothing is [DDD00076](../diagnostics.md#ddd00076).
 
-### When a manager is not written
+### When a service is not written
 
 | Situation | Result |
 |---|---|
-| A template has no class or several classes, or a class does not meet the constraints of the managers | No manager is written. [DDD00065](../diagnostics.md#ddd00065) reports this as information on the first class, because projects above would see only CS0246. When a module's classes are split over two projects, the first project gets the message, and the second project, where the classes are complete, gets the managers. |
-| A type, namespace or alias of yours with a manager's name exists in the global namespace | That manager is not written. Your type stays. |
-| A type of yours with a manager's name exists in a namespace of the declaring project | That manager is not written. [DDD00065](../diagnostics.md#ddd00065) says so on your type: a class in the global namespace would win over yours in every file that imports your namespace. |
+| A template has no class or several classes, or a class does not meet the constraints of the services | No service is written. [DDD00065](../diagnostics.md#ddd00065) reports this as information on the first class, because projects above would see only CS0246. When a module's classes are split over two projects, the first project gets the message, and the second project, where the classes are complete, gets the services. |
+| A type, namespace or alias of yours with a service's name exists in the global namespace | That service is not written. Your type stays. |
+| A type of yours with a service's name exists in a namespace of the declaring project | That service is not written. [DDD00065](../diagnostics.md#ddd00065) says so on your type: a class in the global namespace would win over yours in every file that imports your namespace. |
 | A project above has an alias with that name | CS0576. Remove the alias. |
-| A project declares a type of yours with a store's name in a namespace | That project gets no alias of the store. [DDD00065](../diagnostics.md#ddd00065) says so on your type. |
-| HotChocolate's generator runs in the declaring project | HotChocolate's generator does not see the managers, because they are another generator's output. Its code over a manager's record, such as `SeatManager.SeatOverview`, does not compile. A module split by layer names those records in its API project, where the generators see them. A module of one project keeps an alias of the manager's name, such as `global using SeatManager = DTS.Tenancy.Managers.SeatManager<...>;`. Every generator reads the alias, and the class is then not written. |
+| A project declares a type of yours with the repositories' name in a namespace | That project gets no alias of the repositories. [DDD00065](../diagnostics.md#ddd00065) says so on your type. |
+| HotChocolate's generator runs in the declaring project | HotChocolate's generator does not see the services, because they are another generator's output. Its code over a service's record, such as `SeatService.SeatOverview`, does not compile. A module split by layer names those records in its API project, where the generators see them. A module of one project keeps an alias of the service's name, such as `global using SeatService = DTS.Tenancy.Services.SeatService<...>;`. Every generator reads the alias, and the class is then not written. |
 
 ### Two modules with Tenancy's classes
 
 An application can have two modules that declare Tenancy's classes, for example one for customers' tenants and one
-for partners' tenants. Each module's domain project then gets its own managers and its own access manager.
+for partners' tenants. Each module's domain project then gets its own services and its own access manager.
 
 - The two sets of classes meet in every project that references both modules, such as the host and your tests. In
-  those projects, naming `TenantManager` is CS0433. [DDD00075](../diagnostics.md#ddd00075) warns in each of those
+  those projects, naming `TenantService` is CS0433. [DDD00075](../diagnostics.md#ddd00075) warns in each of those
   projects, on the project file. The warning contains the line that gives one class another name, and names the
   project where that module declares its classes.
-- Those projects get no `TenancyStore` alias, because they would get one for each module.
+- Those projects get no `TenancyRepositories` alias, because they would get one for each module.
   [DDD00075](../diagnostics.md#ddd00075) warns about the alias in the same way.
 - When one module's domain project references the other module's domain project, the warning appears on the first
   Tenancy class of the referencing project. In that project, C# binds the name to the project's own class (CS0436).
@@ -509,19 +509,19 @@ using DTS.Tenancy;
 
 [assembly: Module("Customers")]
 [assembly: GenerateTenancyClasses]
-[assembly: TemplateFacadeName("TenantManager", "CustomersTenantManager")]
-[assembly: TemplateFacadeName("OrganizationManager", "CustomersOrganizationManager")]
-[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]
-[assembly: TemplateFacadeName("RoleManager", "CustomersRoleManager")]
+[assembly: TemplateFacadeName("TenantService", "CustomersTenantManager")]
+[assembly: TemplateFacadeName("OrganizationService", "CustomersOrganizationManager")]
+[assembly: TemplateFacadeName("SeatService", "CustomersSeatService")]
+[assembly: TemplateFacadeName("RoleService", "CustomersRoleManager")]
 [assembly: TemplateFacadeName("TenantToProvision", "CustomersTenantToProvision")]
 [assembly: TemplateFacadeName("TenancyAccessManager", "CustomersAccessManager")]
-[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")]
+[assembly: TemplateFacadeName("TenancyRepositories", "CustomersTenancyRepositories")]
 ```
 
 **`Shop.Host/Provisioning.cs`**
 
 ```csharp
-public sealed class Provisioning(CustomersTenantManager customers, TenantManager partners)
+public sealed class Provisioning(CustomersTenantManager customers, TenantService partners)
 {
     // Customers' tenants through the new names, partners' tenants through the package's names.
 }
@@ -553,7 +553,7 @@ where you declare them. The last column says where each closed form is available
 
   The generator then writes `TenancyAccessManager` into that project's root namespace. The module's project that
   holds its context gets `db.Tenancy()`, `services.AddTenancyAccess<TRequests, TContext>()` and
-  `modelBuilder.AddTenancyReadFunctions(schema)`. None of them names an id. The managers are not written there: only
+  `modelBuilder.AddTenancyReadFunctions(schema)`. None of them names an id. The services are not written there: only
   the module that declares Tenancy's classes changes them. A class that the module declares with one of Tenancy's
   templates wins over the line.
 - **Some types always carry the ids**: `ITenancyQueries<...>`, and records such as `SeatOfUser<TenantId, SeatId>`.
@@ -604,7 +604,7 @@ Your class is the package's class plus your additions. The package has no virtua
 always runs, and your code adds to it. You can add four things:
 
 - **Members.** Add fields and methods. Entity Framework stores them with the class. Placements and grants stay the
-  package's, and only the package's managers change them.
+  package's, and only the package's services change them.
 - **Entities.** Map entities of yours with the class, as in any aggregate.
 - **Rules.** A nested `IInvariant<T>` runs after the package's rules on every save. It refuses the save in the same
   way as the package's rules.
@@ -665,9 +665,9 @@ await tenants.ProvisionAsync(
   role.
 - The provisioning save writes what the callbacks set. An event that your class raises in a callback is saved with
   the provisioning's events. When a callback throws, provisioning stops and nothing is saved.
-- For later units, use the `configure` callback of `OrganizationManager.AddUnitAsync`
-  ([The kind of a unit](#the-kind-of-a-unit)). For later seats, use the callbacks of `SeatManager.AddAsync` and of
-  `InvitationManager.AcceptAsync`
+- For later units, use the `configure` callback of `OrganizationService.AddUnitAsync`
+  ([The kind of a unit](#the-kind-of-a-unit)). For later seats, use the callbacks of `SeatService.AddAsync` and of
+  `InvitationService.AcceptAsync`
   ([How a seat is shown](names-and-languages.md#how-a-seat-is-shown)).
 
 ### Handling an event in process
@@ -679,7 +679,7 @@ off its crews:
 **`Projects.Application/Crew/DeactivatedSeatLeavesItsCrews.cs`**
 
 ```csharp
-internal sealed class DeactivatedSeatLeavesItsCrews(CrewMemberManager crew, IProjectReads reads, TenancyAccessManager tenancy)
+internal sealed class DeactivatedSeatLeavesItsCrews(CrewMemberService crew, IProjectReads reads, TenancyAccessManager tenancy)
     : INotificationHandler<SeatDeactivated<TenantId, SeatId>>
 {
     public async ValueTask Handle(SeatDeactivated<TenantId, SeatId> notification, CancellationToken cancellationToken)
@@ -769,10 +769,10 @@ flowchart TB
 
 - Your class's rules check the field in that save. When the callback throws, a later save in the same scope does not
   add the unit either. Set the root's kind through `ConfigureRoot`.
-- **Showing the kind.** [`ListUnitsAsync`](reference/managers.md#listunitsasynccancellationtoken) returns the units
+- **Showing the kind.** [`ListUnitsAsync`](reference/services.md#listunitsasynccancellationtoken) returns the units
   the caller reads. Each unit is your unit class with all its fields, in a `UnitInTree` with its path and depth. Your
   field is on each unit.
-- **By id.** [`UnitsByIdAsync`](reference/managers.md#unitsbyidasyncireadonlycollectiontunitid-cancellationtoken)
+- **By id.** [`UnitsByIdAsync`](reference/services.md#unitsbyidasyncireadonlycollectiontunitid-cancellationtoken)
   returns a `NamedUnit` with the name, path and depth. A seat that may not read the rest of a unit still gets the
   unit's name this way. Use it when another module shows units by id.
 
@@ -790,13 +790,13 @@ public sealed partial class OrganizationUnit
     public void SetKind(UnitKind? kind) => Kind = kind;
 }
 
-// The command's handler. The manager adds the unit, the callback sets the kind, and one save writes both.
+// The command's handler. The service adds the unit, the callback sets the kind, and one save writes both.
 // AddUnitAsync returns the new unit with its kind.
 public async ValueTask<OrganizationUnit> Handle(AddOrganizationUnit command, CancellationToken cancellationToken)
     => await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken, configure: unit => unit.SetKind(command.Kind));
 
 // The query's handler. ListUnitsAsync returns the units the caller reads. Each UnitInTree holds your unit with its kind.
-IReadOnlyList<OrganizationManager.UnitInTree> units = await organization.ListUnitsAsync(cancellationToken);
+IReadOnlyList<OrganizationService.UnitInTree> units = await organization.ListUnitsAsync(cancellationToken);
 
 // Store the kind by its name, with one line in the context's ConfigureConventions
 configurationBuilder.Properties<UnitKind>().HaveConversion<string>().HaveMaxLength(16);

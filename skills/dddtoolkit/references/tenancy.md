@@ -8,7 +8,7 @@ beside it under `docs/tenancy/` (listed on the overview and in `llms.txt`), and
 `writing-a-supporting-domain.md`. The Tenancy packages, `DylansTechStack.Tenancy` and the others, are part of DTS Pro and are not on nuget.org.
 Their names can change while they are 0.x; read the project's references before writing against them.
 
-Packages: `DTS.Tenancy` (the model, its rules, a manager per aggregate, the access manager, no
+Packages: `DTS.Tenancy` (the model, its rules, a service per aggregate, the access manager, no
 database), `DTS.Tenancy.Abstractions` (`[OfTenant]`, the marker of a row's tenant, for a module's
 domain project that sees only Tenancy's ids; `[SeatKinds]`, `[InOrganization]` and `[OutsideOrganization]` for the
 contracts project that declares the kinds of seat; Tenancy's generators ship in it; the first package references it),
@@ -93,27 +93,27 @@ public sealed partial class ShopSeat
    and every tenant gets Tenancy's own; declare one (`Administers: true`) and declare one for every shape, a single
    one without `SeededFor` or one seeded for each shape.
 
-4. Take the managers and the access manager by their own names, and write no alias. The toolkit's generator
-   writes, into the project that declares your classes, a sealed class per manager closed over them:
-   `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager`, and `InvitationManager` where an
+4. Take the services and the access manager by their own names, and write no alias. The toolkit's generator
+   writes, into the project that declares your classes, a sealed class per service closed over them:
+   `TenantService`, `OrganizationService`, `SeatService`, `RoleService`, and `InvitationService` where an
    invitation class is declared; `TenancyAccessManager` closed over the four ids; and the record
    `TenantToProvision`. Each has the package's class name without type parameters, whatever the module is called,
    in the global namespace, and every project above sees it. `AddTenancy` registers them per scope; the container
    makes them. A method takes your object or its id (`GrantAsync(seat, role, at, until, reason, ct)`), creating
    returns the new aggregate, changing returns the changed one, reads return your own classes
-   (`seats.ByIdAsync(ids, ct)`, `roles.ListAsync(ct)`). A record nested in a manager is the package's own type:
-   `SeatManager.SeatOverview`, `OrganizationManager.UnitInTree`.
-   The stores the managers save through are interfaces (`ITenancyStore<...>`, `IInvitationStore<...>` in
-   `DTS.Tenancy.Managers`): the generator writes `global using TenancyStore = ...;`, and
-   `InvitationStore` where an invitation class is declared, into the declaring project and every project above that
+   (`seats.ByIdAsync(ids, ct)`, `roles.ListAsync(ct)`). A record nested in a service is the package's own type:
+   `SeatService.SeatOverview`, `OrganizationService.UnitInTree`.
+   The stores the services save through are interfaces (`ITenancyRepositories<...>`, `IInvitationRepository<...>` in
+   `DTS.Tenancy.Managers`): the generator writes `global using TenancyRepositories = ...;`, and
+   `InvitationRepository` where an invitation class is declared, into the declaring project and every project above that
    sees its classes (where the toolkit's generator runs). A command that changes a field of the application's own on
-   a Tenancy aggregate takes `TenancyStore`, loads, changes, `SaveAsync`; write no alias of the stores either.
-   A hand-written `global using SeatManager = ...` above it is CS0576: delete it. Two modules that each declare
+   a Tenancy aggregate takes `TenancyRepositories`, loads, changes, `SaveAsync`; write no alias of the repositories either.
+   A hand-written `global using SeatService = ...` above it is CS0576: delete it. Two modules that each declare
    Tenancy's classes get two classes of each name, and the host is warned once per name (DDD00075): copy the lines
    the messages write out into one module's domain project, beside `[assembly: Module]` or the switch,
-   `[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]`, one per class (in
+   `[assembly: TemplateFacadeName("SeatService", "CustomersSeatService")]`, one per class (in
    `DTS.DDD.Abstractions.Attributes`; another name works too, but not one a namespace has), and take that
-   module's managers by those names above. CS0246 for a name above: read DDD00065 in that project. Only a module of
+   module's services by those names above. CS0246 for a name above: read DDD00065 in that project. Only a module of
    one project with HotChocolate types over the nested records keeps one alias of exactly the class's name there,
    since another generator does not see a generated class.
    `TenancyAccessManager` says who acts and begins the work that is not the caller's own. It derives from the core's
@@ -130,7 +130,7 @@ public sealed partial class ShopSeat
    project. Write no `TenancyWork.BeginSystem<TenantId, SeatId>()`.
 
    ```csharp
-   public sealed class FirstTenant(TenantManager tenants, TenancyAccessManager access)
+   public sealed class FirstTenant(TenantService tenants, TenancyAccessManager access)
    {
        public async Task<Tenant> SetUpAsync(Guid identity, CancellationToken cancellationToken)
        {
@@ -218,10 +218,10 @@ public sealed partial class ShopSeat
   With several kinds inside, mark one `[InOrganization(Default = true)]`: a seat added or invited without a kind, and
   a new tenant's first seat, get the default. `seats.AddAsync(identity, ct, kind: HarborSeatKinds.Guest)`; an unknown
   kind is `tenancy.seat-kind-unknown`. While `ApplicationCatalogue.NarrowOutsideSeats` is on (the default), a seat
-  outside the organization reads its own seats and its tenant and no unit, role or other seat, in the managers' reads,
+  outside the organization reads its own seats and its tenant and no unit, role or other seat, in the services' reads,
   in `db.Tenancy()` and, on Postgres, through restrictive policies no rule of yours widens. It also reads the seats of
   its fellow members on the resources it is a member of, without their placements and grants: Membership's join marks
-  each such resource `[TenancyFellowSeats]`, Tenancy's managers ask `ISeatFellows`, and on Postgres `fellow_seats()`
+  each such resource `[TenancyFellowSeats]`, Tenancy's services ask `ISeatFellows`, and on Postgres `fellow_seats()`
   widens the seats policy. A handler reads the
   caller's kind from `access.CurrentTenant.RequireSeat()` (`Kind`, `InOrganization`); a row rule asks
   `user.IsInOrganization()` or `user.SeatKind()`. The seats and invitations tables get `Kind` and `InOrganization`:
@@ -242,20 +242,20 @@ public sealed partial class ShopSeat
   held.Contains(project.UnitId))` and it becomes a subquery. Do not fetch the units first, and do not ask
   `HoldsAtAsync` per row. A read source that is not Entity Framework asks `access.In(source, executor)`.
 - **Permission sets draw a screen; a command asks again.** A list may carry what the caller can do with each row.
-  The manager still checks when it runs.
+  The service still checks when it runs.
 - **A module answers ids, never Tenancy's names.** The read model has ids, permissions, periods and statuses, and
-  no name. What a unit or a role is called is asked of the managers by id (`OrganizationManager.UnitsByIdAsync`,
-  `RoleManager.ByIdAsync`) by whoever shows it.
-- **The managers' reads return the application's own classes, whole.** `seats.ListAsync(ct)` and
+  no name. What a unit or a role is called is asked of the services by id (`OrganizationService.UnitsByIdAsync`,
+  `RoleService.ByIdAsync`) by whoever shows it.
+- **The services' reads return the application's own classes, whole.** `seats.ListAsync(ct)` and
   `seats.ByIdAsync(ids, ct)` return the module's `Seat`s, `organization.ListUnitsAsync(ct)` its units as
-  `OrganizationManager.UnitInTree` (the unit, its `Path`, its `Depth`), `roles.ListAsync(ct)` and
+  `OrganizationService.UnitInTree` (the unit, its `Path`, its `Depth`), `roles.ListAsync(ct)` and
   `roles.ByIdAsync(ids, ct)` its `Role`s (`roles.ManagesAccess(role)` for whether one manages access), all untracked;
   `organization.UnitsByIdAsync(ids, ct)` names units alone, as `NamedUnit` (`Id`, `Name`, `Path`, `Depth`),
   through a function that runs as its owner on Postgres, so a seat that a restrictive rule of yours keeps out of the
   organization still reads what its unit is called. A seat of a kind outside the organization reads no unit name
   while `NarrowOutsideSeats` is on. The operators' `tenants.ListAsync(after, size, ct)` returns a
-  `TenantManager.TenantPage` of `TenantListing(Tenant, Name, ActiveSeats)`. Whoever wants fewer fields selects
-  them. `seats.WhoAmIAsync(ct)` returns a `SeatManager.SeatOverview`: the `Seat` with its placements and grants,
+  `TenantService.TenantPage` of `TenantListing(Tenant, Name, ActiveSeats)`. Whoever wants fewer fields selects
+  them. `seats.WhoAmIAsync(ct)` returns a `SeatService.SeatOverview`: the `Seat` with its placements and grants,
   and only what is not on it (`Tenant`, `TenantName`, `Units` by path, `Roles` its grants name, `Permissions`,
   `AsOf`; `UnitOf(id)` and `RoleOf(id)` look them up). The tenant picker's
   `TenantSelection.SeatsOfAsync<Seat>(user.Snapshot, ct)` returns `SeatInTenant<Seat>` (the seat, `Slug`,
@@ -290,7 +290,7 @@ public sealed partial class ShopSeat
   follow it once the host has started, tenant by tenant as system work: what the starter role gained is added,
   what it lost is taken out, what the tenant changed itself stays, and each role that changes raises `RoleFollowedItsStarterRole`,
   which the access history keeps. It needs the roles' nullable `PermissionsFromStarterRole` column: add a migration. A host
-  that syncs from a deployment step runs `IStarterRoleSync` instead; one tenant is `RoleManager.FollowStarterRolesAsync`.
+  that syncs from a deployment step runs `IStarterRoleSync` instead; one tenant is `RoleService.FollowStarterRolesAsync`.
 - **A refusal is a `RefusalException` with a code**: `tenancy.not-permitted`, `tenancy.not-seated`,
   `tenancy.grant-exceeds-own`, `tenancy.last-admin`. Branch on `Code`, never on the message. A refusal
   about one input names it in its `Field` argument. A class of codes makes its refusal with `Refuse`,
@@ -331,7 +331,7 @@ set-shaped: once per statement, never per row. There a seat reads its own rights
 grants only at the units where it holds `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage`,
 or all of them with `tenancy.roles.manage` for the whole tenant; `db.Tenancy().SeatsHoldingPermissionAt` returns by the
 same rule on every database. The database guards Tenancy's own columns of a seat (no seat changes its id, identity
-or tenant; its status only as the managers do) and none of yours: a field you add to the seat class is as writable
+or tenant; its status only as the services do) and none of yours: a field you add to the seat class is as writable
 as the row, by the seat itself and by a seat that manages seats or grants anywhere in the tenant, until a column
 rule of yours holds it to your command's rule, beside your infrastructure:
 `[RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.DisplayName)])]`.
@@ -342,9 +342,9 @@ every seat of the tenant to a seat that manages seats, grants or units anywhere,
 which no rule takes away. Write it with the questions Tenancy adds to the rule's `IRowUser` (`user.CurrentSeatId()`, `user.CurrentTenant()`,
 `user.UnitsWhereIHold(permission)`, `user.SeatsInMyUnits()`: the seats placed at or below the caller's units; `user.CurrentSeat<Seat>().Onboarding`, a
 field of the caller's own seat; `user.IsInOrganization()` and `user.SeatKind()`, the caller's kind of seat), or `user.FellowMembers<ProjectId, SeatId>()`, the people on the caller's projects. It changes what a read of the
-seats returns, a direct read, the managers' reads, `tenant_seats_with_kinds()` and `db.Tenancy().Seats()`; never Tenancy's
+seats returns, a direct read, the services' reads, `tenant_seats_with_kinds()` and `db.Tenancy().Seats()`; never Tenancy's
 queries about the caller and rights, the placements (every member still reads each seat's id and units), or who writes.
-Membership's member manager and its kind guard admit a seat by its id past the rule, through `db.Tenancy().SeatToAdmitAsync(seat)`
+Membership's member service and its kind guard admit a seat by its id past the rule, through `db.Tenancy().SeatToAdmitAsync(seat)`
 and `seat_to_admit(seat)`, which answer an active seat of the caller's tenant and its kind alone (`member-not-active` otherwise). A read
 rule on any other class of Tenancy's is refused.
 To take away what Tenancy allows, write a restrictive rule, `[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]`:
@@ -399,8 +399,8 @@ and "Who may change a seat's columns".
   `RequiredAccess` itself only in three cases. The first is a case of the module's own that has no marker. The second
   is a requirement computed from its values (`SeatGrants`, `OpenProject`). The third is a combination that stacked
   attributes cannot express, one caller or another: `AccessRequirement.Any(TenancyAccess.Operator(),
-  TenancyAccess.AtTenant(permission))`, with a row rule for each way onto the module's own table. None leaves the decision to a package: a request handed to Tenancy's manager says what that
-  manager asks first, and the manager keeps the rest. System work is no requirement: trusted code begins it around
+  TenancyAccess.AtTenant(permission))`, with a row rule for each way onto the module's own table. None leaves the decision to a package: a request handed to Tenancy's service says what that
+  service asks first, and the service keeps the rest. System work is no requirement: trusted code begins it around
   the work (`access.BeginSystemIn(tenant)`), a request it sends in a tenant is `[InTenant]`, and the
   handler refuses everyone else (`access.system-only`). A request that declares nothing is DDD00077.
 
@@ -409,7 +409,7 @@ and "Who may change a seat's columns".
       [OnResource(ProjectPermissionNames.Close)] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
   ```
 
-- **A command saves through a store port, a query reads through a read port** on a context of its own
+- **A command saves through the repositories port, a query reads through a read port** on a context of its own
   from a pool, so the queries of one request can run side by side. A query answers data, never an entity.
 - **Scenario tests run on the real database, from one fixture.** A scenario class takes the fixture
   (`SampleHosts`) and asks it for its host; it never makes one. The fixture starts Supabase's own images

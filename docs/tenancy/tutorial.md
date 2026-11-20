@@ -368,8 +368,8 @@ public sealed partial class Seat
 - The switch writes `Tenant`, `Organization`, `OrganizationUnit` and `Role`. It does not write `Seat`, because you
   declared it.
 - The switch uses the ids from the contracts project, so it writes no id types.
-- The generator also writes Tenancy's managers for your classes, one per aggregate: `TenantManager`,
-  `OrganizationManager`, `SeatManager` and `RoleManager`. A manager holds the commands and the reads of its
+- The generator also writes Tenancy's services for your classes, one per aggregate: `TenantService`,
+  `OrganizationService`, `SeatService` and `RoleService`. A service holds the commands and the reads of its
   aggregate. Every later request uses one of them.
 - It also writes `TenancyAccessManager`, closed over your ids. It says who acts and in which tenant, and it starts
   system work (step 6).
@@ -492,7 +492,7 @@ checks it, and `Handle` runs only when the check passes:
 public sealed record AddSeatCommand(Guid Identity, OrganizationUnitId Unit)
     : ICommand<Seat>, ITenancyRequest;                        // ITenancyRequest: the behavior checks this request
 
-public sealed class AddSeatHandler(SeatManager seats) : ICommandHandler<AddSeatCommand, Seat>
+public sealed class AddSeatHandler(SeatService seats) : ICommandHandler<AddSeatCommand, Seat>
 {
     // Runs only for a caller who holds tenancy.seats.manage for the whole tenant.
     public async ValueTask<Seat> Handle(AddSeatCommand command, CancellationToken cancellationToken)
@@ -632,8 +632,8 @@ public static class TenancyModule
 - `UseDDDToolkit(provider)` adds every part the host registered to this context. Here there are two. One sets the
   caller's database role on each connection, for RLS. The other is Tenancy's save check, which refuses a write into
   another tenant.
-- `AddTenancy<TenancyContext>()` registers the managers and `TenancyAccessManager` for your classes, one of each per
-  scope. The managers save their data in this context.
+- `AddTenancy<TenancyContext>()` registers the services and `TenancyAccessManager` for your classes, one of each per
+  scope. The services save their data in this context.
 - `AddTenancyPostgres()` sets the request's tenant on every connection, so the RLS policies can read it.
 - `AddTenancyAccess<ITenancyRequest, TenancyContext>()` registers the checks that the behavior runs. The checks read
   this context.
@@ -654,7 +654,7 @@ the database before it starts.
 - **Current user**: the toolkit's name for who the work runs as. `ICurrentUser` answers it. `BeginAs` on the
   toolkit's `AccessManager` makes a user current for a piece of work, here the rest of the request.
 - **Tenant**: the request names the tenant. In Harbor it uses the header `Tenant: harbor`.
-- **Seat**: Tenancy looks up the caller's seat in that tenant. For the rest of the request, the checks, the managers
+- **Seat**: Tenancy looks up the caller's seat in that tenant. For the rest of the request, the checks, the services
   and the database role (RLS) all use that seat.
 - **Refusal**: when a rule refuses a request, it throws a `RefusalException` with a code, such as
   `tenancy.not-permitted`. The host turns the exception into a status code: 404, 403, 409 or 400.
@@ -840,7 +840,7 @@ administrators' starter role at the root.
 - `ProvisionAsync` refuses every caller except system work. A handler that forgets `BeginSystem()` gets a refusal on
   its first request.
 - **What provisioning returns**: `ProvisionAsync` returns the new tenant, your `Tenant` class. The root unit and the
-  first seat belong to the tenant. A request that names the tenant reads them through the other managers, as step 7
+  first seat belong to the tenant. A request that names the tenant reads them through the other services, as step 7
   does for Ada's seat.
 - **The tenant's shape** is chosen when the tenant is created:
 
@@ -871,7 +871,7 @@ namespace Harbor.Tenancy.Application.Tenants.ProvisionTenant;
 public sealed record ProvisionTenantCommand(string Slug, string Name)
     : ICommand<Tenant>, ITenancyRequest;
 
-public sealed class ProvisionTenantHandler(TenantManager tenants, TenancyAccessManager access)
+public sealed class ProvisionTenantHandler(TenantService tenants, TenancyAccessManager access)
     : ICommandHandler<ProvisionTenantCommand, Tenant>
 {
     public async ValueTask<Tenant> Handle(ProvisionTenantCommand command, CancellationToken cancellationToken)
@@ -987,7 +987,7 @@ app.Run();
 - `[SignedIn]`: the check lets any signed-in caller through, and refuses an anonymous one.
 - `ICommand<T>` and `ICommandHandler<TCommand, T>`: the mediator's interfaces for a command that returns a `T`, and for
   its handler. A query uses `IQuery<T>` and `IQueryHandler<TQuery, T>` instead (step 7).
-- `TenantManager`: Tenancy's manager of tenants, generated for your classes in step 2.
+- `TenantService`: Tenancy's service of tenants, generated for your classes in step 2.
 - `TenancyAccessManager`: who acts and in which tenant.
 - `access.CurrentUser.RequireId()`: `[SignedIn]` guarantees that the caller has a user id, and `RequireId()` returns
   it. The handler reads it before `BeginSystem()`, because inside system work the caller is the system, which has no
@@ -1059,7 +1059,7 @@ namespace Harbor.Tenancy.Application.Seats.WhoAmI;
 [InTenant]
 public sealed record WhoAmIQuery : IQuery<MyOverview>, ITenancyRequest;
 
-public sealed class WhoAmIHandler(SeatManager seats) : IQueryHandler<WhoAmIQuery, MyOverview>
+public sealed class WhoAmIHandler(SeatService seats) : IQueryHandler<WhoAmIQuery, MyOverview>
 {
     public async ValueTask<MyOverview> Handle(WhoAmIQuery query, CancellationToken cancellationToken)
     {
@@ -1142,8 +1142,8 @@ public static class TenancyModule
 
 - `IQuery<MyOverview>` and `IQueryHandler<WhoAmIQuery, MyOverview>`: the mediator's interfaces for a query that returns a
   `MyOverview`, and for its handler.
-- `SeatManager`: Tenancy's manager of seats, which changes seats and reads them, as `WhoAmIAsync` does. Step 8
-  reads units with `OrganizationManager.ListUnitsAsync`.
+- `SeatService`: Tenancy's service of seats, which changes seats and reads them, as `WhoAmIAsync` does. Step 8
+  reads units with `OrganizationService.ListUnitsAsync`.
 - `overview.UnitOf(...)` and `overview.RoleOf(...)` look up the seat's units and roles in the overview. The overview
   read them in the same query, so these calls run no query.
 - `Path`: the names of the unit and the units above it, the root first, joined with `" / "`. An example is
@@ -1187,8 +1187,8 @@ that lists the units a seat can read.
 - `[RequiresPermission(...)]` on the request: the caller must hold that permission for the whole tenant.
 - `[AtUnit(...)]` on a parameter: the caller must hold that permission at that unit or above it. The marker names
   the permission, so the request needs no other attribute.
-- Tenancy's manager checks the permission again where it acts, and adds its own rules. So the check before the
-  handler is the first check, and the manager runs a second one.
+- Tenancy's service checks the permission again where it acts, and adds its own rules. So the check before the
+  handler is the first check, and the service runs a second one.
 - Harbor has a rule of its own: "no two units with the same name below one parent". Harbor's handler checks this rule
   and throws Harbor's own refusal.
 
@@ -1205,7 +1205,7 @@ namespace Harbor.Tenancy.Application.Units.AddUnit;
 
 public sealed record AddUnitCommand([AtUnit(TenancyPermissions.UnitsManage)] OrganizationUnitId Parent, string Name) : ICommand<OrganizationUnit>, ITenancyRequest;
 
-public sealed class AddUnitHandler(OrganizationManager organization)
+public sealed class AddUnitHandler(OrganizationService organization)
     : ICommandHandler<AddUnitCommand, OrganizationUnit>
 {
     public async ValueTask<OrganizationUnit> Handle(AddUnitCommand command, CancellationToken cancellationToken)
@@ -1252,7 +1252,7 @@ namespace Harbor.Tenancy.Application.Units.ListUnit;
 [InTenant]
 public sealed record ListUnitQuery : IQuery<IReadOnlyList<UnitListing>>, ITenancyRequest;
 
-public sealed class ListUnitHandler(OrganizationManager organization) : IQueryHandler<ListUnitQuery, IReadOnlyList<UnitListing>>
+public sealed class ListUnitHandler(OrganizationService organization) : IQueryHandler<ListUnitQuery, IReadOnlyList<UnitListing>>
 {
     public async ValueTask<IReadOnlyList<UnitListing>> Handle(ListUnitQuery query, CancellationToken cancellationToken)
         => [.. (await organization.ListUnitsAsync(cancellationToken))
@@ -1273,7 +1273,7 @@ namespace Harbor.Tenancy.Application.Seats.AddSeat;
 [RequiresPermission(TenancyPermissions.SeatsManage)]
 public sealed record AddSeatCommand(Guid Identity, OrganizationUnitId Unit) : ICommand<Seat>, ITenancyRequest;
 
-public sealed class AddSeatHandler(SeatManager seats) : ICommandHandler<AddSeatCommand, Seat>
+public sealed class AddSeatHandler(SeatService seats) : ICommandHandler<AddSeatCommand, Seat>
 {
     public async ValueTask<Seat> Handle(AddSeatCommand command, CancellationToken cancellationToken)
     {
@@ -1386,7 +1386,7 @@ public static class TenancyModule
   `SeatsManage` is `tenancy.seats.manage`, and so on.
 - `[AtUnit(TenancyPermissions.UnitsManage)] Parent`: Ada needs `tenancy.units.manage` at the parent unit or above
   it. She holds it at the root, so she may add a unit anywhere.
-- `OrganizationManager` and `SeatManager`: Tenancy's managers of the organization with its units, and of seats.
+- `OrganizationService` and `SeatService`: Tenancy's services of the organization with its units, and of seats.
 - `AddUnitAsync` writes the unit and its rows in `OrganizationUnitPaths` in one save, and returns the new unit,
   your `OrganizationUnit` class. The command returns the unit, and the route answers its id, its parent and its name.
 - `UnitStatus.Active`: a unit is `Active` or `Archived`. Nothing new is added to an archived unit, so Harbor's rule
@@ -1399,7 +1399,7 @@ public static class TenancyModule
   `X-Dev-User` id. Adding a seat needs `tenancy.seats.manage` for the whole tenant.
 - `PlaceAsync` places the seat at a unit, and returns the seat with its new placement. It needs
   `tenancy.seats.manage` at that unit. `primary: true` makes this placement the seat's primary one.
-- A command returns the object its manager returns: the new unit, or the seat as the change left it. The route
+- A command returns the object its service returns: the new unit, or the seat as the change left it. The route
   decides which fields leave the API. `Describe` answers a seat's id and its placements, each with the roles granted
   there.
 
@@ -1454,7 +1454,7 @@ namespace Harbor.Tenancy.Application.Roles.CreateRole;
 [RequiresPermission(TenancyPermissions.RolesManage)]
 public sealed record CreateRoleCommand(string Name, string Description, IReadOnlyList<string> Permissions) : ICommand<Role>, ITenancyRequest;
 
-public sealed class CreateRoleHandler(RoleManager roles) : ICommandHandler<CreateRoleCommand, Role>
+public sealed class CreateRoleHandler(RoleService roles) : ICommandHandler<CreateRoleCommand, Role>
 {
     public async ValueTask<Role> Handle(CreateRoleCommand command, CancellationToken cancellationToken)
         => await roles.CreateAsync(command.Name, command.Description, command.Permissions, cancellationToken);
@@ -1471,7 +1471,7 @@ namespace Harbor.Tenancy.Application.Grants.GrantRole;
 
 public sealed record GrantRoleCommand(SeatId Seat, [AtUnit(TenancyPermissions.GrantsManage)] OrganizationUnitId Unit, RoleId Role) : ICommand<Seat>, ITenancyRequest;
 
-public sealed class GrantRoleHandler(SeatManager seats) : ICommandHandler<GrantRoleCommand, Seat>
+public sealed class GrantRoleHandler(SeatService seats) : ICommandHandler<GrantRoleCommand, Seat>
 {
     public async ValueTask<Seat> Handle(GrantRoleCommand command, CancellationToken cancellationToken)
         => await seats.GrantAsync(command.Seat, command.Role, command.Unit, until: null, reason: null, cancellationToken);
@@ -1578,7 +1578,7 @@ public static class TenancyModule
 
 ### What it does
 
-- `RoleManager`: Tenancy's manager of roles. `CreateAsync` returns the new role, your `Role` class. The command
+- `RoleService`: Tenancy's service of roles. `CreateAsync` returns the new role, your `Role` class. The command
   returns it, and the route answers its id, its name and its permissions.
 - `CreateAsync` refuses a permission the catalogue does not know (`tenancy.unknown-permission`). It also refuses a
   name the tenant already uses (`tenancy.role-name-taken`).

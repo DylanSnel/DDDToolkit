@@ -504,15 +504,15 @@ does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
 ## DDD00065
 
 Info, in the project that declares Tenancy's classes (or another package's that asks with
-`[assembly: TemplateFacade]`), once per class not written: a class the package asks for, such as `SeatManager` (the
-package's class's name without its type parameters; Tenancy asks for `TenantManager`, `OrganizationManager`,
-`SeatManager`, `RoleManager`, `InvitationManager` where an invitation class is declared, `TenancyAccessManager` and
-`TenantToProvision`), is not written, so every project above that takes a `SeatManager` fails with CS0246. Read the
+`[assembly: TemplateFacade]`), once per class not written: a class the package asks for, such as `SeatService` (the
+package's class's name without its type parameters; Tenancy asks for `TenantService`, `OrganizationService`,
+`SeatService`, `RoleService`, `InvitationService` where an invitation class is declared, `TenancyAccessManager` and
+`TenantToProvision`), is not written, so every project above that takes a `SeatService` fails with CS0246. Read the
 message for why. A template with no class: declare that class next to the others, once
 (a module split over two projects hears this in the first and gets the class in the second; nothing to do).
 Several classes of one template: keep one. A class that does not meet a constraint: give it what the message
 names. A type of that name in a namespace of the project: rename it, or name the class otherwise with
-`[assembly: TemplateFacadeName("SeatManager", "ShopSeatManager")]` in that project. Never
+`[assembly: TemplateFacadeName("SeatService", "ShopSeatManager")]` in that project. Never
 answer it by writing the nine-type alias in the projects above.
 
 ## DDD00066
@@ -627,16 +627,16 @@ written by hand: the build writes one beside it that makes the call, so delete a
 
 ## DDD00075
 
-Warning, once per name: two classes a package asks for have one name where this project sees them, `SeatManager`
+Warning, once per name: two classes a package asks for have one name where this project sees them, `SeatService`
 twice (and the other six of Tenancy's): two modules each declare Tenancy's classes. At the project file of a project that references
 both modules' domain projects (the host, a test project), where naming it is CS0433; on the first Tenancy class of a
 module's project that references the other module's domain project (it still gets its own, which its own code binds
 to with CS0436, and every project above sees both); or on the first class of a project whose own two classes come to
 one name. Copy the line the message writes out into the project it names, the one that declares that module's
 classes, beside `[assembly: Module]` or the switch, with `using DTS.DDD.Abstractions.Attributes;`:
-`[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]`, one line per class the message names, or any
+`[assembly: TemplateFacadeName("SeatService", "CustomersSeatService")]`, one line per class the message names, or any
 other name a class can have that no namespace or type in the global namespace has (not the module's root namespace),
-and take that module's managers by it above. Where the message names an existing line, give another name in that line instead of adding one.
+and take that module's services by it above. Where the message names an existing line, give another name in that line instead of adding one.
 Never answer it with a `using` alias in the host, or by renaming a module.
 
 ## DDD00076
@@ -925,13 +925,13 @@ database role.
 
 ## DDD00106
 
-Info, on the member class, the role class, or a type of the manager's name: Membership's generator writes the
-member manager (`DocumentShareManager` for `DocumentShare`) and the role manager (`BoardRoleManager` for
+Info, on the member class, the role class, or a type of the service's name: Membership's generator writes the
+member service (`DocumentShareService` for `DocumentShare`) and the role service (`BoardRoleService` for
 `BoardRole`) in the global namespace, and did not write this one. The message says why: a type of that name the
-project declares in a namespace (rename it; one in the global namespace is the project's own manager and silences
+project declares in a namespace (rename it; one in the global namespace is the project's own service and silences
 it), two member or role classes of one name (rename one), an `[Owner]` property without a setter (give it
 `{ get; private set; }`), a resource whose id cannot be told (declare it `[AggregateRoot<TId>]`), or a role class
-whose resource is declared in another project (declare it beside the resource). Handlers take the managers to
+whose resource is declared in another project (declare it beside the resource). Handlers take the services to
 change members and roles; never add member-changing methods to the resource instead.
 
 ## DDD00107

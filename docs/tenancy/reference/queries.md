@@ -62,7 +62,7 @@ The caller and the moment are fixed once, so every answer of one set of queries 
 **Exceptions**
 
 - `ArgumentNullException`: `context` is null.
-- `InvalidOperationException`: `context` is neither wired with `UseDDDToolkit` nor made by the application's services, or Tenancy is not registered in them. Or the database keeps the rights ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), and `context` is a module's that maps the read model as views over Tenancy's tables: there a module reads no table of Tenancy's, and asks its functions, mapped with `AddTenancyReadFunctions`.
+- `InvalidOperationException`: `context` is neither wired with `UseDDDToolkit` nor made by the application's services, or Tenancy is not registered in them. Or the database keeps the rights ([`TenancyDatabaseOptions.DatabaseKeepsRights`](entity-framework.md#tenancydatabaseoptions)), and `context` is a module's that maps the read model as views over Tenancy's tables: there a module reads no table of Tenancy's, and asks its functions, mapped with `AddTenancyReadFunctions`.
 
 ### `ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>`
 
@@ -144,7 +144,7 @@ IQueryable<UnitPermission<TUnitId>> UnitsWhereIHold(IReadOnlyCollection<string> 
 
 Every pair of a unit and a permission of `permissions` the caller holds there now: for each permission, the units it is held at and every unit below them. It is [`UnitsWhereIHold`](#unitswhereiholdstring) for several permissions in one query, so a list that shows what the caller may do with each row asks once, not once per permission.
 
-The answer is for showing what a caller can do, a button or a menu. The manager that runs a command checks the permission again when the command runs.
+The answer is for showing what a caller can do, a button or a menu. The service that runs a command checks the permission again when the command runs.
 
 **Parameters**
 
@@ -328,7 +328,7 @@ var closers = await db.Tenancy().SeatsHoldingPermissionAt("projects.close", nort
 IQueryable<OrganizationUnitRow<TTenantId, TUnitId>> Units()
 ```
 
-The tenant's units, archived ones included, as access facts, without a name: where each hangs and whether it is in use. What a unit is called comes from `OrganizationManager.UnitsByIdAsync`, by id.
+The tenant's units, archived ones included, as access facts, without a name: where each hangs and whether it is in use. What a unit is called comes from `OrganizationService.UnitsByIdAsync`, by id.
 
 **Returns**: A query of the units' rows.
 
@@ -348,7 +348,7 @@ var active = db.Tenancy().Units().Where(unit => unit.Status == UnitStatus.Active
 IQueryable<RoleRow<TTenantId, TRoleId>> Roles()
 ```
 
-The tenant's roles, archived ones included, as access facts, without a name: the starter role each was copied from, its status and the permissions it grants. What a role is called comes from `RoleManager.ByIdAsync`, by id.
+The tenant's roles, archived ones included, as access facts, without a name: the starter role each was copied from, its status and the permissions it grants. What a role is called comes from `RoleService.ByIdAsync`, by id.
 
 **Returns**: A query of the roles' rows.
 
@@ -368,9 +368,9 @@ var fromStarterRoles = db.Tenancy().Roles().Where(role => role.FromStarterRole !
 IQueryable<SeatRow<TTenantId, TSeatId>> Seats()
 ```
 
-The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. What a seat is shown by is the application's, selected from its own seat class, which `SeatManager.ByIdAsync` returns whole, by id.
+The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. What a seat is shown by is the application's, selected from its own seat class, which `SeatService.ByIdAsync` returns whole, by id.
 
-This reads the seats, where the other queries read rights. By default it returns every seat of the tenant. On Postgres it returns the seats that a read rule of the application's on its seat class lets the caller read, where the application writes one (`tenant_seats_with_kinds()` runs as its caller). A module that admits one seat as a member asks [`SeatToAdmitAsync`](#seattoadmitasynctseatid-cancellationtoken) instead, as Membership's member manager does.
+This reads the seats, where the other queries read rights. By default it returns every seat of the tenant. On Postgres it returns the seats that a read rule of the application's on its seat class lets the caller read, where the application writes one (`tenant_seats_with_kinds()` runs as its caller). A module that admits one seat as a member asks [`SeatToAdmitAsync`](#seattoadmitasynctseatid-cancellationtoken) instead, as Membership's member service does.
 
 **Returns**: A query of the seats' rows.
 
@@ -574,7 +574,7 @@ public sealed record NamedUnit<TUnitId>
 
 Namespace `DTS.Tenancy.Access`.
 
-What a unit is called, and nothing more: its name, its path from the root and how deep it is. What `OrganizationManager.UnitsByIdAsync` answers about the units a caller works on, whether or not it reads the rest of the organization: a seat on a project at a unit it is not placed under, or one an application's restrictive rule keeps out of the organization, still reads what that unit is called.
+What a unit is called, and nothing more: its name, its path from the root and how deep it is. What `OrganizationService.UnitsByIdAsync` answers about the units a caller works on, whether or not it reads the rest of the organization: a seat on a project at a unit it is not placed under, or one an application's restrictive rule keeps out of the organization, still reads what that unit is called.
 
 | Member | Summary |
 |---|---|
@@ -1421,7 +1421,7 @@ public interface ISeatFellows<TSeatId>
     where TSeatId : struct, IEquatable<TSeatId>
 ```
 
-The seats the caller works with on a resource of another package: the members now of every resource the caller is a member of now. Tenancy asks it for a seat outside the organization while the catalogue narrows such seats (`ApplicationCatalogue.NarrowOutsideSeats`). `SeatManager.ListAsync`, `ByIdAsync` and `OverviewAsync` then answer those seats beside the caller's own.
+The seats the caller works with on a resource of another package: the members now of every resource the caller is a member of now. Tenancy asks it for a seat outside the organization while the catalogue narrows such seats (`ApplicationCatalogue.NarrowOutsideSeats`). `SeatService.ListAsync`, `ByIdAsync` and `OverviewAsync` then answer those seats beside the caller's own.
 
 **Type parameters**
 

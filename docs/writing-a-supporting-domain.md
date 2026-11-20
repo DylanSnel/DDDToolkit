@@ -1026,7 +1026,7 @@ belongs next to the others, in the domain project.
 
 ## A class closed over your classes
 
-A package's managers, and the records they take and return, are generic over the application's classes. The
+A package's services, and the records they take and return, are generic over the application's classes. The
 application would write their type arguments wherever it names them, in every project that does. To avoid this:
 
 - mark each type parameter of the package's class **`[TemplateType]`**, as for a registration;
@@ -1038,10 +1038,10 @@ application gets depends on the package's class:
 
 | The package's class | The application gets | Used as |
 |---|---|---|
-| a class that is not abstract, with public constructors | a sealed class with the same public constructors | a service the container makes, such as Tenancy's `SeatManager` |
+| a class that is not abstract, with public constructors | a sealed class with the same public constructors | a service the container makes, such as Tenancy's `SeatService` |
 | a record that is not sealed | a sealed record with the same public constructors | a record the application makes and hands to the package, such as Tenancy's `TenantToProvision` |
 | an abstract class with a protected constructor | an abstract class with a private constructor | a name for the nested types and the static members of the package's class |
-| an interface | a `global using` alias, named without the leading `I`, in every project that sees the classes | an interface the storage package implements, such as Tenancy's `ITenancyStore<...>`, which the application names `TenancyStore` |
+| an interface | a `global using` alias, named without the leading `I`, in every project that sees the classes | an interface the storage package implements, such as Tenancy's `ITenancyRepositories<...>`, which the application names `TenancyRepositories` |
 
 In the diagram, purple marks the class that the generator writes into the application:
 
@@ -1060,7 +1060,7 @@ flowchart TB
 
 ### A service the container makes
 
-A manager holds the package's commands and reads for one aggregate. The package declares it as a class that is not
+A service holds the package's commands and reads for one aggregate. The package declares it as a class that is not
 abstract, with a public constructor that takes the services it needs:
 
 ```csharp
@@ -1143,10 +1143,10 @@ public sealed class SubscriptionManager : global::Acme.Subscriptions.Subscriptio
 
 ### A record the application makes
 
-A record that the application makes and hands to a manager is a record of the package that is not sealed. The
+A record that the application makes and hands to a service is a record of the package that is not sealed. The
 application gets a sealed record with each public constructor of the package's record, its default values included.
 The application writes `new TenantToProvision(...)` without type arguments, and Tenancy's
-`TenantManager.ProvisionAsync` takes it as the package's record.
+`TenantService.ProvisionAsync` takes it as the package's record.
 
 ### A name for nested types
 
@@ -1223,7 +1223,7 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
 - **A name, and no second type.** C# finds a type nested in a class through every class derived from it. So
   `SubscriptionUseCases.Dunning` is the package's own `Dunning`, closed over the application's classes. It is the type
   that the package's registration adds to the container, with the package's documentation. The same holds for the
-  types nested in a manager: Tenancy's `SeatManager.SeatOverview` is the package's own record.
+  types nested in a service: Tenancy's `SeatService.SeatOverview` is the package's own record.
 - **Calls as well as names.** C# finds a static member through a derived class, as it finds a nested type. So put
   members that are generic over the classes, and that code calls, on the same class. The application calls them
   without type arguments: `public static IDisposable BeginRun() => DunningRuns.Begin<TSubscriptionId>();` on
@@ -1233,7 +1233,7 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
 
 ### An interface the storage implements
 
-A store is an interface of the package that a storage package implements and registers. The container hands out the
+A repository is an interface of the package that a storage package implements and registers. The container hands out the
 package's interface, closed over the application's classes, so no class of the application's can stand for it. The
 application gets a `global using` alias instead, named as the interface is without the leading `I`:
 
@@ -1280,12 +1280,12 @@ global using SubscriptionStore = global::Acme.Subscriptions.ISubscriptionStore<g
   [DDD00075](diagnostics.md#ddd00075), together with the line that gives one of them its own name. The application
   writes that line in the project that declares that module's classes:
   `[assembly: TemplateFacadeName("SubscriptionManager", "ShopSubscriptions")]`. Every project above it then takes that
-  module's manager as `ShopSubscriptions`. Nothing in your package changes for this. An application may also set the
+  module's service as `ShopSubscriptions`. Nothing in your package changes for this. An application may also set the
   name without a second module. A line that changes nothing is [DDD00076](diagnostics.md#ddd00076).
 - **A class only some applications get.** `OnlyWith = typeof(...)` on the assembly attribute names the template of a
   class that an application may leave out. The class is written only where that template has a class, and a project
   without one hears nothing. `OnlyWith` on a `[TemplateRegistration]` does the same for a registration. Tenancy's
-  `InvitationManager` and `AddTenancyInvitations` are written only where the application declares an invitation class.
+  `InvitationService` and `AddTenancyInvitations` are written only where the application declares an invitation class.
 - **A wrapper that only saves type arguments.** `Shorthand = true` on a `[TemplateRegistration]` is for a method whose
   generic form answers just the same, and that may be called from any project, as a question a row access rule asks.
   Each project of a module that sees the method gets its own wrapper, since a wrapper is internal. Nothing is reported
@@ -1338,13 +1338,13 @@ the package's classes constrain the id, so the compiler checks the line.
 
 ### The toolkit's packages
 
-[Tenancy](tenancy/your-module.md#the-managers-and-the-access-manager) is written this way. Its managers are `TenantManager<...>`,
-`OrganizationManager<...>`, `SeatManager<...>`, `RoleManager<...>` and `InvitationManager<...>`, and an application,
-including the sample, takes a `SeatManager`. Its access manager, `TenancyAccessManager<...>`, is closed over the four
+[Tenancy](tenancy/your-module.md#the-services-and-the-access-manager) is written this way. Its services are `TenantService<...>`,
+`OrganizationService<...>`, `SeatService<...>`, `RoleService<...>` and `InvitationService<...>`, and an application,
+including the sample, takes a `SeatService`. Its access manager, `TenancyAccessManager<...>`, is closed over the four
 ids alone. A module that sees only Tenancy's ids writes `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId,
 RoleId>]` and gets `TenancyAccessManager`, `db.Tenancy()` and `services.AddTenancyAccess<TRequests, TContext>()`.
-Its stores, `ITenancyStore<...>` and `IInvitationStore<...>`, are interfaces, and the application names them
-`TenancyStore` and `InvitationStore`. Membership's access manager, `MembershipAccessManager<TResource>`, is generic over
+Its repositories, `ITenancyRepositories<...>` and `IInvitationRepository<...>`, are interfaces, and the application names them
+`TenancyRepositories` and `InvitationRepository`. Membership's access manager, `MembershipAccessManager<TResource>`, is generic over
 the resource alone, which is short to write where the application uses it, so Membership declares no such class.
 
 ## Working alone and next to another package

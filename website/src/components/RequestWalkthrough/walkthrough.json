@@ -1395,7 +1395,7 @@
       "language": "csharp",
       "lines": [
         "[InTenant]",
-        "public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest;"
+        "public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationService.UnitInTree>>, ITenantsRequest;"
       ]
     },
     "write.add-unit": {
@@ -1441,7 +1441,7 @@
     "write.organization-units.property": {
       "language": "csharp",
       "lines": [
-        "public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest",
+        "public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationService.UnitInTree>>, ITenantsRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();",
         "}"

@@ -15,7 +15,7 @@ An operator is a member of your staff who works across tenants, for example in s
 seat**. So an operator is not an administrator of every tenant.
 
 - **Who is an operator.** A signed-in user is an operator when the user's token carries a role listed in
-  `TenancyOptions.OperatorTokenRoles` ([Registration](reference/managers.md#registration)). The list is empty by
+  `TenancyOptions.OperatorTokenRoles` ([Registration](reference/services.md#registration)). The list is empty by
   default. Registration refuses a token role that is also a seated token role.
 - **Tenant selection.** Tenant selection gives an operator no seat in any tenant. It looks up the tenant the request
   names by its slug, and keeps it for a command that acts in that tenant (below). A request that names no tenant gets
@@ -23,9 +23,9 @@ seat**. So an operator is not an administrator of every tenant.
 - **A request for operators.** `[Operator]` on a request lets an operator through. The access check refuses every
   other caller with `tenancy.operators-only` before the handler runs, seats and system work included.
 - **What an operator reads.** A query marked `[Operator]` starts no work. The operator reads as the signed-in user,
-  through the database role of its token, across tenants. `TenantManager.ListAsync(after, size)` returns every
-  tenant by slug, 1 to 200 per page, each as a `TenantManager.TenantListing` with its name and its number of active
-  seats. The manager refuses every other caller with `tenancy.operators-only` too.
+  through the database role of its token, across tenants. `TenantService.ListAsync(after, size)` returns every
+  tenant by slug, 1 to 200 per page, each as a `TenantService.TenantListing` with its name and its number of active
+  seats. The service refuses every other caller with `tenancy.operators-only` too.
 - **What an operator changes.** A command marked `[Operator]` runs its handler as operator work. Operator work is
   system work, recorded as the operator. The operator's identity is the current user's id, never an id the request
   sends. No method of your code starts operator work, so no code can record work as an operator who did not send the
@@ -50,7 +50,7 @@ seat**. So an operator is not an administrator of every tenant.
 [Operator]
 public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenantsRequest;
 
-public sealed class SuspendTenantHandler(TenantManager tenants) : ICommandHandler<SuspendTenant, Tenant>
+public sealed class SuspendTenantHandler(TenantService tenants) : ICommandHandler<SuspendTenant, Tenant>
 {
     // Runs as operator work in that tenant, recorded as the operator who sent the command.
     public async ValueTask<Tenant> Handle(SuspendTenant command, CancellationToken cancellationToken)
@@ -59,7 +59,7 @@ public sealed class SuspendTenantHandler(TenantManager tenants) : ICommandHandle
 
 // The operators' list of tenants. A query starts no work.
 [Operator]
-public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenantsRequest;
+public sealed record AllTenants(string? After) : IQuery<TenantService.TenantPage>, ITenantsRequest;
 ```
 
 [Which call for which situation](keeping-tenants-apart.md#which-call-for-which-situation) compares operator work

@@ -1,13 +1,13 @@
 ---
-title: "Tenancy API: Managers"
-sidebar_label: Managers
+title: "Tenancy API: Services"
+sidebar_label: Services
 ---
 
 <!-- Generated from the packages' code and XML documentation by build/ApiReference; do not edit by hand. Regenerate with build/generate-api-reference.sh. -->
 
-# Tenancy API: Managers
+# Tenancy API: Services
 
-The managers, one per aggregate: `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager` and `InvitationManager`. Your code takes each one by that name, with no type arguments. The generator writes each one into the project that declares the application's Tenancy classes, as a sealed class that derives from the package's class closed over those classes: `SeatManager` derives from `SeatManager<…>`. A type nested in the package's class is named through the generated class, such as `SeatManager.SeatOverview`. This page names them that way. `InvitationManager` is written only where the project declares an invitation class. `AddTenancy<TContext>()` registers the first four per scope, and `AddTenancyInvitations<TContext>()` registers `InvitationManager`.
+The services, one per aggregate: `TenantService`, `OrganizationService`, `SeatService`, `RoleService` and `InvitationService`. Your code takes each one by that name, with no type arguments. The generator writes each one into the project that declares the application's Tenancy classes, as a sealed class that derives from the package's class closed over those classes: `SeatService` derives from `SeatService<…>`. A type nested in the package's class is named through the generated class, such as `SeatService.SeatOverview`. This page names them that way. `InvitationService` is written only where the project declares an invitation class. `AddTenancy<TContext>()` registers the first four per scope, and `AddTenancyInvitations<TContext>()` registers `InvitationService`.
 
 A command that works on an aggregate has two overloads: one takes the domain objects, the other their ids. Both load the aggregate and check the caller's permissions in the same way. A command that creates an aggregate returns it, and a command that changes one returns it as changed. A read returns the application's own classes.
 
@@ -25,16 +25,16 @@ The nine type parameters are filled with:
 | `TRole` | your Role class, declared with `[RoleAggregate<RoleId>]` | `RoleAggregate<TRoleId, TTenantId>` |
 | `TRoleId` | the id it is declared with, in `[RoleAggregate<RoleId>]` | `struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>` |
 
-The stores a storage package implements are under [Stores](#stores). The registration a host calls, from all three packages, is under [Registration](#registration).
+The repositories a storage package implements are under [Repositories](#repositories). The registration a host calls, from all three packages, is under [Registration](#registration).
 
 ## Tenants
 
-Namespace `DTS.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Services`.
 
-### `TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+### `TenantService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
 ```csharp
-public class TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public class TenantService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
     where TTenant : TenantAggregate<TTenantId>
     where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -46,16 +46,16 @@ public class TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TS
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
 ```
 
-A tenant's life and settings: provisioning it with everything it needs to be used, changing its shape, and suspending, reactivating or closing it; and, for the application's operators, the tenants there are. Your code takes it as `TenantManager`, a class the generator writes, closed over your classes and ids, and the container makes per scope. Each command returns the tenant as it changed it, the one the unit of work keeps.
+A tenant's life and settings: provisioning it with everything it needs to be used, changing its shape, and suspending, reactivating or closing it; and, for the application's operators, the tenants there are. Your code takes it as `TenantService`, a class the generator writes, closed over your classes and ids, and the container makes per scope. Each command returns the tenant as it changed it, the one the unit of work keeps.
 
 Provisioning is the one thing system work outside any tenant does. Suspending, reactivating and closing are system work inside the tenant, and act on that tenant: whoever carries them out begins `access.BeginSystemIn(tenant)` first, or sends a command marked `[Operator]` with the tenant on a `[ForTenant]` member, which runs as operator work in that tenant, so acting on another tenant cannot be expressed.
 
-The organization's name is the tenant's name, and `OrganizationManager.RenameAsync` changes it.
+The organization's name is the tenant's name, and `OrganizationService.RenameAsync` changes it.
 
 | Member | Summary |
 |---|---|
 | `MostPerPage = 200` | How many tenants a page of [`ListAsync`](#listasyncstring-int-cancellationtoken) holds at most. |
-| [`TenantManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, ICurrentUser, IStarterRoleTexts?, NewTenantStarterRoles?)`](#tenantmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider-tenancyoptionsttenantid-tseatid-tunitid-troleid-icurrentuser-istarterroletexts-newtenantstarterroles) | The primary constructor: the type's summary says what it makes. |
+| [`TenantService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, ICurrentUser, IStarterRoleTexts?, NewTenantStarterRoles?)`](#tenantserviceitenancyrepositoriesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider-tenancyoptionsttenantid-tseatid-tunitid-troleid-icurrentuser-istarterroletexts-newtenantstarterroles) | The primary constructor: the type's summary says what it makes. |
 | [`ProvisionAsync(TenantToProvision<TTenant, TTenantId, TUnit, TUnitId, TSeat, TSeatId, TRoleId>, CancellationToken)`](#provisionasynctenanttoprovisionttenant-ttenantid-tunit-tunitid-tseat-tseatid-troleid-cancellationtoken) | Provisions a tenant, in one save: the tenant, its organization with the root, a role copied from every starter role seeded for its shape, and a first seat for the administrator's identity, placed at the root and granted the administrators' role there with no end. |
 | [`ChangeShapeAsync(TenantShape, IReadOnlyDictionary<string, TRoleId>?, CultureInfo?, CancellationToken)`](#changeshapeasynctenantshape-ireadonlydictionarystring-troleid-cultureinfo-cancellationtoken) | Changes a flat tenant into a hierarchical one, and gives it a copy of every starter role seeded for the new shape it has no copy of yet. |
 | [`SuspendAsync(string, CancellationToken)`](#suspendasyncstring-cancellationtoken) | Suspends the caller's tenant: system work in that tenant only. |
@@ -63,11 +63,11 @@ The organization's name is the tenant's name, and `OrganizationManager.RenameAsy
 | [`CloseAsync(string, CancellationToken)`](#closeasyncstring-cancellationtoken) | Closes the caller's tenant for good: system work in that tenant only. |
 | [`ListAsync(string?, int, CancellationToken)`](#listasyncstring-int-cancellationtoken) | A page of the tenants of the application, for its operators, by slug: those after the last tenant of the page before, or the first ones. |
 
-#### `TenantManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, ICurrentUser, IStarterRoleTexts?, NewTenantStarterRoles?)`
+#### `TenantService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, ICurrentUser, IStarterRoleTexts?, NewTenantStarterRoles?)`
 
 ```csharp
-public TenantManager(
-    ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> store,
+public TenantService(
+    ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> repositories,
     TenancyCatalogue catalogue,
     TimeProvider clock,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
@@ -80,7 +80,7 @@ The primary constructor: the type's summary says what it makes.
 
 **Parameters**
 
-- `store`: Where the tenant is loaded and saved.
+- `repositories`: Where the tenant is loaded and saved.
 - `catalogue`: The starter roles a new tenant is given.
 - `clock`: What "now" is.
 - `options`: Which token roles are operators', for the tenants an operator lists.
@@ -102,7 +102,7 @@ The roles are named as the catalogue names its starter roles, or, with a languag
 
 Only system work outside any tenant provisions one, and it does not do so with that power: once it knows the new tenant's id, everything else, the check that the slug is free and the save included, runs as system work inside the new tenant ([`TenancyWork.BeginSystemIn<TTenantId, TSeatId>`](access.md#beginsysteminttenantid-tseatid-string-1)), so it writes that tenant's rows and nothing else. On a database that keeps tenants apart by itself, such as Postgres with row level security, the slug check then sees no other tenant, and the unique index on the slug is what refuses one that is taken.
 
-The organization, the first seat and the roles belong to the tenant, and are read through the other managers by a request that names the new tenant. Imports and seeding that need fixed ids pass them in the command.
+The organization, the first seat and the roles belong to the tenant, and are read through the other services by a request that names the new tenant. Imports and seeding that need fixed ids pass them in the command.
 
 After the save, still as system work in the new tenant, every registered [`ITenantStarterRoles`](catalogue.md#itenantstarterroles) runs, each in a scope of its own: another module's starter roles. This is not one transaction. A module has its own context, so the tenant is saved first. A failure there does not fail provisioning: it is logged as an error, the tenant is returned, and the next `services.SyncStarterRoles()` makes the role.
 
@@ -270,15 +270,15 @@ The application's own work that has to visit every tenant, a sweep say, does not
 
 **Parameters**
 
-- `after`: [`TenantManager.TenantPage.Next`](#tenantmanagertenantpage) of the page before, or `null` for the first page. It is a marker the manager made, and means nothing to anyone else.
-- `size`: How many tenants the page holds: 1 to [`MostPerPage`](#tenantmanagerttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid).
+- `after`: [`TenantService.TenantPage.Next`](#tenantservicetenantpage) of the page before, or `null` for the first page. It is a marker the service made, and means nothing to anyone else.
+- `size`: How many tenants the page holds: 1 to [`MostPerPage`](#tenantservicettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid).
 - `cancellationToken`: Cancels the read.
 
 **Returns**: The page: each tenant with its name and its number of active seats, and the marker of the next page, or `null` on the last page.
 
 **Exceptions**
 
-- `RefusalException`: `tenancy.operators-only` for anyone but an operator, checked before anything else, so nobody else learns what a page holds; `tenancy.page-size-invalid`, with `Max`; `tenancy.cursor-invalid` for a marker the manager did not make. Each of the last two names its input in the argument `Field`: `size` and `after`.
+- `RefusalException`: `tenancy.operators-only` for anyone but an operator, checked before anything else, so nobody else learns what a page holds; `tenancy.page-size-invalid`, with `Max`; `tenancy.cursor-invalid` for a marker the service did not make. Each of the last two names its input in the argument `Field`: `size` and `after`.
 
 **Example**
 
@@ -302,7 +302,7 @@ public record TenantToProvision<TTenant, TTenantId, TUnit, TUnitId, TSeat, TSeat
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
 ```
 
-What a new tenant is provisioned with, for `TenantManager.ProvisionAsync`. Your code makes it as `TenantToProvision`, a record the generator writes, closed over your classes and ids:
+What a new tenant is provisioned with, for `TenantService.ProvisionAsync`. Your code makes it as `TenantToProvision`, a record the generator writes, closed over your classes and ids:
 
 ```csharp
 var tenant = await tenants.ProvisionAsync(new TenantToProvision(
@@ -369,13 +369,13 @@ The primary constructor: the type's summary says what it makes.
 - `ConfigureRoot`: The same for the fields the application added to its unit class, on the root: what kind of unit it is, say, when the class keeps one. A unit raises no events of its own; the organization raises the root's.
 - `ConfigureFirstSeat`: The same for the first administrator's seat, which is placed at the root and holds the administrators' role by then: the name it is shown by, say, when the class keeps one.
 
-### `TenantManager.TenantListing`
+### `TenantService.TenantListing`
 
 ```csharp
 public sealed record TenantListing
 ```
 
-A tenant as [`TenantManager.ListAsync`](#listasyncstring-int-cancellationtoken) lists it for an operator: the tenant, the application's own class, with what is not on it, its name and how many of its seats are in use. It names no person, and no row of the tenant's.
+A tenant as [`TenantService.ListAsync`](#listasyncstring-int-cancellationtoken) lists it for an operator: the tenant, the application's own class, with what is not on it, its name and how many of its seats are in use. It names no person, and no row of the tenant's.
 
 | Member | Summary |
 |---|---|
@@ -398,7 +398,7 @@ The primary constructor: the type's summary says what it makes.
 - `Name`: Its name, which is its organization's.
 - `ActiveSeats`: How many of its seats are active now.
 
-### `TenantManager.TenantPage`
+### `TenantService.TenantPage`
 
 ```csharp
 public sealed record TenantPage
@@ -427,12 +427,12 @@ The primary constructor: the type's summary says what it makes.
 
 ## Organization
 
-Namespace `DTS.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Services`.
 
-### `OrganizationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+### `OrganizationService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
 ```csharp
-public class OrganizationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public class OrganizationService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
     where TTenant : TenantAggregate<TTenantId>
     where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -444,18 +444,18 @@ public class OrganizationManager<TTenant, TTenantId, TOrganization, TUnit, TUnit
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
 ```
 
-The organization and its tree: renaming the organization, adding, renaming, moving and archiving units, and reading the units. Your code takes it as `OrganizationManager`, a class the generator writes, closed over your classes and ids, and the container makes per scope.
+The organization and its tree: renaming the organization, adding, renaming, moving and archiving units, and reading the units. Your code takes it as `OrganizationService`, a class the generator writes, closed over your classes and ids, and the container makes per scope.
 
-Each change of a unit takes the unit, or its id. Both check the same: the manager loads the organization itself and asks the caller's rights over what it loaded, never over the state of a unit it was handed. Each returns the unit as it changed it, the one the unit of work keeps.
+Each change of a unit takes the unit, or its id. Both check the same: the service loads the organization itself and asks the caller's rights over what it loaded, never over the state of a unit it was handed. Each returns the unit as it changed it, the one the unit of work keeps.
 
 Each change of a unit needs [`TenancyPermissions.UnitsManage`](catalogue.md#tenancypermissions) where the change is made, so a seat that manages a region manages the units below it and nothing beside or above it. Two edits of the tree at the same time are kept apart by the organization's version. A move also changes what every permission held above the moved unit reaches, so it takes the access revision too.
 
-The reads answer units as the application's own class, whole, with every field of its own, beside the path and depth that are not on it ([`OrganizationManager.UnitInTree`](#organizationmanagerunitintree)). Each is read for the answer and tracked by nobody. Paths are written from the root down, joined with `" / "`, and come from the closure of the tree, so a unit's path names the units above it even where the caller is not placed under those.
+The reads answer units as the application's own class, whole, with every field of its own, beside the path and depth that are not on it ([`OrganizationService.UnitInTree`](#organizationserviceunitintree)). Each is read for the answer and tracked by nobody. Paths are written from the root down, joined with `" / "`, and come from the closure of the tree, so a unit's path names the units above it even where the caller is not placed under those.
 
 | Member | Summary |
 |---|---|
 | `MostIds = 200` | How many ids one question by id takes. |
-| [`OrganizationManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`](#organizationmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider) | The primary constructor: the type's summary says what it makes. |
+| [`OrganizationService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`](#organizationserviceitenancyrepositoriesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider) | The primary constructor: the type's summary says what it makes. |
 | [`RenameAsync(string, CancellationToken)`](#renameasyncstring-cancellationtoken) | Renames the organization, which is the tenant's name. |
 | [`AddUnitAsync(TUnitId, string, CancellationToken, TUnitId?, Action<TUnit>?)`](#addunitasynctunitid-string-cancellationtoken-tunitid-actiontunit) | Adds a unit below `parent`. |
 | [`AddUnitAsync(TUnit, string, CancellationToken, TUnitId?, Action<TUnit>?)`](#addunitasynctunit-string-cancellationtoken-tunitid-actiontunit) | Adds a unit below `parent`, as [`AddUnitAsync`](#addunitasynctunitid-string-cancellationtoken-tunitid-actiontunit) does with its id. |
@@ -468,11 +468,11 @@ The reads answer units as the application's own class, whole, with every field o
 | [`ListUnitsAsync(CancellationToken)`](#listunitsasynccancellationtoken) | The units the caller reads, by path: for a seat, the units it is placed in and every unit below them; for system work in the tenant, every unit. |
 | [`UnitsByIdAsync(IReadOnlyCollection<TUnitId>, CancellationToken)`](#unitsbyidasyncireadonlycollectiontunitid-cancellationtoken) | What the units among `ids` that are the caller's tenant's are called, by path, whichever of them the caller is placed under: a seat that works on something at a unit it is not placed under still reads what that unit is called, and so does one an application's restrictive rule keeps out of the organization. |
 
-#### `OrganizationManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`
+#### `OrganizationService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`
 
 ```csharp
-public OrganizationManager(
-    ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> store,
+public OrganizationService(
+    ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> repositories,
     TenancyCatalogue catalogue,
     TimeProvider clock)
 ```
@@ -481,7 +481,7 @@ The primary constructor: the type's summary says what it makes.
 
 **Parameters**
 
-- `store`: Where the organization is loaded and saved.
+- `repositories`: Where the organization is loaded and saved.
 - `catalogue`: The permissions asked for.
 - `clock`: What "now" is.
 
@@ -745,7 +745,7 @@ var archived = await organization.ArchiveUnitAsync(northCoast, cancellationToken
 public Task<IReadOnlyList<UnitInTree>> ListUnitsAsync(CancellationToken cancellationToken)
 ```
 
-The units the caller reads, by path: for a seat, the units it is placed in and every unit below them; for system work in the tenant, every unit. Each is the application's own unit, whole, with its path and depth beside it ([`OrganizationManager.UnitInTree`](#organizationmanagerunitintree)), so a field the application added to its unit class, such as what kind of unit it is, is shown from the units read here, with no statement more.
+The units the caller reads, by path: for a seat, the units it is placed in and every unit below them; for system work in the tenant, every unit. Each is the application's own unit, whole, with its path and depth beside it ([`OrganizationService.UnitInTree`](#organizationserviceunitintree)), so a field the application added to its unit class, such as what kind of unit it is, is shown from the units read here, with no statement more.
 
 **Parameters**
 
@@ -779,7 +779,7 @@ What the units among `ids` that are the caller's tenant's are called, by path, w
 
 **Parameters**
 
-- `ids`: The units asked about, at most [`MostIds`](#organizationmanagerttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid) different ones.
+- `ids`: The units asked about, at most [`MostIds`](#organizationservicettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid) different ones.
 - `cancellationToken`: Cancels the read.
 
 **Returns**: Each unit's id, name, path and depth, by path.
@@ -797,13 +797,13 @@ The paths of the units a page of projects sits at, in one read:
 var named = await organization.UnitsByIdAsync([.. projects.Select(project => project.UnitId)], cancellationToken);
 ```
 
-### `OrganizationManager.UnitInTree`
+### `OrganizationService.UnitInTree`
 
 ```csharp
 public sealed record UnitInTree
 ```
 
-A unit, the application's own and whole, with where it sits in the tree: its path from the root and how deep it is. The unit carries its id, its parent, its name, its status and every field the application added, such as what kind of unit it is; the path and the depth are not on it. They come from the closure and the units above it, which the answer does not carry, as a seat lists only the units under its placements, so the application would need a read more to work them out. So that is all this adds, and an application shows a unit by what it selects ([`OrganizationManager.ListUnitsAsync`](#listunitsasynccancellationtoken)).
+A unit, the application's own and whole, with where it sits in the tree: its path from the root and how deep it is. The unit carries its id, its parent, its name, its status and every field the application added, such as what kind of unit it is; the path and the depth are not on it. They come from the closure and the units above it, which the answer does not carry, as a seat lists only the units under its placements, so the application would need a read more to work them out. So that is all this adds, and an application shows a unit by what it selects ([`OrganizationService.ListUnitsAsync`](#listunitsasynccancellationtoken)).
 
 **Remarks**
 
@@ -836,12 +836,12 @@ The unit was read for this answer and is tracked by nobody: nothing done to it i
 
 ## Seats
 
-Namespace `DTS.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Services`.
 
-### `SeatManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+### `SeatService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
 ```csharp
-public class SeatManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public class SeatService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
     where TTenant : TenantAggregate<TTenantId>
     where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -853,9 +853,9 @@ public class SeatManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSea
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
 ```
 
-People's seats: adding them, placing them in units, granting them roles there, and suspending, reactivating or deactivating them; and what the screens show of them, who the caller is and what any seat may do where. Your code takes it as `SeatManager`, a class the generator writes, closed over your classes and ids, and the container makes per scope.
+People's seats: adding them, placing them in units, granting them roles there, and suspending, reactivating or deactivating them; and what the screens show of them, who the caller is and what any seat may do where. Your code takes it as `SeatService`, a class the generator writes, closed over your classes and ids, and the container makes per scope.
 
-Each command takes the domain objects, `GrantAsync(seat, role, at, ...)`, or their ids, as a request carries them. Both check the same: the manager loads the seat, the role and the unit itself, and asks the caller's rights over what it loaded, never over the state of an object it was handed. Each command returns the seat as it changed it, the one the unit of work keeps.
+Each command takes the domain objects, `GrantAsync(seat, role, at, ...)`, or their ids, as a request carries them. Both check the same: the service loads the seat, the role and the unit itself, and asks the caller's rights over what it loaded, never over the state of an object it was handed. Each command returns the seat as it changed it, the one the unit of work keeps.
 
 Holding [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) at a unit is enough to give roles there. Its holder gives any active role of the tenant that manages no access to a seat placed there or below, and takes any such role away, without holding the role's permissions: to another seat for as long as it says, to itself for no longer than it holds [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) there. A role that manages access (see [`TenancyCatalogue.AccessManagingPermissionsOf`](catalogue.md#accessmanagingpermissionsofrolefacts)) stays contained: a seat gives it, and takes it away, only while holding there each of its permissions that manage access, for at least as long as the grant runs, and never gives it to itself. Withdrawing a placement takes its grants away, by the same rule, and so does suspending or deactivating a seat, while reactivating one gives its grants back by that rule too. System work in a tenant is not held to any of that. When the application turns containment off ([`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions)), a role that manages access goes as one that manages none: a grants manager gives every role, to another seat for as long as it says and to itself for no longer than it holds [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) there, and the permission a command asks where it acts is all a seat's status takes. Nothing leaves a tenant that has an administrator without one, whoever asks, and that is decided before the seat changes, so a refused command leaves nothing for a later save to write. A seat of another tenant is not found.
 
@@ -868,7 +868,7 @@ The reads answer seats as the application's own class, whole: the seat with its 
 | Member | Summary |
 |---|---|
 | `MostIds = 200` | How many ids one question by id takes. |
-| [`SeatManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, IEnumerable<ISeatFellows<TSeatId>>?)`](#seatmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider-ienumerableiseatfellowstseatid) | The primary constructor: the type's summary says what it makes. |
+| [`SeatService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, IEnumerable<ISeatFellows<TSeatId>>?)`](#seatserviceitenancyrepositoriesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider-ienumerableiseatfellowstseatid) | The primary constructor: the type's summary says what it makes. |
 | [`AddAsync(Guid, CancellationToken, TSeatId?, Action<TSeat>?, string?)`](#addasyncguid-cancellationtoken-tseatid-actiontseat-string) | Adds a seat for a verified identity, placed nowhere yet, of a kind the catalogue declares. |
 | [`PlaceAsync(TSeatId, TUnitId, bool, CancellationToken)`](#placeasynctseatid-tunitid-bool-cancellationtoken) | Places a seat in an active unit. |
 | [`PlaceAsync(TSeat, TUnit, bool, CancellationToken)`](#placeasynctseat-tunit-bool-cancellationtoken) | Places a seat in an active unit, as [`PlaceAsync`](#placeasynctseatid-tunitid-bool-cancellationtoken) does with their ids. |
@@ -886,17 +886,17 @@ The reads answer seats as the application's own class, whole: the seat with its 
 | [`ReactivateAsync(TSeat, CancellationToken)`](#reactivateasynctseat-cancellationtoken) | Makes a suspended seat active again, as [`ReactivateAsync`](#reactivateasynctseatid-cancellationtoken) does with its id. |
 | [`DeactivateAsync(TSeatId, CancellationToken)`](#deactivateasynctseatid-cancellationtoken) | Deactivates a seat for good, which takes away every grant that has not ended, by the rule [`SuspendAsync`](#suspendasynctseatid-cancellationtoken) follows. |
 | [`DeactivateAsync(TSeat, CancellationToken)`](#deactivateasynctseat-cancellationtoken) | Deactivates a seat for good, as [`DeactivateAsync`](#deactivateasynctseatid-cancellationtoken) does with its id. |
-| [`WhoAmIAsync(CancellationToken)`](#whoamiasynccancellationtoken) | Who the calling seat is, and what it may do where: its own seat, whole, as the application's class, with the tenant, the paths of the units it is placed at, the roles its grants name, and every live permission it holds now with where it is granted and every unit it reaches ([`SeatManager.SeatOverview`](#seatmanagerseatoverview)). |
-| [`OverviewAsync(TSeatId, CancellationToken)`](#overviewasynctseatid-cancellationtoken) | Any seat of the caller's tenant and what it may do where, as [`WhoAmIAsync`](#whoamiasynccancellationtoken) answers the caller's own: the seat, whole, as the application's class, with the tenant, the paths of the units it is placed at, the roles its grants name, and every permission it holds now with where it is granted and every unit it reaches ([`SeatManager.SeatOverview`](#seatmanagerseatoverview)). |
+| [`WhoAmIAsync(CancellationToken)`](#whoamiasynccancellationtoken) | Who the calling seat is, and what it may do where: its own seat, whole, as the application's class, with the tenant, the paths of the units it is placed at, the roles its grants name, and every live permission it holds now with where it is granted and every unit it reaches ([`SeatService.SeatOverview`](#seatserviceseatoverview)). |
+| [`OverviewAsync(TSeatId, CancellationToken)`](#overviewasynctseatid-cancellationtoken) | Any seat of the caller's tenant and what it may do where, as [`WhoAmIAsync`](#whoamiasynccancellationtoken) answers the caller's own: the seat, whole, as the application's class, with the tenant, the paths of the units it is placed at, the roles its grants name, and every permission it holds now with where it is granted and every unit it reaches ([`SeatService.SeatOverview`](#seatserviceseatoverview)). |
 | [`OverviewAsync(TSeat, CancellationToken)`](#overviewasynctseat-cancellationtoken) | Any seat of the caller's tenant and what it may do where, as [`OverviewAsync`](#overviewasynctseatid-cancellationtoken) answers it by its id. |
 | [`ListAsync(CancellationToken)`](#listasynccancellationtoken) | The tenant's seats, the application's own class, each whole and in the order of their ids: a seat has nothing of Tenancy's a person would order it by, so a screen orders what it shows by what it shows. |
 | [`ByIdAsync(IReadOnlyCollection<TSeatId>, CancellationToken)`](#byidasyncireadonlycollectiontseatid-cancellationtoken) | The seats among `ids` that are in the caller's tenant, as [`ListAsync`](#listasynccancellationtoken) answers them: the application's own, whole, in the order of their ids. |
 
-#### `SeatManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, IEnumerable<ISeatFellows<TSeatId>>?)`
+#### `SeatService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider, IEnumerable<ISeatFellows<TSeatId>>?)`
 
 ```csharp
-public SeatManager(
-    ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> store,
+public SeatService(
+    ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> repositories,
     TenancyCatalogue catalogue,
     TimeProvider clock,
     IEnumerable<ISeatFellows<TSeatId>>? fellows = null)
@@ -906,7 +906,7 @@ The primary constructor: the type's summary says what it makes.
 
 **Parameters**
 
-- `store`: Where seats and roles are loaded and saved.
+- `repositories`: Where seats and roles are loaded and saved.
 - `catalogue`: The permissions asked for, and which permissions are live.
 - `clock`: What "now" is.
 - `fellows`: The seats a seat outside the organization works with on a resource of another package, one source for each such resource. The reads answer those seats beside the caller's own while the catalogue narrows such seats. None when left out.
@@ -929,7 +929,7 @@ Adds a seat for a verified identity, placed nowhere yet, of a kind the catalogue
 - `identity`: The person's verified identity, the subject of their token.
 - `cancellationToken`: Cancels the work.
 - `id`: Its id, for imports and seeding; a new one otherwise. An id that is already a seat's is a mistake in the import, which the save reports.
-- `configure`: Sets the fields the application added to its seat class, such as the name it is shown by, on the new seat once the caller is checked and before the seat is handed to the store, so they are saved in the same transaction and the class's own rules judge them there. When it throws, the seat is not added: nothing is saved, by this call or by a later save in the same scope.
+- `configure`: Sets the fields the application added to its seat class, such as the name it is shown by, on the new seat once the caller is checked and before the seat is handed to the repositories, so they are saved in the same transaction and the class's own rules judge them there. When it throws, the seat is not added: nothing is saved, by this call or by a later save in the same scope.
 - `kind`: The seat's kind, one of the catalogue's [`TenancyCatalogue.SeatKinds`](catalogue.md#tenancycatalogue); `null` for its [`TenancyCatalogue.DefaultSeatKind`](catalogue.md#tenancycatalogue). The seat keeps it. A seat of a kind outside the organization is placed in no unit.
 
 **Returns**: The new seat.
@@ -1414,7 +1414,7 @@ tove = await seats.DeactivateAsync(tove, cancellationToken);
 public Task<SeatOverview> WhoAmIAsync(CancellationToken cancellationToken)
 ```
 
-Who the calling seat is, and what it may do where: its own seat, whole, as the application's class, with the tenant, the paths of the units it is placed at, the roles its grants name, and every live permission it holds now with where it is granted and every unit it reaches ([`SeatManager.SeatOverview`](#seatmanagerseatoverview)). A seat asks this about itself; any seat of the tenant, its own included, is [`OverviewAsync`](#overviewasynctseatid-cancellationtoken).
+Who the calling seat is, and what it may do where: its own seat, whole, as the application's class, with the tenant, the paths of the units it is placed at, the roles its grants name, and every live permission it holds now with where it is granted and every unit it reaches ([`SeatService.SeatOverview`](#seatserviceseatoverview)). A seat asks this about itself; any seat of the tenant, its own included, is [`OverviewAsync`](#overviewasynctseatid-cancellationtoken).
 
 **Parameters**
 
@@ -1445,7 +1445,7 @@ var canEdit = me.Permissions.Any(held => held.Permission == "projects.edit" && h
 public Task<SeatOverview> OverviewAsync(TSeatId seat, CancellationToken cancellationToken)
 ```
 
-Any seat of the caller's tenant and what it may do where, as [`WhoAmIAsync`](#whoamiasynccancellationtoken) answers the caller's own: the seat, whole, as the application's class, with the tenant, the paths of the units it is placed at, the roles its grants name, and every permission it holds now with where it is granted and every unit it reaches ([`SeatManager.SeatOverview`](#seatmanagerseatoverview)). Asked about the caller's own seat, it answers what [`WhoAmIAsync`](#whoamiasynccancellationtoken) answers.
+Any seat of the caller's tenant and what it may do where, as [`WhoAmIAsync`](#whoamiasynccancellationtoken) answers the caller's own: the seat, whole, as the application's class, with the tenant, the paths of the units it is placed at, the roles its grants name, and every permission it holds now with where it is granted and every unit it reaches ([`SeatService.SeatOverview`](#seatserviceseatoverview)). Asked about the caller's own seat, it answers what [`WhoAmIAsync`](#whoamiasynccancellationtoken) answers.
 
 **Parameters**
 
@@ -1463,7 +1463,7 @@ Any seat of the caller's tenant and what it may do where, as [`WhoAmIAsync`](#wh
 
 It asks nothing of the caller beyond what every read asks, a seat of the tenant or system work in it. Who may see another person's access is the application's choice, so the request that asks this states it (`IRequireAccess.RequiredAccess`), as a request states it for everything else: `TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)` for a tenant's administration, say, or `TenancyAccess.InTenant()` where the database's read rules are the rule.
 
-What comes back is what the caller reads, through the store, as the lists read seats. On Postgres Tenancy's policies give a seat another seat's grants only where it may read them: at the units where it manages grants, seats or units and below them, or all of them when it manages roles for the whole tenant; and a read rule of the application's on its seat class decides which seats it reads at all. The permissions are worked out from the grants that were read, by the rule the rights are written by, since a database that keeps the rights shows a seat its own alone: a permission is shown where the caller reads the grant that gives it, and a seat that is not active holds none. Where no policy applies, on another database or in a context without row level security, every seat comes with all its grants and permissions, and the request's requirement is the only rule: choose it as the rule you mean.
+What comes back is what the caller reads, through the repositories, as the lists read seats. On Postgres Tenancy's policies give a seat another seat's grants only where it may read them: at the units where it manages grants, seats or units and below them, or all of them when it manages roles for the whole tenant; and a read rule of the application's on its seat class decides which seats it reads at all. The permissions are worked out from the grants that were read, by the rule the rights are written by, since a database that keeps the rights shows a seat its own alone: a permission is shown where the caller reads the grant that gives it, and a seat that is not active holds none. Where no policy applies, on another database or in a context without row level security, every seat comes with all its grants and permissions, and the request's requirement is the only rule: choose it as the rule you mean.
 
 The seat is read untracked, as the lists read seats: nothing done to it is saved, by this question or by a save later in the same unit of work.
 
@@ -1500,7 +1500,7 @@ Any seat of the caller's tenant and what it may do where, as [`OverviewAsync`](#
 
 It asks nothing of the caller beyond what every read asks, a seat of the tenant or system work in it. Who may see another person's access is the application's choice, so the request that asks this states it (`IRequireAccess.RequiredAccess`), as a request states it for everything else: `TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)` for a tenant's administration, say, or `TenancyAccess.InTenant()` where the database's read rules are the rule.
 
-What comes back is what the caller reads, through the store, as the lists read seats. On Postgres Tenancy's policies give a seat another seat's grants only where it may read them: at the units where it manages grants, seats or units and below them, or all of them when it manages roles for the whole tenant; and a read rule of the application's on its seat class decides which seats it reads at all. The permissions are worked out from the grants that were read, by the rule the rights are written by, since a database that keeps the rights shows a seat its own alone: a permission is shown where the caller reads the grant that gives it, and a seat that is not active holds none. Where no policy applies, on another database or in a context without row level security, every seat comes with all its grants and permissions, and the request's requirement is the only rule: choose it as the rule you mean.
+What comes back is what the caller reads, through the repositories, as the lists read seats. On Postgres Tenancy's policies give a seat another seat's grants only where it may read them: at the units where it manages grants, seats or units and below them, or all of them when it manages roles for the whole tenant; and a read rule of the application's on its seat class decides which seats it reads at all. The permissions are worked out from the grants that were read, by the rule the rights are written by, since a database that keeps the rights shows a seat its own alone: a permission is shown where the caller reads the grant that gives it, and a seat that is not active holds none. Where no policy applies, on another database or in a context without row level security, every seat comes with all its grants and permissions, and the request's requirement is the only rule: choose it as the rule you mean.
 
 The seat is read untracked, as the lists read seats: nothing done to it is saved, by this question or by a save later in the same unit of work.
 
@@ -1555,7 +1555,7 @@ The seats among `ids` that are in the caller's tenant, as [`ListAsync`](#listasy
 
 **Parameters**
 
-- `ids`: The seats asked about, at most [`MostIds`](#seatmanagerttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid) different ones.
+- `ids`: The seats asked about, at most [`MostIds`](#seatservicettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid) different ones.
 - `cancellationToken`: Cancels the read.
 
 **Returns**: The seats found, the application's own class, in the order of their ids.
@@ -1577,7 +1577,7 @@ The seats of a project's crew, to show their names:
 var crew = await seats.ByIdAsync([.. project.Crew.Select(member => member.Seat)], cancellationToken);
 ```
 
-### `SeatManager.PermissionReach`
+### `SeatService.PermissionReach`
 
 ```csharp
 public sealed record PermissionReach
@@ -1612,13 +1612,13 @@ The primary constructor: the type's summary says what it makes.
 - `GrantedAt`: The units a grant of the seat gives it at, each once, by its path from the root.
 - `Reaches`: Every unit it holds the permission at: those, and every unit below them, each once, by path.
 
-### `SeatManager.SeatOverview`
+### `SeatService.SeatOverview`
 
 ```csharp
 public sealed record SeatOverview
 ```
 
-A seat and what it may do where: the application's own seat, whole, with only what is not on the seat itself beside it. The seat carries its id, its identity, its status, where it is placed with the roles granted there for which period, and every field the application added; Tenancy adds the tenant it is in and that tenant's name, the path of each unit it is placed at, the roles its grants name, and every permission it holds at [`AsOf`](#seatmanagerseatoverview) with where that permission reaches. [`SeatManager.WhoAmIAsync`](#whoamiasynccancellationtoken) answers it for the calling seat, and [`SeatManager.OverviewAsync`](#overviewasynctseatid-cancellationtoken) for any seat of the tenant.
+A seat and what it may do where: the application's own seat, whole, with only what is not on the seat itself beside it. The seat carries its id, its identity, its status, where it is placed with the roles granted there for which period, and every field the application added; Tenancy adds the tenant it is in and that tenant's name, the path of each unit it is placed at, the roles its grants name, and every permission it holds at [`AsOf`](#seatserviceseatoverview) with where that permission reaches. [`SeatService.WhoAmIAsync`](#whoamiasynccancellationtoken) answers it for the calling seat, and [`SeatService.OverviewAsync`](#overviewasynctseatid-cancellationtoken) for any seat of the tenant.
 
 Nothing of it is the seat a second time, so an application shows the seat by what it chose, a name its seat class keeps or a profile found by the identity, from the seat itself, and puts its placements beside the paths and roles with [`UnitOf`](#unitoftunitid) and [`RoleOf`](#roleoftroleid). What leaves is what the application selects: the seat has its identity.
 
@@ -1631,11 +1631,11 @@ The seat and the roles were read for the overview and are tracked by nobody: not
 | `string TenantName { get; init; }` | The tenant's name, which is its organization's. |
 | `TSeat Seat { get; init; }` | The seat, the application's own class, with its placements and the grants the caller reads. |
 | `IReadOnlyList<UnitRef> Units { get; init; }` | Each unit the seat is placed at, once, by its path from the root. |
-| `IReadOnlyList<TRole> Roles { get; init; }` | Each role the seat's grants name, once, the application's own class, by name, whether or not the grant applies now; a role the store does not answer, one a filter of the application's own hides, is left out rather than made up. |
+| `IReadOnlyList<TRole> Roles { get; init; }` | Each role the seat's grants name, once, the application's own class, by name, whether or not the grant applies now; a role the repositories do not answer, one a filter of the application's own hides, is left out rather than made up. |
 | `IReadOnlyList<PermissionReach> Permissions { get; init; }` | Every permission the seat holds at `AsOf` from those grants, where it is granted and every unit it reaches: none while the seat is not active. |
 | `DateTimeOffset AsOf { get; init; }` | The moment the overview holds for: the permissions are those held then, and a grant of the seat applies then when `grant.AppliesAt(AsOf)`. |
-| [`UnitOf(TUnitId)`](#unitoftunitid) | A unit the seat is placed at, by its path: what [`Units`](#seatmanagerseatoverview) holds for it. |
-| [`RoleOf(TRoleId)`](#roleoftroleid) | A role the seat's grants name: what [`Roles`](#seatmanagerseatoverview) holds for it. |
+| [`UnitOf(TUnitId)`](#unitoftunitid) | A unit the seat is placed at, by its path: what [`Units`](#seatserviceseatoverview) holds for it. |
+| [`RoleOf(TRoleId)`](#roleoftroleid) | A role the seat's grants name: what [`Roles`](#seatserviceseatoverview) holds for it. |
 
 #### `SeatOverview(TTenant, string, TSeat, IReadOnlyList<UnitRef>, IReadOnlyList<TRole>, IReadOnlyList<PermissionReach>, DateTimeOffset)`
 
@@ -1658,7 +1658,7 @@ The primary constructor: the type's summary says what it makes.
 - `TenantName`: The tenant's name, which is its organization's.
 - `Seat`: The seat, the application's own class, with its placements and the grants the caller reads.
 - `Units`: Each unit the seat is placed at, once, by its path from the root.
-- `Roles`: Each role the seat's grants name, once, the application's own class, by name, whether or not the grant applies now; a role the store does not answer, one a filter of the application's own hides, is left out rather than made up.
+- `Roles`: Each role the seat's grants name, once, the application's own class, by name, whether or not the grant applies now; a role the repositories do not answer, one a filter of the application's own hides, is left out rather than made up.
 - `Permissions`: Every permission the seat holds at `AsOf` from those grants, where it is granted and every unit it reaches: none while the seat is not active.
 - `AsOf`: The moment the overview holds for: the permissions are those held then, and a grant of the seat applies then when `grant.AppliesAt(AsOf)`.
 
@@ -1668,7 +1668,7 @@ The primary constructor: the type's summary says what it makes.
 public UnitRef UnitOf(TUnitId unit)
 ```
 
-A unit the seat is placed at, by its path: what [`Units`](#seatmanagerseatoverview) holds for it.
+A unit the seat is placed at, by its path: what [`Units`](#seatserviceseatoverview) holds for it.
 
 **Parameters**
 
@@ -1684,19 +1684,19 @@ A unit the seat is placed at, by its path: what [`Units`](#seatmanagerseatovervi
 public TRole? RoleOf(TRoleId role)
 ```
 
-A role the seat's grants name: what [`Roles`](#seatmanagerseatoverview) holds for it.
+A role the seat's grants name: what [`Roles`](#seatserviceseatoverview) holds for it.
 
 **Parameters**
 
 - `role`: The role of one of the seat's grants.
 
-**Returns**: The role; or `null` when a grant of the seat names it and the store answered no such role, as a filter of the application's own on its role class does, a soft delete say. The grant is the seat's own all the same, so a screen shows it with what the application chooses for a role it cannot name.
+**Returns**: The role; or `null` when a grant of the seat names it and the repositories answered no such role, as a filter of the application's own on its role class does, a soft delete say. The grant is the seat's own all the same, so a screen shows it with what the application chooses for a role it cannot name.
 
 **Exceptions**
 
 - `KeyNotFoundException`: No grant of the seat names such a role.
 
-### `SeatManager.UnitRef`
+### `SeatService.UnitRef`
 
 ```csharp
 public sealed record UnitRef
@@ -1725,12 +1725,12 @@ The primary constructor: the type's summary says what it makes.
 
 ## Roles
 
-Namespace `DTS.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Services`.
 
-### `RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+### `RoleService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
 ```csharp
-public class RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public class RoleService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
     where TTenant : TenantAggregate<TTenantId>
     where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -1742,9 +1742,9 @@ public class RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSea
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
 ```
 
-The tenant's roles: making them, renaming them, changing their permissions and archiving them, and reading them. Your code takes it as `RoleManager`, a class the generator writes, closed over your classes and ids, and the container makes per scope.
+The tenant's roles: making them, renaming them, changing their permissions and archiving them, and reading them. Your code takes it as `RoleService`, a class the generator writes, closed over your classes and ids, and the container makes per scope.
 
-Each change of a role takes the role, or its id. Both check the same: the manager loads the role itself and asks the caller's rights over what it loaded, never over the state of a role it was handed. Each returns the role as it changed it, the one the unit of work keeps.
+Each change of a role takes the role, or its id. Both check the same: the service loads the role itself and asks the caller's rights over what it loaded, never over the state of a role it was handed. Each returns the role as it changed it, the one the unit of work keeps.
 
 Each change needs [`TenancyPermissions.RolesManage`](catalogue.md#tenancypermissions) for the whole tenant. Following the starter roles the roles were made from, once the application changed them, is system work's alone ([`FollowStarterRolesAsync`](#followstarterrolesasynccancellationtoken)). A holder of that permission may put any live permission into any role, permissions it does not hold included. That is on purpose: it is the administrator's permission, and an administrator can give themselves anything already. One exception: an administrator alone, holding it at the root with no end, changes which permissions that manage access a role holds, by adding one, taking one out or archiving a role that holds one. A role that gains one gives it to every seat that holds the role, seats that gave themselves the role included, and a role that loses one takes it from every holder at once, so someone holding the permission for a week neither gives lasting power over access that way nor takes away what it could not revoke grant by grant. A change of a role's permissions reaches every seat that holds the role at the next save. Whether a change leaves the tenant an administrator is decided before the role changes, so a refused command leaves nothing for a later save to write.
 
@@ -1755,7 +1755,7 @@ The reads answer roles as the application's own class, whole, and read the roles
 | Member | Summary |
 |---|---|
 | `MostIds = 200` | How many ids one question by id takes. |
-| [`RoleManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`](#rolemanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider) | The primary constructor: the type's summary says what it makes. |
+| [`RoleService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`](#roleserviceitenancyrepositoriesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tenancycatalogue-timeprovider) | The primary constructor: the type's summary says what it makes. |
 | [`CreateAsync(string, string, IReadOnlyCollection<string>, CancellationToken, TRoleId?)`](#createasyncstring-string-ireadonlycollectionstring-cancellationtoken-troleid) | Makes a role by hand; it comes from no starter role. |
 | [`RenameAsync(TRoleId, string, string, CancellationToken)`](#renameasynctroleid-string-string-cancellationtoken) | Renames a role and describes it again. |
 | [`RenameAsync(TRole, string, string, CancellationToken)`](#renameasynctrole-string-string-cancellationtoken) | Renames a role and describes it again, as [`RenameAsync`](#renameasynctroleid-string-string-cancellationtoken) does with its id. |
@@ -1768,11 +1768,11 @@ The reads answer roles as the application's own class, whole, and read the roles
 | [`ByIdAsync(IReadOnlyCollection<TRoleId>, CancellationToken)`](#byidasyncireadonlycollectiontroleid-cancellationtoken) | The roles among `ids` that are the caller's tenant's, the application's own class, the active ones first, each by name. |
 | [`ManagesAccess(TRole)`](#managesaccesstrole) | Whether a role manages access: whether the catalogue marks one of its live permissions as managing access, which an archived role never does. |
 
-#### `RoleManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`
+#### `RoleService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, TenancyCatalogue, TimeProvider)`
 
 ```csharp
-public RoleManager(
-    ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> store,
+public RoleService(
+    ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> repositories,
     TenancyCatalogue catalogue,
     TimeProvider clock)
 ```
@@ -1781,7 +1781,7 @@ The primary constructor: the type's summary says what it makes.
 
 **Parameters**
 
-- `store`: Where roles are loaded and saved.
+- `repositories`: Where roles are loaded and saved.
 - `catalogue`: The permissions a role may hold.
 - `clock`: What "now" is.
 
@@ -2057,7 +2057,7 @@ The roles among `ids` that are the caller's tenant's, the application's own clas
 
 **Parameters**
 
-- `ids`: The roles asked about, at most [`MostIds`](#rolemanagerttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid) different ones.
+- `ids`: The roles asked about, at most [`MostIds`](#roleservicettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid) different ones.
 - `cancellationToken`: Cancels the read.
 
 **Returns**: The roles found.
@@ -2102,13 +2102,13 @@ A role list that marks the roles only some seats may give:
 var list = (await roles.ListAsync(cancellationToken)).Select(role => new { role.Id, role.Name, Restricted = roles.ManagesAccess(role) });
 ```
 
-### `RoleManager.StarterRolesFollowed`
+### `RoleService.StarterRolesFollowed`
 
 ```csharp
 public sealed record StarterRolesFollowed
 ```
 
-What following the starter roles did in one tenant ([`RoleManager.FollowStarterRolesAsync`](#followstarterrolesasynccancellationtoken)). A role that follows its starter role already, one made by hand and one that is archived are in none of the lists.
+What following the starter roles did in one tenant ([`RoleService.FollowStarterRolesAsync`](#followstarterrolesasynccancellationtoken)). A role that follows its starter role already, one made by hand and one that is archived are in none of the lists.
 
 | Member | Summary |
 |---|---|
@@ -2136,12 +2136,12 @@ The primary constructor: the type's summary says what it makes.
 
 ## Invitations
 
-Namespace `DTS.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Services`.
 
-### `InvitationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>`
+### `InvitationService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>`
 
 ```csharp
-public class InvitationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>
+public class InvitationService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>
     where TTenant : TenantAggregate<TTenantId>
     where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -2155,7 +2155,7 @@ public class InvitationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId
     where TInvitationId : struct, ICreatableEntityId<TInvitationId>, IEquatable<TInvitationId>
 ```
 
-Invitations into a tenant: issuing one for an address, listing the open ones, cancelling one, and accepting one, which is what makes the seat. Your code takes it as `InvitationManager`, a class the generator writes, closed over your classes and ids, in a project that declares an invitation class; the container makes it per scope.
+Invitations into a tenant: issuing one for an address, listing the open ones, cancelling one, and accepting one, which is what makes the seat. Your code takes it as `InvitationService`, a class the generator writes, closed over your classes and ids, in a project that declares an invitation class; the container makes it per scope.
 
 An invitation offers what adding a seat, placing it and granting it a role would give, so issuing one takes what those take: [`TenancyPermissions.SeatsInvite`](catalogue.md#tenancypermissions) for the whole tenant, as adding a seat does ([`TenancyPermissions.SeatsManage`](catalogue.md#tenancypermissions) implies it), and [`TenancyPermissions.GrantsManage`](catalogue.md#tenancypermissions) at the unit, with the rule for giving a role there. A role that manages no access is offered freely, and may outlast the issuer's own grants. A role that manages access is offered only by a seat that holds each of its permissions that do at the unit, until at least the end of the grant, unless the application turns containment off ([`ApplicationCatalogue.ContainAccessManagingPermissions`](catalogue.md#containaccessmanagingpermissions)), and then as freely as any other. Nobody invites themself into one: an identity that has a seat in the tenant cannot accept.
 
@@ -2163,11 +2163,11 @@ A person from outside the organization is invited with [`IssueOutsideAsync`](#is
 
 An invitation never gives more than its issuer could give at the moment it is used. Accepting asks the issuer's rights again, as they are then, with the role as it is then, and an invitation whose issuer has lost them is refused with one answer that says nothing of which. System work is not held to a seat, and neither is an invitation it issued.
 
-The token is returned once, by [`IssueAsync`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid-string), and kept nowhere: the store holds its digest. It is in no event, no refusal and no log of the package. Sending it to the address is the application's to do.
+The token is returned once, by [`IssueAsync`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid-string), and kept nowhere: the repositories hold its digest. It is in no event, no refusal and no log of the package. Sending it to the address is the application's to do.
 
 | Member | Summary |
 |---|---|
-| [`InvitationManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>, TenancyCatalogue, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyInvitationOptions<TInvitationId>, ICurrentUser, TimeProvider)`](#invitationmanageritenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-iinvitationstoretinvitation-tinvitationid-ttenantid-tunitid-troleid-tseatid-tenancycatalogue-tenancyoptionsttenantid-tseatid-tunitid-troleid-tenancyinvitationoptionstinvitationid-icurrentuser-timeprovider) | The primary constructor: the type's summary says what it makes. |
+| [`InvitationService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, IInvitationRepository<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>, TenancyCatalogue, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyInvitationOptions<TInvitationId>, ICurrentUser, TimeProvider)`](#invitationserviceitenancyrepositoriesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-iinvitationrepositorytinvitation-tinvitationid-ttenantid-tunitid-troleid-tseatid-tenancycatalogue-tenancyoptionsttenantid-tseatid-tunitid-troleid-tenancyinvitationoptionstinvitationid-icurrentuser-timeprovider) | The primary constructor: the type's summary says what it makes. |
 | [`IssueAsync(string, TUnitId, TRoleId, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?, string?)`](#issueasyncstring-tunitid-troleid-datetimeoffset-timespan-cancellationtoken-tinvitationid-string) | Issues an invitation for an address: a seat placed in `unit` as its primary placement, with `role` there until `grantUntil`, for whoever accepts it with the token this returns. |
 | [`IssueOutsideAsync(string, string, TUnitId, TimeSpan?, CancellationToken, TInvitationId?, Action<TInvitation>?)`](#issueoutsideasyncstring-string-tunitid-timespan-cancellationtoken-tinvitationid-actiontinvitation) | Issues an invitation for an address to a person from outside the organization: a seat of `kind`, placed nowhere and with no organization role, for whoever accepts it with the token this returns. |
 | [`IssueOutsideAsync(string, string, TUnit, TimeSpan?, CancellationToken, TInvitationId?, Action<TInvitation>?)`](#issueoutsideasyncstring-string-tunit-timespan-cancellationtoken-tinvitationid-actiontinvitation) | Issues an invitation to a person from outside the organization, as [`IssueOutsideAsync`](#issueoutsideasyncstring-string-tunitid-timespan-cancellationtoken-tinvitationid-actiontinvitation) does with the unit's id. |
@@ -2177,12 +2177,12 @@ The token is returned once, by [`IssueAsync`](#issueasyncstring-tunitid-troleid-
 | [`AcceptAsync(string, string?, CancellationToken, TSeatId?, Action<TSeat>?)`](#acceptasyncstring-string-cancellationtoken-tseatid-actiontseat) | Accepts the invitation `token` is for, as the signed-in identity that is calling: in one save it makes that identity's seat of the invitation's kind in the invitation's tenant, places it in the invitation's unit as its primary placement, grants it the invitation's role there, and marks the invitation as accepted. |
 | [`ListOpenAsync(CancellationToken)`](#listopenasynccancellationtoken) | The tenant's invitations that can still be accepted, the soonest to end first, the application's own class: for a seat, those into the units where it holds [`TenancyPermissions.SeatsInvite`](catalogue.md#tenancypermissions), which may be none, the invitations from outside the organization at the units where it holds [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions), and those from outside it issued itself; for system work in the tenant, all of them. |
 
-#### `InvitationManager(ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>, TenancyCatalogue, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyInvitationOptions<TInvitationId>, ICurrentUser, TimeProvider)`
+#### `InvitationService(ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>, IInvitationRepository<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>, TenancyCatalogue, TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyInvitationOptions<TInvitationId>, ICurrentUser, TimeProvider)`
 
 ```csharp
-public InvitationManager(
-    ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> store,
-    IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId> invitations,
+public InvitationService(
+    ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> repositories,
+    IInvitationRepository<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId> invitations,
     TenancyCatalogue catalogue,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
     TenancyInvitationOptions<TInvitationId> invitationOptions,
@@ -2194,7 +2194,7 @@ The primary constructor: the type's summary says what it makes.
 
 **Parameters**
 
-- `store`: Where seats, roles and the rest are loaded, and where the unit of work is saved.
+- `repositories`: Where seats, roles and the rest are loaded, and where the unit of work is saved.
 - `invitations`: Where invitations are loaded and kept, in that unit of work.
 - `catalogue`: The permissions asked for, and which roles manage access.
 - `options`: Which signed-in users may hold a seat: whom an acceptance seats.
@@ -2265,7 +2265,7 @@ Issues an invitation for an address to a person from outside the organization: a
 - `lifetime`: How long the invitation stays open, within [`TenancyInvitationOptions.MinLifetime`](#tenancyinvitationoptionstinvitationid) and [`TenancyInvitationOptions.MaxLifetime`](#tenancyinvitationoptionstinvitationid), or `null` for [`TenancyInvitationOptions.DefaultLifetime`](#tenancyinvitationoptionstinvitationid).
 - `cancellationToken`: Cancels the work.
 - `id`: Its id, for imports and seeding; a new one otherwise.
-- `configure`: Sets the fields the application added to its invitation class, such as the project the person is invited to, on the new invitation before it is handed to the store, so they are saved in the same transaction. When it throws, nothing is issued.
+- `configure`: Sets the fields the application added to its invitation class, such as the project the person is invited to, on the new invitation before it is handed to the repositories, so they are saved in the same transaction. When it throws, nothing is issued.
 
 **Returns**: The new invitation, and its token, which is shown this once.
 
@@ -2305,7 +2305,7 @@ Issues an invitation to a person from outside the organization, as [`IssueOutsid
 - `lifetime`: How long the invitation stays open, within [`TenancyInvitationOptions.MinLifetime`](#tenancyinvitationoptionstinvitationid) and [`TenancyInvitationOptions.MaxLifetime`](#tenancyinvitationoptionstinvitationid), or `null` for [`TenancyInvitationOptions.DefaultLifetime`](#tenancyinvitationoptionstinvitationid).
 - `cancellationToken`: Cancels the work.
 - `id`: Its id, for imports and seeding; a new one otherwise.
-- `configure`: Sets the fields the application added to its invitation class, such as the project the person is invited to, on the new invitation before it is handed to the store, so they are saved in the same transaction. When it throws, nothing is issued.
+- `configure`: Sets the fields the application added to its invitation class, such as the project the person is invited to, on the new invitation before it is handed to the repositories, so they are saved in the same transaction. When it throws, nothing is issued.
 
 **Returns**: The new invitation, and its token, which is shown this once.
 
@@ -2438,7 +2438,7 @@ Accepting again as the same identity answers the same seat. Two acceptances at t
 - `verifiedAddress`: The address the application knows the calling identity to have, verified by its identity provider, or `null` when the application does not hold an invitation to its address. Given, it only narrows: an invitation for another address is refused. It never finds an invitation or a person.
 - `cancellationToken`: Cancels the work.
 - `seat`: The new seat's id, for imports and seeding; a new one otherwise.
-- `configure`: Sets the fields the application added to its seat class, such as the name it is shown by, on the new seat once the invitation is found to hold, and the seat is placed and holds the role, and before the invitation is marked as accepted and the seat is handed to the store: so they are saved in the same transaction, and the class's own rules judge them there. When it throws, nothing is accepted: no seat is saved, by this call or by a later save in the same scope, and the invitation stays open. It is not run for an invitation the same identity accepted before, which answers the seat it made then.
+- `configure`: Sets the fields the application added to its seat class, such as the name it is shown by, on the new seat once the invitation is found to hold, and the seat is placed and holds the role, and before the invitation is marked as accepted and the seat is handed to the repositories: so they are saved in the same transaction, and the class's own rules judge them there. When it throws, nothing is accepted: no seat is saved, by this call or by a later save in the same scope, and the invitation stays open. It is not run for an invitation the same identity accepted before, which answers the seat it made then.
 
 **Returns**: The tenant, whose slug the next request selects it by, and the seat the caller now has in it.
 
@@ -2462,7 +2462,7 @@ var accepted = await invitations.AcceptAsync(command.Token, verifiedAddress: nul
 public Task<IReadOnlyList<TInvitation>> ListOpenAsync(CancellationToken cancellationToken)
 ```
 
-The tenant's invitations that can still be accepted, the soonest to end first, the application's own class: for a seat, those into the units where it holds [`TenancyPermissions.SeatsInvite`](catalogue.md#tenancypermissions), which may be none, the invitations from outside the organization at the units where it holds [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions), and those from outside it issued itself; for system work in the tenant, all of them. They are read for the answer, and tracked by nobody. An invitation holds no token: the store keeps its digest apart.
+The tenant's invitations that can still be accepted, the soonest to end first, the application's own class: for a seat, those into the units where it holds [`TenancyPermissions.SeatsInvite`](catalogue.md#tenancypermissions), which may be none, the invitations from outside the organization at the units where it holds [`TenancyPermissions.ExternalsInvite`](catalogue.md#tenancypermissions), and those from outside it issued itself; for system work in the tenant, all of them. They are read for the answer, and tracked by nobody. An invitation holds no token: the repositories keep its digest apart.
 
 **Parameters**
 
@@ -2481,7 +2481,7 @@ The tenant's invitations that can still be accepted, the soonest to end first, t
 var open = await invitations.ListOpenAsync(cancellationToken);
 ```
 
-### `InvitationManager.AcceptedInvitation`
+### `InvitationService.AcceptedInvitation`
 
 ```csharp
 public sealed record AcceptedInvitation
@@ -2508,7 +2508,7 @@ The primary constructor: the type's summary says what it makes.
 - `Tenant`: The tenant they now have a seat in, whose slug the next request selects it by.
 - `Seat`: Their seat, the application's own class.
 
-### `InvitationManager.IssuedInvitation`
+### `InvitationService.IssuedInvitation`
 
 ```csharp
 public sealed record IssuedInvitation
@@ -2544,16 +2544,16 @@ public override string ToString()
 
 Says which invitation and not its token: a record prints its members, and this one must not end up in a log.
 
-## Stores
+## Repositories
 
-Where the managers load and save. A storage package implements these interfaces and registers them: `DTS.Tenancy.EntityFramework` does, in `AddTenancy` and `AddTenancyInvitations`. Your code takes the managers. A command of yours that changes a field of your own on one of the aggregates takes a store by the name the generator gives it, `TenancyStore` or, where you declare an invitation class, `InvitationStore`. Each name is an alias closed over your classes.
+Where the services load and save: a repository per aggregate, `ITenancyRepositories` with all four and the reads, and `ITenancyUnitOfWork`, whose `SaveAsync` writes what the command changed. A storage package implements these interfaces and registers them: `DTS.Tenancy.EntityFramework` does, in `AddTenancy` and `AddTenancyInvitations`. Your code takes the services. A command of yours that changes a field of your own on one of the aggregates takes a repository by the name the generator gives it, such as `SeatRepository`, `TenancyRepositories` or, where you declare an invitation class, `InvitationRepository`. Each name is an alias closed over your classes.
 
-Namespace `DTS.Tenancy.Managers`.
+Namespace `DTS.Tenancy.Services`.
 
-### `ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+### `ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
 ```csharp
-public interface ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public interface ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> : ITenancyUnitOfWork<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
     where TTenant : TenantAggregate<TTenantId>
     where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -2565,43 +2565,50 @@ public interface ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
 ```
 
-Where the managers load and save: one unit of work per command. The storage package implements it, closed over the application's classes and ids, and registers it with `AddTenancy`.
+The repositories of Tenancy together, with the reads of the access questions and the unit of work: what the services and their gate load and save through, one per command. The storage package implements it, closed over the application's classes and ids, and registers it and each repository with `AddTenancy`.
 
-Every lookup keeps to the current caller's tenant, as the storage's tenant filter does: a seat or a role of another tenant is simply not found. Two lookups go across tenants: [`SlugTakenAsync`](#slugtakenasyncstring-cancellationtoken), which says no more than yes or no, and [`ListTenantsAsync`](#listtenantsasyncstring-int-cancellationtoken), which is an operator's and reads what the operator may read.
+Every lookup keeps to the current caller's tenant, as the storage's tenant filter does: a seat or a role of another tenant is not found. Two lookups go across tenants: `Tenants.SlugTakenAsync`, which answers yes or no, and `Tenants.ListAsync`, which is an operator's and reads what the operator may read.
 
-The project that declares the application's classes, and every project above it that sees them, names it `TenancyStore`, a global alias the toolkit's generator writes, closed over those classes. A command of the application's that changes a field of its own on one of Tenancy's aggregates loads and saves it there, in the unit of work the managers save through.
+The project that declares the application's classes, and every project above it that sees them, names it `TenancyRepositories`, and each repository by its own name, such as `SeatRepository`: global aliases the toolkit's generator writes, closed over those classes. A command of the application's that changes a field of its own on one of Tenancy's aggregates loads it from its repository and saves it with `SaveAsync`.
 
 | Member | Summary |
 |---|---|
+| `ITenantRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> Tenants { get; }` | The tenants. |
+| `IOrganizationRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> Organizations { get; }` | The organizations and their units. |
+| `ISeatRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> Seats { get; }` | The seats. |
+| `IRoleRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> Roles { get; }` | The roles. |
 | `ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> Reads { get; }` | The rows the access questions read, as last saved. |
-| `IQueryExecutor Queries { get; }` | Runs queries over [`Reads`](#itenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid). |
-| [`FindTenantAsync(TTenantId, CancellationToken)`](#findtenantasyncttenantid-cancellationtoken) | The tenant, or `null` when it is not the current caller's. |
-| [`SlugTakenAsync(string, CancellationToken)`](#slugtakenasyncstring-cancellationtoken) | Whether any tenant, the caller's or not, has the slug. |
-| [`ListTenantsAsync(string?, int, CancellationToken)`](#listtenantsasyncstring-int-cancellationtoken) | The tenants there are, past the tenant filter, in the order of their slugs: those whose slug comes after `afterSlug`, at most `take` of them, each with its organization's name and the number of its active seats. |
-| [`FindOrganizationAsync(TTenantId, CancellationToken)`](#findorganizationasyncttenantid-cancellationtoken) | The tenant's organization with all its units, or `null` when it is not the current caller's. |
-| [`ReadOrganizationAsync(TTenantId, CancellationToken)`](#readorganizationasyncttenantid-cancellationtoken) | The tenant's organization with all its units, for the managers' reads to answer, or `null` when it is not the current caller's. |
-| [`FindSeatAsync(TSeatId, CancellationToken)`](#findseatasynctseatid-cancellationtoken) | The seat, or `null` when it is not in the current caller's tenant. |
-| [`ListSeatsAsync(TTenantId, IReadOnlyCollection<TSeatId>?, bool, CancellationToken)`](#listseatsasyncttenantid-ireadonlycollectiontseatid-bool-cancellationtoken) | The tenant's seats, for the managers' reads to answer: all of them, or those among `only`; an id that is no seat of the tenant is simply not among the answer. |
-| [`IdentityHasSeatAsync(TTenantId, Guid, CancellationToken)`](#identityhasseatasyncttenantid-guid-cancellationtoken) | Whether the identity already has a seat in the tenant. |
-| [`FindRoleAsync(TRoleId, CancellationToken)`](#findroleasynctroleid-cancellationtoken) | The role, or `null` when it is not in the current caller's tenant. |
-| [`ListRolesAsync(TTenantId, CancellationToken)`](#listrolesasyncttenantid-cancellationtoken) | Every role of the tenant, archived ones included. |
-| [`RoleNameTakenAsync(TTenantId, string, TRoleId?, CancellationToken)`](#rolenametakenasyncttenantid-string-troleid-cancellationtoken) | Whether another role of the tenant than `except` has the name, ignoring case. |
-| [`AdministratorsAsync(TTenantId, DateTimeOffset, CancellationToken)`](#administratorsasyncttenantid-datetimeoffset-cancellationtoken) | The tenant's administrators as last saved, as (seat, role) pairs: a right at the root for `tenancy.roles.manage`, with no end, applying at `now`. |
-| [`RightsAMoveChangesAsync(TTenantId, TSeatId, TUnitId, TUnitId, IReadOnlyCollection<string>, DateTimeOffset, CancellationToken)`](#rightsamovechangesasyncttenantid-tseatid-tunitid-tunitid-ireadonlycollectionstring-datetimeoffset-cancellationtoken) | Every right that has not ended at `now`, one still to start included, held at a unit at or above `parent` or `newParent`, of `seat` or of a permission in `managing`, once for each of the two it reaches. |
-| [`UnitsNamedAsync(TTenantId, IReadOnlyCollection<TUnitId>, CancellationToken)`](#unitsnamedasyncttenantid-ireadonlycollectiontunitid-cancellationtoken) | The units among `ids` that are `tenant`'s, by name and path and nothing more, whatever the calling seat reads of the organization: on a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the units, through Tenancy's function that runs as its owner and answers those ids alone. |
-| [`TenantNameAsync(TTenantId, CancellationToken)`](#tenantnameasyncttenantid-cancellationtoken) | What `tenant`, the calling seat's, is called, whatever the seat reads of its organization: on a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the organization, through Tenancy's function that runs as its owner and answers the tenants of the caller's identity, as the tenant picker reads them. |
-| [`Add(TTenant)`](#addttenant) | Adds a new tenant to the unit of work. |
-| [`Add(TOrganization)`](#addtorganization) | Adds a new organization to the unit of work. |
-| [`Add(TSeat)`](#addtseat) | Adds a new seat to the unit of work. |
-| [`Add(TRole)`](#addtrole) | Adds a new role to the unit of work. |
-| [`AddAccessRevision(TTenantId)`](#addaccessrevisionttenantid) | Adds a new tenant's access revision, which every later change of rights in it takes first. |
-| [`SerializeAccessChangesAsync(TTenantId, CancellationToken)`](#serializeaccesschangesasyncttenantid-cancellationtoken) | Takes the tenant's access revision for this unit of work: reads it and bumps it, so the save fails when another change of rights in the tenant was saved after it was read. |
-| [`SaveAsync(CancellationToken)`](#saveasynccancellationtoken) | Saves the unit of work, in one transaction. |
+| `IQueryExecutor Queries { get; }` | Runs queries over [`Reads`](#itenancyrepositoriesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid). |
 
-#### `FindTenantAsync(TTenantId, CancellationToken)`
+### `ITenantRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
 ```csharp
-Task<TTenant?> FindTenantAsync(TTenantId id, CancellationToken cancellationToken)
+public interface ITenantRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TTenant : TenantAggregate<TTenantId>
+    where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+    where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
+    where TUnit : OrganizationUnitEntity<TUnitId>
+    where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+    where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
+    where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+    where TRole : RoleAggregate<TRoleId, TTenantId>
+    where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+```
+
+The repository of tenants: finds, lists and adds them. The services save through [`ITenancyUnitOfWork<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#itenancyunitofworkttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid).
+
+| Member | Summary |
+|---|---|
+| [`FindAsync(TTenantId, CancellationToken)`](#findasyncttenantid-cancellationtoken) | The tenant, or `null` when it is not the current caller's. |
+| [`SlugTakenAsync(string, CancellationToken)`](#slugtakenasyncstring-cancellationtoken) | Whether any tenant, the caller's or not, has the slug. |
+| [`ListAsync(string?, int, CancellationToken)`](#listasyncstring-int-cancellationtoken-1) | The tenants there are, past the tenant filter, in the order of their slugs: those whose slug comes after `afterSlug`, at most `take` of them, each with its organization's name and the number of its active seats. |
+| [`NameAsync(TTenantId, CancellationToken)`](#nameasyncttenantid-cancellationtoken) | What `tenant`, the calling seat's, is called, whatever the seat reads of its organization: on a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the organization, through Tenancy's function that runs as its owner and answers the tenants of the caller's identity, as the tenant picker reads them. |
+| [`Add(TTenant)`](#addttenant) | Adds a new tenant to the unit of work. |
+
+#### `FindAsync(TTenantId, CancellationToken)`
+
+```csharp
+Task<TTenant?> FindAsync(TTenantId id, CancellationToken cancellationToken)
 ```
 
 The tenant, or `null` when it is not the current caller's.
@@ -2614,16 +2621,16 @@ Task<bool> SlugTakenAsync(string slug, CancellationToken cancellationToken)
 
 Whether any tenant, the caller's or not, has the slug.
 
-#### `ListTenantsAsync(string?, int, CancellationToken)`
+#### `ListAsync(string?, int, CancellationToken)`
 
 ```csharp
-Task<IReadOnlyList<TenantListing>> ListTenantsAsync(
+Task<IReadOnlyList<TenantListing>> ListAsync(
     string? afterSlug,
     int take,
     CancellationToken cancellationToken)
 ```
 
-The tenants there are, past the tenant filter, in the order of their slugs: those whose slug comes after `afterSlug`, at most `take` of them, each with its organization's name and the number of its active seats. What `TenantManager.ListAsync` shows an operator, and read as that operator: a storage that keeps tenants apart by itself answers what the caller may read there, which for anyone else is nothing, or their own tenant.
+The tenants there are, past the tenant filter, in the order of their slugs: those whose slug comes after `afterSlug`, at most `take` of them, each with its organization's name and the number of its active seats. What `TenantService.ListAsync` shows an operator, and read as that operator: a storage that keeps tenants apart by itself answers what the caller may read there, which for anyone else is nothing, or their own tenant.
 
 **Parameters**
 
@@ -2631,46 +2638,167 @@ The tenants there are, past the tenant filter, in the order of their slugs: thos
 - `take`: How many tenants to answer at most.
 - `cancellationToken`: Cancels the read.
 
-#### `FindOrganizationAsync(TTenantId, CancellationToken)`
+#### `NameAsync(TTenantId, CancellationToken)`
 
 ```csharp
-Task<TOrganization?> FindOrganizationAsync(TTenantId id, CancellationToken cancellationToken)
+Task<string?> NameAsync(TTenantId tenant, CancellationToken cancellationToken)
+```
+
+What `tenant`, the calling seat's, is called, whatever the seat reads of its organization: on a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the organization, through Tenancy's function that runs as its owner and answers the tenants of the caller's identity, as the tenant picker reads them. `null` from a storage that keeps no policies of its own, where the caller reads the organization, and for a tenant without a name.
+
+**Parameters**
+
+- `tenant`: The tenant, which is the calling seat's.
+- `cancellationToken`: Cancels the read.
+
+#### `Add(TTenant)`
+
+```csharp
+void Add(TTenant tenant)
+```
+
+Adds a new tenant to the unit of work.
+
+### `IOrganizationRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+
+```csharp
+public interface IOrganizationRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TTenant : TenantAggregate<TTenantId>
+    where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+    where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
+    where TUnit : OrganizationUnitEntity<TUnitId>
+    where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+    where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
+    where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+    where TRole : RoleAggregate<TRoleId, TTenantId>
+    where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+```
+
+The repository of organizations and their units.
+
+| Member | Summary |
+|---|---|
+| [`FindAsync(TTenantId, CancellationToken)`](#findasyncttenantid-cancellationtoken-1) | The tenant's organization with all its units, or `null` when it is not the current caller's. |
+| [`ReadAsync(TTenantId, CancellationToken)`](#readasyncttenantid-cancellationtoken) | The tenant's organization with all its units, for the services' reads to answer, or `null` when it is not the current caller's. |
+| [`UnitsNamedAsync(TTenantId, IReadOnlyCollection<TUnitId>, CancellationToken)`](#unitsnamedasyncttenantid-ireadonlycollectiontunitid-cancellationtoken) | The units among `ids` that are `tenant`'s, by name and path and nothing more, whatever the calling seat reads of the organization: on a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the units, through Tenancy's function that runs as its owner and answers those ids alone. |
+| [`RightsAMoveChangesAsync(TTenantId, TSeatId, TUnitId, TUnitId, IReadOnlyCollection<string>, DateTimeOffset, CancellationToken)`](#rightsamovechangesasyncttenantid-tseatid-tunitid-tunitid-ireadonlycollectionstring-datetimeoffset-cancellationtoken) | Every right that has not ended at `now`, one still to start included, held at a unit at or above `parent` or `newParent`, of `seat` or of a permission in `managing`, once for each of the two it reaches. |
+| [`Add(TOrganization)`](#addtorganization) | Adds a new organization to the unit of work. |
+
+#### `FindAsync(TTenantId, CancellationToken)`
+
+```csharp
+Task<TOrganization?> FindAsync(TTenantId id, CancellationToken cancellationToken)
 ```
 
 The tenant's organization with all its units, or `null` when it is not the current caller's.
 
-#### `ReadOrganizationAsync(TTenantId, CancellationToken)`
+#### `ReadAsync(TTenantId, CancellationToken)`
 
 ```csharp
-Task<TOrganization?> ReadOrganizationAsync(TTenantId id, CancellationToken cancellationToken)
+Task<TOrganization?> ReadAsync(TTenantId id, CancellationToken cancellationToken)
 ```
 
-The tenant's organization with all its units, for the managers' reads to answer, or `null` when it is not the current caller's. Read as the application's own classes, with every field it added to its unit class, since the reads hand the units to the application; and read only, never for a save, as [`ListSeatsAsync`](#listseatsasyncttenantid-ireadonlycollectiontseatid-bool-cancellationtoken) reads seats: a change made to a unit is not written, by this unit of work or another.
+The tenant's organization with all its units, for the services' reads to answer, or `null` when it is not the current caller's. Read as the application's own classes, with every field it added to its unit class, since the reads hand the units to the application; and read only, never for a save, as `Seats.ListAsync` reads seats: a change made to a unit is not written, by this unit of work or another.
 
 **Parameters**
 
 - `id`: The tenant, which is the current caller's.
 - `cancellationToken`: Cancels the read.
 
-#### `FindSeatAsync(TSeatId, CancellationToken)`
+#### `UnitsNamedAsync(TTenantId, IReadOnlyCollection<TUnitId>, CancellationToken)`
 
 ```csharp
-Task<TSeat?> FindSeatAsync(TSeatId id, CancellationToken cancellationToken)
+Task<IReadOnlyList<NamedUnit<TUnitId>>?> UnitsNamedAsync(
+    TTenantId tenant,
+    IReadOnlyCollection<TUnitId> ids,
+    CancellationToken cancellationToken)
+```
+
+The units among `ids` that are `tenant`'s, by name and path and nothing more, whatever the calling seat reads of the organization: on a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the units, through Tenancy's function that runs as its owner and answers those ids alone. `null` from a storage that keeps no policies of its own, where the caller reads every unit of its tenant, so the service reads them whole.
+
+**Parameters**
+
+- `tenant`: The tenant, which is the calling seat's.
+- `ids`: The units asked about, at least one.
+- `cancellationToken`: Cancels the read.
+
+#### `RightsAMoveChangesAsync(TTenantId, TSeatId, TUnitId, TUnitId, IReadOnlyCollection<string>, DateTimeOffset, CancellationToken)`
+
+```csharp
+Task<IReadOnlyList<MoveReach<TUnitId>>> RightsAMoveChangesAsync(
+    TTenantId tenant,
+    TSeatId seat,
+    TUnitId parent,
+    TUnitId newParent,
+    IReadOnlyCollection<string> managing,
+    DateTimeOffset now,
+    CancellationToken cancellationToken)
+```
+
+Every right that has not ended at `now`, one still to start included, held at a unit at or above `parent` or `newParent`, of `seat` or of a permission in `managing`, once for each of the two it reaches. What the check of a move reads. Another seat's right is answered only where it reaches one of the two and not the other, which is a right the move changes: one that reaches both reaches the unit wherever it hangs, so the check never weighs it, and a seat that manages only part of the tree learns nothing of the rights above that part that stay. Like `Seats.AdministratorsAsync`, it is about every seat's rights, and the storage answers it whole. The service asks once it has found `seat` to hold `tenancy.units.manage` at both parents, so the seat's own rights for that permission are always among the rows: a storage that cannot tell so much has no answer, and fails rather than answer with less, which would read as a move that changes nothing.
+
+**Parameters**
+
+- `tenant`: The tenant, which is the current caller's.
+- `seat`: The seat that moves the unit, whose own rights count whatever their permission.
+- `parent`: The unit the moved unit hangs under.
+- `newParent`: The unit it would hang under.
+- `managing`: The permissions that manage access, whose rights count whoever holds them.
+- `now`: The moment a right must not have ended at.
+- `cancellationToken`: Cancels the read.
+
+#### `Add(TOrganization)`
+
+```csharp
+void Add(TOrganization organization)
+```
+
+Adds a new organization to the unit of work.
+
+### `ISeatRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+
+```csharp
+public interface ISeatRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TTenant : TenantAggregate<TTenantId>
+    where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+    where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
+    where TUnit : OrganizationUnitEntity<TUnitId>
+    where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+    where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
+    where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+    where TRole : RoleAggregate<TRoleId, TTenantId>
+    where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+```
+
+The repository of seats, with their placements and grants.
+
+| Member | Summary |
+|---|---|
+| [`FindAsync(TSeatId, CancellationToken)`](#findasynctseatid-cancellationtoken) | The seat, or `null` when it is not in the current caller's tenant. |
+| [`ListAsync(TTenantId, IReadOnlyCollection<TSeatId>?, bool, CancellationToken)`](#listasyncttenantid-ireadonlycollectiontseatid-bool-cancellationtoken) | The tenant's seats, for the services' reads to answer: all of them, or those among `only`; an id that is no seat of the tenant is simply not among the answer. |
+| [`IdentityHasSeatAsync(TTenantId, Guid, CancellationToken)`](#identityhasseatasyncttenantid-guid-cancellationtoken) | Whether the identity already has a seat in the tenant. |
+| [`AdministratorsAsync(TTenantId, DateTimeOffset, CancellationToken)`](#administratorsasyncttenantid-datetimeoffset-cancellationtoken) | The tenant's administrators as last saved, as (seat, role) pairs: a right at the root for `tenancy.roles.manage`, with no end, applying at `now`. |
+| [`Add(TSeat)`](#addtseat) | Adds a new seat to the unit of work. |
+
+#### `FindAsync(TSeatId, CancellationToken)`
+
+```csharp
+Task<TSeat?> FindAsync(TSeatId id, CancellationToken cancellationToken)
 ```
 
 The seat, or `null` when it is not in the current caller's tenant. A storage that keeps grants to the seats that may read them, as Tenancy's policies on Postgres do, loads it with the grants the caller may read: all of its own seat's, and another seat's at the units where the caller manages grants, seats or units, or every one when it manages roles for the whole tenant. Each command acts only on grants at a unit where it asked one of those permissions first, or for the whole tenant, so they are among them.
 
-#### `ListSeatsAsync(TTenantId, IReadOnlyCollection<TSeatId>?, bool, CancellationToken)`
+#### `ListAsync(TTenantId, IReadOnlyCollection<TSeatId>?, bool, CancellationToken)`
 
 ```csharp
-Task<IReadOnlyList<TSeat>> ListSeatsAsync(
+Task<IReadOnlyList<TSeat>> ListAsync(
     TTenantId tenant,
     IReadOnlyCollection<TSeatId>? only,
     bool withPlacements,
     CancellationToken cancellationToken)
 ```
 
-The tenant's seats, for the managers' reads to answer: all of them, or those among `only`; an id that is no seat of the tenant is simply not among the answer. Read as the application's own seats, with every field it added, since the reads hand them to the application whole; and read only, never for a save: a change made to one is not written, by this unit of work or another. A storage that keeps grants to the seats that may read them loads each seat's grants as [`FindSeatAsync`](#findseatasynctseatid-cancellationtoken) does.
+The tenant's seats, for the services' reads to answer: all of them, or those among `only`; an id that is no seat of the tenant is simply not among the answer. Read as the application's own seats, with every field it added, since the reads hand them to the application whole; and read only, never for a save: a change made to one is not written, by this unit of work or another. A storage that keeps grants to the seats that may read them loads each seat's grants as [`FindAsync`](#findasynctseatid-cancellationtoken) does.
 
 **Parameters**
 
@@ -2690,34 +2818,6 @@ Task<bool> IdentityHasSeatAsync(
 
 Whether the identity already has a seat in the tenant.
 
-#### `FindRoleAsync(TRoleId, CancellationToken)`
-
-```csharp
-Task<TRole?> FindRoleAsync(TRoleId id, CancellationToken cancellationToken)
-```
-
-The role, or `null` when it is not in the current caller's tenant.
-
-#### `ListRolesAsync(TTenantId, CancellationToken)`
-
-```csharp
-Task<IReadOnlyList<TRole>> ListRolesAsync(TTenantId tenant, CancellationToken cancellationToken)
-```
-
-Every role of the tenant, archived ones included.
-
-#### `RoleNameTakenAsync(TTenantId, string, TRoleId?, CancellationToken)`
-
-```csharp
-Task<bool> RoleNameTakenAsync(
-    TTenantId tenant,
-    string name,
-    TRoleId? except,
-    CancellationToken cancellationToken)
-```
-
-Whether another role of the tenant than `except` has the name, ignoring case.
-
 #### `AdministratorsAsync(TTenantId, DateTimeOffset, CancellationToken)`
 
 ```csharp
@@ -2727,84 +2827,13 @@ Task<IReadOnlyList<(TSeatId Seat, TRoleId Role)>> AdministratorsAsync(
     CancellationToken cancellationToken)
 ```
 
-The tenant's administrators as last saved, as (seat, role) pairs: a right at the root for `tenancy.roles.manage`, with no end, applying at `now`. What the rule that a tenant keeps an administrator reads. It is about every seat's rights, which a storage may keep from a seat that reads [`Reads`](#itenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid): the storage answers it from wherever it can, as far as the caller may read the grants at the root. That is whole for every command that asks: each one that could take an administrator away asks a permission at the root first, and one that acts below the root does not ask.
+The tenant's administrators as last saved, as (seat, role) pairs: a right at the root for `tenancy.roles.manage`, with no end, applying at `now`. What the rule that a tenant keeps an administrator reads. It is about every seat's rights, which a storage may keep from a seat that reads `ITenancyRepositories.Reads`: the storage answers it from wherever it can, as far as the caller may read the grants at the root. That is whole for every command that asks: each one that could take an administrator away asks a permission at the root first, and one that acts below the root does not ask.
 
 **Parameters**
 
 - `tenant`: The tenant, which is the current caller's.
 - `now`: The moment a right must apply at.
 - `cancellationToken`: Cancels the read.
-
-#### `RightsAMoveChangesAsync(TTenantId, TSeatId, TUnitId, TUnitId, IReadOnlyCollection<string>, DateTimeOffset, CancellationToken)`
-
-```csharp
-Task<IReadOnlyList<MoveReach<TUnitId>>> RightsAMoveChangesAsync(
-    TTenantId tenant,
-    TSeatId seat,
-    TUnitId parent,
-    TUnitId newParent,
-    IReadOnlyCollection<string> managing,
-    DateTimeOffset now,
-    CancellationToken cancellationToken)
-```
-
-Every right that has not ended at `now`, one still to start included, held at a unit at or above `parent` or `newParent`, of `seat` or of a permission in `managing`, once for each of the two it reaches. What the check of a move reads. Another seat's right is answered only where it reaches one of the two and not the other, which is a right the move changes: one that reaches both reaches the unit wherever it hangs, so the check never weighs it, and a seat that manages only part of the tree learns nothing of the rights above that part that stay. Like [`AdministratorsAsync`](#administratorsasyncttenantid-datetimeoffset-cancellationtoken), it is about every seat's rights, and the storage answers it whole. The manager asks once it has found `seat` to hold `tenancy.units.manage` at both parents, so the seat's own rights for that permission are always among the rows: a storage that cannot tell so much has no answer, and fails rather than answer with less, which would read as a move that changes nothing.
-
-**Parameters**
-
-- `tenant`: The tenant, which is the current caller's.
-- `seat`: The seat that moves the unit, whose own rights count whatever their permission.
-- `parent`: The unit the moved unit hangs under.
-- `newParent`: The unit it would hang under.
-- `managing`: The permissions that manage access, whose rights count whoever holds them.
-- `now`: The moment a right must not have ended at.
-- `cancellationToken`: Cancels the read.
-
-#### `UnitsNamedAsync(TTenantId, IReadOnlyCollection<TUnitId>, CancellationToken)`
-
-```csharp
-Task<IReadOnlyList<NamedUnit<TUnitId>>?> UnitsNamedAsync(
-    TTenantId tenant,
-    IReadOnlyCollection<TUnitId> ids,
-    CancellationToken cancellationToken)
-```
-
-The units among `ids` that are `tenant`'s, by name and path and nothing more, whatever the calling seat reads of the organization: on a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the units, through Tenancy's function that runs as its owner and answers those ids alone. `null` from a storage that keeps no policies of its own, where the caller reads every unit of its tenant, so the manager reads them whole.
-
-**Parameters**
-
-- `tenant`: The tenant, which is the calling seat's.
-- `ids`: The units asked about, at least one.
-- `cancellationToken`: Cancels the read.
-
-#### `TenantNameAsync(TTenantId, CancellationToken)`
-
-```csharp
-Task<string?> TenantNameAsync(TTenantId tenant, CancellationToken cancellationToken)
-```
-
-What `tenant`, the calling seat's, is called, whatever the seat reads of its organization: on a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the organization, through Tenancy's function that runs as its owner and answers the tenants of the caller's identity, as the tenant picker reads them. `null` from a storage that keeps no policies of its own, where the caller reads the organization, and for a tenant without a name.
-
-**Parameters**
-
-- `tenant`: The tenant, which is the calling seat's.
-- `cancellationToken`: Cancels the read.
-
-#### `Add(TTenant)`
-
-```csharp
-void Add(TTenant tenant)
-```
-
-Adds a new tenant to the unit of work.
-
-#### `Add(TOrganization)`
-
-```csharp
-void Add(TOrganization organization)
-```
-
-Adds a new organization to the unit of work.
 
 #### `Add(TSeat)`
 
@@ -2814,6 +2843,58 @@ void Add(TSeat seat)
 
 Adds a new seat to the unit of work.
 
+### `IRoleRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+
+```csharp
+public interface IRoleRepository<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TTenant : TenantAggregate<TTenantId>
+    where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+    where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
+    where TUnit : OrganizationUnitEntity<TUnitId>
+    where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+    where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
+    where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+    where TRole : RoleAggregate<TRoleId, TTenantId>
+    where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+```
+
+The repository of roles.
+
+| Member | Summary |
+|---|---|
+| [`FindAsync(TRoleId, CancellationToken)`](#findasynctroleid-cancellationtoken) | The role, or `null` when it is not in the current caller's tenant. |
+| [`ListAsync(TTenantId, CancellationToken)`](#listasyncttenantid-cancellationtoken) | Every role of the tenant, archived ones included. |
+| [`NameTakenAsync(TTenantId, string, TRoleId?, CancellationToken)`](#nametakenasyncttenantid-string-troleid-cancellationtoken) | Whether another role of the tenant than `except` has the name, ignoring case. |
+| [`Add(TRole)`](#addtrole) | Adds a new role to the unit of work. |
+
+#### `FindAsync(TRoleId, CancellationToken)`
+
+```csharp
+Task<TRole?> FindAsync(TRoleId id, CancellationToken cancellationToken)
+```
+
+The role, or `null` when it is not in the current caller's tenant.
+
+#### `ListAsync(TTenantId, CancellationToken)`
+
+```csharp
+Task<IReadOnlyList<TRole>> ListAsync(TTenantId tenant, CancellationToken cancellationToken)
+```
+
+Every role of the tenant, archived ones included.
+
+#### `NameTakenAsync(TTenantId, string, TRoleId?, CancellationToken)`
+
+```csharp
+Task<bool> NameTakenAsync(
+    TTenantId tenant,
+    string name,
+    TRoleId? except,
+    CancellationToken cancellationToken)
+```
+
+Whether another role of the tenant than `except` has the name, ignoring case.
+
 #### `Add(TRole)`
 
 ```csharp
@@ -2821,6 +2902,29 @@ void Add(TRole role)
 ```
 
 Adds a new role to the unit of work.
+
+### `ITenancyUnitOfWork<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
+
+```csharp
+public interface ITenancyUnitOfWork<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TTenant : TenantAggregate<TTenantId>
+    where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+    where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
+    where TUnit : OrganizationUnitEntity<TUnitId>
+    where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+    where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
+    where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+    where TRole : RoleAggregate<TRoleId, TTenantId>
+    where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+```
+
+The unit of work of Tenancy: one per command. [`SaveAsync`](#saveasynccancellationtoken) writes everything the repositories added or loaded and changed, in one transaction, with the tenant's access revision when rights changed.
+
+| Member | Summary |
+|---|---|
+| [`AddAccessRevision(TTenantId)`](#addaccessrevisionttenantid) | Adds a new tenant's access revision, which every later change of rights in it takes first. |
+| [`SerializeAccessChangesAsync(TTenantId, CancellationToken)`](#serializeaccesschangesasyncttenantid-cancellationtoken) | Takes the tenant's access revision for this unit of work: reads it and bumps it, so the save fails when another change of rights in the tenant was saved after it was read. |
+| [`SaveAsync(CancellationToken)`](#saveasynccancellationtoken) | Saves the unit of work, in one transaction. |
 
 #### `AddAccessRevision(TTenantId)`
 
@@ -2846,10 +2950,10 @@ Task SaveAsync(CancellationToken cancellationToken)
 
 Saves the unit of work, in one transaction.
 
-### `IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>`
+### `IInvitationRepository<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>`
 
 ```csharp
-public interface IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
+public interface IInvitationRepository<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
     where TInvitation : InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
     where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
@@ -2858,11 +2962,11 @@ public interface IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Where the invitation manager loads and keeps invitations, in the unit of work of [`ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#itenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid): what is added or changed here is saved by that store's save, with everything else the command changed. The storage package implements it.
+Where the invitation service loads and keeps invitations, in the unit of work of [`ITenancyRepositories<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#itenancyrepositoriesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid): what is added or changed here is saved by the repositories' save, with everything else the command changed. The storage package implements it.
 
-A token's digest is handed over with its invitation and never comes back. The store keeps it where reading invitations does not read it, and answers one question about it: which invitation it belongs to.
+A token's digest is handed over with its invitation and never comes back. The repositories keep it where reading invitations does not read it, and answers one question about it: which invitation it belongs to.
 
-Where the application declares an invitation class, the project that declares it, and every project above that sees it, names this interface `InvitationStore`, a global alias the toolkit's generator writes, closed over the application's classes.
+Where the application declares an invitation class, the project that declares it, and every project above that sees it, names this interface `InvitationRepository`, a global alias the toolkit's generator writes, closed over the application's classes.
 
 **Type parameters**
 
@@ -3057,7 +3161,7 @@ The token roles whose users are operators of the application: staff who look acr
 options.OperatorTokenRoles.Add("operator");
 ```
 
-An operator holds no seat. Its token role is never one of [`TenantSelectionOptions.SeatedTokenRoles`](access.md#tenantselectionoptions), so tenant selection answers nobody for it whatever tenant the request names, keeping that tenant, and registration refuses a role that is on both lists. An operator reads: the tenants, through `TenantManager`, and on Postgres whatever the policies of its own database role let it read. It changes nothing as itself. A command marked [`OperatorAttribute`](access.md#operatorattribute) runs as operator work, which is system work that names it.
+An operator holds no seat. Its token role is never one of [`TenantSelectionOptions.SeatedTokenRoles`](access.md#tenantselectionoptions), so tenant selection answers nobody for it whatever tenant the request names, keeping that tenant, and registration refuses a role that is on both lists. An operator reads: the tenants, through `TenantService`, and on Postgres whatever the policies of its own database role let it read. It changes nothing as itself. A command marked [`OperatorAttribute`](access.md#operatorattribute) runs as operator work, which is system work that names it.
 
 #### `IsOperator(CurrentUserSnapshot?)`
 
@@ -3065,7 +3169,7 @@ An operator holds no seat. Its token role is never one of [`TenantSelectionOptio
 public bool IsOperator(CurrentUserSnapshot? user)
 ```
 
-Whether `user` is one of the application's operators: a signed-in user whose token carries one of [`OperatorTokenRoles`](#operatortokenroles). The one place that says so: `TenantManager.ListAsync` and the check of [`OperatorAttribute`](access.md#operatorattribute) both ask here, so they mean the same caller by it. System work is never one, whoever it is recorded as, and neither is anyone without an identity.
+Whether `user` is one of the application's operators: a signed-in user whose token carries one of [`OperatorTokenRoles`](#operatortokenroles). The one place that says so: `TenantService.ListAsync` and the check of [`OperatorAttribute`](access.md#operatorattribute) both ask here, so they mean the same caller by it. System work is never one, whoever it is recorded as, and neither is anyone without an identity.
 
 **Parameters**
 
@@ -3079,12 +3183,12 @@ public static class TenancyServiceCollectionExtensions
 
 Namespace `DTS.Tenancy`.
 
-Registration of Tenancy's storage-agnostic parts. The storage package registers the rest, the store and the seat directory, and calls [`AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) itself; an application calls the storage package's registration, and adds its modules' permissions once, from the host: `services.AddTenancyPermissionsOfModules()`, which Tenancy's generator writes from the lists the modules mark with `TenancyPermissionsAttribute`. [`AddTenancyPermissions`](#addtenancypermissionsiservicecollection-ienumerablepermission) adds a list by hand.
+Registration of Tenancy's storage-agnostic parts. The storage package registers the rest, the repositories and the seat directory, and calls [`AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) itself; an application calls the storage package's registration, and adds its modules' permissions once, from the host: `services.AddTenancyPermissionsOfModules()`, which Tenancy's generator writes from the lists the modules mark with `TenancyPermissionsAttribute`. [`AddTenancyPermissions`](#addtenancypermissionsiservicecollection-ienumerablepermission) adds a list by hand.
 
 | Member | Summary |
 |---|---|
-| [`AddTenancyCore(IServiceCollection, Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>?)`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) | Registers the catalogue, the access manager, tenant selection and the managers, everything except the store and the seat directory. |
-| [`AddTenancyInvitationsCore(IServiceCollection, Action<TenancyInvitationOptions<TInvitationId>>?)`](#addtenancyinvitationscoreiservicecollection-actiontenancyinvitationoptionstinvitationid) | Registers the invitation manager, closed over the application's invitation class, for an application that invites people into a tenant: everything of invitations except their store, which the storage package registers; that package calls this itself. |
+| [`AddTenancyCore(IServiceCollection, Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>?)`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) | Registers the catalogue, the access manager, tenant selection and the services, everything except the repositories and the seat directory. |
+| [`AddTenancyInvitationsCore(IServiceCollection, Action<TenancyInvitationOptions<TInvitationId>>?)`](#addtenancyinvitationscoreiservicecollection-actiontenancyinvitationoptionstinvitationid) | Registers the invitation service, closed over the application's invitation class, for an application that invites people into a tenant: everything of invitations except their repositories, which the storage package registers; that package calls this itself. |
 | [`AddTenancyOperatorAccess(IServiceCollection)`](#addtenancyoperatoraccessiservicecollection) | Registers the check of Tenancy's operator cases for the requests of `TRequests`: [`TenancyRequirement.Operator`](access.md#tenancyrequirementoperator) and [`TenancyRequirement.OperatorIn<TTenantId>`](access.md#tenancyrequirementoperatorinttenantid), which a request declares with [`OperatorAttribute`](access.md#operatorattribute). |
 | [`AddTenancyPermissions(IServiceCollection, IEnumerable<Permission>)`](#addtenancypermissionsiservicecollection-ienumerablepermission) | Adds permissions to the catalogue by hand. |
 | [`SyncStarterRoles(IServiceCollection)`](#syncstarterrolesiservicecollection) | Brings every tenant's roles up to the starter roles they were made from, in the background, once the host has started: after its start-up checks, when it runs them, and after every hosted service has started. |
@@ -3106,10 +3210,10 @@ public static IServiceCollection AddTenancyCore<TTenant, TTenantId, TOrganizatio
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
 ```
 
-Registers the catalogue, the access manager, tenant selection and the managers, everything except the store and the seat directory.
+Registers the catalogue, the access manager, tenant selection and the services, everything except the repositories and the seat directory.
 
 - The catalogue is built once, from [`TenancyOptions.Catalogue`](#tenancyoptionsttenantid-tseatid-tunitid-troleid), or from none when it is not set, and every [`PermissionContribution`](catalogue.md#permissioncontribution), the first time it is asked for; resolve it at start-up to have a catalogue that does not hold together stop the application there.
-- The access manager, [`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](access.md#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid), selection and the managers are made per scope. The storage package's `AddTenancy` registers the application's own `TenancyAccessManager`, `TenantManager`, `OrganizationManager`, `SeatManager` and `RoleManager` beside them. Selection is registered without its id types as well, [`ITenantSelection`](access.md#itenantselection), the same instance, unless a host registered its own before: that one stays.
+- The access manager, [`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](access.md#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid), selection and the managers are made per scope. The storage package's `AddTenancy` registers the application's own `TenancyAccessManager`, `TenantService`, `OrganizationService`, `SeatService` and `RoleService` beside them. Selection is registered without its id types as well, [`ITenantSelection`](access.md#itenantselection), the same instance, unless a host registered its own before: that one stays.
 - The toolkit's `ICurrentUser` a host registered before stays; otherwise `CurrentUser` is registered.
 - What the caller's own seat is, for a request about it (`[OrOwn] SeatId Seat`, `TenancyAccess.Own(seat)`): the caller's seat in the tenant, unless a host registered its own before with `AddOwnedByCurrentUser`.
 - A `TimeProvider` registered before stays; otherwise the system clock is used.
@@ -3143,7 +3247,7 @@ public static IServiceCollection AddTenancyInvitationsCore<TTenant, TTenantId, T
     where TInvitationId : struct, ICreatableEntityId<TInvitationId>, IEquatable<TInvitationId>
 ```
 
-Registers the invitation manager, closed over the application's invitation class, for an application that invites people into a tenant: everything of invitations except their store, which the storage package registers; that package calls this itself. Call it after [`AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid), which registers what the managers share: the catalogue, the options, the clock and who is calling.
+Registers the invitation service, closed over the application's invitation class, for an application that invites people into a tenant: everything of invitations except their repositories, which the storage package registers; that package calls this itself. Call it after [`AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid), which registers what the services share: the catalogue, the options, the clock and who is calling.
 
 **Parameters**
 
@@ -3279,14 +3383,14 @@ Registers Tenancy, stored with Entity Framework.
 
 | Member | Summary |
 |---|---|
-| [`AddTenancy(IServiceCollection, Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>?)`](#addtenancyiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) | Registers Tenancy over `TContext`, the context whose model calls `AddTenancy`: everything [`TenancyServiceCollectionExtensions.AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) registers, the store the managers load and save through, the seat directory tenant selection asks, the save interceptor, brought to every context `UseDDDToolkit` wires as Tenancy's part ([`TenancySaveInterceptor.PartName`](entity-framework.md#tenancysaveinterceptor)), the query executor, and what an event log asks: who acted, as Tenancy knows the caller ([`TenancyActedByAccessor`](entity-framework.md#tenancyactedbyaccessor), put around the accessor registered before this call, or around the toolkit's default), and the tenant of each row of the log `AddTenancyEventLogTable` maps. |
-| [`AddTenancyInvitations(IServiceCollection, Action<TenancyInvitationOptions<TInvitationId>>?)`](#addtenancyinvitationsiservicecollection-actiontenancyinvitationoptionstinvitationid) | Registers invitations over `TContext`, the context whose model calls `AddTenancyInvitations`, for an application that invites people into a tenant: the invitation manager, `TInvitationManager`, the application's `InvitationManager`, and the store it loads and keeps invitations through. |
+| [`AddTenancy(IServiceCollection, Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>?)`](#addtenancyiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) | Registers Tenancy over `TContext`, the context whose model calls `AddTenancy`: everything [`TenancyServiceCollectionExtensions.AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) registers, the repositories the managers load and save through, the seat directory tenant selection asks, the save interceptor, brought to every context `UseDDDToolkit` wires as Tenancy's part ([`TenancySaveInterceptor.PartName`](entity-framework.md#tenancysaveinterceptor)), the query executor, and what an event log asks: who acted, as Tenancy knows the caller ([`TenancyActedByAccessor`](entity-framework.md#tenancyactedbyaccessor), put around the accessor registered before this call, or around the toolkit's default), and the tenant of each row of the log `AddTenancyEventLogTable` maps. |
+| [`AddTenancyInvitations(IServiceCollection, Action<TenancyInvitationOptions<TInvitationId>>?)`](#addtenancyinvitationsiservicecollection-actiontenancyinvitationoptionstinvitationid) | Registers invitations over `TContext`, the context whose model calls `AddTenancyInvitations`, for an application that invites people into a tenant: the invitation manager, `TInvitationService`, the application's `InvitationService`, and the repositories it loads and keeps invitations through. |
 | [`AddTenancyAccess(IServiceCollection)`](#addtenancyaccessiservicecollection) | Adds Tenancy's access check to the checks the requests of one module are held to (`AccessChecks<TRequests>`): what decides the cases of [`TenancyRequirement`](access.md#tenancyrequirement) a request of that module declares, before its handler runs. |
 
 #### `AddTenancy(IServiceCollection, Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>?)`
 
 ```csharp
-public static IServiceCollection AddTenancy<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TAccessManager, TTenantManager, TOrganizationManager, TSeatManager, TRoleManager, TContext>(
+public static IServiceCollection AddTenancy<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TAccessManager, TTenantService, TOrganizationService, TSeatService, TRoleService, TContext>(
     this IServiceCollection services,
     Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>? configure = null)
     where TTenant : TenantAggregate<TTenantId>
@@ -3299,14 +3403,14 @@ public static IServiceCollection AddTenancy<TTenant, TTenantId, TOrganization, T
     where TRole : RoleAggregate<TRoleId, TTenantId>
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
     where TAccessManager : TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>
-    where TTenantManager : TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
-    where TOrganizationManager : OrganizationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
-    where TSeatManager : SeatManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
-    where TRoleManager : RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TTenantService : TenantService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TOrganizationService : OrganizationService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TSeatService : SeatService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+    where TRoleService : RoleService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
     where TContext : DbContext
 ```
 
-Registers Tenancy over `TContext`, the context whose model calls `AddTenancy`: everything [`TenancyServiceCollectionExtensions.AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) registers, the store the managers load and save through, the seat directory tenant selection asks, the save interceptor, brought to every context `UseDDDToolkit` wires as Tenancy's part ([`TenancySaveInterceptor.PartName`](entity-framework.md#tenancysaveinterceptor)), the query executor, and what an event log asks: who acted, as Tenancy knows the caller ([`TenancyActedByAccessor`](entity-framework.md#tenancyactedbyaccessor), put around the accessor registered before this call, or around the toolkit's default), and the tenant of each row of the log `AddTenancyEventLogTable` maps.
+Registers Tenancy over `TContext`, the context whose model calls `AddTenancy`: everything [`TenancyServiceCollectionExtensions.AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#addtenancycoreiservicecollection-actiontenancyoptionsttenantid-tseatid-tunitid-troleid) registers, the repositories the managers load and save through, the seat directory tenant selection asks, the save interceptor, brought to every context `UseDDDToolkit` wires as Tenancy's part ([`TenancySaveInterceptor.PartName`](entity-framework.md#tenancysaveinterceptor)), the query executor, and what an event log asks: who acted, as Tenancy knows the caller ([`TenancyActedByAccessor`](entity-framework.md#tenancyactedbyaccessor), put around the accessor registered before this call, or around the toolkit's default), and the tenant of each row of the log `AddTenancyEventLogTable` maps.
 
 ```csharp
 services.AddTenancy<TenancyContext>(options =>
@@ -3316,13 +3420,13 @@ services.AddDbContext<TenancyContext>((serviceProvider, options) => options
     .UseDDDToolkit(serviceProvider));
 ```
 
-Every option has a default, so `services.AddTenancy<TenancyContext>()` is enough. A new id is made by the id itself, `TSeatId.Create()`, in code and before the save: the generator writes it for an id over a `Guid`, and an id over anything else declares its own. The store and the directory are scoped, like the context they use. The store offers a save that fails to every registered [`ITenancySaveFailures`](entity-framework.md#itenancysavefailures), which a package for one database adds, and leaves to the database what [`TenancyStoreOptions`](entity-framework.md#tenancystoreoptions) says, which such a package sets.
+Every option has a default, so `services.AddTenancy<TenancyContext>()` is enough. A new id is made by the id itself, `TSeatId.Create()`, in code and before the save: the generator writes it for an id over a `Guid`, and an id over anything else declares its own. The repositories and the directory are scoped, like the context they use. The repositories offers a save that fails to every registered [`ITenancySaveFailures`](entity-framework.md#itenancysavefailures), which a package for one database adds, and leaves to the database what [`TenancyDatabaseOptions`](entity-framework.md#tenancydatabaseoptions) says, which such a package sets.
 
 `AddTenancy<TenancyContext>` is generated into the project that declares the classes, closed over them (`TemplateRegistrationAttribute`), or into a project of the same `[assembly: Module]` that declares none, such as the module's infrastructure project next to its domain project. It calls this method with the classes and ids filled in; the context is still the caller's to name. This method can be called as well, with all fifteen.
 
 It registers the access manager per scope: `TAccessManager`, the application's `TenancyAccessManager`, which the generator writes into the project that declares the classes and fills in here, or the package's class itself where a call names it; and the package's [`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](access.md#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid) it derives from. It registers the read of the tenants a round of system work visits over the context as well, which the access manager asks.
 
-It registers the managers per scope the same way: `TTenantManager`, `TOrganizationManager`, `TSeatManager` and `TRoleManager`, the application's `TenantManager`, `OrganizationManager`, `SeatManager` and `RoleManager`, and the package's classes they derive from.
+It registers the services per scope the same way: `TTenantService`, `TOrganizationService`, `TSeatService` and `TRoleService`, the application's `TenantService`, `OrganizationService`, `SeatService` and `RoleService`, and the package's classes they derive from.
 
 It brings the start-up checks of [`TenancyChecks`](entity-framework.md#tenancychecks), which a host runs with `services.RunStartupChecks()`: the catalogue builds, every context that keeps rows to a tenant checks its saves, and a permission a role holds that the catalogue has lost is logged.
 
@@ -3341,7 +3445,7 @@ And it registers [`IStarterRoleSync`](catalogue.md#istarterrolesync) over the co
 #### `AddTenancyInvitations(IServiceCollection, Action<TenancyInvitationOptions<TInvitationId>>?)`
 
 ```csharp
-public static IServiceCollection AddTenancyInvitations<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId, TInvitationManager, TContext>(
+public static IServiceCollection AddTenancyInvitations<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId, TInvitationService, TContext>(
     this IServiceCollection services,
     Action<TenancyInvitationOptions<TInvitationId>>? configure = null)
     where TTenant : TenantAggregate<TTenantId>
@@ -3355,11 +3459,11 @@ public static IServiceCollection AddTenancyInvitations<TTenant, TTenantId, TOrga
     where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
     where TInvitation : InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
     where TInvitationId : struct, ICreatableEntityId<TInvitationId>, IEquatable<TInvitationId>
-    where TInvitationManager : InvitationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>
+    where TInvitationService : InvitationService<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>
     where TContext : DbContext
 ```
 
-Registers invitations over `TContext`, the context whose model calls `AddTenancyInvitations`, for an application that invites people into a tenant: the invitation manager, `TInvitationManager`, the application's `InvitationManager`, and the store it loads and keeps invitations through. Call it after `AddTenancy`, with the context:
+Registers invitations over `TContext`, the context whose model calls `AddTenancyInvitations`, for an application that invites people into a tenant: the invitation manager, `TInvitationService`, the application's `InvitationService`, and the repositories it loads and keeps invitations through. Call it after `AddTenancy`, with the context:
 
 ```csharp
 services.AddTenancy<TenancyContext>();
@@ -3368,7 +3472,7 @@ services.AddTenancyInvitations<TenancyContext>();
 
 That call is generated into the project that declares Tenancy's classes, closed over them, as `AddTenancy<TenancyContext>` is (`TemplateRegistrationAttribute`), invitation class included. An application may have no invitation class: then no project gets the call, and none is told of it. This method can be called as well, with all thirteen. A new invitation's id is made by the id itself, `InvitationId.Create()`.
 
-The store is scoped, and works in the unit of work of Tenancy's own store: an invitation is saved, and its acceptance with the seat it makes, by that store's one save.
+The repositories are scoped, and work in the unit of work of Tenancy's own repositories: an invitation is saved, and its acceptance with the seat it makes, by the repositories' one save.
 
 **Parameters**
 
@@ -3401,7 +3505,7 @@ services.AddTenancyAccess<IBillingRequest, BillingContext>();
 
 A module calls it for its own request interface and its own context, once, next to the checks for the cases only it has. The check asks a permission for the whole tenant over `TContext`, so that is Tenancy's own context or one that maps Tenancy's read model (`AddTenancyReadModel`, or `AddTenancyReadFunctions` where the database keeps the rights), and so is a permission at a unit ([`TenancyRequirement.AtUnit<TUnitId>`](access.md#tenancyrequirementatunittunitid), closed over `TUnitId`); a module whose requests declare neither is never read for, whatever its context maps. The statement runs on a context of its own where the application registered a factory for the context (`IDbContextFactory<TContext>`), a pooled one say, and on the scope's own context otherwise.
 
-The check is free of any dispatcher, as the package is: whatever calls `AccessChecks.RequireAsync` in front of the module's handlers holds the requests to it. On the toolkit's mediator that is the pipeline behavior the generator writes for an interface marked `[AccessRequests]`.
+The check is free of any dispatcher, as the package is: whatever calls `AccessChecks.RequireAsync` in front of the module's handlers holds the requests to it. In an application that uses the Mediator library that is the pipeline behavior the generator writes for an interface marked `[AccessRequests]`.
 
 The operator cases, `[Operator]`, are decided by the check `AddTenancyOperatorAccess` adds, which this adds as well. That check reads nothing, and begins the operator work a command an operator sends runs in, through `AccessChecks.BeginWork`.
 
@@ -3519,7 +3623,7 @@ Registers what Tenancy needs on Postgres with row level security.
 
 | Member | Summary |
 |---|---|
-| [`AddTenancyPostgres(IServiceCollection)`](#addtenancypostgresiservicecollection) | Sets [`TenancyRowLevelSecurity.TenantSetting`](postgres.md#tenantsetting) to the current Tenancy user's tenant whenever a context under row level security connects, next to the caller's role and claims and in the same statement; turns the last administrator the trigger keeps at commit, which no index states, into the refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the manager's own check, is refused by its unique index on any database, with no help from here); requires an explicit current user (`CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser`), so work nobody said anything about fails rather than running as the login role, past every policy; and leaves the rights to the database ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), whose trigger writes them and whose policies let a seat read only its own, so the save writes none, the store asks the database's functions about other seats, and Tenancy's few reads across tenants ask its functions as scoped system work in no tenant, rather than run as the application itself, past the policies. |
+| [`AddTenancyPostgres(IServiceCollection)`](#addtenancypostgresiservicecollection) | Sets [`TenancyRowLevelSecurity.TenantSetting`](postgres.md#tenantsetting) to the current Tenancy user's tenant whenever a context under row level security connects, next to the caller's role and claims and in the same statement; turns the last administrator the trigger keeps at commit, which no index states, into the refusal the service gives for the same rule (a slug another tenant has, which the policies hide from the manager's own check, is refused by its unique index on any database, with no help from here); requires an explicit current user (`CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser`), so work nobody said anything about fails rather than running as the login role, past every policy; and leaves the rights to the database ([`TenancyDatabaseOptions.DatabaseKeepsRights`](entity-framework.md#tenancydatabaseoptions)), whose trigger writes them and whose policies let a seat read only its own, so the save writes none, the repositories ask the database's functions about other seats, and Tenancy's few reads across tenants ask its functions as scoped system work in no tenant, rather than run as the application itself, past the policies. |
 
 #### `AddTenancyPostgres(IServiceCollection)`
 
@@ -3527,7 +3631,7 @@ Registers what Tenancy needs on Postgres with row level security.
 public static IServiceCollection AddTenancyPostgres(this IServiceCollection services)
 ```
 
-Sets [`TenancyRowLevelSecurity.TenantSetting`](postgres.md#tenantsetting) to the current Tenancy user's tenant whenever a context under row level security connects, next to the caller's role and claims and in the same statement; turns the last administrator the trigger keeps at commit, which no index states, into the refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the manager's own check, is refused by its unique index on any database, with no help from here); requires an explicit current user (`CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser`), so work nobody said anything about fails rather than running as the login role, past every policy; and leaves the rights to the database ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), whose trigger writes them and whose policies let a seat read only its own, so the save writes none, the store asks the database's functions about other seats, and Tenancy's few reads across tenants ask its functions as scoped system work in no tenant, rather than run as the application itself, past the policies. Call it next to `AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity`:
+Sets [`TenancyRowLevelSecurity.TenantSetting`](postgres.md#tenantsetting) to the current Tenancy user's tenant whenever a context under row level security connects, next to the caller's role and claims and in the same statement; turns the last administrator the trigger keeps at commit, which no index states, into the refusal the service gives for the same rule (a slug another tenant has, which the policies hide from the manager's own check, is refused by its unique index on any database, with no help from here); requires an explicit current user (`CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser`), so work nobody said anything about fails rather than running as the login role, past every policy; and leaves the rights to the database ([`TenancyDatabaseOptions.DatabaseKeepsRights`](entity-framework.md#tenancydatabaseoptions)), whose trigger writes them and whose policies let a seat read only its own, so the save writes none, the repositories ask the database's functions about other seats, and Tenancy's few reads across tenants ask its functions as scoped system work in no tenant, rather than run as the application itself, past the policies. Call it next to `AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity`:
 
 ```csharp
 builder.Services.AddSupabaseRowLevelSecurity();

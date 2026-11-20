@@ -1,22 +1,22 @@
 ---
-title: "Membership API: Managers and access"
-sidebar_label: Managers and access
+title: "Membership API: Services and access"
+sidebar_label: Services and access
 ---
 
 <!-- Generated from the packages' code and XML documentation by build/ApiReference; do not edit by hand. Regenerate with build/generate-api-reference.sh. -->
 
-# Membership API: Managers and access
+# Membership API: Services and access
 
-The managers the generator writes for a resource's member class and for its role class, `BoardMemberManager` and `BoardRoleManager`, and what they take; what the application answers about who may be a member and which roles go to one; the access manager of one kind of resource, the requirements a request states, and the contracts that publish a resource's access to row access rules. A generated manager is named after your class and closed over your types: each section shows the package's class it derives from, with the methods it inherits. The access manager is asked for by the resource's class, `MembershipAccessManager<Board>`, and the requirements by the resource's id, so those of documents never answer for folders. Their registration is with Entity Framework, under [Registration](entity-framework.md#registration).
+The services the generator writes for a resource's member class and for its role class, `BoardMemberService` and `BoardRoleService`, and what they take; what the application answers about who may be a member and which roles go to one; the access manager of one kind of resource, the requirements a request states, and the contracts that publish a resource's access to row access rules. A generated service is named after your class and closed over your types: each section shows the package's class it derives from, with the methods it inherits. The access manager is asked for by the resource's class, `MembershipAccessManager<Board>`, and the requirements by the resource's id, so those of documents never answer for folders. Their registration is with Entity Framework, under [Registration](entity-framework.md#registration).
 
-## Member manager
+## Member service
 
-Namespace `DTS.Membership.Managers`.
+Namespace `DTS.Membership.Services`.
 
-### `MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>`
+### `MemberService<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>`
 
 ```csharp
-public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>
+public class MemberService<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>
     where TResource : AggregateRoot<TResourceId>, IMembershipResource, IMembershipResource<TMember, TMemberId, TRoleId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     where TMember : MemberEntity<TId, TMemberId, TRoleId>
@@ -25,19 +25,19 @@ public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRol
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-The members of one kind of resource: adding them, giving and taking their roles, removing them, leaving, naming another owner, opening a new resource, and listing who is on one. Your code takes it as `BoardMemberManager`, a class the package's generator writes for your member class, closed over your resource and its ids, and the container makes per scope.
+The members of one kind of resource: adding them, giving and taking their roles, removing them, leaving, naming another owner, opening a new resource, and listing who is on one. Your code takes it as `BoardMemberService`, a class the package's generator writes for your member class, closed over your resource and its ids, and the container makes per scope.
 
 ```csharp
-public sealed class AddMemberHandler(BoardMemberManager members) : ICommandHandler<AddMember, Board>
+public sealed class AddMemberHandler(BoardMemberService members) : ICommandHandler<AddMember, Board>
 {
     public async ValueTask<Board> Handle(AddMember command, CancellationToken cancellationToken)
         => await members.AddAsync(command.Board, command.Seat, command.Role, until: null, cancellationToken);
 }
 ```
 
-Each change takes the resource, or its id. Both do the same: the manager loads the resource itself, tracked, and answers it as it changed and saved it. A member and a role are ids, since a member is somebody of another module and a role is a row of your role class or a name the rules declare. After the cancellation token comes the version the caller last read, for a command that names one: a resource at another version is a lost race.
+Each change takes the resource, or its id. Both do the same: the service loads the resource itself, tracked, and answers it as it changed and saved it. A member and a role are ids, since a member is somebody of another module and a role is a row of your role class or a name the rules declare. After the cancellation token comes the version the caller last read, for a command that names one: a resource at another version is a lost race.
 
-**What a change checks, in order.** The caller's right first, as the access manager refuses: the caller's own refusal when it is nobody, `not-found` for a resource it may not see, `not-permitted` naming the permission. A change of the members needs the permission the rules mark `ManagesMembers`, and naming an owner the one marked `NamesOwner`; a resource that marks none lets only system work make the change. Where the request in hand was checked for that permission on that resource, the manager takes the check's answer and asks nothing again. Then whether the member and the role may go on the list: an active member where the application registered an [`IMemberDirectory<TResourceId, TMemberId>`](#imemberdirectorytresourceid-tmemberid), a role in use that goes to a member. Then the resource's guard, `OnChangingMembers()`, and the member list's rules, then the save.
+**What a change checks, in order.** The caller's right first, as the access manager refuses: the caller's own refusal when it is nobody, `not-found` for a resource it may not see, `not-permitted` naming the permission. A change of the members needs the permission the rules mark `ManagesMembers`, and naming an owner the one marked `NamesOwner`; a resource that marks none lets only system work make the change. Where the request in hand was checked for that permission on that resource, the service takes the check's answer and asks nothing again. Then whether the member and the role may go on the list: an active member where the application registered an [`IMemberDirectory<TResourceId, TMemberId>`](#imemberdirectorytresourceid-tmemberid), a role in use that goes to a member. Then the resource's guard, `OnChangingMembers()`, and the member list's rules, then the save.
 
 **The caller's own place.** A caller that takes a role from itself, takes itself off, leaves, or hands on the resource it owns can lose the very right the save needs, where a database checks every row. Such a save runs as the resource's own work in its scope, for the caller ([`IOwnPlaceWork<TResourceId, TMemberId>`](#iownplaceworktresourceid-tmemberid)), when the request in hand is the one whose check read the resource and the unit of work holds nothing but the resource. Otherwise every save runs as the caller.
 
@@ -55,7 +55,7 @@ Each change takes the resource, or its id. Both do the same: the manager loads t
 | Member | Summary |
 |---|---|
 | `MostResources = 200` | The most resources one list of several is asked about. |
-| [`MemberManager(MembershipAccessManager<TResource>, IMemberStore<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?, IMemberKinds<TResourceId, TMemberId>?)`](#membermanagermembershipaccessmanagertresource-imemberstoretresource-tresourceid-tmemberid-icurrentuser-timeprovider-imemberrolestresourceid-troleid-imemberdirectorytresourceid-tmemberid-imemberrolepolicytresourceid-troleid-iownplaceworktresourceid-tmemberid-imemberkindstresourceid-tmemberid) | The member manager of one kind of resource. |
+| [`MemberService(MembershipAccessManager<TResource>, IMemberRepository<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?, IMemberKinds<TResourceId, TMemberId>?)`](#memberservicemembershipaccessmanagertresource-imemberrepositorytresource-tresourceid-tmemberid-icurrentuser-timeprovider-imemberrolestresourceid-troleid-imemberdirectorytresourceid-tmemberid-imemberrolepolicytresourceid-troleid-iownplaceworktresourceid-tmemberid-imemberkindstresourceid-tmemberid) | The member service of one kind of resource. |
 | `MembershipRules Rules { get; }` | The rules of the resource, with the codes it refuses under. |
 | [`OpenAsync(TResource, CancellationToken)`](#openasynctresource-cancellationtoken) | Opens a new resource: the owner its constructor put on its member list is admitted, and the resource is added and saved. |
 | [`AddAsync(TResourceId, TMemberId, TRoleId?, DateTimeOffset?, CancellationToken, long?)`](#addasynctresourceid-tmemberid-troleid-datetimeoffset-cancellationtoken-long) | Adds a member, from now until `until` or for good, with `role` for the same period where one is given. |
@@ -74,12 +74,12 @@ Each change takes the resource, or its id. Both do the same: the manager loads t
 | [`ListAsync(TResource, CancellationToken)`](#listasynctresource-cancellationtoken) | The members of a resource, as [`ListAsync`](#listasynctresourceid-cancellationtoken) answers them with the resource's id. |
 | [`ListAsync(IReadOnlyCollection<TResourceId>, CancellationToken)`](#listasyncireadonlycollectiontresourceid-cancellationtoken) | The members of each of `resources` the caller sees, in one statement whatever their number, each list in the order [`ListAsync`](#listasynctresourceid-cancellationtoken) answers in. |
 
-#### `MemberManager(MembershipAccessManager<TResource>, IMemberStore<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?, IMemberKinds<TResourceId, TMemberId>?)`
+#### `MemberService(MembershipAccessManager<TResource>, IMemberRepository<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?, IMemberKinds<TResourceId, TMemberId>?)`
 
 ```csharp
-public MemberManager(
+public MemberService(
     MembershipAccessManager<TResource> access,
-    IMemberStore<TResource, TResourceId, TMemberId> store,
+    IMemberRepository<TResource, TResourceId, TMemberId> repository,
     ICurrentUser user,
     TimeProvider clock,
     IMemberRoles<TResourceId, TRoleId>? roles = null,
@@ -89,12 +89,12 @@ public MemberManager(
     IMemberKinds<TResourceId, TMemberId>? kinds = null)
 ```
 
-The member manager of one kind of resource. The container makes it; the generated class has the same constructor.
+The member service of one kind of resource. The container makes it; the generated class has the same constructor.
 
 **Parameters**
 
 - `access`: The resource's access manager, which asks what the caller holds.
-- `store`: Where the resource is loaded and saved.
+- `repository`: Where the resource is loaded and saved.
 - `user`: Who is calling.
 - `clock`: What "now" is.
 - `roles`: Which roles there are; the rules answer it themselves where the roles are fixed.
@@ -534,26 +534,26 @@ The members of each of `resources` the caller sees, in one statement whatever th
 
 **Parameters**
 
-- `resources`: The resources, at most [`MostResources`](#membermanagertresource-tresourceid-tmember-tid-tmemberid-troleid) different ones.
+- `resources`: The resources, at most [`MostResources`](#memberservicetresource-tresourceid-tmember-tid-tmemberid-troleid) different ones.
 - `cancellationToken`: Cancels the query.
 
 **Returns**: The members of each resource the caller sees, by its id.
 
 **Exceptions**
 
-- `ArgumentException`: More than [`MostResources`](#membermanagertresource-tresourceid-tmember-tid-tmemberid-troleid) different resources are asked about.
+- `ArgumentException`: More than [`MostResources`](#memberservicetresource-tresourceid-tmember-tid-tmemberid-troleid) different resources are asked about.
 - `RefusalException`: The caller's own refusal when it is nobody.
 
-### `IMemberStore<TResource, TResourceId, TMemberId>`
+### `IMemberRepository<TResource, TResourceId, TMemberId>`
 
 ```csharp
-public interface IMemberStore<TResource, TResourceId, TMemberId>
+public interface IMemberRepository<TResource, TResourceId, TMemberId>
     where TResource : class, IEntity<TResourceId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
 ```
 
-Where the member manager of one kind of resource loads, adds and saves the resource: the unit of work of the scope. A storage package implements it and registers it with the resource; an application never takes it.
+Where the member service of one kind of resource loads, adds and saves the resource: the unit of work of the scope. A storage package implements it and registers it with the resource; an application never takes it.
 
 **Type parameters**
 
@@ -656,9 +656,9 @@ public interface IOwnPlaceWork<TResourceId, TMemberId>
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
 ```
 
-Begins the resource's own work for the save of a change to the caller's own place on it: a role it takes from itself, itself taken off, leaving, or handing on the resource it owns. Such a change can take away the very right the save needs where a database checks every row, so the member manager saves it as the resource's own work in its scope, for the request in hand whose check read the resource, when the unit of work holds nothing else.
+Begins the resource's own work for the save of a change to the caller's own place on it: a role it takes from itself, itself taken off, leaving, or handing on the resource it owns. Such a change can take away the very right the save needs where a database checks every row, so the member service saves it as the resource's own work in its scope, for the request in hand whose check read the resource, when the unit of work holds nothing else.
 
-Optional. Without one the manager begins system work in that scope for the current user, `access.BeginSystem(scope)` on the core's `AccessManager`. For rules that name no scope it begins `access.BeginSystemBypassingRowAccess()`. The join with an organization's package registers one that begins it in the caller's organization, for the caller's seat.
+Optional. Without one the service begins system work in that scope for the current user, `access.BeginSystem(scope)` on the core's `AccessManager`. For rules that name no scope it begins `access.BeginSystemBypassingRowAccess()`. The join with an organization's package registers one that begins it in the caller's organization, for the caller's seat.
 
 **Type parameters**
 
@@ -684,30 +684,30 @@ Begins the resource's own work in `scope`, for `member`, the caller.
 
 **Returns**: What ends the work when disposed.
 
-## Role manager
+## Role service
 
-Namespace `DTS.Membership.Managers`.
+Namespace `DTS.Membership.Services`.
 
-### `CustomRoleManager<TRole, TRoleId, TResource>`
+### `CustomRoleService<TRole, TRoleId, TResource>`
 
 ```csharp
-public class CustomRoleManager<TRole, TRoleId, TResource>
+public class CustomRoleService<TRole, TRoleId, TResource>
     where TRole : CustomRoleAggregate<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
     where TResource : class
 ```
 
-The roles a customer makes for one kind of resource: making them, the starter roles among them, renaming them, setting their permissions, archiving them, following their starter roles, and reading them. Your code takes it as `BoardRoleManager`, a class the package's generator writes for your role class, closed over it and the resource, and the container makes per scope.
+The roles a customer makes for one kind of resource: making them, the starter roles among them, renaming them, setting their permissions, archiving them, following their starter roles, and reading them. Your code takes it as `BoardRoleService`, a class the package's generator writes for your role class, closed over it and the resource, and the container makes per scope.
 
 ```csharp
-public sealed class RenameBoardRoleHandler(BoardRoleManager roles) : ICommandHandler<RenameBoardRole, BoardRole>
+public sealed class RenameBoardRoleHandler(BoardRoleService roles) : ICommandHandler<RenameBoardRole, BoardRole>
 {
     public async ValueTask<BoardRole> Handle(RenameBoardRole command, CancellationToken cancellationToken)
         => await roles.RenameAsync(command.Role, command.Name, command.Description, cancellationToken);
 }
 ```
 
-Each change takes the role, or its id; both load the role and answer it as it was changed and saved. The manager hands the role the resource's rules, so no handler does. Each change needs the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)), held for the whole of what the roles are kept for: the manager asks it of what the application registered for that ([`ICustomRoleAccess<TResource>`](#icustomroleaccesstresource)), which the join with an organization's package answers for the whole organization. Where the rules name none, or nothing answers, only system work changes the roles.
+Each change takes the role, or its id; both load the role and answer it as it was changed and saved. The service hands the role the resource's rules, so no handler does. Each change needs the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)), held for the whole of what the roles are kept for: the service asks it of what the application registered for that ([`ICustomRoleAccess<TResource>`](#icustomroleaccesstresource)), which the join with an organization's package answers for the whole organization. Where the rules name none, or nothing answers, only system work changes the roles.
 
 **What stays yours.** The role class, its constructor and the fields it adds, such as the customer a role is of. Its events: the generator declares the partial methods `OnRenamed()`, `OnPermissionsSet(set)` and `OnArchived()` on it, and the role calls each after a change that changed something. A role class kept per a scope of your own, a garden say, passes that scope to the reads and to the starter roles: `scope: role => role.GardenId == garden`.
 
@@ -722,7 +722,7 @@ The reads answer the roles there are for the caller: what the context's own rule
 | Member | Summary |
 |---|---|
 | `MostIds = 200` | How many ids one question by id takes. |
-| [`CustomRoleManager(ICustomRoleStore<TRole, TRoleId>, MembershipAccessManager<TResource>, ICurrentUser, ICustomRoleAccess<TResource>?)`](#customrolemanagericustomrolestoretrole-troleid-membershipaccessmanagertresource-icurrentuser-icustomroleaccesstresource) | The role manager of one role class. |
+| [`CustomRoleService(ICustomRoleRepository<TRole, TRoleId>, MembershipAccessManager<TResource>, ICurrentUser, ICustomRoleAccess<TResource>?)`](#customroleserviceicustomrolerepositorytrole-troleid-membershipaccessmanagertresource-icurrentuser-icustomroleaccesstresource) | The role service of one role class. |
 | `MembershipRules Rules { get; }` | The rules of the resource the roles are of: what a role's constructor takes. |
 | [`CreateAsync(TRole, CancellationToken)`](#createasynctrole-cancellationtoken) | Adds a role made with your class's constructor, and saves it. |
 | [`CreateStarterRolesAsync(Func<CustomRoleDraft, TRole>, CancellationToken, Expression<Func<TRole, bool>>?)`](#createstarterrolesasyncfunccustomroledraft-trole-cancellationtoken-expressionfunctrole-bool) | Makes the starter roles the rules declare that the roles there are for the caller do not have yet, each through `make`, and saves them. |
@@ -736,21 +736,21 @@ The reads answer the roles there are for the caller: what the context's own rule
 | [`ListAsync(CancellationToken, Expression<Func<TRole, bool>>?)`](#listasynccancellationtoken-expressionfunctrole-bool) | Every role there is for the caller, archived ones included, by name: your class, whole, read for showing. |
 | [`ByIdAsync(IReadOnlyCollection<TRoleId>, CancellationToken)`](#byidasyncireadonlycollectiontroleid-cancellationtoken) | The roles of `roles` there are for the caller, read for showing: for a list that names the roles its rows hold by id. |
 
-#### `CustomRoleManager(ICustomRoleStore<TRole, TRoleId>, MembershipAccessManager<TResource>, ICurrentUser, ICustomRoleAccess<TResource>?)`
+#### `CustomRoleService(ICustomRoleRepository<TRole, TRoleId>, MembershipAccessManager<TResource>, ICurrentUser, ICustomRoleAccess<TResource>?)`
 
 ```csharp
-public CustomRoleManager(
-    ICustomRoleStore<TRole, TRoleId> store,
+public CustomRoleService(
+    ICustomRoleRepository<TRole, TRoleId> repository,
     MembershipAccessManager<TResource> access,
     ICurrentUser user,
     ICustomRoleAccess<TResource>? roleAccess = null)
 ```
 
-The role manager of one role class. The container makes it; the generated class has the same constructor.
+The role service of one role class. The container makes it; the generated class has the same constructor.
 
 **Parameters**
 
-- `store`: Where the roles are loaded and saved.
+- `repository`: Where the roles are loaded and saved.
 - `access`: The access manager of the resource the roles are of, for its rules.
 - `user`: Who is calling.
 - `roleAccess`: Whether the caller may change the roles, or `null` where only system work may.
@@ -1006,22 +1006,22 @@ The roles of `roles` there are for the caller, read for showing: for a list that
 
 **Parameters**
 
-- `roles`: The roles, at most [`MostIds`](#customrolemanagertrole-troleid-tresource) different ones.
+- `roles`: The roles, at most [`MostIds`](#customroleservicetrole-troleid-tresource) different ones.
 - `cancellationToken`: Cancels the query.
 
 **Exceptions**
 
-- `ArgumentException`: More than [`MostIds`](#customrolemanagertrole-troleid-tresource) different roles are asked about.
+- `ArgumentException`: More than [`MostIds`](#customroleservicetrole-troleid-tresource) different roles are asked about.
 
-### `ICustomRoleStore<TRole, TRoleId>`
+### `ICustomRoleRepository<TRole, TRoleId>`
 
 ```csharp
-public interface ICustomRoleStore<TRole, TRoleId>
+public interface ICustomRoleRepository<TRole, TRoleId>
     where TRole : CustomRoleAggregate<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Where the role manager of one role class loads, adds and saves roles: the unit of work of the scope, under the rules the application's context keeps its rows to, such as the customer a role is of. A storage package implements it and registers it with the resource the roles are of; an application never takes it.
+Where the role service of one role class loads, adds and saves roles: the unit of work of the scope, under the rules the application's context keeps its rows to, such as the customer a role is of. A storage package implements it and registers it with the resource the roles are of; an application never takes it.
 
 **Type parameters**
 
@@ -1112,7 +1112,7 @@ public interface ICustomRoleAccess<TResource>
     where TResource : class
 ```
 
-Whether the caller may change the roles a customer makes for one kind of resource: holds the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)) for the whole of what the roles are kept for. The roles are a customer's as a whole, not one resource's, so Membership cannot answer it from a resource's members: the role manager asks this.
+Whether the caller may change the roles a customer makes for one kind of resource: holds the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)) for the whole of what the roles are kept for. The roles are a customer's as a whole, not one resource's, so Membership cannot answer it from a resource's members: the role service asks this.
 
 Optional. Without one only system work changes the roles. The join with an organization's package registers one that asks the organization whether the caller holds the permission for the whole of it.
 
@@ -1149,7 +1149,7 @@ public sealed record StarterRolesFollowed<TRole, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-What following the starter roles did ([`CustomRoleManager.FollowStarterRolesAsync`](#followstarterrolesasyncfunccustomroledraft-trole-cancellationtoken-expressionfunctrole-bool)). A role that follows its starter role already, one a customer made and one that is archived are in none of the lists.
+What following the starter roles did ([`CustomRoleService.FollowStarterRolesAsync`](#followstarterrolesasyncfunccustomroledraft-trole-cancellationtoken-expressionfunctrole-bool)). A role that follows its starter role already, one a customer made and one that is archived are in none of the lists.
 
 **Type parameters**
 
@@ -1182,7 +1182,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Who may be a member
 
-Namespace `DTS.Membership.Managers`.
+Namespace `DTS.Membership.Services`.
 
 ### `IMemberDirectory<TResourceId, TMemberId>`
 
@@ -1228,9 +1228,9 @@ public interface IMemberRolePolicy<TResourceId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Says whether a role that exists may go to a member of one kind of resource: a rule of the application's own on top of the roles there are, such as roles an organization keeps for itself and never gives on a resource. The member manager of that kind of resource asks it when a role is given; what was given once can always be taken back, so it is not asked when a role is taken.
+Says whether a role that exists may go to a member of one kind of resource: a rule of the application's own on top of the roles there are, such as roles an organization keeps for itself and never gives on a resource. The member service of that kind of resource asks it when a role is given; what was given once can always be taken back, so it is not asked when a role is taken.
 
-Optional. Without one every role there is may go to a member. It is asked about the role alone: whether this caller may give it is the manager's to check by the permission that manages the members, and a rule of the application's own beyond that is asked in its handler, before the manager is called.
+Optional. Without one every role there is may go to a member. It is asked about the role alone: whether this caller may give it is the service's to check by the permission that manages the members, and a rule of the application's own beyond that is asked in its handler, before the service is called.
 
 **Type parameters**
 
@@ -1264,7 +1264,7 @@ Namespace `DTS.Membership.Access`.
 public static class MembershipAccessManager
 ```
 
-Makes the access manager of one kind of resource over what a storage answers. A storage package calls it where it registers the resource; an application takes the manager it made, [`MembershipAccessManager<TResource>`](#membershipaccessmanagertresource).
+Makes the access manager of one kind of resource over what a storage answers. A storage package calls it where it registers the resource; an application takes the service it made, [`MembershipAccessManager<TResource>`](#membershipaccessmanagertresource).
 
 | Member | Summary |
 |---|---|
@@ -1748,7 +1748,7 @@ public abstract class MemberReach<TResource>
 
 Which resources of one kind the caller reaches for one permission, at one moment: the lower level under `db.Boards.WhereIHold(permission)`, for a statement that reads more than which resources are held, such as how each is held, or one made on another context than the one that asks.
 
-It is made by the access manager of the resource ([`MembershipAccessManager.Reach`](#reachstring)), for the caller the request runs as, and the storage that manager reads through is what puts it into a query (`Within` and `Reached` of the Entity Framework package). What a query is filtered by is therefore always what the rules decided, and never a set somebody put together elsewhere: a storage takes only the reaches its own manager made. What is public here is what a use case reads of it.
+It is made by the access manager of the resource ([`MembershipAccessManager.Reach`](#reachstring)), for the caller the request runs as, and the storage that service reads through is what puts it into a query (`Within` and `Reached` of the Entity Framework package). What a query is filtered by is therefore always what the rules decided, and never a set somebody put together elsewhere: a storage takes only the reaches its own manager made. What is public here is what a use case reads of it.
 
 **Type parameters**
 
@@ -2335,7 +2335,7 @@ is `MemberAccess.SeenWith<DocumentId>(DocumentPermissions.View)`.
 
 **Remarks**
 
-For queries only. It refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check. On a message of the toolkit's mediator that is no query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
+For queries only. It refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check. On a message of the Mediator library that is no query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
 
 | Member | Summary |
 |---|---|
@@ -2356,7 +2356,7 @@ The primary constructor: the type's summary says what it makes.
 
 **Remarks**
 
-For queries only. It refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check. On a message of the toolkit's mediator that is no query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
+For queries only. It refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check. On a message of the Mediator library that is no query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
 
 ### `MemberAccessCheck<TResource, TResourceId>`
 

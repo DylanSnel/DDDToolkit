@@ -96,7 +96,7 @@ A `Result<T>` converts to a `Result` with the same success or failure.
 A request whose response is a `Result` or `Result<T>` passes the toolkit's mediator like any other. The mediator adds
 two things for such a request:
 
-- **A thrown refusal becomes a failed result.** An access check that refuses, a manager of a package that throws a
+- **A thrown refusal becomes a failed result.** An access check that refuses, a service of a package that throws a
   `RefusalException`, or an invalid value object that throws an `InvalidValueObjectException` gives a failed result.
   The handler does not run after a refused check. A `RefusalException` keeps its code, message and arguments, and its
   kind decides the error type. An `InvalidValueObjectException` becomes an `InvalidError` with the code
@@ -151,5 +151,5 @@ failure does not matter.
 
 - Return a result for an answer the caller can act on: not found, not allowed, taken, invalid.
 - Throw for a bug, such as an argument that may not be null or a state the code never reaches.
-- The managers of Tenancy and Membership throw `RefusalException`. Inside a request with a result the mediator turns
+- The services of Tenancy and Membership throw `RefusalException`. Inside a request with a result the mediator turns
   the refusal into a failed result, so a handler calls them without a try.
