@@ -674,12 +674,12 @@ Projects/
       Commands/                   MakeProjectRole.cs, RenameProjectRole.cs, SetProjectRolePermissions.cs, ArchiveProjectRole.cs
       Queries/                    TenantProjectRoles.cs, ProjectRolesById.cs
       ProjectRoleListing.cs       the result type of both
-    StoredProjects/               IProjectStore.cs, IProjectReads.cs, IProjectReading.cs: the ports several features share
+    StoredProjects/               IProjectRepository.cs, IProjectReads.cs, IProjectReading.cs: the ports several features share
   Examples.Tenancy.Projects.Infrastructure/
     GlobalUsings.cs, ProjectsInfrastructure.cs
     Persistence/                  ProjectsContext.cs, marked [SupabaseMigrations]; next to it the build
                                   writes the factory that dotnet ef and the export use;
-                                  EfProjectStore.cs, EfProjectReads.cs; Migrations/
+                                  ProjectRepository.cs, EfProjectReads.cs; Migrations/
     Access/                       the row rules, one class per file, column rules included;
                                   UnitChangesWithItsPermissions.cs, a rule that Postgres checks
                                   with a trigger of the module, in addition to the policies

@@ -36,7 +36,7 @@ module name of its folder ([A module named by its folder](../../modules.md#a-mod
   Application projects of Inspections also reference `Projects.Contracts`.
 - **Two ports.** `ProjectsInfrastructure.cs`
   registers both:
-  - A command that changes the project itself loads, changes and saves it through `IProjectStore`. The store works
+  - A command that changes the project itself loads, changes and saves it through `IProjectRepository`. The store works
     on the request's context, which is the request's unit of work. A command on the crew or on the project roles
     calls the managers the Membership package writes, `CrewMemberManager` and `ProjectRoleManager`. They load and
     save on the same context.
@@ -65,7 +65,7 @@ sequenceDiagram
     participant Behavior as ProjectsAccess<br/>Behavior
     participant Check as MemberAccess<br/>Check
     participant Handler as CloseProject<br/>Handler
-    participant Store as IProjectStore
+    participant Store as IProjectRepository
 
     Route->>Behavior: Send(CloseProject)
     rect rgba(91, 46, 201, 0.14)
