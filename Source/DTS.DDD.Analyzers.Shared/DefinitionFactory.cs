@@ -133,6 +133,11 @@ internal static class DefinitionFactory
         {
             DeclaresValidate = DeclaresValidate(symbol),
             SingleValueAvailable = HasType(compilation, KnownTypes.SingleValueInterface),
+            ValueConvertible = valueType is not null
+                && valueType.TypeKind != TypeKind.Interface
+                && valueType.SpecialType != SpecialType.System_Object,
+            DeclaresConversion = symbol.GetMembers(WellKnownMemberNames.ImplicitConversionName).Length > 0
+                || symbol.GetMembers(WellKnownMemberNames.ExplicitConversionName).Length > 0,
         };
     }
 

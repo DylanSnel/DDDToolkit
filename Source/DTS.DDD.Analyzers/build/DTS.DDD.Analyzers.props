@@ -50,6 +50,13 @@
       build declared it from DDD_Module, and the file it wrote that into is no one's to edit.
     -->
     <CompilerVisibleProperty Include="MSBuildProjectFullPath" />
+
+    <!--
+      Every [SingleValueObject<T>] of the project gets implicit conversions to and from its value, and its always-valid
+      twin an implicit conversion from the value, which validates and throws for an invalid value. On when unset; false
+      turns them off.
+    -->
+    <CompilerVisibleProperty Include="DDD_ImplicitConversions" />
   </ItemGroup>
 
   <ItemGroup>
