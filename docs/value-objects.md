@@ -355,17 +355,17 @@ harm.
 
 ## Implicit conversions
 
-A project can let a single value object convert to its value, and a value convert to the always-valid twin. Set the
-MSBuild property `DDD_ImplicitConversions` to `true`, for one project or in a `Directory.Build.props`. The property is
-off by default:
+A single value object converts to its value, and a value converts to the always-valid twin. The generator writes both
+conversions on every `[SingleValueObject<T>]`. A project that wants none sets the MSBuild property
+`DDD_ImplicitConversions` to `false`, in its project file or in a `Directory.Build.props`:
 
 ```xml
 <PropertyGroup>
-  <DDD_ImplicitConversions>true</DDD_ImplicitConversions>
+  <DDD_ImplicitConversions>false</DDD_ImplicitConversions>
 </PropertyGroup>
 ```
 
-The generator then writes two conversions on every `[SingleValueObject<T>]` of the project:
+The two conversions:
 
 | Conversion | Written on | What it does |
 |---|---|---|

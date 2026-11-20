@@ -12,9 +12,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
-- **Implicit conversions for single value objects.** With the MSBuild property `DDD_ImplicitConversions` set to `true`,
-  every `[SingleValueObject<T>]` converts to its value, and a value converts to its always-valid twin, which validates
-  and throws `InvalidValueObjectException` for an invalid value. Off by default.
+- **Implicit conversions for single value objects.** Every `[SingleValueObject<T>]` converts to its value, and a value
+  converts to its always-valid twin, which validates and throws `InvalidValueObjectException` for an invalid value. On
+  by default. The MSBuild property `DDD_ImplicitConversions` set to `false` turns them off.
   - The plain record gets no conversion from the value.
   - A record that declares a conversion operator of its own gets none from the generator on the record.
   - A value of an interface type or `object` gets no conversion.

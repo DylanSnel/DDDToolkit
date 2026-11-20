@@ -52,8 +52,9 @@
     <CompilerVisibleProperty Include="MSBuildProjectFullPath" />
 
     <!--
-      true: every [SingleValueObject<T>] of the project gets an implicit conversion to its value, and its always-valid
-      twin an implicit conversion from the value, which validates and throws for an invalid value. Off when unset.
+      Every [SingleValueObject<T>] of the project gets an implicit conversion to its value, and its always-valid twin an
+      implicit conversion from the value, which validates and throws for an invalid value. On when unset; false turns
+      them off.
     -->
     <CompilerVisibleProperty Include="DDD_ImplicitConversions" />
   </ItemGroup>

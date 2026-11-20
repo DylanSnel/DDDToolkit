@@ -4,7 +4,7 @@ using DTS.DDD.Exceptions;
 namespace DTS.DDD.Analyzers.Tests.Generation;
 
 /// <summary>
-/// With <c>DDD_ImplicitConversions</c> set to <c>true</c>, a <c>[SingleValueObject&lt;T&gt;]</c> converts to its value,
+/// Unless <c>DDD_ImplicitConversions</c> is <c>false</c>, a <c>[SingleValueObject&lt;T&gt;]</c> converts to its value,
 /// and a value converts to the always-valid twin, which validates and throws for an invalid value. The plain record gets
 /// no conversion from the value, and a record whose author declared a conversion operator gets none from the generator.
 /// </summary>
@@ -26,14 +26,14 @@ public class ImplicitConversionTests
     private static GeneratorRunOutcome Run(string source, bool conversions = true)
     {
         var host = GeneratorTestHost.Create(Preamble + source);
-        return (conversions ? host.WithBuildProperty("DDD_ImplicitConversions", "true") : host).RunCore();
+        return (conversions ? host : host.WithBuildProperty("DDD_ImplicitConversions", "false")).RunCore();
     }
 
     private static MethodInfo[] Conversions(Type type)
         => [.. type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly).Where(method => method.Name == "op_Implicit")];
 
     [Fact]
-    public void Without_the_property_the_generator_writes_no_conversion()
+    public void A_project_that_sets_the_property_to_false_gets_no_conversion()
     {
         var result = Run(Language, conversions: false);
 
@@ -41,6 +41,18 @@ public class ImplicitConversionTests
         var emitted = result.Emit();
         Conversions(emitted.Type("Sample.Language")).Should().BeEmpty();
         Conversions(emitted.Type("Sample.ValidLanguage")).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("true")]
+    public void A_project_that_leaves_the_property_out_or_sets_it_true_gets_both_conversions(string? setting)
+    {
+        var host = GeneratorTestHost.Create(Preamble + Language);
+        var emitted = (setting is null ? host.WithoutBuildProperties() : host.WithBuildProperty("DDD_ImplicitConversions", setting)).RunCore().Emit();
+
+        Conversions(emitted.Type("Sample.Language")).Should().ContainSingle();
+        Conversions(emitted.Type("Sample.ValidLanguage")).Should().ContainSingle();
     }
 
     [Fact]

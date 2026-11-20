@@ -10,8 +10,8 @@ namespace DTS.DDD.Analyzers;
 /// records, plus their always-valid twin. Both implement <c>ISingleValue&lt;TSelf, TValue&gt;</c> when the project
 /// can see it, so a project that does not declare them can still store them as their value.
 /// <para>
-/// With the MSBuild property <c>DDD_ImplicitConversions</c> set to <c>true</c>, it also writes two implicit
-/// conversions: from the record to its value, and from the value to the twin. The second validates, and throws
+/// It also writes two implicit conversions, unless the MSBuild property <c>DDD_ImplicitConversions</c> is
+/// <c>false</c>: from the record to its value, and from the value to the twin. The second validates, and throws
 /// <c>InvalidValueObjectException</c> for an invalid value. A record whose author declared a conversion operator
 /// gets no conversion from the generator, and the plain record never gets one from the value: a plain value object
 /// may be invalid, and a silent conversion to it would hide that.
@@ -22,9 +22,10 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // On unless the project sets the property to false: unset and empty both mean on.
         var implicitConversions = context.AnalyzerConfigOptionsProvider.Select(static (provider, _) =>
-            provider.GlobalOptions.TryGetValue("build_property.DDD_ImplicitConversions", out var value)
-            && string.Equals(value?.Trim(), "true", global::System.StringComparison.OrdinalIgnoreCase));
+            !provider.GlobalOptions.TryGetValue("build_property.DDD_ImplicitConversions", out var value)
+            || !string.Equals(value?.Trim(), "false", global::System.StringComparison.OrdinalIgnoreCase));
 
         context.RegisterSourceOutput(
             context.SingleValueObjects().Combine(implicitConversions),
@@ -77,7 +78,7 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
                 if (implicitConversions && definition.ValueConvertible && !definition.DeclaresConversion)
                 {
                     writer.Line();
-                    writer.Line("/// <summary>The value. Written because DDD_ImplicitConversions is true.</summary>");
+                    writer.Line("/// <summary>The value. Set DDD_ImplicitConversions to false for no conversions.</summary>");
                     writer.Line("public static implicit operator " + value.FullyQualifiedName + "(" + name + " value) => (value ?? throw new global::System.ArgumentNullException(nameof(value))).Value;");
                 }
 
@@ -122,7 +123,7 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
                 if (implicitConversions && definition.ValueConvertible)
                 {
                     writer.Line();
-                    writer.Line("/// <summary>The value, validated. Throws InvalidValueObjectException when it is invalid. Written because DDD_ImplicitConversions is true.</summary>");
+                    writer.Line("/// <summary>The value, validated. Throws InvalidValueObjectException when it is invalid. Set DDD_ImplicitConversions to false for no conversions.</summary>");
                     writer.Line("public static implicit operator " + validName + "(" + value.FullyQualifiedName + " value) => new(value);");
                 }
             }
