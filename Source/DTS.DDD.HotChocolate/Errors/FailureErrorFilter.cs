@@ -1,6 +1,8 @@
 using DTS.DDD.Exceptions;
 using DTS.DDD.Invariants;
 using DTS.DDD.Localization;
+using DTS.DDD.Results;
+using ResultError = DTS.DDD.Results.Error;
 using DTS.DDD.Validation;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -97,6 +99,7 @@ public sealed class FailureErrorFilter : IErrorFilter
             InvalidValueObjectException invalid => Split(error, FailureValues.Failures(invalid).Select(failure => FromValidation(error, failure))),
             InvariantViolationException broken => Split(error, FailureValues.Violations(broken).Select(violation => FromViolation(error, violation))),
             RefusalException refusal => FromRefusal(error, refusal),
+            ErrorException failed => FromError(error, failed.Error),
             _ => error,
         };
     }
@@ -155,6 +158,38 @@ public sealed class FailureErrorFilter : IErrorFilter
     }
 
     /// <summary>One error stays one error; several become an <see cref="AggregateError"/>, which HotChocolate reports one by one.</summary>
+    // The error of a failed result, read with Result<T>.Value or ThrowIfFailure: the same extensions as a refusal, and
+    // for an InvalidError with failures one GraphQL error per failure, as an invalid value object gives.
+    private IError FromError(IError error, ResultError failed)
+    {
+        if (failed is InvalidError { Failures.Count: > 0 } invalid)
+        {
+            return Split(error, invalid.Failures.Select(failure => FromValidation(error, failure)));
+        }
+
+        var builder = ErrorBuilder.FromError(error)
+            .SetMessage(_localizer?.Localize(failed) ?? failed.Message)
+            .SetCode(failed.Code)
+            .SetExtension(KindExtension, EnumValueSpellings.Spell(KindOf(failed), _kindSpelling))
+            .SetExtension(ArgumentsExtension, FailureValues.AsExtension(failed.Arguments));
+        if (failed.Field is { Length: > 0 } field)
+        {
+            builder.SetExtension(FieldExtension, field);
+        }
+
+        return builder.Build();
+    }
+
+    // The kind of an error by its type: the four kinds of a refusal, and Unexpected.
+    private static string KindOf(ResultError error) => error switch
+    {
+        InvalidError => nameof(RefusalKind.Invalid),
+        NotPermittedError => nameof(RefusalKind.NotPermitted),
+        NotFoundError => nameof(RefusalKind.NotFound),
+        ConflictError => nameof(RefusalKind.Conflict),
+        _ => "Unexpected",
+    };
+
     private static IError Split(IError error, IEnumerable<IError> errors)
     {
         var all = errors.ToArray();

@@ -76,16 +76,16 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
             var note = new PrivateNote { Id = Guid.CreateVersion7(), Text = body.Text };
             notes.Notes.Add(note);
             await notes.SaveChangesAsync(cancellationToken);
-            return Results.Created($"/notes/{note.Id}", new { note.Id, note.Owner });
+            return global::Microsoft.AspNetCore.Http.Results.Created($"/notes/{note.Id}", new { note.Id, note.Owner });
         });
 
         _app.MapGet("/notes/{id:guid}", async (Guid id, NotesContext notes, CancellationToken cancellationToken)
             => await notes.Notes.SingleOrDefaultAsync(note => note.Id == id, cancellationToken) is { } note
-                ? Results.Ok(new { note.Text, note.Owner })
-                : Results.NotFound());
+                ? global::Microsoft.AspNetCore.Http.Results.Ok(new { note.Text, note.Owner })
+                : global::Microsoft.AspNetCore.Http.Results.NotFound());
 
         _app.MapGet("/claims", async (NotesContext notes, CancellationToken cancellationToken)
-            => Results.Text(await notes.Database.SqlQueryRaw<string>("""SELECT coalesce(auth.jwt()::text, 'null') AS "Value" """).SingleAsync(cancellationToken)));
+            => global::Microsoft.AspNetCore.Http.Results.Text(await notes.Database.SqlQueryRaw<string>("""SELECT coalesce(auth.jwt()::text, 'null') AS "Value" """).SingleAsync(cancellationToken)));
 
         // Who the request is, asked while the system is the ambient caller: the request's own caller does not
         // change with it, what the accessor answers does.
@@ -93,7 +93,7 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
         {
             using (TestAccess.BeginSystemBypassingRowAccess())
             {
-                return Results.Text($"{context.GetSupabaseUser()}|{callers.Snapshot}");
+                return global::Microsoft.AspNetCore.Http.Results.Text($"{context.GetSupabaseUser()}|{callers.Snapshot}");
             }
         });
 
@@ -102,7 +102,7 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
         {
             using (TestAccess.BeginSystemBypassingRowAccess())
             {
-                return Results.Ok(await notes.Notes.CountAsync(cancellationToken));
+                return global::Microsoft.AspNetCore.Http.Results.Ok(await notes.Notes.CountAsync(cancellationToken));
             }
         });
 

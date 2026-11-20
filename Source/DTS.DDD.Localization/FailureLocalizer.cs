@@ -142,6 +142,33 @@ public sealed class FailureLocalizer : IFailureLocalizer
     }
 
     /// <summary>
+    /// The error of a failed result in the reader's language, looked up by its <see cref="Results.Error.Code"/> as a
+    /// refusal is, or its own message when nothing knows the code. A template reads the arguments, and also
+    /// <c>{Code}</c>.
+    /// </summary>
+    /// <param name="error">The error to phrase.</param>
+    public string Localize(Results.Error error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+
+        var template = Find(error.Code);
+        if (template is null)
+        {
+            return error.Message;
+        }
+
+        return FailureTemplate.Format(template, (string name, out object? value) =>
+        {
+            if (error.Arguments.TryGetValue(name, out value))
+            {
+                return true;
+            }
+
+            value = string.Equals(name, nameof(Results.Error.Code), StringComparison.OrdinalIgnoreCase) ? error.Code : null;
+            return value is not null;
+        });
+    }
+    /// <summary>
     /// The refusal in the reader's language, looked up by its <see cref="RefusalException.Code"/> exactly
     /// as a validation failure is, or its own message when nothing knows the code.
     /// </summary>

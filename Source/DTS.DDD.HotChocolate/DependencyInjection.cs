@@ -88,6 +88,9 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(builder);
 
+        // A resolver that returns a Result<T> has the type of T, and its failure is an ErrorException for the filter below.
+        builder.TryAddTypeInterceptor(typeof(ResultFieldsInterceptor));
+
         // The localizer is an application service, and error filters are built from the schema's own
         // services, so it is asked for on the root provider. The spelling is the schema's, and so in its services.
         return builder.AddErrorFilter(services => new FailureErrorFilter(

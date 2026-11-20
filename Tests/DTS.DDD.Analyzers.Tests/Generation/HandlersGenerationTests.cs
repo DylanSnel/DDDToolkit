@@ -55,6 +55,50 @@ public class HandlersGenerationTests
     }
 
     [Fact]
+    public void A_handler_of_a_result_request_is_registered_with_the_result_as_its_response()
+    {
+        const string results =
+            """
+            using DTS.DDD.Abstractions.Attributes;
+            using DTS.DDD.Mediator;
+            using DTS.DDD.Results;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            [assembly: Module("Shop")]
+
+            namespace Shop;
+
+            public sealed record Reserve(string Sku) : IResultCommand<int>;
+
+            public sealed record Cancel(string Sku) : IResultCommand;
+
+            public sealed record Count(string Sku) : IResultQuery<int>;
+
+            public sealed class OnReserve : IResultCommandHandler<Reserve, int>
+            {
+                public ValueTask<Result<int>> Handle(Reserve command, CancellationToken cancellationToken) => ValueTask.FromResult<Result<int>>(3);
+            }
+
+            public sealed class OnCancel : IResultCommandHandler<Cancel>
+            {
+                public ValueTask<Result> Handle(Cancel command, CancellationToken cancellationToken) => ValueTask.FromResult(Result.Success());
+            }
+
+            public sealed class OnCount : IResultQueryHandler<Count, int>
+            {
+                public ValueTask<Result<int>> Handle(Count query, CancellationToken cancellationToken) => ValueTask.FromResult<Result<int>>(7);
+            }
+            """;
+
+        var result = GeneratorTestHost.Create(results).WithDependencyInjection().RunCore();
+
+        result.ShouldCompile();
+        result.ShouldContain(Hint, "AddCommandHandler<global::Shop.Reserve, global::DTS.DDD.Results.Result<int>, global::Shop.OnReserve>(services);");
+        result.ShouldContain(Hint, "AddCommandHandler<global::Shop.Cancel, global::DTS.DDD.Results.Result, global::Shop.OnCancel>(services);");
+        result.ShouldContain(Hint, "AddQueryHandler<global::Shop.Count, global::DTS.DDD.Results.Result<int>, global::Shop.OnCount>(services);");
+    }
+    [Fact]
     public void A_closed_generic_notification_of_a_package_is_registered_as_its_handler_names_it()
     {
         const string package =

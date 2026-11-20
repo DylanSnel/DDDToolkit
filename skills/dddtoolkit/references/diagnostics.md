@@ -967,6 +967,13 @@ keeps the first. Delete one of the handlers. Put what should run around the hand
 from a handler counts as a second handler: make the base abstract. Notifications may have many handlers and are not
 reported.
 
+## DDD00111
+
+Error, at a call: the call returns a `DTS.DDD.Results.Result` or `Result<T>` and stands as a statement of its own,
+directly or awaited, so its failure is lost. Read `IsSuccess` or `IsFailure`, return the result, pass it on, or call
+`ThrowIfFailure()` where a failure is a bug. Write `_ = Call();` where the failure does not matter. `Tap` and
+`TapError` on a result are not reported.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

@@ -53,6 +53,7 @@ public partial class Order { }
 | [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, child entities, read-only collections, referencing by id |
 | [Invariants](docs/invariants.md) | Named `IInvariant<T>` rules and the `CheckInvariants()` seam, the two stages, and the save that runs them |
 | [Domain events](docs/domain-events.md) | Declaring, raising and draining events, and their stable names |
+| [Results](docs/results.md) | `Result<T>` and the error records, how the mediator and GraphQL read them, and the log line of a failure |
 | [Designing aggregates](docs/aggregate-design.md) | The four rules of aggregate design, and how the toolkit holds each one |
 | [Testing](docs/testing.md) | The aggregate testing kit: acting on an aggregate and asserting on what it raised |
 | [Failure handling](docs/value-objects.md#failure-handling) | Validating without exceptions, and when to throw anyway |

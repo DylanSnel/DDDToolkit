@@ -46,9 +46,9 @@ public sealed class SupabaseTokenValidatorTests : IAsyncLifetime
         _project.MapGet("/auth/v1/.well-known/openid-configuration", (HttpRequest request) =>
         {
             var issuer = $"{request.Scheme}://{request.Host}/auth/v1";
-            return Results.Text(JsonSerializer.Serialize(new { issuer, jwks_uri = issuer + "/.well-known/jwks.json" }), "application/json");
+            return global::Microsoft.AspNetCore.Http.Results.Text(JsonSerializer.Serialize(new { issuer, jwks_uri = issuer + "/.well-known/jwks.json" }), "application/json");
         });
-        _project.MapGet("/auth/v1/.well-known/jwks.json", () => Results.Text(JwksOf(_projectKey), "application/json"));
+        _project.MapGet("/auth/v1/.well-known/jwks.json", () => global::Microsoft.AspNetCore.Http.Results.Text(JwksOf(_projectKey), "application/json"));
 
         await _project.StartAsync(TestContext.Current.CancellationToken);
         _projectUrl = _project.Services.GetRequiredService<IServer>().Features.GetRequiredFeature<IServerAddressesFeature>().Addresses.First();

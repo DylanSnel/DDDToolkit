@@ -15,7 +15,7 @@ const sidebars = {
       type: 'category',
       label: 'Building blocks',
       collapsed: false,
-      items: ['identifiers', 'value-objects', 'entities-and-aggregates', 'invariants', 'domain-events', 'aggregate-design', 'testing'],
+      items: ['identifiers', 'value-objects', 'entities-and-aggregates', 'invariants', 'domain-events', 'results', 'aggregate-design', 'testing'],
     },
     {
       type: 'category',
