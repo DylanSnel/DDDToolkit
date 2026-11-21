@@ -132,9 +132,11 @@ IReadOnlyList<Seat> listed = await seats.ListAsync(cancellationToken);
 - Tenancy returns objects of your seat class with every field. `SeatService` does this, and so does
   `TenantSelection.SeatsOfAsync<TSeat>(user)`, which returns the person's seats in every tenant for a tenant
   picker. A screen shows the name with no extra query.
-- The identity is personal data, like an e-mail address. Only the fields your API lists leave it. Each of the
-  sample's GraphQL types lists its fields one by one (`BindFieldsExplicitly`), and REST writes the same fields. No
-  response of the sample includes the identity.
+- The identity is the subject of the token, such as the Supabase user id. It is marked `[PersonalData]`, so a GraphQL
+  type leaves it out unless your type lists it. No response of the sample includes the identity.
+- `SeatAdded` carries the identity, so a module of yours can act for the person when a seat is added. For example, an
+  accounts module opens the person's account once, on the first seat in any tenant. The other seat events carry only
+  ids.
 
 The next diagram shows what each seat method checks before it reads, so you know when a screen gets a refusal and
 when it gets an empty list. Purple: the methods. Green: the seats are read. Red: a refusal. Grey: an empty list.

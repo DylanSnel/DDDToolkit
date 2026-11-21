@@ -2336,16 +2336,22 @@ A seat was added to a tenant.
 
 | Member | Summary |
 |---|---|
-| [`SeatAdded(TTenantId, TSeatId, string, TenancyActor<TSeatId>?)`](#seataddedttenantid-tseatid-string-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
+| [`SeatAdded(TTenantId, TSeatId, Guid, string, TenancyActor<TSeatId>?)`](#seataddedttenantid-tseatid-guid-string-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the seat was added to. |
 | `TSeatId SeatId { get; init; }` | The seat added. |
+| `Guid Identity { get; init; }` | The verified identity the seat belongs to: the subject of its token, such as the Supabase user id. One person has one identity across all tenants, so a module can key its own data on it. |
 | `string Kind { get; init; }` | The seat's kind, as it stores it: one of the catalogue's kinds, which the seat keeps. |
 | `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](access.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's services, with no actor handed to it. |
 
-#### `SeatAdded(TTenantId, TSeatId, string, TenancyActor<TSeatId>?)`
+#### `SeatAdded(TTenantId, TSeatId, Guid, string, TenancyActor<TSeatId>?)`
 
 ```csharp
-public SeatAdded(TTenantId TenantId, TSeatId SeatId, string Kind, TenancyActor<TSeatId>? By)
+public SeatAdded(
+    TTenantId TenantId,
+    TSeatId SeatId,
+    Guid Identity,
+    string Kind,
+    TenancyActor<TSeatId>? By)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -2354,6 +2360,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the seat was added to.
 - `SeatId`: The seat added.
+- `Identity`: The verified identity the seat belongs to: the subject of its token, such as the Supabase user id. One person has one identity across all tenants, so a module can key its own data on it.
 - `Kind`: The seat's kind, as it stores it: one of the catalogue's kinds, which the seat keeps.
 - `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](access.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's services, with no actor handed to it.
 
