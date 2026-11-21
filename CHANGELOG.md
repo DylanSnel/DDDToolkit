@@ -10,6 +10,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-21
+
+No change to the code of the packages.
+
+### Changed
+
+- The Tenancy docs say that `SeatAdded` carries the seat's identity, as in DTS Pro 0.3.0, and what a module can do
+  with it.
+
 ## [0.2.0] - 2026-11-20
 
 No change to the code of the packages. The docs and the messages follow the names of DTS Pro 0.2.0.
