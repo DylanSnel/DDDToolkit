@@ -724,15 +724,29 @@ services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator().
 
 ### Publishing an event
 
-To let another module receive one of Tenancy's events, map the event in the outbox of your Tenancy context, before
-`AddTenancyDomainEvents`. `AddTenancyDomainEvents` keeps every event without a mapping off the sinks, so a mapping
-after that call throws:
+`AddTenancyDomainEvents` keeps every event of Tenancy off the sinks until your module maps it. To let another module
+receive one of Tenancy's events, write a class per event in the project of your Tenancy context. The class implements
+`IOutboundIntegrationEvent<TDomainEvent, TContract>` with the event closed over your ids:
+
+```csharp
+internal sealed class PublishSeatSuspended : IOutboundIntegrationEvent<SeatSuspended<TenantId, SeatId>, SeatSuspendedV1>
+{
+    public ValueTask<SeatSuspendedV1?> CreateAsync(SeatSuspended<TenantId, SeatId> suspended, CancellationToken cancellationToken)
+        => new(new SeatSuspendedV1(suspended.SeatId.Value));
+}
+```
+
+The generator writes a `PublishWith` call for each such class into `Add{Module}IntegrationEvents()`. The registration
+stays the same size when your module publishes more events. The order of the two calls does not matter:
 
 ```csharp
 services.AddDDDToolkitEntityFramework(options => options.UseOutbox<ShopTenancyContext>(outbox => outbox
-    .PublishAs<SeatSuspended<TenantId, SeatId>, SeatSuspendedV1>(suspended => new SeatSuspendedV1(suspended.SeatId.Value))
-    .AddTenancyDomainEvents()));
+    .AddShopIntegrationEvents()
+    .AddTenancyDomainEvents()
+    .SendToModules()));
 ```
+
+[A class per published event](../integration-events.md#a-class-per-published-event) describes the class.
 
 ### The kind of a unit
 

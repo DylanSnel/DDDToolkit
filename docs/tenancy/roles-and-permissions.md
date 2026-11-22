@@ -356,7 +356,7 @@ it runs again at every start. A host on other storage runs them in its own `ISta
 [IntegrationEvent]
 public sealed record RoleFollowedItsStarterRoleV1(long TenantId, Guid RoleId, string StarterRole, string[] Added, string[] Removed, string[] ManagingAccess);
 
-// Tenancy's outbox. Map the event before AddTenancyDomainEvents, which keeps every event without a mapping off the sinks.
+// Tenancy's outbox. AddTenancyDomainEvents keeps every event without a mapping off the sinks.
 options.UseOutbox<ShopTenancyContext>(outbox => outbox
     .PublishAs<RoleFollowedItsStarterRole<TenantId, RoleId, SeatId>, RoleFollowedItsStarterRoleV1>(followed => new RoleFollowedItsStarterRoleV1(
         followed.TenantId.Value, followed.RoleId.Value, followed.StarterRole, [.. followed.Added], [.. followed.Removed], [.. followed.ManagingAccess]))

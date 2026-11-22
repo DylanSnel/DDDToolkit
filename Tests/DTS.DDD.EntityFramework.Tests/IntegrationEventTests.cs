@@ -419,6 +419,45 @@ public sealed class IntegrationEventTests : IDisposable
     }
 
     [Fact]
+    public async Task DoNotPublishUnlessMapped_keeps_an_event_inside_until_an_entry_maps_it_in_either_order()
+    {
+        var domainEvent = new ShelfCreated(ShelfId.CreateUnique(), "Fiction");
+        using var services = new ServiceCollection().BuildServiceProvider();
+
+        var keptInside = new IntegrationEventMap().DoNotPublishUnlessMapped<ShelfCreated>().DoNotPublishUnlessMapped<ShelfCreated>();
+        keptInside.IsMapped(typeof(ShelfCreated)).Should().BeTrue("an event kept inside is not published as it stands");
+        keptInside.MappedEventTypes.Should().BeEmpty("keeping an event inside adds no entry");
+        (await keptInside.ConvertAsync(domainEvent, services, TestContext.Current.CancellationToken)).Should().BeNull();
+
+        var mappedAfter = new IntegrationEventMap()
+            .DoNotPublishUnlessMapped<ShelfCreated>()
+            .PublishAs<ShelfCreated, ShelfOpenedV3>(e => new ShelfOpenedV3(e.ShelfId.ToString(), e.Name));
+        (await mappedAfter.ConvertAsync(domainEvent, services, TestContext.Current.CancellationToken)).Should().BeOfType<ShelfOpenedV3>();
+
+        var mappedBefore = new IntegrationEventMap()
+            .PublishAs<ShelfCreated, ShelfOpenedV3>(e => new ShelfOpenedV3(e.ShelfId.ToString(), e.Name))
+            .DoNotPublishUnlessMapped<ShelfCreated>();
+        (await mappedBefore.ConvertAsync(domainEvent, services, TestContext.Current.CancellationToken)).Should().BeOfType<ShelfOpenedV3>();
+    }
+
+    [Fact]
+    public async Task A_mapping_after_DoNotPublishUnlessMapped_publishes_the_contract_and_the_other_event_stays_inside()
+    {
+        var sink = new RecordingSink();
+        using var host = CreateHost(outbox => outbox
+            .DoNotPublishUnlessMapped<ShelfCreated>()
+            .DoNotPublishUnlessMapped<BookAdded>()
+            .PublishAs<BookAdded, BookShelved>(e => new BookShelved(e.BookId.ToString()))
+            .SendTo(sink));
+        await SaveShelfAsync(host, withBook: true);
+
+        var processed = await ProcessAsync(host);
+
+        processed.Should().Be(2, "an event that stays inside still counts as delivered");
+        sink.Messages.Should().ContainSingle().Which.Body.Should().BeOfType<BookShelved>();
+    }
+
+    [Fact]
     public void An_integration_event_version_below_one_is_rejected()
     {
         var attribute = new Abstractions.Attributes.IntegrationEventAttribute("x");
