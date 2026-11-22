@@ -139,6 +139,13 @@ internal static class GraphQLSchemaClasses
             }
         }
 
+        // A class marked with a name only carries [Query] or [Mutation] on its methods: HotChocolate's generator
+        // registers it, and SchemaFieldsInterceptor keeps its fields to its schema. Nothing here is for it.
+        if (schemas.Count == 0 && problems.Count == 0)
+        {
+            return null;
+        }
+
         for (var current = type; current is not null; current = current.ContainingType)
         {
             if (current.IsGenericType)
