@@ -195,14 +195,14 @@ not published on nuget.org. Their docs are on this site.
 
 | Package | Use it for |
 |---|---|
-| `DylansTechStack.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, a service per aggregate, and the access manager. No database in it. |
-| `DylansTechStack.Tenancy.Abstractions` | Tenancy's markers for domain classes, `[OfTenant]` on the property that says which tenant a row belongs to, for a module's domain project that sees only Tenancy's ids. Tenancy's package references it. |
-| `DylansTechStack.Tenancy.EntityFramework` | Tenancy in a context of your own, with its queries as Entity Framework queries (`db.Tenancy()`), on every provider, and the convention that maps `[OfTenant]`. |
-| `DylansTechStack.Tenancy.Postgres` | Tenancy's queries as SQL functions, its row level security policies, and the start-up checks. |
-| `DylansTechStack.Membership` | [Membership](docs/membership/overview.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
-| `DylansTechStack.Membership.Abstractions` | Membership's markers for domain classes, `[At]` on the property that says where a resource hangs. Membership's package references it. |
-| `DylansTechStack.Membership.EntityFramework` | A resource's members in a context of your own, mapped by convention, a registration named after each resource, and queries inside your own statements (`db.Boards.WhereIHold(permission)`). Its generator joins a resource to Tenancy where an application has both. |
-| `DylansTechStack.Membership.Postgres` | A resource's access queries as SQL functions for your row access rules, and a start-up check. |
+| `DylansTechStack.Pro.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, a service per aggregate, and the access manager. No database in it. |
+| `DylansTechStack.Pro.Tenancy.Abstractions` | Tenancy's markers for domain classes, `[OfTenant]` on the property that says which tenant a row belongs to, for a module's domain project that sees only Tenancy's ids. Tenancy's package references it. |
+| `DylansTechStack.Pro.Tenancy.EntityFramework` | Tenancy in a context of your own, with its queries as Entity Framework queries (`db.Tenancy()`), on every provider, and the convention that maps `[OfTenant]`. |
+| `DylansTechStack.Pro.Tenancy.Postgres` | Tenancy's queries as SQL functions, its row level security policies, and the start-up checks. |
+| `DylansTechStack.Pro.Membership` | [Membership](docs/membership/overview.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
+| `DylansTechStack.Pro.Membership.Abstractions` | Membership's markers for domain classes, `[At]` on the property that says where a resource hangs. Membership's package references it. |
+| `DylansTechStack.Pro.Membership.EntityFramework` | A resource's members in a context of your own, mapped by convention, a registration named after each resource, and queries inside your own statements (`db.Boards.WhereIHold(permission)`). Its generator joins a resource to Tenancy where an application has both. |
+| `DylansTechStack.Pro.Membership.Postgres` | A resource's access queries as SQL functions for your row access rules, and a start-up check. |
 
 Requires .NET 10. The generators themselves target `netstandard2.0` and carry no runtime
 dependencies, so they load in any recent SDK.

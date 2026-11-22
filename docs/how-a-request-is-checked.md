@@ -72,7 +72,7 @@ The sample's seed has a tenant called **harbor** (Harbor Works). Its organizatio
 regions below it (North and South), and areas below those, such as North Coast. The project **Pier 7** is at North
 Coast. Leo owns it, and Juno and Vic are on its crew. The project **Bay bridge** is at South Bay, and Juno is not on its
 crew. Every request below is sent for harbor. Its `Tenant` header names the tenant, and the host looks up the caller's
-seat there before anything else (`UseTenantSelection` of `DylansTechStack.Tenancy.AspNetCore`).
+seat there before anything else (`UseTenantSelection` of `DylansTechStack.Pro.Tenancy.AspNetCore`).
 
 | Caller | Who it is | Runs on Postgres as |
 |---|---|---|

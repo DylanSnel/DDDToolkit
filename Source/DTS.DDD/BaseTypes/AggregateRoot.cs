@@ -33,7 +33,10 @@ public abstract class AggregateRoot<TIdObject> : Entity<TIdObject>, IAggregateRo
     /// <remarks>
     /// Mapped as a concurrency token by DTS.DDD.EntityFramework, which also increments it on every
     /// save that touches this aggregate. A stale version surfaces as a <c>ConcurrencyConflictException</c>.
+    /// Marked <see cref="BookkeepingAttribute"/>, so an API layer leaves it out unless a type lists it: a GraphQL type
+    /// that takes an expected version shows it with a resolver, <c>GetVersion([Parent] Order order) =&gt; order.Version</c>.
     /// </remarks>
+    [Bookkeeping]
     public long Version { get; private set; }
 
     /// <summary>

@@ -301,6 +301,17 @@ public sealed class OutboxOptions
     }
 
     /// <summary>
+    /// Keeps <typeparamref name="TDomainEvent"/> off the sinks until a <c>PublishAs</c> or <c>PublishWith</c> maps it,
+    /// registered before or after this call. Shorthand for
+    /// <see cref="IntegrationEventMap.DoNotPublishUnlessMapped{TDomainEvent}"/>.
+    /// </summary>
+    public OutboxOptions DoNotPublishUnlessMapped<TDomainEvent>() where TDomainEvent : IDomainEvent
+    {
+        IntegrationEvents.DoNotPublishUnlessMapped<TDomainEvent>();
+        return this;
+    }
+
+    /// <summary>
     /// The names this outbox sends out: every contract an entry names, and every registered event that
     /// leaves as it stands. Nothing when it has no sink, because then nothing leaves the process.
     /// </summary>

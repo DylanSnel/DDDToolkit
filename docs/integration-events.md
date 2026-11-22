@@ -150,7 +150,7 @@ Now `OrderPlaced` can gain a field, lose a field or get a new name, and the publ
 you change `OrderPlacedV2` on purpose. Every sink receives what the mapping returns. The sink for the other modules in
 this process is described [below](#delivering-to-a-module-in-the-same-process).
 
-Two more options:
+Three more options:
 
 ```csharp
 // This event is for this module only. Local handlers still get it; no sink is called.
@@ -158,7 +158,15 @@ outbox.DoNotPublish<CustomerCreditChecked>();
 
 // Publish only some occurrences. Returning null drops that one message.
 outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => e.Total.Amount < 1000 ? null : Map(e));
+
+// Keep this event off the sinks until a PublishAs or PublishWith maps it.
+outbox.DoNotPublishUnlessMapped<CustomerCreditChecked>();
 ```
+
+`DoNotPublish` is a mapping, so a second mapping of the same event throws. `DoNotPublishUnlessMapped` adds no mapping.
+A `PublishAs` or `PublishWith` of the same event wins, before or after that call. A package that raises domain events
+calls `DoNotPublishUnlessMapped` for each of them, so the application maps the ones it publishes in any order. DTS
+Tenancy's `AddTenancyDomainEvents()` does this.
 
 ### A class per published event
 

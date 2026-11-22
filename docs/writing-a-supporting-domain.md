@@ -436,8 +436,8 @@ The toolkit's markers are split this way:
 
 | Markers' package | Namespace | Marker | Read by |
 |---|---|---|---|
-| `DylansTechStack.Tenancy.Abstractions` | `DTS.Tenancy` | `[OfTenant]`: the tenant an aggregate root belongs to | `OfTenantConvention`, in `DylansTechStack.Tenancy.EntityFramework` |
-| `DylansTechStack.Membership.Abstractions` | `DTS.Membership` | `[At]`: where an aggregate root hangs | the rules of a resource with members. Membership's generator, in `DylansTechStack.Membership`, reports [DDD00097](diagnostics.md#ddd00097) |
+| `DylansTechStack.Pro.Tenancy.Abstractions` | `DTS.Tenancy` | `[OfTenant]`: the tenant an aggregate root belongs to | `OfTenantConvention`, in `DylansTechStack.Pro.Tenancy.EntityFramework` |
+| `DylansTechStack.Pro.Membership.Abstractions` | `DTS.Membership` | `[At]`: where an aggregate root hangs | the rules of a resource with members. Membership's generator, in `DylansTechStack.Pro.Membership`, reports [DDD00097](diagnostics.md#ddd00097) |
 
 `[Owner]` stays in the core, in `DTS.DDD.Abstractions`, because the core's checks of the owner read it.
 

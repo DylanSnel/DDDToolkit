@@ -27,6 +27,7 @@ public sealed class IntegrationEventMap
     private sealed record Entry(Conversion Convert, Func<IDomainEvent, object?>? Immediate, (string Name, int Version)? Contract = null);
 
     private readonly Dictionary<Type, Entry> _entries = [];
+    private readonly HashSet<Type> _keptInsideUnlessMapped = [];
 
     /// <summary>The domain event types with an explicit entry.</summary>
     public IReadOnlyCollection<Type> MappedEventTypes => _entries.Keys;
@@ -105,12 +106,34 @@ public sealed class IntegrationEventMap
     public IntegrationEventMap DoNotPublish<TDomainEvent>() where TDomainEvent : IDomainEvent
         => AddImmediate(typeof(TDomainEvent), static _ => null);
 
-    /// <summary>True when <paramref name="domainEventType"/> has an entry, and is therefore not published as it stands.</summary>
+    /// <summary>
+    /// Keeps <typeparamref name="TDomainEvent"/> inside this process until an entry maps it. An entry from
+    /// <see cref="PublishAs{TDomainEvent, TContract}"/> or <see cref="PublishWith{TDomainEvent, TContract}"/> goes
+    /// before this call, whether it is registered before or after it. Calling this twice for one event is allowed.
+    /// <para>
+    /// A package registers its domain events with this call, so an application can map them in any order:
+    /// <code>
+    /// outbox.AddTenancyDomainEvents();                                  // calls DoNotPublishUnlessMapped for each event
+    /// outbox.PublishAs&lt;SeatAdded&lt;TenantId, SeatId&gt;, SeatAddedV1&gt;(...);  // SeatAdded leaves as SeatAddedV1
+    /// </code>
+    /// <see cref="DoNotPublish{TDomainEvent}"/> is an entry, so a mapping of the same event after it throws.
+    /// </para>
+    /// </summary>
+    public IntegrationEventMap DoNotPublishUnlessMapped<TDomainEvent>() where TDomainEvent : IDomainEvent
+    {
+        _keptInsideUnlessMapped.Add(typeof(TDomainEvent));
+        return this;
+    }
+
+    /// <summary>
+    /// True when <paramref name="domainEventType"/> has an entry or is kept inside with
+    /// <see cref="DoNotPublishUnlessMapped{TDomainEvent}"/>, and is therefore not published as it stands.
+    /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="domainEventType"/> is null.</exception>
     public bool IsMapped(Type domainEventType)
     {
         ArgumentNullException.ThrowIfNull(domainEventType);
-        return _entries.ContainsKey(domainEventType);
+        return _entries.ContainsKey(domainEventType) || _keptInsideUnlessMapped.Contains(domainEventType);
     }
 
     /// <summary>
@@ -137,7 +160,8 @@ public sealed class IntegrationEventMap
     /// <summary>
     /// Converts <paramref name="domainEvent"/> to the object that should be published: the mapped
     /// contract, the event itself when nothing is mapped (see <see cref="IsMapped"/>), or
-    /// <see langword="null"/> when the event must not be published.
+    /// <see langword="null"/> when the event must not be published. An event kept inside with
+    /// <see cref="DoNotPublishUnlessMapped{TDomainEvent}"/> and without an entry returns <see langword="null"/>.
     /// </summary>
     /// <param name="domainEvent">The event read back from the outbox.</param>
     /// <param name="services">The scope the outbox processor runs in, for an <see cref="IOutboundIntegrationEvent{TDomainEvent, TContract}"/> and its dependencies.</param>
@@ -148,9 +172,12 @@ public sealed class IntegrationEventMap
         ArgumentNullException.ThrowIfNull(domainEvent);
         ArgumentNullException.ThrowIfNull(services);
 
-        return _entries.TryGetValue(domainEvent.GetType(), out var entry)
-            ? entry.Convert(domainEvent, services, cancellationToken)
-            : ValueTask.FromResult<object?>(domainEvent);
+        if (_entries.TryGetValue(domainEvent.GetType(), out var entry))
+        {
+            return entry.Convert(domainEvent, services, cancellationToken);
+        }
+
+        return ValueTask.FromResult<object?>(_keptInsideUnlessMapped.Contains(domainEvent.GetType()) ? null : domainEvent);
     }
 
     /// <summary>
@@ -172,6 +199,12 @@ public sealed class IntegrationEventMap
 
         if (!_entries.TryGetValue(domainEvent.GetType(), out var entry))
         {
+            if (_keptInsideUnlessMapped.Contains(domainEvent.GetType()))
+            {
+                contract = null;
+                return true;
+            }
+
             contract = domainEvent;
             return false;
         }

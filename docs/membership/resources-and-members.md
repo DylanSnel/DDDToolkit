@@ -12,16 +12,16 @@ beside Tenancy.
 ## The packages
 
 > [!NOTE]
-> The packages are `DylansTechStack.Membership`, `.Abstractions`, `.EntityFramework` and `.Postgres`, and their
+> The packages are `DylansTechStack.Pro.Membership`, `.Abstractions`, `.EntityFramework` and `.Postgres`, and their
 > namespaces are `DTS.Membership*`. They are part of DTS Pro and are not published on nuget.org. They are 0.x, so their
 > names can still change.
 
 | Package | What it holds |
 |---|---|
-| `DylansTechStack.Membership` | The templates, the member list, the services' base classes and the generator that writes the list and the services, the rules, the access manager (`MembershipAccessManager<TResource>`) and the requirements. It has no database code. |
-| `DylansTechStack.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on each property that says where a resource hangs, one per kind of place, nullable where a place may be empty, in the namespace `DTS.Membership`. No Entity Framework. `DTS.Membership` references it. |
-| `DylansTechStack.Membership.EntityFramework` | The mapping by convention, with `HasMembers()` and `IsCustomRole()` for names of your own, the registrations, the stores the services load and save through, and `WhereIHold` for your own queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
-| `DylansTechStack.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
+| `DylansTechStack.Pro.Membership` | The templates, the member list, the services' base classes and the generator that writes the list and the services, the rules, the access manager (`MembershipAccessManager<TResource>`) and the requirements. It has no database code. |
+| `DylansTechStack.Pro.Membership.Abstractions` | Membership's markers for domain classes: `[At]`, on each property that says where a resource hangs, one per kind of place, nullable where a place may be empty, in the namespace `DTS.Membership`. No Entity Framework. `DTS.Membership` references it. |
+| `DylansTechStack.Pro.Membership.EntityFramework` | The mapping by convention, with `HasMembers()` and `IsCustomRole()` for names of your own, the registrations, the stores the services load and save through, and `WhereIHold` for your own queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
+| `DylansTechStack.Pro.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
 
 - **Membership needs no dispatcher and no Tenancy.** Members are your users unless the rules say
   [otherwise](beside-an-organization.md#three-settings-of-the-rules).

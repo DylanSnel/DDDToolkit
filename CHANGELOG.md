@@ -10,6 +10,45 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-22
+
+### Changed
+
+- A failed `Result` or `Result<T>` of a GraphQL field is reported as an error without a throw. The field answers
+  null and the response has the same coded error as before, with `code`, `kind`, `field` and `arguments`. Before
+  0.7.0 the formatter threw an `ErrorException` for every failure.
+
+## [0.6.0] - 2026-11-22
+ change to the code of the packages.
+
+### Changed
+
+- The docs and the skill name DTS Pro's packages by their new ids, `DylansTechStack.Pro.Tenancy`,
+  `DylansTechStack.Pro.Membership` and the others, as in DTS Pro 0.6.0.
+
+## [0.5.0] - 2026-11-22
+
+### Changed
+
+- `AggregateRoot.Version` is marked `[Bookkeeping]`. A GraphQL type that binds its fields by convention no longer
+  shows `version`. A type that takes an expected version shows it with a resolver in its type class:
+  `GetVersion([Parent] Order order) => order.Version`.
+
+## [0.4.0] - 2026-11-22
+
+### Added
+
+- `OutboxOptions.DoNotPublishUnlessMapped<TDomainEvent>()` and `IntegrationEventMap.DoNotPublishUnlessMapped<TDomainEvent>()`
+  keep a domain event off the sinks until a `PublishAs` or `PublishWith` maps it. The mapping can be registered
+  before or after the call. A second call for the same event is allowed.
+
+### Changed
+
+- `IntegrationEventMap.IsMapped` also returns `true` for an event kept inside with `DoNotPublishUnlessMapped`.
+- The Tenancy docs describe DTS Pro 0.4.0. `AddTenancyDomainEvents()` uses `DoNotPublishUnlessMapped`, so a mapping of
+  a Tenancy event can come before or after it. The docs map Tenancy's events with an `IOutboundIntegrationEvent` class
+  in place of a `PublishAs` lambda.
+
 ## [0.3.0] - 2026-11-21
 
 No change to the code of the packages.

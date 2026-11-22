@@ -167,8 +167,8 @@ packages always have the same version. Write a prerelease version in full, such 
 
   <ItemGroup>
     <PackageVersion Include="DylansTechStack.DDD" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Tenancy" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Tenancy.Postgres" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Tenancy" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Tenancy.Postgres" Version="3.2.0-preview.13" />
     <PackageVersion Include="DylansTechStack.DDD.EntityFramework.Supabase" Version="3.2.0-preview.13" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
@@ -200,7 +200,7 @@ This keeps the database out of the domain. The comment at the top of each file s
 
   <!-- The tenancy classes, and the rules the application adds to them. -->
   <ItemGroup>
-    <PackageReference Include="DylansTechStack.Tenancy" />
+    <PackageReference Include="DylansTechStack.Pro.Tenancy" />
   </ItemGroup>
 
   <ItemGroup>
@@ -239,7 +239,7 @@ This keeps the database out of the domain. The comment at the top of each file s
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DylansTechStack.Tenancy.Postgres" />
+    <PackageReference Include="DylansTechStack.Pro.Tenancy.Postgres" />
     <PackageReference Include="DylansTechStack.DDD.EntityFramework.Supabase" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
