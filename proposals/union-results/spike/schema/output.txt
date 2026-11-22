@@ -1,0 +1,116 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  ping: String!
+}
+
+type Mutation {
+  reserveStock(input: ReserveStockInput!): ReserveStockPayload!
+  reserveStockPlain(input: ReserveStockPlainInput!): ReserveStockPlainPayload!
+}
+
+type OutOfStock implements Error {
+  available: Int!
+  message: String!
+}
+
+type Reservation {
+  sku: String!
+  quantity: Int!
+}
+
+type ReserveStockPayload {
+  reservation: Reservation
+  errors: [ReserveStockError!]
+}
+
+type ReserveStockPlainPayload {
+  reservation: Reservation
+  errors: [ReserveStockPlainError!]
+}
+
+type SkuInvalid implements Error {
+  sku: String!
+  message: String!
+}
+
+type StockBlocked implements Error {
+  sku: String!
+  message: String!
+}
+
+interface Error {
+  message: String!
+}
+
+union ReserveStockError = StockBlocked | OutOfStock | SkuInvalid
+
+union ReserveStockPlainError = StockBlocked | OutOfStock | SkuInvalid
+
+input ReserveStockInput {
+  sku: String!
+  quantity: Int!
+}
+
+input ReserveStockPlainInput {
+  sku: String!
+  quantity: Int!
+}
+# reserveStock(tea, 2)
+{
+  "data": {
+    "reserveStock": {
+      "reservation": {
+        "sku": "tea",
+        "quantity": 2
+      },
+      "errors": null
+    }
+  }
+}
+# reserveStock(tea, 9)
+{
+  "data": {
+    "reserveStock": {
+      "reservation": null,
+      "errors": [
+        {
+          "__typename": "OutOfStock",
+          "message": "Only 5 left.",
+          "available": 5
+        }
+      ]
+    }
+  }
+}
+# reserveStock(blocked, 1)
+{
+  "data": {
+    "reserveStock": {
+      "reservation": null,
+      "errors": [
+        {
+          "__typename": "StockBlocked",
+          "message": "Stock blocked is blocked."
+        }
+      ]
+    }
+  }
+}
+# reserveStock(bad, 1)
+{
+  "data": {
+    "reserveStock": {
+      "reservation": null,
+      "errors": [
+        {
+          "__typename": "SkuInvalid",
+          "message": "bad is no valid SKU."
+        }
+      ]
+    }
+  }
+}

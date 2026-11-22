@@ -136,6 +136,42 @@ union ReserveStockError = StockBlockedError | OutOfStockError | SkuInvalidError
   | RefusalError | InvalidValuesError | BrokenRulesError | ConcurrencyConflictError
 ```
 
+## Schema test
+
+`spike/schema` builds a schema with HotChocolate 16.6.9 and the mutation conventions, and runs four mutations.
+`spike/schema/output.txt` holds the schema and the responses.
+
+- `UnionMutationInterceptor` is a prototype of the type interceptor. It finds a mutation field whose resolver
+  returns a type with `[Union]`, and reads the cases from the public constructors with one parameter.
+- The interceptor gives the field the type of the success case and calls `AddErrorType` for each error case. In the
+  spike an error case implements `IDomainError`. In the toolkit it would derive from `Error`.
+- A result formatter turns the union value into an `IFieldResult`. The conventions read the errors of a failed
+  `IFieldResult` as a list, so the formatter puts the error in an array of one.
+- The mutation `reserveStockPlain` maps the same union to `FieldResult` by hand. Both mutations get the same schema.
+
+```graphql
+type ReserveStockPayload {
+  reservation: Reservation
+  errors: [ReserveStockError!]
+}
+
+union ReserveStockError = StockBlocked | OutOfStock | SkuInvalid
+
+type OutOfStock implements Error {
+  available: Int!
+  message: String!
+}
+```
+
+`reserveStock(input: { sku: "tea", quantity: 9 })` answers:
+
+```json
+{ "reservation": null, "errors": [ { "__typename": "OutOfStock", "message": "Only 5 left.", "available": 5 } ] }
+```
+
+The spike leaves out `CodedError`, the four general error types and the `Error` suffix on the type names. The
+toolkit adds those through `AddDDDToolkitMutationConventions`.
+
 ## Diagnostics and code fixes
 
 | Case | Reported by | Code fix |
@@ -182,4 +218,5 @@ that a `return` can produce is a case of the union.
 - Names. The proposal names a record `OutOfStock` in C# and adds `Error` in the schema (`OutOfStockError`). The
   alternative is the name `OutOfStockError` in C#.
 - The place of `Result<T>`, `Bind` and `Map`. Handlers with a union return no `Result<T>`.
-- The type interceptor is not built. The spike covers the compiler only.
+- The type interceptor exists as a prototype in `spike/schema`. The spike does not combine it with
+  `AddDDDToolkitMutationConventions`, `CodedError` or Fusion.
