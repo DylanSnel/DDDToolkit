@@ -396,14 +396,24 @@ The interceptor hides these members:
 - `DomainEvents` on an aggregate root.
 - `GetInvariantViolations()` and `GetOwnInvariantViolations()` on every entity.
 
-The interceptor hides nothing that is not marked. `Id` and `Version` stay, because they are part of the API:
+The interceptor hides nothing that is not marked. `Id` stays, because it is part of the API. `Version` is marked
+`[Bookkeeping]`, so `PersonalDataAndBookkeepingFieldsInterceptor` leaves it out as well:
 
 ```graphql
 type Ticket {
   holder: EmailAddress!
   seat: Int!
-  version: Long!
   id: UUID!
+}
+```
+
+A type that takes an expected version shows the version with a resolver in its type class:
+
+```csharp
+[ObjectType<Ticket>]
+public static partial class TicketType
+{
+    public static long GetVersion([Parent] Ticket ticket) => ticket.Version;
 }
 ```
 
@@ -1719,7 +1729,8 @@ The rules, and what a client sees when the owner returns nothing:
   `errors`, declare the fields that other modules reach through a reference as nullable.
   `AddDDDToolkitEntityNullability()` does that for every entity at once. See
   [Types over application records](#types-over-application-records).
-- **A mutation that takes an expected version returns the new version.** A client sends the version it read as an
+- **A mutation that takes an expected version returns the new version.** The type shows `version` with a resolver,
+  because the toolkit leaves the aggregate's `Version` out by default. A client sends the version it read as an
   argument, `expectedVersion`, where a route takes `If-Match`. The use case passes the version to
   [`ExpectVersion`](entity-framework.md#the-version-the-client-saw), and a stale version returns a
   `ConcurrencyConflictError` in the payload. A mutation that returns what it changed, read after the save, gives the

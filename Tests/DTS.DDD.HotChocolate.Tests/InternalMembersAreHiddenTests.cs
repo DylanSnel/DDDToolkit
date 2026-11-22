@@ -38,14 +38,14 @@ public class InternalMembersAreHiddenTests
     }
 
     [Fact]
-    public async Task Aggregate_root_shows_id_and_version_but_not_its_pending_events()
+    public async Task Aggregate_root_shows_id_but_not_its_version_or_pending_events()
     {
         var sdl = await TestSchema.PrintSchemaAsync();
 
         var ticket = TypeBlock(sdl, "type Ticket");
 
         ticket.Should().Contain("id: UUID!");
-        ticket.Should().Contain("version: Long!");
+        ticket.Should().NotContain("version", "the version is bookkeeping: a type that takes an expected version lists it");
         ticket.Should().Contain("holder: EmailAddress!");
         ticket.Should().Contain("seat: Int!");
         ticket.Should().NotContain("domainEvents");
