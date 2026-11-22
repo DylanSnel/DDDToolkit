@@ -10,6 +10,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
+### Changed
+
+- `AggregateRoot.Version` is marked `[Bookkeeping]`. A GraphQL type that binds its fields by convention no longer
+  shows `version`. A type that takes an expected version shows it with a resolver in its type class:
+  `GetVersion([Parent] Order order) => order.Version`.
+
 ## [0.4.0] - 2026-11-22
 
 ### Added
