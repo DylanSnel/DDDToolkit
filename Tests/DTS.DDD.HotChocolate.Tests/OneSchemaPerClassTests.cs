@@ -92,6 +92,24 @@ public sealed class OneSchemaPerClassTests
     }
 
     [Fact]
+    public async Task A_schema_of_the_kind_a_mark_names_has_the_field_whatever_its_name()
+    {
+        // Two schemas named apart, both of the kind staff: a mark by name compares with the kind.
+        var services = new ServiceCollection().AddSingleton<LibraryDesk>();
+        services.AddGraphQLServer("east-staff").AddDDDToolkitTypes(schemaKind: LibrarySchemas.Staff).AddLibraryGraphQlRuntimeBindings().AddLibraryTypes();
+        services.AddGraphQLServer("west-staff").AddDDDToolkitTypes(schemaKind: LibrarySchemas.Staff).AddLibraryGraphQlRuntimeBindings().AddLibraryTypes();
+        services.AddGraphQLServer("east-members").AddDDDToolkitTypes().AddLibraryGraphQlRuntimeBindings().AddLibraryTypes();
+        var executors = services.BuildServiceProvider().GetRequiredService<IRequestExecutorProvider>();
+
+        foreach (var name in new[] { "east-staff", "west-staff" })
+        {
+            (await executors.GetExecutorAsync(name, Cancellation)).Schema.ToString().Should().Contain("loanCount: Int!", "{0} is of the kind staff", name);
+        }
+
+        (await executors.GetExecutorAsync("east-members", Cancellation)).Schema.ToString().Should().NotContain("loanCount", "its kind is its name");
+    }
+
+    [Fact]
     public async Task A_schema_whose_only_mutations_are_another_schemas_has_no_mutation_type()
     {
         (await ExecutorAsync(LibrarySchemas.Staff)).Schema.MutationType.Should().NotBeNull();

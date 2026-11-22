@@ -10,6 +10,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-22
+
+### Added
+
+- `AddDDDToolkitTypes(schemaKind: ...)`. A mark by name, `[GraphQLSchema(name)]`, compares with the schema's kind, which is
+  its name unless the host gives one. An operator schema per module, each of the kind `operator`, shares one mark.
+
 ## [0.8.0] - 2026-11-22
 
 ### Added

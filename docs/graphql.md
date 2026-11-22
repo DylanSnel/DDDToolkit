@@ -1479,6 +1479,9 @@ public static class OperatorTenantMutations
   `SchemaFieldsInterceptor`, which `AddDDDToolkitTypes()` adds with the builder's name, then removes them from every
   schema whose name no mark of the class names. It reads the marks with inheritance, so `[OperatorSchema]` counts.
 - A class with two marks is in both schemas. A class without a mark is in every schema.
+- A mark compares with the schema's *kind*, which is its name unless the host gives one. An operator schema per
+  module, `tenancy-operator` and `accounts-operator`, each built with `AddDDDToolkitTypes(schemaKind: "operator")`,
+  shares one mark: `[GraphQLSchema("operator")]` or an attribute derived from it.
 - DDD00062 holds only the form with an operation type. A class marked by name only may carry `[Query]` and
   `[Mutation]`, and the toolkit's generator leaves it to HotChocolate's.
 - A schema needs one field of every operation type the project registers. If all mutations of a project are marked

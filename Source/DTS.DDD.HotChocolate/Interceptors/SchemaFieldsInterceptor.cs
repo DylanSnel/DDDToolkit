@@ -21,10 +21,13 @@ namespace DTS.DDD.HotChocolate.Interceptors;
 /// Only marks without an operation type count here. A mark with one, <c>[GraphQLSchema("admin", OperationType.Query)]</c>,
 /// is read by the toolkit's generator, which registers the class's fields in that schema only.
 /// </para>
-/// <para>Registered by <see cref="DependencyInjection.AddDDDToolkitTypes"/>, with the name of the builder's schema.</para>
+/// <para>
+/// Registered by <see cref="DependencyInjection.AddDDDToolkitTypes"/>, with the kind of the builder's schema: its name, or
+/// the <c>schemaKind</c> the host gives it, so several schemas of one kind, an operator schema per module, share a mark.
+/// </para>
 /// </remarks>
-/// <param name="schemaName">The name of the schema being built, as <c>AddGraphQLServer(name)</c> registered it.</param>
-public sealed class SchemaFieldsInterceptor(string schemaName) : TypeInterceptor
+/// <param name="schemaKind">What the marks are compared with: the schema's name, or the kind the host gave it.</param>
+public sealed class SchemaFieldsInterceptor(string schemaKind) : TypeInterceptor
 {
     /// <summary>Removes the fields of another schema before HotChocolate works out what they depend on.</summary>
     public override void OnBeforeRegisterDependencies(ITypeDiscoveryContext discoveryContext, TypeSystemConfiguration configuration)
@@ -60,7 +63,7 @@ public sealed class SchemaFieldsInterceptor(string schemaName) : TypeInterceptor
         }
     }
 
-    // A field of a marked class whose marks name no schema of this name.
+    // A field of a marked class whose marks name no schema of this kind.
     private bool OfAnotherSchema(MemberInfo? member)
     {
         if (member?.DeclaringType is not { } declaring)
@@ -69,6 +72,6 @@ public sealed class SchemaFieldsInterceptor(string schemaName) : TypeInterceptor
         }
 
         var marks = declaring.GetCustomAttributes<GraphQLSchemaAttribute>(inherit: true).Where(mark => mark.Operation is null).ToList();
-        return marks.Count > 0 && !marks.Any(mark => string.Equals(mark.Name, schemaName, StringComparison.Ordinal));
+        return marks.Count > 0 && !marks.Any(mark => string.Equals(mark.Name, schemaKind, StringComparison.Ordinal));
     }
 }
