@@ -26,6 +26,8 @@ internal static class KnownTypes
 
     public const string SingleValueObjectAttribute = AttributesNamespace + ".SingleValueObjectAttribute`1";
     public const string ValueObjectAttribute = AttributesNamespace + ".ValueObjectAttribute";
+    public const string ErrorCodeAttribute = AttributesNamespace + ".ErrorCodeAttribute";
+    public const string Error = "DTS.DDD.Results.Error";
     public const string EntityAttribute = AttributesNamespace + ".EntityAttribute`1";
     public const string AggregateRootAttribute = AttributesNamespace + ".AggregateRootAttribute`1";
     public const string InternalAttribute = AttributesNamespace + ".InternalAttribute";

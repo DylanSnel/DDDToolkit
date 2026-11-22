@@ -3,6 +3,7 @@
     Builds with the .NET 10 SDK and the C# 15 compiler from Microsoft.Net.Compilers.Toolset 5.12.0.
     CSC_TOOL_PATH points to a folder with an executable "csc" that runs that package's csc.dll.
     The .NET 11 SDK needs neither the property nor Polyfill.cs.
+    The package versions come from Directory.Packages.props at the root of the repository.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -18,7 +19,7 @@
     <UseSharedCompilation>false</UseSharedCompilation>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="HotChocolate" Version="16.6.9" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="HotChocolate" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 </Project>

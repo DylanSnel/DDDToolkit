@@ -758,6 +758,33 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "A permission marker can mark a member that is a collection of ids, where its package names a method for a collection with EachMethod on [PermissionMarker]. Membership's [OnResource] names MemberAccess.OnEach, so [OnResource(BoardPermissions.Edit)] IReadOnlyCollection<BoardId> Boards becomes MemberAccess.OnEach(BoardPermissions.Edit, request.Boards). That call takes the permission and the collection, and nothing more. A marker argument such as [ExpectedVersion] names the version of one resource, so beside a marker on a collection it is reported. [OrOwn] makes the caller's own an alternative to one permission on one resource, so paired with a marker on a collection it is reported. A marker argument that can belong to a marker on one id of the same resource belongs to that marker. Send one request for each resource where a version or the caller's own is needed.");
 
+    public static readonly DiagnosticDescriptor ErrorCodeNotOnError = Create(
+        id: "DDD00112",
+        title: "[ErrorCode] is on a record that derives from Error",
+        messageFormat: "'{0}' has [ErrorCode] and is no record class that derives from DTS.DDD.Results.Error. Derive it from Error or from one of its five kinds, such as ConflictError.",
+        category: Usage,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generator overrides Code, Message and Arguments of an error record. A class, a struct or a record that does not derive from DTS.DDD.Results.Error has no such members, so the generator writes nothing for it.");
+
+    public static readonly DiagnosticDescriptor ErrorMessagePlaceholderUnknown = Create(
+        id: "DDD00113",
+        title: "A placeholder in the message of [ErrorCode] names a property of the record",
+        messageFormat: "The message of '{0}' has the placeholder '{{{1}}}', and '{0}' has no property '{1}'",
+        category: Usage,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generator fills each placeholder of the message from the property with the same name. Rename the placeholder, add the property, or write a literal brace as {{ or }}.");
+
+    public static readonly DiagnosticDescriptor ErrorCodeTaken = Create(
+        id: "DDD00114",
+        title: "Two errors of an assembly have the same code",
+        messageFormat: "'{0}' and '{1}' both have the code '{2}'. A client branches on the code, so each error needs its own.",
+        category: Usage,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A client and a localizer find an error by its code. Two error records with one code show the same text and the same branch for two different errors.");
+
     public static readonly DiagnosticDescriptor ResultNotObserved = Create(
         id: "DDD00111",
         title: "A Result is read or returned",

@@ -634,6 +634,16 @@ public class FailureLocalizerTests
         FluentActions.Invoking(() => FailureTextsServiceCollectionExtensions.AddFailureTexts<TestFailures>(null!)).Should().Throw<ArgumentNullException>();
     }
 
+    [Fact]
+    public void An_error_with_ErrorCode_is_translated_from_its_code_and_its_properties()
+    {
+        var localizer = Localizer(("stock.out-of-stock", "Nog {Available} over van {Sku}."));
+        var error = new OutOfStock("tea", 5);
+
+        localizer.Localize(error).Should().Be("Nog 5 over van tea.");
+        FailureLocalizer.Default.Localize(error).Should().Be("Only 5 left of tea.");
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /// <summary>What a host always has and a bare collection does not: the resx factory wants a logger factory.</summary>
@@ -679,3 +689,7 @@ public class FailureLocalizerTests
         }
     }
 }
+
+/// <summary>An error the generator completes from its <c>[ErrorCode]</c>.</summary>
+[DTS.DDD.Abstractions.Attributes.ErrorCode("stock.out-of-stock", "Only {Available} left of {Sku}.")]
+public sealed partial record OutOfStock(string Sku, int Available) : DTS.DDD.Results.ConflictError;

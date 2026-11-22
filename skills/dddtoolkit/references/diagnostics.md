@@ -974,6 +974,21 @@ directly or awaited, so its failure is lost. Read `IsSuccess` or `IsFailure`, re
 `ThrowIfFailure()` where a failure is a bug. Write `_ = Call();` where the failure does not matter. `Tap` and
 `TapError` on a result are not reported.
 
+## DDD00112
+
+Error, at a type with `[ErrorCode]`: the type is no record class that derives from `DTS.DDD.Results.Error`. Derive it
+from `Error` or from one of the five kinds, such as `ConflictError`, and keep it a `partial record`.
+
+## DDD00113
+
+Error, at a record with `[ErrorCode]`: a placeholder in the message, such as `{Code}`, names no property of the record.
+Rename the placeholder to a property, add the property, or write `{{` and `}}` for a literal brace.
+
+## DDD00114
+
+Error, at a record with `[ErrorCode]`: another error record of the assembly has the same code. Give each error record
+its own code.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

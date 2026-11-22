@@ -4093,6 +4093,51 @@ the permission and the collection, and nothing more.
 A request that also has `[OnResource]` on one id of the same resource is not reported: the marker argument belongs to
 that marker. Remove the marker argument, or send one request for each resource.
 
+## DDD00114
+
+**Two errors of an assembly have the same code.**
+
+```csharp
+[ErrorCode("stock.unknown", "There is no stock with SKU {Sku}.")]
+public sealed partial record StockUnknown(string Sku) : NotFoundError;
+
+[ErrorCode("stock.unknown", "There is no stock called {Name}.")]   // DDD00114
+public sealed partial record StockMissing(string Name) : NotFoundError;
+```
+
+A client branches on the code, and a localizer finds the translated text by the code. Two error records with one code
+show the same text and take the same branch. Give each record its own code. The diagnostic is reported at the record
+whose full name sorts last. See [Results](results.md#an-error-type-per-code).
+
+## DDD00113
+
+**A placeholder in the message of [ErrorCode] names a property of the record.**
+
+```csharp
+[ErrorCode("stock.unknown", "There is no stock with SKU {Code}.")]   // DDD00113: StockUnknown has no Code
+public sealed partial record StockUnknown(string Sku) : NotFoundError;
+```
+
+The generator fills each placeholder of the message from the property with the same name, such as `{Sku}` from `Sku`.
+The name is matched with its case. Rename the placeholder or add the property. Write `{{` and `}}` for a literal brace.
+A `{` without its `}` is reported too. The generator writes nothing for the record until the message is fixed.
+
+## DDD00112
+
+**[ErrorCode] is on a record that derives from Error.**
+
+```csharp
+[ErrorCode("stock.unknown", "There is no stock.")]
+public sealed partial record StockUnknown(string Sku);              // DDD00112: no Error
+
+[ErrorCode("stock.unknown", "There is no stock.")]
+public sealed partial record StockUnknown(string Sku) : NotFoundError;
+```
+
+The generator overrides `Code`, `Message` and `Arguments` of `DTS.DDD.Results.Error`. A class, a struct or a record
+that does not derive from `Error` has no such members. Derive the record from `Error` or from one of its five kinds:
+`InvalidError`, `NotPermittedError`, `NotFoundError`, `ConflictError` or `UnexpectedError`.
+
 ## DDD00111
 
 **A Result is read or returned.**
