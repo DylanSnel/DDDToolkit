@@ -45,8 +45,13 @@ public static class DependencyInjection
     /// <para>Calling it more than once on the same builder is harmless.</para>
     /// </remarks>
     /// <param name="builder">The request executor builder to configure.</param>
+    /// <param name="schemaKind">
+    /// What a mark by name, <c>[GraphQLSchema(name)]</c>, is compared with: the builder's name when null. A host with an
+    /// operator schema per module, <c>tenancy-operator</c> and <c>accounts-operator</c>, gives each the kind <c>operator</c>,
+    /// so one attribute, <c>[GraphQLSchema("operator")]</c> or one derived from it, marks the operator fields of every module.
+    /// </param>
     /// <returns>The same builder, so calls can be chained.</returns>
-    public static IRequestExecutorBuilder AddDDDToolkitTypes(this IRequestExecutorBuilder builder)
+    public static IRequestExecutorBuilder AddDDDToolkitTypes(this IRequestExecutorBuilder builder, string? schemaKind = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
@@ -57,8 +62,8 @@ public static class DependencyInjection
         builder.TryAddTypeInterceptor(typeof(ShareableValueObjectsInterceptor));
 
         // The fields of a class marked for another schema, [GraphQLSchema(name)], leave this one.
-        var schemaName = builder.Name;
-        builder.ConfigureSchema(schema => schema.TryAddTypeInterceptor(new SchemaFieldsInterceptor(schemaName)));
+        var kind = schemaKind ?? builder.Name;
+        builder.ConfigureSchema(schema => schema.TryAddTypeInterceptor(new SchemaFieldsInterceptor(kind)));
 
         builder.AddHotChocolateTypes();
         return builder;
