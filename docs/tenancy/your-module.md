@@ -14,12 +14,12 @@ defines the words.
 
 | Package | What it contains | Where it goes |
 |---|---|---|
-| `DylansTechStack.Tenancy` | The model, its rules, its services and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
-| `DylansTechStack.Tenancy.Abstractions` | Tenancy's markers for domain classes: `[OfTenant]`, on the property that says which tenant a row belongs to ([Keeping tenants apart](keeping-tenants-apart.md)). The markers of the kinds of seat: `[SeatKinds]`, `[InOrganization]` and `[OutsideOrganization]` ([Kinds of seat](#kinds-of-seat)). Tenancy's generators, which every project that references the package gets. No Entity Framework. `DTS.Tenancy` references it. | The domain project of another module, which sees only Tenancy's ids. The contracts project that declares the kinds of seat. |
-| `DylansTechStack.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, and Tenancy's queries as Entity Framework queries. It works with every provider. | The infrastructure project, which has the context |
-| `DylansTechStack.Tenancy.Postgres` | Tenancy's queries as SQL functions, and row level security (RLS) policies, written by the [export](../supabase.md). It references the Entity Framework package. | The infrastructure project, on Postgres |
+| `DylansTechStack.Pro.Tenancy` | The model, its rules, its services and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
+| `DylansTechStack.Pro.Tenancy.Abstractions` | Tenancy's markers for domain classes: `[OfTenant]`, on the property that says which tenant a row belongs to ([Keeping tenants apart](keeping-tenants-apart.md)). The markers of the kinds of seat: `[SeatKinds]`, `[InOrganization]` and `[OutsideOrganization]` ([Kinds of seat](#kinds-of-seat)). Tenancy's generators, which every project that references the package gets. No Entity Framework. `DTS.Tenancy` references it. | The domain project of another module, which sees only Tenancy's ids. The contracts project that declares the kinds of seat. |
+| `DylansTechStack.Pro.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, and Tenancy's queries as Entity Framework queries. It works with every provider. | The infrastructure project, which has the context |
+| `DylansTechStack.Pro.Tenancy.Postgres` | Tenancy's queries as SQL functions, and row level security (RLS) policies, written by the [export](../supabase.md). It references the Entity Framework package. | The infrastructure project, on Postgres |
 
-The packages are `DylansTechStack.Tenancy*`, and their namespaces are `DTS.Tenancy*`. They are part of DTS Pro and are
+The packages are `DylansTechStack.Pro.Tenancy*`, and their namespaces are `DTS.Tenancy*`. They are part of DTS Pro and are
 not published on nuget.org. Their version is the version of every `DylansTechStack.DDD.*` package. They are 0.x, so
 their names can still change.
 
@@ -278,7 +278,7 @@ public static partial class HarborSeatKinds
 - The generator writes `All` into the class. `All` lists every kind as a `SeatKind`, in the order of the constants.
 - The build reports a class the generator cannot read: [DDD10001](../diagnostics.md#ddd10001) for the class,
   [DDD10002](../diagnostics.md#ddd10002) for a constant, and [DDD10003](../diagnostics.md#ddd10003) for the default.
-- The markers and the generator are in `DylansTechStack.Tenancy.Abstractions`. A contracts project that references
+- The markers and the generator are in `DylansTechStack.Pro.Tenancy.Abstractions`. A contracts project that references
   only that package gets `All`.
 
 Give `All` to the catalogue:

@@ -143,13 +143,13 @@ package and Tenancy's markers package. Boards' context uses the Entity Framework
 
   <ItemGroup>
     <PackageVersion Include="DylansTechStack.DDD" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Tenancy" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Tenancy.Postgres" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Tenancy.EntityFramework" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Tenancy.Abstractions" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Membership" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Membership.EntityFramework" Version="3.2.0-preview.13" />
-    <PackageVersion Include="DylansTechStack.Membership.Postgres" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Tenancy" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Tenancy.Postgres" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Tenancy.EntityFramework" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Tenancy.Abstractions" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Membership" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Membership.EntityFramework" Version="3.2.0-preview.13" />
+    <PackageVersion Include="DylansTechStack.Pro.Membership.Postgres" Version="3.2.0-preview.13" />
     <PackageVersion Include="DylansTechStack.DDD.EntityFramework.Supabase" Version="3.2.0-preview.13" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
@@ -186,9 +186,9 @@ list and the two services. From Tenancy, it references the contracts project and
 
   <!-- The board classes: a board, the seats on it, and the roles a tenant keeps for boards. -->
   <ItemGroup>
-    <PackageReference Include="DylansTechStack.Membership" />
+    <PackageReference Include="DylansTechStack.Pro.Membership" />
     <!-- [OfTenant], Tenancy's marker of the tenant a board or a role belongs to, and nothing else of Tenancy's. -->
-    <PackageReference Include="DylansTechStack.Tenancy.Abstractions" />
+    <PackageReference Include="DylansTechStack.Pro.Tenancy.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
@@ -428,7 +428,7 @@ Tenancy knows, `[AtUnit]` and `[AtTenant]`, and the `TenancyIds` line.
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Boards.Domain\Harbor.Boards.Domain.csproj" />
     <!-- Tenancy's levels for a permission held in the organization, [AtUnit] and [AtTenant], and its access manager. -->
-    <PackageReference Include="DylansTechStack.Tenancy" />
+    <PackageReference Include="DylansTechStack.Pro.Tenancy" />
   </ItemGroup>
 
 </Project>
@@ -577,8 +577,8 @@ joins Membership to Tenancy (step 5).
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DylansTechStack.Membership.Postgres" />
-    <PackageReference Include="DylansTechStack.Tenancy.EntityFramework" />
+    <PackageReference Include="DylansTechStack.Pro.Membership.Postgres" />
+    <PackageReference Include="DylansTechStack.Pro.Tenancy.EntityFramework" />
     <PackageReference Include="DylansTechStack.DDD.EntityFramework.Supabase" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />

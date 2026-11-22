@@ -864,8 +864,8 @@ owning it (declared `[On<TResource>]` with `Owner = true`, the default), so the 
 ## DDD00097
 
 Error, at `[At]` (namespace `DTS.Membership`, package
-`DylansTechStack.Membership.Abstractions`), reported by Membership's generator, which ships in
-`DylansTechStack.Membership`: it goes on an instance property of an aggregate root, a place the root hangs at, one
+`DylansTechStack.Pro.Membership.Abstractions`), reported by Membership's generator, which ships in
+`DylansTechStack.Pro.Membership`: it goes on an instance property of an aggregate root, a place the root hangs at, one
 per kind of place. The kind is the type of the place's id without `?`, so `OrganizationUnitId` and
 `OrganizationUnitId?` are one kind. A nullable place is allowed, and an empty one reaches nothing. Not on an entity
 inside an aggregate, not on a static property, not twice for one kind on one aggregate: the first stays, and each

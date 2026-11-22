@@ -120,7 +120,7 @@ contracts project references only that package of Tenancy's, so other modules st
   <ItemGroup>
     <PackageReference Include="DylansTechStack.DDD" />
     <!-- [SeatKinds], [InOrganization] and [OutsideOrganization], and the generator that writes All. -->
-    <PackageReference Include="DylansTechStack.Tenancy.Abstractions" />
+    <PackageReference Include="DylansTechStack.Pro.Tenancy.Abstractions" />
   </ItemGroup>
 
 </Project>

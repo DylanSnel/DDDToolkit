@@ -219,7 +219,7 @@ flowchart TD
 `TenantSelection` reads the seat directory as the user, in no tenant. Postgres returns only the seats of the
 token's identity. `TenantSelection` returns the seat when the seat and its tenant are active.
 
-The package `DylansTechStack.Tenancy.AspNetCore` has this step as a middleware. Add it to the host's `Program.cs`
+The package `DylansTechStack.Pro.Tenancy.AspNetCore` has this step as a middleware. Add it to the host's `Program.cs`
 after authentication:
 
 ```csharp
