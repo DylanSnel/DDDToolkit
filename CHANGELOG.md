@@ -10,6 +10,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-22
+
+### Changed
+
+- A failed `Result` or `Result<T>` of a GraphQL field is reported as an error without a throw. The field answers
+  null and the response has the same coded error as before, with `code`, `kind`, `field` and `arguments`. Before
+  0.7.0 the formatter threw an `ErrorException` for every failure.
+
 ## [0.6.0] - 2026-11-22
  change to the code of the packages.
 

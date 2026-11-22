@@ -75,7 +75,7 @@ public sealed class ResultFieldsTests
             .AddQueryType<Stock>()
             .BuildRequestExecutorAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-    private static async Task<JsonDocument> RunAsync(string query)
+    internal static async Task<JsonDocument> RunAsync(string query)
     {
         var result = await (await ExecutorAsync()).ExecuteAsync(query, TestContext.Current.CancellationToken);
         return JsonDocument.Parse(result.ToJson());
