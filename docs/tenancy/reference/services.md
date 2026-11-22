@@ -3558,15 +3558,19 @@ public static OutboxOptions AddTenancyDomainEvents<TTenantId, TSeatId, TUnitId, 
 
 Registers every domain event Tenancy raises, closed over the application's ids, under the name its `[DomainEventName]` gives it (`tenancy.seat-placed` and the like), so the outbox stores and reads them. The package's events are generic, so no generated registration can find them.
 
-They are domain events, not contracts: each one the application has not mapped to an integration event is kept off the sinks. To publish one, map it before this call:
+Each one is kept off the sinks until the application maps it to an integration event (`OutboxOptions.DoNotPublishUnlessMapped`). The mapping can come before or after this call. To publish one, write an `IOutboundIntegrationEvent<TDomainEvent, TContract>` for it, which the generated `Add{Module}IntegrationEvents()` registers:
 
 ```csharp
-options.UseOutbox<TenancyContext>(outbox => outbox
-    .PublishAs<SeatAdded<TenantId, SeatId>, SeatJoined>(added => new SeatJoined(added.TenantId.Value, added.SeatId.Value))
-    .AddTenancyDomainEvents());
-```
+internal sealed class PublishSeatAdded : IOutboundIntegrationEvent<SeatAdded<TenantId, SeatId>, SeatJoined>
+{
+    public ValueTask<SeatJoined?> CreateAsync(SeatAdded<TenantId, SeatId> added, CancellationToken cancellationToken)
+        => new(new SeatJoined(added.TenantId.Value, added.SeatId.Value));
+}
 
-Mapped after it, an event is already kept off the sinks, and the mapping throws.
+options.UseOutbox<TenancyContext>(outbox => outbox
+    .AddTenancyDomainEvents()
+    .AddShopIntegrationEvents());
+```
 
 The call without type arguments is generated into the project that declares the application's classes, closed over their four ids, or into a project of the same module that declares none, such as the module's infrastructure project, where the context is (`TemplateRegistrationAttribute`). This is the method it calls, which can be called as well, with the four ids written out.
 
@@ -3599,7 +3603,7 @@ options.UseOutbox<TenancyContext>(outbox => outbox
     .AddTenancyInvitationEvents<InvitationId>());
 ```
 
-That call is generated as [`AddTenancyDomainEvents<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancydomaineventsoutboxoptions)'s is, closed over the four ids of the application's classes; the invitation's id is named, since an application may have no invitations, as it is named where invitations are registered. As the others, each one the application has not mapped to an integration event before this call is kept off the sinks. They carry ids and dates, and who made the change: never a token, a digest or an address.
+That call is generated as [`AddTenancyDomainEvents<TTenantId, TSeatId, TUnitId, TRoleId>`](#addtenancydomaineventsoutboxoptions)'s is, closed over the four ids of the application's classes; the invitation's id is named, since an application may have no invitations, as it is named where invitations are registered. As the others, each one is kept off the sinks until the application maps it to an integration event, before or after this call. They carry ids and dates, and who made the change: never a token, a digest or an address.
 
 None of them is among the events the access history keeps: an invitation changes nobody's access until it is accepted, and then the seat's own events, added, placed and granted its role, say what changed.
 

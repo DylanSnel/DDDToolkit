@@ -10,6 +10,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+
+### Added
+
+- `OutboxOptions.DoNotPublishUnlessMapped<TDomainEvent>()` and `IntegrationEventMap.DoNotPublishUnlessMapped<TDomainEvent>()`
+  keep a domain event off the sinks until a `PublishAs` or `PublishWith` maps it. The mapping can be registered
+  before or after the call. A second call for the same event is allowed.
+
+### Changed
+
+- `IntegrationEventMap.IsMapped` also returns `true` for an event kept inside with `DoNotPublishUnlessMapped`.
+- The Tenancy docs describe DTS Pro 0.4.0. `AddTenancyDomainEvents()` uses `DoNotPublishUnlessMapped`, so a mapping of
+  a Tenancy event can come before or after it. The docs map Tenancy's events with an `IOutboundIntegrationEvent` class
+  in place of a `PublishAs` lambda.
+
 ## [0.3.0] - 2026-11-21
 
 No change to the code of the packages.

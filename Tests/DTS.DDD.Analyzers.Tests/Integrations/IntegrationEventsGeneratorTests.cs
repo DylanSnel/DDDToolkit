@@ -304,4 +304,50 @@ public partial class IntegrationEventsGeneratorTests
         result.ShouldContain(Hint, "outbox.RegisterEvent<global::Sales.Host.Started>(");
         result.ShouldNotContain(Hint, "Sales.Domain", "a project without a module is no module's");
     }
+
+    [Fact]
+    public void An_outbound_class_for_a_generic_event_of_a_package_is_registered_with_the_closed_event()
+    {
+        // A package such as DTS Tenancy declares its events generic over the application's ids, and declares no module.
+        const string Package =
+            """
+            using DTS.DDD.BaseTypes;
+
+            namespace Seats;
+
+            public sealed record SeatAdded<TTenantId>(TTenantId TenantId, string SeatId) : DomainEvent;
+            """;
+
+        var result = GeneratorTestHost.Create(
+                """
+                using System.Threading;
+                using System.Threading.Tasks;
+                using DTS.DDD.Abstractions.Attributes;
+                using DTS.DDD.EntityFramework.Integration;
+                using Seats;
+
+                namespace Sales;
+
+                public readonly record struct StoreId(int Value);
+
+                [IntegrationEvent("sales.seat-added", Version = 1)]
+                public sealed record SeatAddedV1(int StoreId, string SeatId);
+
+                internal sealed class PublishSeatAdded : IOutboundIntegrationEvent<SeatAdded<StoreId>, SeatAddedV1>
+                {
+                    public ValueTask<SeatAddedV1?> CreateAsync(SeatAdded<StoreId> added, CancellationToken cancellationToken)
+                        => new(new SeatAddedV1(added.TenantId.Value, added.SeatId));
+                }
+                """)
+            .WithReferencedAssembly(Package, "Seats")
+            .WithEntityFrameworkRuntime()
+            .WithModule("Sales")
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain(
+            Hint,
+            "outbox.PublishWith<global::Seats.SeatAdded<global::Sales.StoreId>, global::Sales.SeatAddedV1>(\"sales.seat-added\", 1, static services => new global::Sales.PublishSeatAdded());");
+        result.ShouldNotContain(Hint, "RegisterEvent<global::Seats", "the package registers its own events, closed over the application's ids");
+    }
 }
