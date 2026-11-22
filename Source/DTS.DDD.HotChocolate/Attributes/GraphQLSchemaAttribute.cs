@@ -4,7 +4,9 @@ namespace DTS.DDD.HotChocolate.Attributes;
 
 /// <summary>
 /// Says that the fields of a class belong to one GraphQL schema, named <see cref="Name"/>, and to no other: an
-/// administration schema beside the one every user is offered, for instance.
+/// administration schema beside the one every user is offered, for instance. It has two forms. With a name only, the
+/// methods carry <c>[Query]</c> or <c>[Mutation]</c> and the class may use an attribute of the application that derives
+/// from this one. With a name and an operation type, the methods carry nothing of HotChocolate's, as described below.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -51,14 +53,39 @@ namespace DTS.DDD.HotChocolate.Attributes;
 /// the name of a Fusion source schema is.
 /// </para>
 /// </remarks>
-/// <param name="name">The name of the schema the class belongs to.</param>
-/// <param name="operation">The operation type its public static methods are fields of.</param>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
-public sealed class GraphQLSchemaAttribute(string name, OperationType operation) : Attribute
+public class GraphQLSchemaAttribute : Attribute
 {
-    /// <summary>The name of the schema the class belongs to, as the schema is registered.</summary>
-    public string Name { get; } = name;
+    /// <summary>
+    /// Marks a class whose methods carry <c>[Query]</c>, <c>[Mutation]</c> or <c>[Subscription]</c> as they do anywhere
+    /// else. HotChocolate's generator registers them in every schema, and <see cref="Interceptors.SchemaFieldsInterceptor"/>
+    /// removes them from every schema but the one named <paramref name="name"/>. An application may derive an attribute
+    /// of its own: <c>public sealed class OperatorSchemaAttribute() : GraphQLSchemaAttribute("operator");</c>.
+    /// </summary>
+    /// <param name="name">The name of the schema the class belongs to.</param>
+    public GraphQLSchemaAttribute(string name)
+    {
+        Name = name;
+    }
 
-    /// <summary>The operation type the class's public static methods are fields of.</summary>
-    public OperationType Operation { get; } = operation;
+    /// <summary>
+    /// Marks a class whose public static methods carry no attribute of HotChocolate's, and are fields of
+    /// <paramref name="operation"/>. The toolkit's generator registers them in the schema named <paramref name="name"/>.
+    /// </summary>
+    /// <param name="name">The name of the schema the class belongs to.</param>
+    /// <param name="operation">The operation type its public static methods are fields of.</param>
+    public GraphQLSchemaAttribute(string name, OperationType operation)
+        : this(name)
+    {
+        Operation = operation;
+    }
+
+    /// <summary>The name of the schema the class belongs to, as the schema is registered.</summary>
+    public string Name { get; }
+
+    /// <summary>
+    /// The operation type the class's public static methods are fields of, or null when the methods say it themselves
+    /// with <c>[Query]</c>, <c>[Mutation]</c> or <c>[Subscription]</c>.
+    /// </summary>
+    public OperationType? Operation { get; }
 }

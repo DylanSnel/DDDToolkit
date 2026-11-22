@@ -43,7 +43,7 @@ public sealed class OneSchemaPerClassTests
 
         alone.Should().Contain("loansOfMine: [Loan!]!");
         alone.Should().NotContain("loansOf(").And.NotContain("overdueCount").And.NotContain("loanExtend").And.NotContain("secretCount").And.NotContain("onLoanOverdue");
-        alone.Should().Be(await PrintAsync(LibrarySchemas.Members), "a schema whose name no class is marked with gets nothing more than HotChocolate's registration gives it");
+        alone.Should().Be(await PrintAsync(LibrarySchemas.Members), "a schema whose name no class is marked with gets nothing more than the unmarked classes");
     }
 
     [Fact]
@@ -64,6 +64,31 @@ public sealed class OneSchemaPerClassTests
         (await PrintAsync(LibrarySchemas.HelpDesk)).Should().Contain("overdueCount: Int!").And.NotContain("loansOf(", "the help desk shares one class with the staff, and only that one");
         (await PrintAsync(LibrarySchemas.Staff)).Should().Contain("overdueCount: Int!");
         (await PrintAsync(LibrarySchemas.Members)).Should().NotContain("overdueCount");
+    }
+
+    [Fact]
+    public async Task A_class_marked_by_name_only_with_an_attribute_of_the_application_is_in_that_schema_alone()
+    {
+        // [StaffSchema] derives from [GraphQLSchema("staff")]; the methods carry HotChocolate's own [Query].
+        (await PrintAsync(LibrarySchemas.Staff)).Should().Contain("loanCount: Int!");
+        (await PrintAsync(LibrarySchemas.Members)).Should().NotContain("loanCount");
+        (await PrintAsync(LibrarySchemas.HelpDesk)).Should().NotContain("loanCount");
+        (await PrintAsync(HotChocolateAlone)).Should().NotContain("loanCount", "HotChocolate's generator registers it everywhere, and the toolkit takes it out of every other schema");
+    }
+
+    [Fact]
+    public async Task A_class_marked_by_name_for_two_schemas_is_in_both_and_in_no_other()
+    {
+        (await PrintAsync(LibrarySchemas.Staff)).Should().Contain("dueSoonCount: Int!");
+        (await PrintAsync(LibrarySchemas.HelpDesk)).Should().Contain("dueSoonCount: Int!");
+        (await PrintAsync(LibrarySchemas.Members)).Should().NotContain("dueSoonCount");
+    }
+
+    [Fact]
+    public async Task A_field_of_a_class_marked_by_name_runs_in_its_schema()
+    {
+        var executor = await ExecutorAsync(LibrarySchemas.Staff);
+        Data(await executor.ExecuteAsync("{ loanCount }", Cancellation)).GetProperty("loanCount").GetInt32().Should().Be(3);
     }
 
     [Fact]

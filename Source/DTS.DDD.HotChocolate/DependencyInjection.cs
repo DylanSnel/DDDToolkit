@@ -56,6 +56,10 @@ public static class DependencyInjection
         builder.TryAddTypeInterceptor(typeof(DisplayNameTypesInterceptor));
         builder.TryAddTypeInterceptor(typeof(ShareableValueObjectsInterceptor));
 
+        // The fields of a class marked for another schema, [GraphQLSchema(name)], leave this one.
+        var schemaName = builder.Name;
+        builder.ConfigureSchema(schema => schema.TryAddTypeInterceptor(new SchemaFieldsInterceptor(schemaName)));
+
         builder.AddHotChocolateTypes();
         return builder;
     }
