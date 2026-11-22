@@ -5,7 +5,7 @@ rules every application shares, and the application declares the classes, with i
 rules. Tenancy is the toolkit's first: who a person is in a tenant, and what they may do where in its
 organization. Full pages: `https://dylansnel.github.io/DDDToolkit/docs/tenancy/overview.md`, the topic pages
 beside it under `docs/tenancy/` (listed on the overview and in `llms.txt`), and
-`writing-a-supporting-domain.md`. The Tenancy packages, `DylansTechStack.Tenancy` and the others, are part of DTS Pro and are not on nuget.org.
+`writing-a-supporting-domain.md`. The Tenancy packages, `DylansTechStack.Pro.Tenancy` and the others, are part of DTS Pro and are not on nuget.org.
 Their names can change while they are 0.x; read the project's references before writing against them.
 
 Packages: `DTS.Tenancy` (the model, its rules, a service per aggregate, the access manager, no

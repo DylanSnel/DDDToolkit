@@ -116,7 +116,7 @@ problem, and the fix.
 | [DDD11001](#ddd11001) | Error | The kinds a permission lists are kinds of seat, each once |
 
 The Meaning column is the title the IDE shows for each id. DDD10001 to DDD10003 come from Tenancy's generators, which
-ship in `DylansTechStack.Tenancy.Abstractions`. DDD11001 comes from Membership's generators.
+ship in `DylansTechStack.Pro.Tenancy.Abstractions`. DDD11001 comes from Membership's generators.
 
 Most of these diagnostics say that a generator could not do what a declaration asks. The others are rules about
 the model. The code they report compiles, reads well, and does something other than what it seems to do. These
@@ -3748,9 +3748,9 @@ public sealed partial class Board
 ```
 
 `[At]` is Membership's marker, in the namespace `DTS.Membership`. It ships in the package
-`DylansTechStack.Membership.Abstractions`, which references `DTS.DDD.Abstractions` alone and no Entity
+`DylansTechStack.Pro.Membership.Abstractions`, which references `DTS.DDD.Abstractions` alone and no Entity
 Framework, so a domain project references it for the marker. Membership's generator reports DDD00097. That generator
-ships in the package `DylansTechStack.Membership`, which references the markers' package. A project that
+ships in the package `DylansTechStack.Pro.Membership`, which references the markers' package. A project that
 declares the aggregate and references only the markers' package gets no DDD00097. `[Owner]` stays in the core,
 because the core's checks of the owner read it.
 

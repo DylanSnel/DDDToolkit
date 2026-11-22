@@ -10,6 +10,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-22
+ change to the code of the packages.
+
+### Changed
+
+- The docs and the skill name DTS Pro's packages by their new ids, `DylansTechStack.Pro.Tenancy`,
+  `DylansTechStack.Pro.Membership` and the others, as in DTS Pro 0.6.0.
+
 ## [0.5.0] - 2026-11-22
 
 ### Changed
