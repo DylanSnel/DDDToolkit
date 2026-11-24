@@ -49,8 +49,8 @@ public abstract record ValueObject : IValueObject
     }
 
     /// <summary>
-    /// The rules, as a yes or no. The default accepts everything; DTS.DDD.FluentValidation overrides
-    /// this with a generated body that runs the nested <c>Validator</c>.
+    /// The rules, as a yes or no. The default accepts everything. The generator overrides this when the value object
+    /// declares a nested <c>Validator</c> with rules.
     /// </summary>
     [Internal]
     protected virtual bool Validate() => true;
@@ -73,6 +73,16 @@ public abstract record ValueObject : IValueObject
     }
 
     /// <summary>
+    /// True when <see cref="Validate(ValidationErrorBuilder)"/> adds nothing whenever <see cref="Validate()"/> returns
+    /// <see langword="true"/>. The base then skips the <see cref="ValidationErrorBuilder"/> for a valid value, so a
+    /// valid value allocates nothing. The generator for a nested <c>Validator</c> returns <see langword="true"/>,
+    /// because both of its overrides run the same rules. The default is <see langword="false"/>, so a hand-written
+    /// <see cref="Validate(ValidationErrorBuilder)"/> always runs.
+    /// </summary>
+    [Internal]
+    protected virtual bool CollectsFailuresOnlyWhenInvalid => false;
+
+    /// <summary>
     /// Throws <see cref="InvalidValueObjectException"/> unless <see cref="IsValid"/>. The exception
     /// carries <see cref="ValidationErrors"/>, so even the throwing path says why.
     /// </summary>
@@ -92,6 +102,12 @@ public abstract record ValueObject : IValueObject
     private bool RunValidation()
     {
         var verdict = Validate();
+
+        if (verdict && CollectsFailuresOnlyWhenInvalid)
+        {
+            _validationErrors = [];
+            return true;
+        }
 
         var errors = new ValidationErrorBuilder();
         Validate(errors);

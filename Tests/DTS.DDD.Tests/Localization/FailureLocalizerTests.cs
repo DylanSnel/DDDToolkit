@@ -333,6 +333,23 @@ public class FailureLocalizerTests
     }
 
     [Fact]
+    public void The_failures_of_the_validation_rules_have_Dutch_texts()
+    {
+        using var provider = Services()
+            .AddLocalization()
+            .AddDDDToolkitLocalization()
+            .BuildServiceProvider();
+        var localizer = provider.GetRequiredService<IFailureLocalizer>();
+
+        IReadOnlyList<ValidationError> errors = [RuleFailures.Length("Street", new string('a', 52), 2, 40)];
+
+        using (new Culture("nl-NL"))
+        {
+            errors.ToErrorDictionary(localizer)["Street"].Should().Equal("'Street' moet tussen 2 en 40 tekens lang zijn. Je hebt 52 tekens ingevoerd.");
+        }
+    }
+
+    [Fact]
     public void Each_module_can_register_its_own_translations_and_every_one_is_asked()
     {
         using var provider = Services()

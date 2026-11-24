@@ -8,6 +8,26 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 [commit log](https://github.com/DylanSnel/DDDToolkit/commits/main) and the
 [git tags](https://github.com/DylanSnel/DDDToolkit/tags).
 
+## [Unreleased]
+
+### Added
+
+- Validation rules in a nested `Validator` of a value object, without FluentValidation. The rules are
+  `DTS.DDD.Validation.Rules<T>` with `RuleFor`, `RuleForEach`, `When` and `Unless`, and the extension methods of
+  `RuleChainExtensions`: `NotNull`, `NotEmpty`, `Length`, `Matches`, `EmailAddress`, the comparisons, `IsInEnum`,
+  `Must` and `WithError`.
+- `ValidatorGenerator` writes each rule as an `if` statement in a static `Validator.Check` and overrides both
+  `Validate` methods of the value object. The generator writes nothing in a project that references
+  `DTS.DDD.FluentValidation`.
+- Each rule fails with a `ValidationError` that has a standard code, such as `ddd.not-empty`, and its arguments, such
+  as `MaxLength`. `WithError(x => new SomeError(...))` gives the failure the code, the message and the arguments of an
+  `[ErrorCode]` record that derives from `InvalidError`.
+- A property that holds another value object adds that value object's failures, with the property name as a prefix.
+- English and Dutch texts for the codes of the rules in `FailureMessages.resx`.
+- `ValueObject.CollectsFailuresOnlyWhenInvalid`. When it is `true`, the base skips the `ValidationErrorBuilder` for a
+  valid value. The rule generator sets it, so validating a valid value allocates nothing.
+- DDD00115 to DDD00119 for rules the generator cannot copy into `Check`.
+
 ## [0.10.0] - 2026-11-24
 
 ### Added

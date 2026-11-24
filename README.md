@@ -50,6 +50,7 @@ public partial class Order { }
 | [What the generator writes](docs/generated-code.md) | The generated code for one small aggregate, file by file, and why it is generated |
 | [Identifiers](docs/identifiers.md) | `[EntityId<T>]`, struct versus record ids, parsing, prefixes |
 | [Value objects](docs/value-objects.md) | `[ValueObject]`, `[SingleValueObject<T>]`, validation and the always-valid twin |
+| [Validation rules](docs/validation-rules.md) | Rules in a nested `Validator`, written as `if` statements by the generator, with standard codes and your own errors |
 | [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, child entities, read-only collections, referencing by id |
 | [Invariants](docs/invariants.md) | Named `IInvariant<T>` rules and the `CheckInvariants()` seam, the two stages, and the save that runs them |
 | [Domain events](docs/domain-events.md) | Declaring, raising and draining events, and their stable names |

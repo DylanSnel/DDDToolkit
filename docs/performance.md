@@ -270,6 +270,21 @@ allocated a new wrapper. Now the first validation of a type builds the validator
 that instance. A valid value uses one shared empty `Errors` collection. The remaining bytes are the value itself and
 FluentValidation's own allocations for one run.
 
+### The rule generator
+
+`Benchmarks/DTS.DDD.Benchmarks` has the same measurement for the [rule generator](validation-rules.md), with the same
+two rules, `NotEmpty().EmailAddress()`. One short run on a Linux cloud machine measured both projects. The numbers
+differ from the table above, which comes from the test machine. Compare the ratios.
+
+| | FluentValidation | Rule generator |
+|---|---|---|
+| A valid value | 230 ns, 736 B | 16 ns, 40 B |
+| An invalid value | 1,318 ns, 2,640 B | 113 ns, 336 B |
+
+- The 40 bytes for a valid value are the value object itself. The validation allocates nothing.
+- The rule generator writes the rules as `if` statements, so no validator exists and no rule objects are built.
+- An invalid value allocates the `ValidationErrorBuilder`, its list and the `ValidationError`.
+
 ## The Entity Framework round trip
 
 This section measures whether the form of the identifier matters to persistence.

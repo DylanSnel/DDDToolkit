@@ -217,8 +217,10 @@ public partial record EmailAddress
 
 A run that adds no failure passes. Both overloads run. The value is valid only when `Validate()` returned `true` and
 `Validate(ValidationErrorBuilder)` added no failure. Override the overload that suits the rule. Most types override
-one of the two. With `DTS.DDD.FluentValidation` referenced, the generator writes both overloads and you write rules
-instead. See [With FluentValidation](#with-fluentvalidation).
+one of the two.
+
+A nested `Validator` with rules, such as `RuleFor(x => x.Value).NotEmpty().EmailAddress()`, makes the generator write
+both overloads. See [Validation rules](validation-rules.md).
 
 ## The always-valid twin
 
