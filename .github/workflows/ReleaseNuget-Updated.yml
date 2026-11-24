@@ -3,6 +3,14 @@ name: NuGet Release
 on:
   release:
     types: [created]
+  # A start by hand on main builds, tests and publishes the version, and then creates the tag and the GitHub
+  # release. A release that GITHUB_TOKEN creates starts no other workflow, so this file does not run twice.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The version without the v, such as 0.10.0"
+        required: true
+        type: string
 
 jobs:
   publish-nuget:
@@ -10,8 +18,9 @@ jobs:
 
     # id-token lets the job ask GitHub for the token that trusted publishing trades for an API key.
     # Naming one permission drops the defaults, so the checkout's read access is named too.
+    # contents: write lets a start by hand create the tag and the release at the end.
     permissions:
-      contents: read
+      contents: write
       id-token: write
 
     env:
@@ -34,8 +43,22 @@ jobs:
       # fail here rather than after the push.
       - name: Extract release version
         id: get_version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+              echo "::error::A release by hand runs on main only, not on $GITHUB_REF."
+              exit 1
+            fi
+            tag="v$INPUT_VERSION"
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+              echo "::error::The tag $tag exists already."
+              exit 1
+            fi
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
 
           # Matched rather than stripped. ${tag#v} removes the v when it is there and silently leaves
           # the string alone when it is not, so a tag of the wrong shape would become a wrong version
@@ -49,6 +72,7 @@ jobs:
 
           version="${tag#v}"
           echo "VERSION=$version" >> "$GITHUB_OUTPUT"
+          echo "TAG=$tag" >> "$GITHUB_OUTPUT"
           echo "Releasing $version from tag $tag"
 
       - name: Restore dependencies
@@ -93,3 +117,10 @@ jobs:
 
       - name: Publish to NuGet
         run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }} --skip-duplicate
+
+      - name: Create the tag and the GitHub release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.get_version.outputs.TAG }}
+        run: gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/$TAG/CHANGELOG.md)."
