@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Builds with the .NET 10 SDK and the C# 15 compiler from Microsoft.Net.Compilers.Toolset 5.12.0.
+    CSC_TOOL_PATH points to a folder with an executable "csc" that runs that package's csc.dll.
+    The .NET 11 SDK needs neither the property nor Polyfill.cs.
+    The package versions come from Directory.Packages.props at the root of the repository.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NoWarn>CS9113</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(CSC_TOOL_PATH)' != ''">
+    <CscToolPath>$(CSC_TOOL_PATH)</CscToolPath>
+    <CscToolExe>csc</CscToolExe>
+    <UseSharedCompilation>false</UseSharedCompilation>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="HotChocolate" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+</Project>

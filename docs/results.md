@@ -77,6 +77,36 @@ The signature stays `Result<T>`. Code that wants the kind tests the type: `if (r
 
 `InvalidError.ForField(code, message, field)` makes an error about one input.
 
+## An error type per code
+
+`[ErrorCode]` gives an error record its code and its English message. The record declares only its data, and the
+generator writes `Code`, `Message` and `Arguments`:
+
+**Stock/OutOfStock.cs**
+
+```csharp
+using DTS.DDD.Abstractions.Attributes;
+using DTS.DDD.Results;
+
+[ErrorCode("stock.out-of-stock", "Only {Available} left of {Sku}.")]
+public sealed partial record OutOfStock(string Sku, int Available) : ConflictError;
+```
+
+- `Code` returns `stock.out-of-stock`.
+- `Message` fills each placeholder from the property with the same name, with the invariant culture:
+  `new OutOfStock("tea", 5).Message` is `Only 5 left of tea.`. A placeholder may carry a format, such as
+  `{Price:0.00}`. `{{` and `}}` are literal braces.
+- `Arguments` holds each public property of the record and of its base records below `Error`, by name. Here those
+  are `Sku` and `Available`. A localizer fills its translated template for `stock.out-of-stock` from them.
+- The kind comes from the base record, here `ConflictError`.
+
+The record is a `partial record` that derives from `Error` or from one of the five kinds. A handler returns it as any
+other error: `return new OutOfStock(command.Sku, stock.Available);`.
+
+The generator reports a record that is not `partial` ([DDD00005](diagnostics.md#ddd00005)), a type that does not
+derive from `Error` ([DDD00112](diagnostics.md#ddd00112)), a placeholder without a property
+([DDD00113](diagnostics.md#ddd00113)) and two records with one code ([DDD00114](diagnostics.md#ddd00114)).
+
 ## Combining results
 
 | Method | What it does |

@@ -18,6 +18,11 @@ namespace DTS.DDD.Results;
 /// <see cref="Code"/> and fills a template from them, as it does for a <see cref="Exceptions.RefusalException"/>.
 /// The argument <see cref="FieldArgument"/> names the input the error is about.
 /// </para>
+/// <para>
+/// An error with <c>[ErrorCode]</c> is a <c>partial record</c> that uses the constructor without parameters. The
+/// generator overrides <see cref="Code"/>, <see cref="Message"/> and <see cref="Arguments"/> from the attribute and
+/// the properties of the record.
+/// </para>
 /// </remarks>
 public abstract record Error
 {
@@ -38,14 +43,34 @@ public abstract record Error
         Arguments = FailureArguments.Copy(arguments);
     }
 
+    /// <summary>
+    /// For an error with <c>[ErrorCode]</c>. Its generated part overrides <see cref="Code"/>, <see cref="Message"/>
+    /// and <see cref="Arguments"/>, so a derived error that calls this constructor without the attribute has to
+    /// override all three itself.
+    /// </summary>
+    protected Error()
+    {
+        Code = string.Empty;
+        Message = string.Empty;
+        Arguments = FailureArguments.None;
+    }
+
     /// <summary>The stable code, the same in every release and language.</summary>
-    public string Code { get; }
+    public virtual string Code { get; }
 
     /// <summary>The message in English, with the values filled in.</summary>
-    public string Message { get; }
+    public virtual string Message { get; }
 
     /// <summary>The values the message was built from, by name, matched without regard to case. Never null.</summary>
-    public IReadOnlyDictionary<string, object?> Arguments { get; }
+    public virtual IReadOnlyDictionary<string, object?> Arguments { get; }
+
+    /// <summary>
+    /// A copy of <paramref name="arguments"/> whose names are matched without regard to case, as
+    /// <see cref="Arguments"/> requires. The generated part of an error with <c>[ErrorCode]</c> builds its arguments
+    /// with it.
+    /// </summary>
+    protected static IReadOnlyDictionary<string, object?> ArgumentsFrom(IEnumerable<KeyValuePair<string, object?>> arguments)
+        => FailureArguments.Copy(arguments);
 
     /// <summary>The input the error is about, from <see cref="FieldArgument"/>, or null for the request as a whole.</summary>
     public string? Field => Arguments.TryGetValue(FieldArgument, out var input) ? input?.ToString() : null;
@@ -82,6 +107,9 @@ public record InvalidError : Error
         : base(code, message, arguments)
         => Failures = [.. failures ?? []];
 
+    /// <summary>For an error with <c>[ErrorCode]</c>, which has no failures per input.</summary>
+    protected InvalidError() => Failures = [];
+
     /// <summary>One failure per input, each with its property, code and arguments. Never null.</summary>
     public IReadOnlyList<ValidationError> Failures { get; }
 
@@ -106,6 +134,11 @@ public record NotPermittedError : Error
         : base(code, message, arguments)
     {
     }
+
+    /// <summary>For an error with <c>[ErrorCode]</c>.</summary>
+    protected NotPermittedError()
+    {
+    }
 }
 
 /// <summary>What the request names does not exist, or the caller may not see it. HTTP 404.</summary>
@@ -118,6 +151,11 @@ public record NotFoundError : Error
         : base(code, message, arguments)
     {
     }
+
+    /// <summary>For an error with <c>[ErrorCode]</c>.</summary>
+    protected NotFoundError()
+    {
+    }
 }
 
 /// <summary>The request conflicts with the current state, such as a slug that is taken. HTTP 409.</summary>
@@ -128,6 +166,11 @@ public record ConflictError : Error
     /// <param name="arguments">The values the message was built from.</param>
     public ConflictError(string code, string message, IEnumerable<KeyValuePair<string, object?>>? arguments = null)
         : base(code, message, arguments)
+    {
+    }
+
+    /// <summary>For an error with <c>[ErrorCode]</c>.</summary>
+    protected ConflictError()
     {
     }
 }
@@ -143,6 +186,11 @@ public record UnexpectedError : Error
     /// <param name="arguments">The values the message was built from.</param>
     public UnexpectedError(string code, string message, IEnumerable<KeyValuePair<string, object?>>? arguments = null)
         : base(code, message, arguments)
+    {
+    }
+
+    /// <summary>For an error with <c>[ErrorCode]</c>.</summary>
+    protected UnexpectedError()
     {
     }
 }

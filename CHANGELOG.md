@@ -10,6 +10,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+### Added
+
+- `[ErrorCode(code, message)]` on a `partial record` that derives from `Error`. The generator writes `Code`,
+  `Message` and `Arguments` from the attribute and the properties of the record. `Message` fills the placeholders with
+  the invariant culture.
+- `Error` and its five kinds have a protected constructor without parameters, and `Code`, `Message` and `Arguments`
+  are `virtual`. `Error.ArgumentsFrom` builds arguments whose names are matched without regard to case.
+- DDD00112: `[ErrorCode]` is on a type that is no record class deriving from `Error`.
+- DDD00113: a placeholder in the message of `[ErrorCode]` names no property of the record.
+- DDD00114: two error records of an assembly have the same code.
+
 ## [0.9.0] - 2026-11-22
 
 ### Added

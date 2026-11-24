@@ -1,0 +1,24 @@
+=== c1_missing_arm.cs
+c1_missing_arm.cs(3,68): warning CS8509: The switch expression does not handle all possible values of its input type (it is not exhaustive). For example, the pattern 'StockBlocked' is not covered.
+=== c2_case_not_in_union.cs
+c2_case_not_in_union.cs(2,50): error CS0029: Cannot implicitly convert type 'SkuInvalid' to 'Big'
+=== c3_partial_union.cs
+c3_partial_union.cs(2,25): error CS8863: Only a single partial type declaration may have a parameter list
+=== c3b_partial_union_body.cs
+(no diagnostics)
+=== c3c_custom_union.cs
+c3c_custom_union.cs(14,41): warning CS8509: The switch expression does not handle all possible values of its input type (it is not exhaustive). For example, the pattern 'OutOfStock' is not covered.
+=== c4_chain.cs
+c4_chain.cs(4,51): error CS0029: Cannot implicitly convert type 'OutOfStock' to 'Result<Reservation, Big>'
+=== c5_ext_conversion.cs
+c5_ext_conversion.cs(7,41): error CS9282: This member is not allowed in an extension block
+=== c6_unused_case.cs
+(no diagnostics)
+=== c7_nested_pattern.cs
+c7_nested_pattern.cs(5,42): warning CS8509: The switch expression does not handle all possible values of its input type (it is not exhaustive). For example, the pattern 'Inner{ Value: StockBlocked }' is not covered.
+=== c8_switch_mixed_arms.cs
+c8_switch_mixed_arms.cs(9,27): error CS0029: Cannot implicitly convert type 'StockBlocked' to 'Result<Reservation, Big>'
+=== d1_result_is_union.cs
+d1_result_is_union.cs(28,56): error CS0029: Cannot implicitly convert type 'FindStock' to 'ReserveStock'
+=== d2_async.cs
+(no diagnostics)
