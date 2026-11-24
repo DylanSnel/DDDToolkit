@@ -8,7 +8,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 [commit log](https://github.com/DylanSnel/DDDToolkit/commits/main) and the
 [git tags](https://github.com/DylanSnel/DDDToolkit/tags).
 
-## [Unreleased]
+## [0.10.0] - 2026-11-24
 
 ### Added
 
