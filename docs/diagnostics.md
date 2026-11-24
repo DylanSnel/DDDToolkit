@@ -4093,6 +4093,87 @@ the permission and the collection, and nothing more.
 A request that also has `[OnResource]` on one id of the same resource is not reported: the marker argument belongs to
 that marker. Remove the marker argument, or send one request for each resource.
 
+## DDD00119
+
+**A rule of a nested Validator uses no local, parameter or instance member of the Validator.**
+
+```csharp
+partial class Validator
+{
+    private readonly int _limit = 40;
+
+    public Validator() => RuleFor(x => x.Street).MaximumLength(_limit);   // DDD00119
+}
+
+public Validator() => RuleFor(x => x.Street).MaximumLength(StreetLength);  // a constant of the value object
+```
+
+The generator copies each rule into the static method `Validator.Check`. A field of the `Validator`, a local and a
+parameter of the constructor do not exist there. Use a constant or a static member of the value object or of the
+`Validator`. See [Validation rules](validation-rules.md).
+
+## DDD00118
+
+**The constructor of a nested Validator holds only rules.**
+
+```csharp
+public Validator()
+{
+    var limit = 40;                                        // DDD00118
+    RuleFor(x => x.Street).MaximumLength(limit);
+}
+```
+
+No code runs the constructor of a `Validator`. The generator reads its rules during the build, so a variable, an `if`
+statement or a loop in it has no effect. Write each statement as a call to `RuleFor`, `RuleForEach`, `When` or
+`Unless`. Put a condition in `When` or `Unless`, and a computed check in `Must`.
+
+## DDD00117
+
+**WithError creates an error record with [ErrorCode] that derives from InvalidError.**
+
+```csharp
+RuleFor(x => x.PostalCode).NotEmpty().WithError(x => new Problem());              // DDD00117
+
+[ErrorCode("address.postal-code-required", "A postal code is required in {Country}.")]
+public sealed partial record PostalCodeRequired(string Country) : InvalidError;
+
+RuleFor(x => x.PostalCode).NotEmpty().WithError(x => new PostalCodeRequired(x.Country));
+```
+
+The failure takes the code, the message and the arguments of the error. A record with `[ErrorCode]` has all three, and
+`InvalidError` is the kind of error a validation failure is. Its property name stays the one of `RuleFor`.
+
+## DDD00116
+
+**A lambda of a nested Validator is an expression over its own parameters.**
+
+```csharp
+RuleFor(x => x.Street.Trim()).NotEmpty();                       // DDD00116: reads no property
+RuleFor(x => x.Street).Must(v => { return v.Length > 2; });     // DDD00116: a block body
+
+RuleFor(x => x.Street).Must(v => v.Trim().Length > 2);
+```
+
+The generator copies the body of each lambda into `Validator.Check` and replaces the lambda parameters with the value
+object and the value. So `RuleFor` and `RuleForEach` read a property, such as `x => x.Street` or
+`x => x.Address.Street`, and every other lambda has an expression body. `Must` takes `v => ...` over the value or
+`(x, v) => ...` over the value object and the value.
+
+## DDD00115
+
+**A nested Validator calls only the rules the generator knows.**
+
+```csharp
+RuleFor(x => x.Street).NotEmpty().WithMessage("Required");      // DDD00115
+RuleFor(x => x.Street).MustAsync(IsKnownAsync);                 // DDD00115
+```
+
+The generator turns each rule into an `if` statement. It knows `RuleFor`, `RuleForEach`, `When`, `Unless`, `WithError`,
+`Must` and the rules of `DTS.DDD.Validation.RuleChainExtensions`. FluentValidation members such as `MustAsync`,
+`WithMessage`, `WithErrorCode`, `SetValidator` and `Include` have no counterpart. Use `Must` for a check of your own and
+`WithError` for a code and a text of your own. See [Validation rules](validation-rules.md).
+
 ## DDD00114
 
 **Two errors of an assembly have the same code.**

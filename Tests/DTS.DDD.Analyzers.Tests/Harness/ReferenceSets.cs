@@ -57,6 +57,7 @@ public static partial class ReferenceSets
     private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyFluentValidation = new(() =>
     [
         FromOutputDirectory("FluentValidation.dll"),
+        FromOutputDirectory("DTS.DDD.FluentValidation.dll"),
     ]);
 
     private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyHotChocolate = new(() =>

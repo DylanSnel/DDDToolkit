@@ -44,4 +44,84 @@
     <value>'{PropertyName}' is not a valid {ValueObject}.</value>
     <comment>MustBeValid() in DTS.DDD.FluentValidation. {PropertyName} is the property, {ValueObject} the value object type.</comment>
   </data>
+  <data name="ddd.not-null" xml:space="preserve">
+    <value>'{PropertyName}' must not be null.</value>
+    <comment>A rule of a nested Validator: NotNull().</comment>
+  </data>
+  <data name="ddd.null" xml:space="preserve">
+    <value>'{PropertyName}' must be null.</value>
+    <comment>A rule of a nested Validator: Null().</comment>
+  </data>
+  <data name="ddd.not-empty" xml:space="preserve">
+    <value>'{PropertyName}' must not be empty.</value>
+    <comment>A rule of a nested Validator: NotEmpty().</comment>
+  </data>
+  <data name="ddd.empty" xml:space="preserve">
+    <value>'{PropertyName}' must be empty.</value>
+    <comment>A rule of a nested Validator: Empty().</comment>
+  </data>
+  <data name="ddd.length" xml:space="preserve">
+    <value>'{PropertyName}' must be between {MinLength} and {MaxLength} characters. You entered {TotalLength} characters.</value>
+    <comment>A rule of a nested Validator: Length(min, max).</comment>
+  </data>
+  <data name="ddd.exact-length" xml:space="preserve">
+    <value>'{PropertyName}' must be {MaxLength} characters long. You entered {TotalLength} characters.</value>
+    <comment>A rule of a nested Validator: Length(exact).</comment>
+  </data>
+  <data name="ddd.minimum-length" xml:space="preserve">
+    <value>'{PropertyName}' must be at least {MinLength} characters long. You entered {TotalLength} characters.</value>
+    <comment>A rule of a nested Validator: MinimumLength(min).</comment>
+  </data>
+  <data name="ddd.maximum-length" xml:space="preserve">
+    <value>'{PropertyName}' must be at most {MaxLength} characters long. You entered {TotalLength} characters.</value>
+    <comment>A rule of a nested Validator: MaximumLength(max).</comment>
+  </data>
+  <data name="ddd.matches" xml:space="preserve">
+    <value>'{PropertyName}' is not in the correct format.</value>
+    <comment>A rule of a nested Validator: Matches(pattern). {RegularExpression} is the pattern.</comment>
+  </data>
+  <data name="ddd.email-address" xml:space="preserve">
+    <value>'{PropertyName}' is not a valid email address.</value>
+    <comment>A rule of a nested Validator: EmailAddress().</comment>
+  </data>
+  <data name="ddd.equal" xml:space="preserve">
+    <value>'{PropertyName}' must be equal to '{ComparisonValue}'.</value>
+    <comment>A rule of a nested Validator: Equal(value).</comment>
+  </data>
+  <data name="ddd.not-equal" xml:space="preserve">
+    <value>'{PropertyName}' must not be equal to '{ComparisonValue}'.</value>
+    <comment>A rule of a nested Validator: NotEqual(value).</comment>
+  </data>
+  <data name="ddd.greater-than" xml:space="preserve">
+    <value>'{PropertyName}' must be greater than '{ComparisonValue}'.</value>
+    <comment>A rule of a nested Validator: GreaterThan(value).</comment>
+  </data>
+  <data name="ddd.greater-than-or-equal" xml:space="preserve">
+    <value>'{PropertyName}' must be greater than or equal to '{ComparisonValue}'.</value>
+    <comment>A rule of a nested Validator: GreaterThanOrEqualTo(value).</comment>
+  </data>
+  <data name="ddd.less-than" xml:space="preserve">
+    <value>'{PropertyName}' must be less than '{ComparisonValue}'.</value>
+    <comment>A rule of a nested Validator: LessThan(value).</comment>
+  </data>
+  <data name="ddd.less-than-or-equal" xml:space="preserve">
+    <value>'{PropertyName}' must be less than or equal to '{ComparisonValue}'.</value>
+    <comment>A rule of a nested Validator: LessThanOrEqualTo(value).</comment>
+  </data>
+  <data name="ddd.inclusive-between" xml:space="preserve">
+    <value>'{PropertyName}' must be between {From} and {To}. You entered {AttemptedValue}.</value>
+    <comment>A rule of a nested Validator: InclusiveBetween(from, to).</comment>
+  </data>
+  <data name="ddd.exclusive-between" xml:space="preserve">
+    <value>'{PropertyName}' must be between {From} and {To} (exclusive). You entered {AttemptedValue}.</value>
+    <comment>A rule of a nested Validator: ExclusiveBetween(from, to).</comment>
+  </data>
+  <data name="ddd.enum" xml:space="preserve">
+    <value>'{PropertyName}' has a range of values which does not include '{AttemptedValue}'.</value>
+    <comment>A rule of a nested Validator: IsInEnum().</comment>
+  </data>
+  <data name="ddd.must" xml:space="preserve">
+    <value>The specified condition was not met for '{PropertyName}'.</value>
+    <comment>A rule of a nested Validator: Must(...).</comment>
+  </data>
 </root>

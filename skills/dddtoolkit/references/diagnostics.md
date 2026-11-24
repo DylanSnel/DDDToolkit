@@ -989,6 +989,32 @@ Rename the placeholder to a property, add the property, or write `{{` and `}}` f
 Error, at a record with `[ErrorCode]`: another error record of the assembly has the same code. Give each error record
 its own code.
 
+## DDD00115
+
+Error, at a call in the constructor of a nested `Validator`: the generator knows no rule of that name, such as
+`WithMessage` or `MustAsync`. Use `Must(v => ...)` for a check of your own and `WithError(x => new SomeError(...))` for a
+code and a text of your own.
+
+## DDD00116
+
+Error, at a lambda of a nested `Validator`: the lambda has a block body, or `RuleFor` reads no property. Write
+`RuleFor(x => x.Street)` and give every other lambda an expression body.
+
+## DDD00117
+
+Error, at the error that `WithError` creates: the type is no record with `[ErrorCode]` that derives from
+`InvalidError`. Declare `[ErrorCode("code", "Message {Arg}.")] public sealed partial record X(...) : InvalidError;`.
+
+## DDD00118
+
+Error, at a statement in the constructor of a nested `Validator` that is no rule call, such as a local variable or an
+`if`. Move the condition into `When`/`Unless` and the computation into `Must`.
+
+## DDD00119
+
+Error, at a name in a rule of a nested `Validator`: the rule uses a local or parameter of the constructor or an
+instance member of the `Validator`. Use a constant or a static member.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

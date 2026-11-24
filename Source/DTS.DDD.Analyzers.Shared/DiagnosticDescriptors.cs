@@ -785,6 +785,51 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "A client and a localizer find an error by its code. Two error records with one code show the same text and the same branch for two different errors.");
 
+    public static readonly DiagnosticDescriptor RuleUnknown = Create(
+        id: "DDD00115",
+        title: "A nested Validator calls only the rules the generator knows",
+        messageFormat: "'{0}' is no rule of a nested Validator. Use Must(...) for a check of your own, or WithError(...) for a text and code of your own.",
+        category: ValueObjects,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generator turns each rule of the constructor into an if statement in Validate(). It knows RuleFor, RuleForEach, When, Unless, WithError, Must and the rules of DTS.DDD.Validation.RuleChainExtensions. FluentValidation members such as MustAsync, WithMessage, WithErrorCode, SetValidator and Include have no counterpart.");
+
+    public static readonly DiagnosticDescriptor RuleLambdaShape = Create(
+        id: "DDD00116",
+        title: "A lambda of a nested Validator is an expression over its own parameters",
+        messageFormat: "{0}",
+        category: ValueObjects,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generator copies the body of each lambda into Validate() and replaces the parameters with the value object and the value. So a lambda has an expression body, RuleFor and RuleForEach read a property, such as x => x.Street, and a lambda uses only its parameters, constants and static members.");
+
+    public static readonly DiagnosticDescriptor RuleErrorType = Create(
+        id: "DDD00117",
+        title: "WithError creates an error record with [ErrorCode] that derives from InvalidError",
+        messageFormat: "WithError creates '{0}', which is no record with [ErrorCode] that derives from InvalidError",
+        category: ValueObjects,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A failure takes the code, the message and the arguments of the error. A record with [ErrorCode] has all three, and InvalidError is the kind of error a validation failure is.");
+
+    public static readonly DiagnosticDescriptor RuleStatement = Create(
+        id: "DDD00118",
+        title: "The constructor of a nested Validator holds only rules",
+        messageFormat: "The constructor of the Validator of '{0}' holds a statement that is no rule. Write each rule as a call to RuleFor, RuleForEach, When or Unless.",
+        category: ValueObjects,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "No code runs the constructor. The generator reads its rules during the build, so a variable, an if statement or a loop in it would have no effect. Put a condition in When or Unless, and a computed check in Must.");
+
+    public static readonly DiagnosticDescriptor RuleCapture = Create(
+        id: "DDD00119",
+        title: "A rule of a nested Validator uses no local, parameter or instance member of the Validator",
+        messageFormat: "The rule uses '{0}', which does not exist in Validate(). Use a constant or a static member.",
+        category: ValueObjects,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generator copies each rule into a static method of the Validator. A local or parameter of the constructor and an instance member of the Validator do not exist there.");
+
     public static readonly DiagnosticDescriptor ResultNotObserved = Create(
         id: "DDD00111",
         title: "A Result is read or returned",

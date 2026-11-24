@@ -36,4 +36,64 @@
   <data name="ValueObjectValidator" xml:space="preserve">
     <value>'{PropertyName}' is geen geldige {ValueObject}.</value>
   </data>
+  <data name="ddd.not-null" xml:space="preserve">
+    <value>'{PropertyName}' mag niet leeg zijn.</value>
+  </data>
+  <data name="ddd.null" xml:space="preserve">
+    <value>'{PropertyName}' moet leeg zijn.</value>
+  </data>
+  <data name="ddd.not-empty" xml:space="preserve">
+    <value>'{PropertyName}' mag niet leeg zijn.</value>
+  </data>
+  <data name="ddd.empty" xml:space="preserve">
+    <value>'{PropertyName}' moet leeg zijn.</value>
+  </data>
+  <data name="ddd.length" xml:space="preserve">
+    <value>'{PropertyName}' moet tussen {MinLength} en {MaxLength} tekens lang zijn. Je hebt {TotalLength} tekens ingevoerd.</value>
+  </data>
+  <data name="ddd.exact-length" xml:space="preserve">
+    <value>'{PropertyName}' moet {MaxLength} tekens lang zijn. Je hebt {TotalLength} tekens ingevoerd.</value>
+  </data>
+  <data name="ddd.minimum-length" xml:space="preserve">
+    <value>'{PropertyName}' moet minstens {MinLength} tekens lang zijn. Je hebt {TotalLength} tekens ingevoerd.</value>
+  </data>
+  <data name="ddd.maximum-length" xml:space="preserve">
+    <value>'{PropertyName}' mag hoogstens {MaxLength} tekens lang zijn. Je hebt {TotalLength} tekens ingevoerd.</value>
+  </data>
+  <data name="ddd.matches" xml:space="preserve">
+    <value>'{PropertyName}' heeft niet de juiste vorm.</value>
+  </data>
+  <data name="ddd.email-address" xml:space="preserve">
+    <value>'{PropertyName}' is geen geldig e-mailadres.</value>
+  </data>
+  <data name="ddd.equal" xml:space="preserve">
+    <value>'{PropertyName}' moet gelijk zijn aan '{ComparisonValue}'.</value>
+  </data>
+  <data name="ddd.not-equal" xml:space="preserve">
+    <value>'{PropertyName}' mag niet gelijk zijn aan '{ComparisonValue}'.</value>
+  </data>
+  <data name="ddd.greater-than" xml:space="preserve">
+    <value>'{PropertyName}' moet groter zijn dan '{ComparisonValue}'.</value>
+  </data>
+  <data name="ddd.greater-than-or-equal" xml:space="preserve">
+    <value>'{PropertyName}' moet groter dan of gelijk aan '{ComparisonValue}' zijn.</value>
+  </data>
+  <data name="ddd.less-than" xml:space="preserve">
+    <value>'{PropertyName}' moet kleiner zijn dan '{ComparisonValue}'.</value>
+  </data>
+  <data name="ddd.less-than-or-equal" xml:space="preserve">
+    <value>'{PropertyName}' moet kleiner dan of gelijk aan '{ComparisonValue}' zijn.</value>
+  </data>
+  <data name="ddd.inclusive-between" xml:space="preserve">
+    <value>'{PropertyName}' moet tussen {From} en {To} liggen. Je hebt {AttemptedValue} ingevoerd.</value>
+  </data>
+  <data name="ddd.exclusive-between" xml:space="preserve">
+    <value>'{PropertyName}' moet tussen {From} en {To} liggen, zonder de grenzen. Je hebt {AttemptedValue} ingevoerd.</value>
+  </data>
+  <data name="ddd.enum" xml:space="preserve">
+    <value>'{PropertyName}' kent de waarde '{AttemptedValue}' niet.</value>
+  </data>
+  <data name="ddd.must" xml:space="preserve">
+    <value>'{PropertyName}' voldoet niet aan de voorwaarde.</value>
+  </data>
 </root>
