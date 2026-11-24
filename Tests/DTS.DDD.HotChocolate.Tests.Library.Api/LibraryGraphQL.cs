@@ -134,3 +134,29 @@ public static class OverdueQueries
     /// <summary>How many loans are overdue.</summary>
     public static int GetOverdueCount([Service] LibraryDesk desk) => desk.Overdue;
 }
+
+/// <summary>The library's own mark for the staff's schema: an attribute of the application, derived from the toolkit's.</summary>
+public sealed class StaffSchemaAttribute() : GraphQLSchemaAttribute(LibrarySchemas.Staff);
+
+/// <summary>
+/// The staff's desk, written as HotChocolate writes fields: [Query] on the methods, and the library's own mark on the
+/// class. Only the staff's schema has these fields. A [Mutation] fits the same way in a schema that keeps a mutation of
+/// its own: one whose mutations would all leave has an empty Mutation type, which HotChocolate refuses.
+/// </summary>
+[StaffSchema]
+public static class LoansStaffDesk
+{
+    /// <summary>How many loans there are, of every member.</summary>
+    [Query]
+    public static int GetLoanCount([Service] LibraryDesk desk) => desk.LoansOf(LibraryDesk.Ada).Count + desk.LoansOf(LibraryDesk.Ben).Count;
+}
+
+/// <summary>A field of the staff's and the help desk's, marked with the toolkit's attribute by name only.</summary>
+[GraphQLSchema(LibrarySchemas.Staff)]
+[GraphQLSchema(LibrarySchemas.HelpDesk)]
+public static class DueQueries
+{
+    /// <summary>How many loans are due within a week.</summary>
+    [Query]
+    public static int GetDueSoonCount([Service] LibraryDesk desk) => desk.LoansOf(LibraryDesk.Ada).Concat(desk.LoansOf(LibraryDesk.Ben)).Count(loan => loan.DueInDays is >= 0 and <= 7);
+}

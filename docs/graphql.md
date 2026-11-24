@@ -1456,6 +1456,38 @@ attribute says which schema a class belongs to. A gateway says which schemas for
 [Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) serves its administration this way:
 [Several gateways](#several-gateways).
 
+### A mark by name, with HotChocolate's attributes
+
+The attribute has a second form, with a name only. The methods then carry HotChocolate's own `[Query]`, `[Mutation]`
+or `[Subscription]`, as they do in an unmarked class. An application may also derive an attribute of its own, so the
+schema's name sits in one place:
+
+```csharp
+// SharedKernel
+public sealed class OperatorSchemaAttribute() : GraphQLSchemaAttribute("operator");
+
+// Tenancy.Api
+[OperatorSchema]
+public static class OperatorTenantMutations
+{
+    [Mutation]
+    public static Task<Result<ProvisionedTenant>> ProvisionTenantAsync(...) => ...;
+}
+```
+
+- HotChocolate's generator registers these methods in every schema, as it registers every `[Mutation]` method.
+  `SchemaFieldsInterceptor`, which `AddDDDToolkitTypes()` adds with the builder's name, then removes them from every
+  schema whose name no mark of the class names. It reads the marks with inheritance, so `[OperatorSchema]` counts.
+- A class with two marks is in both schemas. A class without a mark is in every schema.
+- A mark compares with the schema's *kind*, which is its name unless the host gives one. An operator schema per
+  module, `tenancy-operator` and `accounts-operator`, each built with `AddDDDToolkitTypes(schemaKind: "operator")`,
+  shares one mark: `[GraphQLSchema("operator")]` or an attribute derived from it.
+- DDD00062 holds only the form with an operation type. A class marked by name only may carry `[Query]` and
+  `[Mutation]`, and the toolkit's generator leaves it to HotChocolate's.
+- A schema needs one field of every operation type the project registers. If all mutations of a project are marked
+  for another schema, the schema keeps an empty `Mutation` type, and HotChocolate refuses it with "The object type
+  `Mutation` has to at least define one field". Mark such a class with an operation type, which registers its fields
+  only where they belong.
 ## One schema over a modular monolith
 
 HotChocolate Fusion puts a gateway in front of several GraphQL services. The gateway composes their schemas, each

@@ -21,6 +21,27 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - DDD00113: a placeholder in the message of `[ErrorCode]` names no property of the record.
 - DDD00114: two error records of an assembly have the same code.
 
+## [0.9.0] - 2026-11-22
+
+### Added
+
+- `AddDDDToolkitTypes(schemaKind: ...)`. A mark by name, `[GraphQLSchema(name)]`, compares with the schema's kind, which is
+  its name unless the host gives one. An operator schema per module, each of the kind `operator`, shares one mark.
+
+## [0.8.0] - 2026-11-22
+
+### Added
+
+- `[GraphQLSchema(name)]` with a name only. The methods of the class carry HotChocolate's `[Query]`, `[Mutation]` or
+  `[Subscription]`, and `SchemaFieldsInterceptor` removes them from every schema but the one named. An application
+  may derive an attribute of its own: `public sealed class OperatorSchemaAttribute() : GraphQLSchemaAttribute("operator");`.
+  `AddDDDToolkitTypes()` adds the interceptor.
+
+### Changed
+
+- `GraphQLSchemaAttribute` is no longer sealed, and its `Operation` is an `OperationType?`: null for a mark by name
+  only. The form with an operation type works as before.
+
 ## [0.7.0] - 2026-11-22
 
 ### Changed
